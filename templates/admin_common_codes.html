@@ -1,0 +1,514 @@
+{% extends "base.html" %}
+
+{% block title %}공통 코드 관리 - 시스템 관리{% endblock %}
+
+{% block extra_head %}
+<style>
+    .admin-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 24px;
+    }
+
+    .admin-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .admin-title {
+        font-size: 18px;
+        font-weight: 800;
+        color: #1e293b;
+    }
+
+    .control-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        gap: 12px;
+    }
+
+    .filter-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .filter-label {
+        font-size: 13px;
+        font-weight: bold;
+        color: #475569;
+    }
+
+    .filter-select {
+        padding: 6px 12px;
+        font-size: 13px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        background-color: #ffffff;
+        min-width: 200px;
+    }
+
+    .btn-create {
+        background-color: #2563eb;
+        color: #ffffff;
+        border: none;
+        padding: 9px 16px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+    .btn-create:hover { background-color: #1d4ed8; }
+
+    .code-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+        table-layout: fixed;
+    }
+
+    .code-table th, .code-table td {
+        border: 1px solid #cbd5e1;
+        padding: 10px 8px;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .code-table th {
+        background-color: #f1f5f9;
+        font-weight: bold;
+        color: #334155;
+    }
+
+    .badge-active-y {
+        background: #dcfce7;
+        color: #15803d;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 11px;
+    }
+
+    .badge-active-n {
+        background: #fee2e2;
+        color: #b91c1c;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 11px;
+    }
+
+    .btn-action-edit {
+        background-color: #0284c7;
+        color: #fff;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+
+    .btn-action-del {
+        background-color: #dc2626;
+        color: #fff;
+        border: none;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        font-weight: bold;
+        margin-left: 4px;
+    }
+
+    /* 모달 */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-box {
+        background: #ffffff;
+        border-radius: 8px;
+        width: 100%;
+        max-width: 480px;
+        padding: 24px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .modal-title {
+        font-size: 16px;
+        font-weight: bold;
+        color: #1e293b;
+        margin-bottom: 16px;
+    }
+
+    .form-group {
+        margin-bottom: 14px;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 12px;
+        font-weight: bold;
+        color: #475569;
+        margin-bottom: 6px;
+    }
+
+    .form-input, .form-select {
+        width: 100%;
+        padding: 8px 10px;
+        font-size: 13px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    .form-input:disabled {
+        background-color: #f1f5f9;
+        color: #64748b;
+        cursor: not-allowed;
+    }
+
+    .preset-btn-group {
+        display: flex;
+        gap: 6px;
+        margin-top: 6px;
+    }
+
+    .btn-preset {
+        padding: 4px 8px;
+        font-size: 11px;
+        background-color: #f1f5f9;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        cursor: pointer;
+        color: #334155;
+    }
+    .btn-preset:hover { background-color: #e2e8f0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-card">
+    <div class="admin-header">
+        <div class="admin-title">시스템 공통 코드 관리</div>
+        <button class="btn-create" onclick="openCreateModal()">+ 신규 코드 등록</button>
+    </div>
+
+    <!-- 필터 영역 -->
+    <div class="control-row">
+        <div class="filter-group">
+            <span class="filter-label">그룹 필터:</span>
+            <select id="groupFilter" class="filter-select" onchange="renderTable()">
+                <option value="">전체 그룹 보기</option>
+            </select>
+        </div>
+        <div id="codeCount" style="font-size: 12px; color: #64748b; font-weight: bold;">총 0건</div>
+    </div>
+
+    <!-- 코드 테이블 -->
+    <table class="code-table">
+        <thead>
+            <tr>
+                <th style="width: 7%;">ID</th>
+                <th style="width: 16%;">그룹 식별자 (Group)</th>
+                <th style="width: 14%;">그룹 명칭</th>
+                <th style="width: 14%;">코드 (Code)</th>
+                <th style="width: 16%;">표시 명칭 (Name)</th>
+                <th style="width: 8%;">정렬순서</th>
+                <th style="width: 8%;">사용여부</th>
+                <th style="width: 17%;">관리</th>
+            </tr>
+        </thead>
+        <tbody id="codeTableBody">
+            <tr><td colspan="8" style="padding: 20px; color: #94a3b8;">데이터를 조회 중입니다...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- 등록/수정 모달 -->
+<div id="codeModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-title" id="modalTitle">공통 코드 등록</div>
+        <input type="hidden" id="modalId">
+
+        <div class="form-group">
+            <label>그룹 식별자 (Group Code) <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalGroupCode" class="form-input" placeholder="예: ACCOUNT_TYPE, UNIT">
+            <div class="preset-btn-group" id="presetGroup">
+                <button type="button" class="btn-preset" onclick="setGroupPreset('ACCOUNT_TYPE', '계정유형')">계정유형</button>
+                <button type="button" class="btn-preset" onclick="setGroupPreset('MATERIAL_TYPE', '자재유형')">자재유형</button>
+                <button type="button" class="btn-preset" onclick="setGroupPreset('UNIT', '단위')">단위</button>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>그룹 명칭 <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalGroupName" class="form-input" placeholder="예: 계정유형, 단위">
+        </div>
+
+        <div class="form-group">
+            <label>코드 (Code) <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalCode" class="form-input" placeholder="예: RAW, EA (고유 식별값)">
+        </div>
+
+        <div class="form-group">
+            <label>표시 명칭 (Code Name) <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalCodeName" class="form-input" placeholder="예: 원자재, EA (개)">
+        </div>
+
+        <div class="form-group">
+            <label>정렬 순서</label>
+            <input type="number" id="modalSortOrder" class="form-input" min="1" value="1">
+        </div>
+
+        <div class="form-group">
+            <label>사용 여부</label>
+            <select id="modalIsActive" class="form-select">
+                <option value="Y">Y (콤보상자에 표시)</option>
+                <option value="N">N (숨김 / 미사용)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>비고</label>
+            <input type="text" id="modalNote" class="form-input" placeholder="설명 및 메모">
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px;">
+            <button onclick="closeModal()" style="padding: 7px 12px; background:#cbd5e1; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">취소</button>
+            <button onclick="submitCodeForm()" style="padding: 7px 16px; background:#2563eb; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">저장</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    let CODES_DATA = [];
+    let IS_EDIT_MODE = false;
+
+    // 1. 공통 코드 전체 로드
+    async function loadCommonCodes() {
+        try {
+            const res = await fetch('/api/admin/common-codes');
+            if (!res.ok) throw new Error("데이터 조회 실패");
+            const json = await res.json();
+            CODES_DATA = json.data || [];
+            updateGroupFilterOptions();
+            renderTable();
+        } catch (err) {
+            document.getElementById('codeTableBody').innerHTML = `<tr><td colspan="8" style="padding: 20px; color:#dc2626;">코드 목록을 불러오지 못했습니다.</td></tr>`;
+        }
+    }
+
+    // 2. 그룹 필터 드롭다운 옵션 갱신
+    function updateGroupFilterOptions() {
+        const select = document.getElementById('groupFilter');
+        const currentVal = select.value;
+        const groups = {};
+
+        CODES_DATA.forEach(c => {
+            if (!groups[c.group_code]) {
+                groups[c.group_code] = c.group_name;
+            }
+        });
+
+        let optionsHtml = `<option value="">전체 그룹 보기</option>`;
+        Object.keys(groups).sort().forEach(gCode => {
+            optionsHtml += `<option value="${gCode}">[${gCode}] ${groups[gCode]}</option>`;
+        });
+
+        select.innerHTML = optionsHtml;
+        select.value = currentVal;
+    }
+
+    // 3. 테이블 렌더링
+    function renderTable() {
+        const tbody = document.getElementById('codeTableBody');
+        const filterVal = document.getElementById('groupFilter').value;
+
+        const filtered = filterVal 
+            ? CODES_DATA.filter(c => c.group_code === filterVal)
+            : CODES_DATA;
+
+        document.getElementById('codeCount').innerText = `총 ${filtered.length}건`;
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" style="padding: 30px; color:#94a3b8;">등록된 공통 코드가 없습니다.</td></tr>`;
+            return;
+        }
+
+        let html = "";
+        filtered.forEach(c => {
+            const badge = c.is_active === 'Y'
+                ? `<span class="badge-active-y">사용</span>`
+                : `<span class="badge-active-n">미사용</span>`;
+
+            html += `
+                <tr>
+                    <td>${c.id}</td>
+                    <td style="font-weight: bold; color: #0284c7;">${c.group_code}</td>
+                    <td style="color: #475569;">${c.group_name}</td>
+                    <td style="font-weight: bold; color: #1e293b;">${c.code}</td>
+                    <td style="text-align: left; padding-left: 14px; font-weight: 600;">${c.code_name}</td>
+                    <td>${c.sort_order}</td>
+                    <td>${badge}</td>
+                    <td>
+                        <button class="btn-action-edit" onclick="openEditModal(${c.id})">수정</button>
+                        <button class="btn-action-del" onclick="deleteCode(${c.id}, '${c.code_name}')">삭제</button>
+                    </td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+    }
+
+    // 4. 모달 빠른 프리셋 버튼
+    function setGroupPreset(code, name) {
+        document.getElementById('modalGroupCode').value = code;
+        document.getElementById('modalGroupName').value = name;
+    }
+
+    // 5. 등록 모달 오픈
+    function openCreateModal() {
+        IS_EDIT_MODE = false;
+        document.getElementById('modalTitle').innerText = "신규 공통 코드 등록";
+        document.getElementById('modalId').value = "";
+        
+        const filterVal = document.getElementById('groupFilter').value;
+        if (filterVal) {
+            const matched = CODES_DATA.find(c => c.group_code === filterVal);
+            document.getElementById('modalGroupCode').value = filterVal;
+            document.getElementById('modalGroupName').value = matched ? matched.group_name : "";
+        } else {
+            document.getElementById('modalGroupCode').value = "";
+            document.getElementById('modalGroupName').value = "";
+        }
+
+        document.getElementById('modalGroupCode').disabled = false;
+        document.getElementById('modalCode').value = "";
+        document.getElementById('modalCode').disabled = false;
+        document.getElementById('modalCodeName').value = "";
+        document.getElementById('modalSortOrder').value = "1";
+        document.getElementById('modalIsActive').value = "Y";
+        document.getElementById('modalNote').value = "";
+        document.getElementById('presetGroup').style.display = 'flex';
+
+        document.getElementById('codeModal').style.display = 'flex';
+        document.getElementById('modalCode').focus();
+    }
+
+    // 6. 수정 모달 오픈
+    function openEditModal(id) {
+        IS_EDIT_MODE = true;
+        const target = CODES_DATA.find(c => c.id === id);
+        if (!target) return;
+
+        document.getElementById('modalTitle').innerText = "공통 코드 정보 수정";
+        document.getElementById('modalId').value = target.id;
+        document.getElementById('modalGroupCode').value = target.group_code;
+        document.getElementById('modalGroupCode').disabled = true;
+        document.getElementById('modalGroupName').value = target.group_name;
+        document.getElementById('modalCode').value = target.code;
+        document.getElementById('modalCode').disabled = true;
+        document.getElementById('modalCodeName').value = target.code_name;
+        document.getElementById('modalSortOrder').value = target.sort_order;
+        document.getElementById('modalIsActive').value = target.is_active;
+        document.getElementById('modalNote').value = target.note || "";
+        document.getElementById('presetGroup').style.display = 'none';
+
+        document.getElementById('codeModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('codeModal').style.display = 'none';
+    }
+
+    // 7. 저장 처리
+    async function submitCodeForm() {
+        const id = document.getElementById('modalId').value;
+        const group_code = document.getElementById('modalGroupCode').value.trim().toUpperCase();
+        const group_name = document.getElementById('modalGroupName').value.trim();
+        const code = document.getElementById('modalCode').value.trim();
+        const code_name = document.getElementById('modalCodeName').value.trim();
+        const sort_order = Number(document.getElementById('modalSortOrder').value) || 1;
+        const is_active = document.getElementById('modalIsActive').value;
+        const note = document.getElementById('modalNote').value.trim();
+
+        if (!group_code || !group_name) {
+            alert("그룹 식별자와 그룹 명칭을 입력해 주십시오.");
+            return;
+        }
+        if (!code || !code_name) {
+            alert("코드와 표시 명칭을 입력해 주십시오.");
+            return;
+        }
+
+        const endpoint = IS_EDIT_MODE ? '/api/admin/common-codes/update' : '/api/admin/common-codes/create';
+        const payload = IS_EDIT_MODE
+            ? { id: Number(id), group_name, code_name, sort_order, is_active, note }
+            : { group_code, group_name, code, code_name, sort_order, is_active, note };
+
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const json = await res.json();
+
+            if (res.ok) {
+                alert(json.message);
+                closeModal();
+                loadCommonCodes();
+            } else {
+                alert(json.detail || "작업 처리에 실패했습니다.");
+            }
+        } catch (err) {
+            alert("서버 통신 중 오류가 발생했습니다.");
+        }
+    }
+
+    // 8. 삭제 처리
+    async function deleteCode(id, name) {
+        if (!confirm(`'${name}' 코드를 삭제하시겠습니까?\n(기존 품목 데이터와 연계되어 있을 수 있으므로 미사용 처리(N)를 권장합니다.)`)) {
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/admin/common-codes/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: Number(id) })
+            });
+            const json = await res.json();
+
+            if (res.ok) {
+                alert(json.message);
+                loadCommonCodes();
+            } else {
+                alert(json.detail || "삭제 처리에 실패했습니다.");
+            }
+        } catch (err) {
+            alert("서버 통신 중 오류가 발생했습니다.");
+        }
+    }
+
+    loadCommonCodes();
+</script>
+{% endblock %}

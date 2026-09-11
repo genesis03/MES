@@ -1,0 +1,675 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- 카카오 주소검색 스크립트 -->
+<script src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+
+<style>
+    /* 거래처 관리 전용 스타일 */
+    .partner-container {
+        padding: 20px;
+        background-color: #fcfcfc;
+    }
+    .search-filter-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: #f8f9fa;
+        padding: 12px 16px;
+        border: 1px solid #ced4da;
+        margin-bottom: 15px;
+        font-size: 13px;
+    }
+    .search-filter-bar label {
+        font-weight: bold;
+        color: #495057;
+    }
+    .search-filter-bar input, .search-filter-bar select {
+        height: 28px;
+        padding: 2px 6px;
+        border: 1px solid #ced4da;
+        border-radius: 2px;
+        box-sizing: border-box;
+    }
+    .btn-action {
+        height: 30px;
+        padding: 0 16px;
+        border: none;
+        border-radius: 2px;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+    }
+    .btn-search { background-color: #0d6efd; }
+    .btn-create { background-color: #198754; }
+    .btn-sub-add { background-color: #6c757d; font-size: 12px; padding: 0 10px; height: 26px; }
+
+    .grid-wrapper {
+        border: 1px solid #ced4da;
+        background: #fff;
+        max-height: 680px;
+        overflow: auto;
+    }
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+        white-space: nowrap;
+    }
+    .data-table th {
+        background-color: #f1f3f5;
+        color: #343a40;
+        padding: 8px 10px;
+        border: 1px solid #dee2e6;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        text-align: center;
+    }
+    .data-table td {
+        padding: 6px 10px;
+        border: 1px solid #dee2e6;
+        color: #212529;
+    }
+    .data-table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    /* 팝업 모달 스타일 */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background-color: rgba(0, 0, 0, 0.4);
+        z-index: 2000;
+        justify-content: center;
+        align-items: center;
+    }
+    .modal-window {
+        background: #fff;
+        width: 760px;
+        max-height: 85vh;
+        display: flex;
+        flex-direction: column;
+        border-radius: 4px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        border: 1px solid #adb5bd;
+    }
+    .modal-header {
+        padding: 12px 16px;
+        background-color: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .modal-header h4 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: bold;
+        color: #212529;
+    }
+    .modal-close-btn {
+        background: none;
+        border: none;
+        font-size: 18px;
+        cursor: pointer;
+        color: #6c757d;
+    }
+
+    /* 탭 헤더 영역 */
+    .tab-header {
+        display: flex;
+        border-bottom: 1px solid #ced4da;
+        background: #f8f9fa;
+        padding: 8px 16px 0 16px;
+        gap: 4px;
+    }
+    .tab-btn {
+        padding: 6px 16px;
+        border: 1px solid #ced4da;
+        border-bottom: none;
+        background: #e9ecef;
+        cursor: pointer;
+        font-size: 13px;
+        border-top-left-radius: 3px;
+        border-top-right-radius: 3px;
+    }
+    .tab-btn.active {
+        background: #fff;
+        font-weight: bold;
+        border-bottom: 1px solid #fff;
+        margin-bottom: -1px;
+    }
+
+    .modal-body {
+        padding: 16px;
+        overflow-y: auto;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* 입력 테이블 공통 */
+    .form-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+    }
+    .form-table th {
+        width: 120px;
+        padding: 6px 8px;
+        text-align: right;
+        font-weight: normal;
+        color: #495057;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+    }
+    .form-table th.required::after {
+        content: " *";
+        color: #dc3545;
+        font-weight: bold;
+    }
+    .form-table td {
+        padding: 5px 8px;
+        border: 1px solid #dee2e6;
+    }
+    .form-table input, .form-table select, .form-table textarea {
+        width: 100%;
+        height: 28px;
+        padding: 3px 6px;
+        border: 1px solid #ced4da;
+        border-radius: 2px;
+        box-sizing: border-box;
+        font-size: 12.5px;
+    }
+    .form-table textarea { height: 50px; resize: vertical; }
+
+    .modal-footer {
+        padding: 10px 16px;
+        background-color: #f8f9fa;
+        border-top: 1px solid #dee2e6;
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+</style>
+
+<div class="partner-container">
+    <!-- 검색 조건 상단 바 -->
+    <div class="search-filter-bar">
+        <label>거래처코드</label>
+        <input type="text" id="searchCode" style="width: 120px;">
+
+        <label style="margin-left: 8px;">상호</label>
+        <input type="text" id="searchName" style="width: 160px;">
+
+        <label style="margin-left: 8px;">구분</label>
+        <select id="searchType" style="width: 100px;">
+            <option value="">전체</option>
+            <option value="VENDOR">구매처</option>
+            <option value="CUSTOMER">고객사</option>
+            <option value="BOTH">공통</option>
+        </select>
+
+        <label style="margin-left: 8px;">상태</label>
+        <select id="searchStatus" style="width: 80px;">
+            <option value="">전체</option>
+            <option value="Y" selected>사용</option>
+            <option value="N">미사용</option>
+        </select>
+
+        <div style="margin-left: auto; display: flex; gap: 6px;">
+            <button type="button" class="btn-action btn-search" onclick="loadPartners()">조회</button>
+            <button type="button" class="btn-action btn-create" onclick="openCreateModal()">신규</button>
+        </div>
+    </div>
+
+    <!-- 전체 리스트 테이블 그리드 -->
+    <div class="grid-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 45px;">No</th>
+                    <th style="width: 100px;">거래처코드</th>
+                    <th style="width: 180px;">상호</th>
+                    <th style="width: 80px;">구분</th>
+                    <th style="width: 90px;">대표자명</th>
+                    <th style="width: 110px;">대표전화</th>
+                    <th style="width: 110px;">모바일</th>
+                    <th style="width: 160px;">계산서 이메일</th>
+                    <th style="width: 100px;">팩스</th>
+                    <th style="width: 90px;">사내담당자</th>
+                    <th>주소</th>
+                    <th style="width: 60px;">상태</th>
+                </tr>
+            </thead>
+            <tbody id="partnerTableBody">
+                <!-- 동적 렌더링 영역 -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 거래처 등록 / 수정 모달 -->
+<div id="partnerModal" class="modal-overlay">
+    <div class="modal-window">
+        <div class="modal-header">
+            <h4 id="modalTitle">거래처등록</h4>
+            <button type="button" class="modal-close-btn" onclick="closeModal()">&times;</button>
+        </div>
+
+        <!-- 탭 헤더 -->
+        <div class="tab-header">
+            <button type="button" class="tab-btn active" id="tabBtnBasic" onclick="switchTab('basic')">기본 정보</button>
+            <button type="button" class="tab-btn" id="tabBtnContact" onclick="switchTab('contact')">담당자 관리 (<span id="contactCount">0</span>)</button>
+        </div>
+
+        <form id="partnerForm" onsubmit="savePartnerData(event)">
+            <input type="hidden" id="partnerId">
+            <div class="modal-body">
+                
+                <!-- 탭 1: 기본 정보 -->
+                <div id="tabBasic" class="tab-content active">
+                    <table class="form-table">
+                        <tr>
+                            <th class="required">거래처코드</th>
+                            <td>
+                                <input type="text" id="partner_code" required maxlength="30" placeholder="거래처코드 입력">
+                            </td>
+                            <th class="required">상호</th>
+                            <td>
+                                <input type="text" id="partner_name" required maxlength="100" placeholder="상호 입력">
+                            </td>
+                        </tr>
+                        <tr>
+                            <th class="required">거래처구분</th>
+                            <td>
+                                <select id="partner_type" required>
+                                    <option value="VENDOR">구매처</option>
+                                    <option value="CUSTOMER">고객사</option>
+                                    <option value="BOTH">공통</option>
+                                </select>
+                            </td>
+                            <th>대표자명</th>
+                            <td>
+                                <input type="text" id="ceo_name" maxlength="50">
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>대표전화</th>
+                            <td>
+                                <input type="text" id="tel" maxlength="30" placeholder="02-000-0000">
+                            </td>
+                            <th>모바일</th>
+                            <td>
+                                <input type="text" id="mobile" maxlength="30" placeholder="010-0000-0000">
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>계산서 이메일</th>
+                            <td>
+                                <input type="email" id="tax_email" maxlength="100" placeholder="tax@domain.com">
+                            </td>
+                            <th>팩스번호</th>
+                            <td>
+                                <input type="text" id="fax" maxlength="30">
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>우편번호</th>
+                            <td colspan="3" style="display: flex; gap: 6px; align-items: center;">
+                                <input type="text" id="post_code" maxlength="10" style="width: 120px;" readonly>
+                                <button type="button" class="btn-action" style="background-color: #495057; height: 28px; padding: 0 10px;" onclick="execDaumPostcode()">주소검색</button>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>기본주소</th>
+                            <td colspan="3">
+                                <input type="text" id="address_base" maxlength="200" readonly>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>상세주소</th>
+                            <td colspan="3">
+                                <input type="text" id="address_detail" maxlength="200" placeholder="상세주소 입력">
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>사내 담당자</th>
+                            <td>
+                                <input type="text" id="manager_name" maxlength="50" placeholder="유니 담당자명">
+                            </td>
+                            <th class="required">사용여부</th>
+                            <td>
+                                <select id="is_active" required>
+                                    <option value="Y">사용</option>
+                                    <option value="N">미사용</option>
+                                </select>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>비고</th>
+                            <td colspan="3">
+                                <textarea id="remark" placeholder="특이사항 입력"></textarea>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- 탭 2: 담당자 관리 -->
+                <div id="tabContact" class="tab-content">
+                    <div style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
+                        <button type="button" class="btn-action btn-sub-add" onclick="addContactRow()">+ 담당자 행 추가</button>
+                    </div>
+                    <div style="border: 1px solid #ced4da; max-height: 380px; overflow-y: auto;">
+                        <table class="data-table" style="width: 100%;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 100px;">담당자명 *</th>
+                                    <th style="width: 90px;">부서</th>
+                                    <th style="width: 80px;">직책</th>
+                                    <th style="width: 100px;">아이템</th>
+                                    <th style="width: 100px;">내선번호</th>
+                                    <th style="width: 110px;">핸드폰번호</th>
+                                    <th>개인 이메일</th>
+                                    <th style="width: 45px;">삭제</th>
+                                </tr>
+                            </thead>
+                            <tbody id="contactTableBody">
+                                <!-- 동적 서브 폼 행 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btnDeletePartner" class="btn-action" style="background: #dc3545; display: none; margin-right: auto;" onclick="deletePartnerData()">삭제</button>
+                <button type="button" class="btn-action" style="background: #adb5bd;" onclick="closeModal()">닫기</button>
+                <button type="submit" class="btn-action" style="background: #0d6efd;">저장</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let currentContacts = [];
+
+document.addEventListener("DOMContentLoaded", function() {
+    loadPartners();
+});
+
+// 거래처 목록 로드
+async function loadPartners() {
+    const code = document.getElementById("searchCode").value.trim();
+    const name = document.getElementById("searchName").value.trim();
+    const type = document.getElementById("searchType").value;
+    const active = document.getElementById("searchStatus").value;
+
+    let url = `/basic-info/partners/api/list?`;
+    if (code) url += `partner_code=${encodeURIComponent(code)}&`;
+    if (name) url += `partner_name=${encodeURIComponent(name)}&`;
+    if (type) url += `partner_type=${encodeURIComponent(type)}&`;
+    if (active) url += `is_active=${encodeURIComponent(active)}&`;
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("거래처 목록을 불러오지 못했습니다.");
+        const data = await response.json();
+        renderPartnerTable(data);
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+// 메인 그리드 렌더링
+function renderPartnerTable(data) {
+    const tbody = document.getElementById("partnerTableBody");
+    tbody.innerHTML = "";
+
+    if (data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 25px; color: #868e96;">조회된 거래처가 없습니다.</td></tr>`;
+        return;
+    }
+
+    const typeLabels = { "VENDOR": "구매처", "CUSTOMER": "고객사", "BOTH": "공통" };
+
+    data.forEach((item, index) => {
+        const tr = document.createElement("tr");
+        const address = `${item.address_base || ''} ${item.address_detail || ''}`.trim();
+
+        tr.innerHTML = `
+            <td style="text-align: center;">${index + 1}</td>
+            <td style="font-weight: bold; color: #0d6efd; text-decoration: underline; cursor: pointer;" onclick="openEditModal(${item.id})">${item.partner_code}</td>
+            <td style="font-weight: bold;">${item.partner_name}</td>
+            <td style="text-align: center;">${typeLabels[item.partner_type] || item.partner_type}</td>
+            <td>${item.ceo_name || ''}</td>
+            <td>${item.tel || ''}</td>
+            <td>${item.mobile || ''}</td>
+            <td>${item.tax_email || ''}</td>
+            <td>${item.fax || ''}</td>
+            <td>${item.manager_name || ''}</td>
+            <td>${address}</td>
+            <td style="text-align: center;">
+                <span style="color: ${item.is_active === 'Y' ? '#198754' : '#dc3545'}; font-weight: bold;">
+                    ${item.is_active === 'Y' ? '사용' : '정지'}
+                </span>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// 탭 전환 처리
+function switchTab(tabKey) {
+    document.getElementById("tabBtnBasic").classList.toggle("active", tabKey === 'basic');
+    document.getElementById("tabBtnContact").classList.toggle("active", tabKey === 'contact');
+    document.getElementById("tabBasic").classList.toggle("active", tabKey === 'basic');
+    document.getElementById("tabContact").classList.toggle("active", tabKey === 'contact');
+}
+
+// 신규 등록 모달 열기
+function openCreateModal() {
+    document.getElementById("partnerForm").reset();
+    document.getElementById("partnerId").value = "";
+    document.getElementById("partner_code").readOnly = false;
+    document.getElementById("is_active").value = "Y";
+    document.getElementById("btnDeletePartner").style.display = "none";
+    document.getElementById("modalTitle").innerText = "거래처 신규 등록";
+
+    currentContacts = [];
+    renderContacts();
+    switchTab('basic');
+    document.getElementById("partnerModal").style.display = "flex";
+}
+
+// 수정 모달 열기 (거래처코드 클릭 시 실행)
+async function openEditModal(partnerId) {
+    try {
+        const response = await fetch(`/basic-info/partners/api/${partnerId}`);
+        if (!response.ok) throw new Error("거래처 상세 정보를 조회할 수 없습니다.");
+        const data = await response.json();
+
+        document.getElementById("partnerId").value = data.id;
+        document.getElementById("partner_code").value = data.partner_code;
+        document.getElementById("partner_code").readOnly = true;
+        document.getElementById("partner_name").value = data.partner_name;
+        document.getElementById("partner_type").value = data.partner_type;
+        document.getElementById("ceo_name").value = data.ceo_name;
+        document.getElementById("tel").value = data.tel;
+        document.getElementById("mobile").value = data.mobile;
+        document.getElementById("fax").value = data.fax;
+        document.getElementById("tax_email").value = data.tax_email;
+        document.getElementById("post_code").value = data.post_code;
+        document.getElementById("address_base").value = data.address_base;
+        document.getElementById("address_detail").value = data.address_detail;
+        document.getElementById("manager_name").value = data.manager_name;
+        document.getElementById("is_active").value = data.is_active;
+        document.getElementById("remark").value = data.remark;
+
+        document.getElementById("btnDeletePartner").style.display = "inline-block";
+        currentContacts = data.contacts || [];
+        renderContacts();
+        switchTab('basic');
+        document.getElementById("modalTitle").innerText = "거래처 수정";
+        document.getElementById("partnerModal").style.display = "flex";
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+function closeModal() {
+    document.getElementById("partnerModal").style.display = "none";
+}
+
+// 담당자 서브 그리드 렌더링
+function renderContacts() {
+    const tbody = document.getElementById("contactTableBody");
+    tbody.innerHTML = "";
+    document.getElementById("contactCount").innerText = currentContacts.length;
+
+    currentContacts.forEach((contact, idx) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td><input type="text" value="${contact.contact_name || ''}" onchange="updateContactData(${idx}, 'contact_name', this.value)" style="width:100%;" required></td>
+            <td><input type="text" value="${contact.department || ''}" onchange="updateContactData(${idx}, 'department', this.value)" style="width:100%;"></td>
+            <td><input type="text" value="${contact.position || ''}" onchange="updateContactData(${idx}, 'position', this.value)" style="width:100%;"></td>
+            <td><input type="text" value="${contact.handled_item || ''}" onchange="updateContactData(${idx}, 'handled_item', this.value)" style="width:100%;"></td>
+            <td><input type="text" value="${contact.extension_tel || ''}" onchange="updateContactData(${idx}, 'extension_tel', this.value)" style="width:100%;"></td>
+            <td><input type="text" value="${contact.mobile_phone || ''}" onchange="updateContactData(${idx}, 'mobile_phone', this.value)" style="width:100%;"></td>
+            <td><input type="email" value="${contact.email || ''}" onchange="updateContactData(${idx}, 'email', this.value)" style="width:100%;"></td>
+            <td style="text-align: center;">
+                <button type="button" onclick="removeContactRow(${idx})" style="background: #dc3545; color:#fff; border:none; border-radius:2px; cursor:pointer;">X</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function addContactRow() {
+    currentContacts.push({
+        contact_name: "",
+        department: "",
+        position: "",
+        handled_item: "",
+        extension_tel: "",
+        mobile_phone: "",
+        email: ""
+    });
+    renderContacts();
+}
+
+function removeContactRow(index) {
+    currentContacts.splice(index, 1);
+    renderContacts();
+}
+
+function updateContactData(index, field, value) {
+    currentContacts[index][field] = value.trim();
+}
+
+// 거래처 및 담당자 일괄 저장 처리
+async function savePartnerData(event) {
+    event.preventDefault();
+
+    const partnerId = document.getElementById("partnerId").value;
+    const isEdit = Boolean(partnerId);
+
+    // 담당자 입력 검증
+    for (let i = 0; i < currentContacts.length; i++) {
+        if (!currentContacts[i].contact_name) {
+            switchTab('contact');
+            alert(`${i + 1}번째 행의 담당자명을 입력해 주십시오.`);
+            return;
+        }
+    }
+
+    const payload = {
+        partner_code: document.getElementById("partner_code").value.trim(),
+        partner_name: document.getElementById("partner_name").value.trim(),
+        partner_type: document.getElementById("partner_type").value,
+        ceo_name: document.getElementById("ceo_name").value.trim() || null,
+        tel: document.getElementById("tel").value.trim() || null,
+        mobile: document.getElementById("mobile").value.trim() || null,
+        fax: document.getElementById("fax").value.trim() || null,
+        tax_email: document.getElementById("tax_email").value.trim() || null,
+        post_code: document.getElementById("post_code").value.trim() || null,
+        address_base: document.getElementById("address_base").value.trim() || null,
+        address_detail: document.getElementById("address_detail").value.trim() || null,
+        manager_name: document.getElementById("manager_name").value.trim() || null,
+        is_active: document.getElementById("is_active").value,
+        remark: document.getElementById("remark").value.trim() || null,
+        contacts: currentContacts
+    };
+
+    const url = isEdit ? `/basic-info/partners/api/${partnerId}` : `/basic-info/partners/api`;
+    const method = isEdit ? "PUT" : "POST";
+
+    try {
+        const response = await fetch(url, {
+            method: method,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.detail || "저장에 실패하였습니다.");
+        }
+
+        alert("정상적으로 저장되었습니다.");
+        closeModal();
+        loadPartners();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+// 거래처 삭제 함수
+async function deletePartnerData() {
+    const partnerId = document.getElementById("partnerId").value;
+    const partnerName = document.getElementById("partner_name").value;
+
+    if (!partnerId) return;
+    if (!confirm(`'${partnerName}' 거래처를 삭제하시겠습니까?\n등록된 하위 담당자 정보도 모두 함께 삭제됩니다.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/basic-info/partners/api/${partnerId}`, {
+            method: "DELETE"
+        });
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(errData.detail || "삭제 처리에 실패하였습니다.");
+        }
+
+        alert("삭제되었습니다.");
+        closeModal();
+        loadPartners();
+    } catch (err) {
+        alert(err.message);
+    }
+}
+
+// 카카오 다음 주소검색 호출 함수
+function execDaumPostcode() {
+    new daum.Postcode({
+        oncomplete: function(data) {
+            let addr = '';
+            if (data.userSelectedType === 'R') {
+                addr = data.roadAddress;
+            } else {
+                addr = data.jibunAddress;
+            }
+
+            document.getElementById('post_code').value = data.zonecode;
+            document.getElementById('address_base').value = addr;
+            document.getElementById('address_detail').focus();
+        }
+    }).open();
+}
+</script>
+{% endblock %}

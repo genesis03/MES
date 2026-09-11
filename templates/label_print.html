@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}출하 바코드 라벨 출력 (80mm x 80mm){% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/label_common.css">
+<style>
+    .control-panel {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 15px 20px;
+        margin-bottom: 20px;
+    }
+    .control-row {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+    }
+    .control-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: bold;
+    }
+    .control-group input, .control-group select {
+        padding: 4px 8px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        font-size: 13px;
+    }
+    .btn-print {
+        padding: 8px 24px;
+        font-size: 14px;
+        font-weight: bold;
+        background-color: #007bff;
+        color: #ffffff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .btn-print:hover { background-color: #0056b3; }
+    .btn-back {
+        padding: 8px 16px;
+        margin-left: 8px;
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+    .btn-back:hover { background: #e2e8f0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container no-print page-header">
+    <h1 class="page-title">출하 바코드 라벨 출력 (80mm × 80mm)</h1>
+    
+    <div class="control-panel">
+        <div class="control-row">
+            <div class="control-group">
+                <label><input type="radio" name="printMode" value="ALL" checked onchange="onModeChange()"> 전체 출력</label>
+            </div>
+            <div class="control-group">
+                <label><input type="radio" name="printMode" value="PART" onchange="onModeChange()"> 품번별 출력</label>
+                <select id="partSelect" disabled onchange="applyFilter()"></select>
+            </div>
+            <div class="control-group">
+                <label><input type="radio" name="printMode" value="RANGE" onchange="onModeChange()"> 범위 출력</label>
+                <input type="number" id="rangeStart" placeholder="시작" style="width:70px;" disabled oninput="validateInput(this)"> ~ 
+                <input type="number" id="rangeEnd" placeholder="종료" style="width:70px;" disabled oninput="validateInput(this)">
+                <button onclick="applyFilter()" id="btnRange" style="padding:4px 8px;" disabled>적용</button>
+            </div>
+            <div class="control-group">
+                <label><input type="radio" name="printMode" value="SINGLE" onchange="onModeChange()"> 1개 출력</label>
+                <input type="number" id="singleIdx" placeholder="순번" style="width:70px;" disabled oninput="validateInput(this)">
+                <button onclick="applyFilter()" id="btnSingle" style="padding:4px 8px;" disabled>적용</button>
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+            <div>
+                <button onclick="window.print()" class="btn-print">라벨 인쇄</button>
+                <button onclick="location.href='/shipping/history'" class="btn-back">출고내역으로 복귀</button>
+            </div>
+            <span id="printSummary" style="font-size: 13px; font-weight: bold; color: #1e293b;">출력 대상: 0장</span>
+        </div>
+    </div>
+</div>
+
+<div id="labelsContainer"></div>
+{% endblock %}
+
+{% block extra_script %}
+<script src="/static/js/barcode_engine.js"></script>
+<script src="/static/js/label_templates.js"></script>
+
+<script>
+    let RAW_DATA = [];
+
+    function validateInput(el) {
+        const maxVal = RAW_DATA.length;
+        if (maxVal === 0) { el.value = 1; return; }
+        let val = parseInt(el.value, 10);
+        if (isNaN(val) || val < 1) el.value = 1;
+        else if (val > maxVal) el.value = maxVal;
+    }
+
+    function onModeChange() {
+        const mode = document.querySelector('input[name="printMode"]:checked').value;
+        document.getElementById('partSelect').disabled = (mode !== 'PART');
+        document.getElementById('rangeStart').disabled = (mode !== 'RANGE');
+        document.getElementById('rangeEnd').disabled = (mode !== 'RANGE');
+        document.getElementById('btnRange').disabled = (mode !== 'RANGE');
+        document.getElementById('singleIdx').disabled = (mode !== 'SINGLE');
+        document.getElementById('btnSingle').disabled = (mode !== 'SINGLE');
+        applyFilter();
+    }
+
+    async function initData() {
+        try {
+            const res = await fetch('/api/data');
+            const json = await res.json();
+            RAW_DATA = json.data || [];
+
+            const totalCount = RAW_DATA.length;
+            const partSelect = document.getElementById('partSelect');
+            partSelect.innerHTML = "";
+            const partSet = new Set();
+
+            RAW_DATA.forEach(row => {
+                const cols = Object.values(row);
+                const partNo = String(cols[11] || '').trim();
+                if (partNo) partSet.add(partNo);
+            });
+
+            // 품번 오름차순 정렬 드롭다운
+            Array.from(partSet).sort().forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                partSelect.appendChild(opt);
+            });
+
+            if (totalCount > 0) {
+                document.getElementById('singleIdx').min = 1;
+                document.getElementById('singleIdx').max = totalCount;
+                document.getElementById('singleIdx').value = 1;
+
+                document.getElementById('rangeStart').min = 1;
+                document.getElementById('rangeStart').max = totalCount;
+                document.getElementById('rangeStart').value = 1;
+
+                document.getElementById('rangeEnd').min = 1;
+                document.getElementById('rangeEnd').max = totalCount;
+                document.getElementById('rangeEnd').value = totalCount;
+            }
+
+            applyFilter();
+        } catch (e) {
+            console.error("원장 데이터 로드 실패:", e);
+        }
+    }
+
+    function applyFilter() {
+        const container = document.getElementById('labelsContainer');
+        const summary = document.getElementById('printSummary');
+
+        if (!RAW_DATA || RAW_DATA.length === 0) {
+            container.innerHTML = "<p style='text-align:center; padding:30px; color:#64748b;'>출력할 데이터가 없습니다. [출고내역] 메뉴에서 파일을 업로드해 주십시오.</p>";
+            summary.innerText = "출력 대상: 0장";
+            return;
+        }
+
+        const mode = document.querySelector('input[name="printMode"]:checked').value;
+        let targetList = [];
+
+        if (mode === 'ALL') {
+            targetList = RAW_DATA;
+        } else if (mode === 'PART') {
+            const selectedPart = document.getElementById('partSelect').value;
+            targetList = RAW_DATA.filter(row => String(Object.values(row)[11] || '').trim() === selectedPart);
+        } else if (mode === 'RANGE') {
+            const start = Math.max(1, parseInt(document.getElementById('rangeStart').value, 10) || 1);
+            const end = Math.min(RAW_DATA.length, parseInt(document.getElementById('rangeEnd').value, 10) || RAW_DATA.length);
+            targetList = RAW_DATA.slice(start - 1, end);
+        } else if (mode === 'SINGLE') {
+            let idx = parseInt(document.getElementById('singleIdx').value, 10) || 1;
+            idx = Math.max(1, Math.min(RAW_DATA.length, idx));
+            targetList = [RAW_DATA[idx - 1]];
+        }
+
+        summary.innerText = `출력 대상: 총 ${targetList.length}장 (전체 ${RAW_DATA.length}장 중)`;
+        
+        let htmlBuffer = "";
+        targetList.forEach(row => {
+            const cols = Object.values(row);
+            htmlBuffer += LabelTemplates.renderShipmentLabel({
+                barcode: String(cols[2] || '').trim(),
+                customer: String(cols[3] || '').trim(),
+                delivery_date: String(cols[8] || '').trim(),
+                part_no: String(cols[11] || '').trim(),
+                part_name: String(cols[12] || '').trim(),
+                qty: String(cols[13] || '').trim(),
+                serial: String(cols[14] || '').trim()
+            });
+        });
+
+        container.innerHTML = htmlBuffer;
+    }
+
+    initData();
+</script>
+{% endblock %}

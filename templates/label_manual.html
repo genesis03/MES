@@ -1,0 +1,456 @@
+{% extends "base.html" %}
+
+{% block title %}출하 바코드 라벨 출력(개별) (80mm x 80mm){% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/label_common.css">
+<style>
+    .form-panel, .control-panel, .history-table-wrapper {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 16px 20px;
+        margin-bottom: 16px;
+    }
+    .form-title {
+        font-size: 14px;
+        font-weight: bold;
+        color: #1e293b;
+        margin-bottom: 12px;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 6px;
+    }
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 10px;
+        align-items: end;
+    }
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    .form-group label {
+        font-size: 11.5px;
+        font-weight: bold;
+        color: #475569;
+    }
+    .form-group input, .control-group input, .control-group select {
+        padding: 6px 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        font-size: 13px;
+        outline: none;
+    }
+    .form-group input:focus { border-color: #007bff; }
+    .btn-submit {
+        padding: 7px 16px;
+        font-size: 13px;
+        font-weight: bold;
+        background-color: #28a745;
+        color: #ffffff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        height: 33px;
+        width: 100%;
+    }
+    .btn-submit:hover { background-color: #218838; }
+    .control-row {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+    }
+    .control-group {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: bold;
+    }
+    .btn-print {
+        padding: 8px 24px;
+        font-size: 14px;
+        font-weight: bold;
+        background-color: #007bff;
+        color: #ffffff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .btn-print:hover { background-color: #0056b3; }
+    .btn-back {
+        padding: 8px 16px;
+        margin-left: 8px;
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+    }
+    .btn-back:hover { background: #e2e8f0; }
+    .history-table-wrapper {
+        max-height: 280px;
+        overflow-y: auto;
+    }
+    .history-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        text-align: center;
+    }
+    .history-table th {
+        background-color: #f1f5f9;
+        border: 1px solid #cbd5e1;
+        padding: 7px 5px;
+        font-weight: bold;
+        color: #334155;
+    }
+    .history-table td {
+        border: 1px solid #cbd5e1;
+        padding: 6px 5px;
+        color: #1e293b;
+    }
+    .btn-del {
+        padding: 3px 8px;
+        font-size: 11px;
+        font-weight: bold;
+        background-color: #dc3545;
+        color: #ffffff;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+    }
+    .btn-del:hover { background-color: #c82333; }
+    .btn-excel {
+        padding: 5px 12px;
+        font-size: 12px;
+        font-weight: bold;
+        background-color: #198754;
+        color: #ffffff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .btn-excel:hover { background-color: #157347; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container no-print page-header">
+    <h1 class="page-title">바코드 출력(개별) - 수기 발행 및 이력 관리</h1>
+
+    <!-- 1. 수기 입력 폼 -->
+    <div class="form-panel">
+        <div class="form-title">라벨 데이터 수기 입력 (단건 등록)</div>
+        <form id="manualForm" onsubmit="handleManualSubmit(event)">
+            <div class="form-grid">
+                <div class="form-group" style="min-width: 110px;">
+                    <label>고객사명</label>
+                    <input type="text" id="inCustomer" placeholder="예: (주)유라" required>
+                </div>
+                <div class="form-group" style="min-width: 100px;">
+                    <label>납품일자</label>
+                    <input type="text" id="inDeliveryDate" placeholder="예: 26/08/28" required>
+                </div>
+                <div class="form-group" style="min-width: 120px;">
+                    <label>품 번</label>
+                    <input type="text" id="inPartNo" placeholder="예: 310186-1" required>
+                </div>
+                <div class="form-group" style="min-width: 150px;">
+                    <label>품 명</label>
+                    <input type="text" id="inPartName" placeholder="예: SV1 COMBO 5P DC TML" required>
+                </div>
+                <div class="form-group" style="min-width: 80px;">
+                    <label>수 량</label>
+                    <input type="number" id="inQty" placeholder="예: 120" required>
+                </div>
+                <div class="form-group" style="min-width: 90px;">
+                    <label>LOT 번호(6자리)</label>
+                    <input type="text" id="inLotNo" placeholder="예: 260828" maxlength="6" required>
+                </div>
+                <div class="form-group" style="min-width: 70px;">
+                    <label>금형번호</label>
+                    <input type="text" id="inMoldNo" placeholder="예: 01" maxlength="2" required>
+                </div>
+                <div class="form-group" style="min-width: 75px;">
+                    <label>박스 번호</label>
+                    <input type="number" id="inBoxNo" placeholder="예: 14" min="1" max="999" required>
+                </div>
+                <div>
+                    <button type="submit" class="btn-submit">등록 및 저장</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- 2. 인쇄 범위 제어 패널 -->
+    <div class="control-panel">
+        <div class="control-row">
+            <div class="control-group">
+                <label><input type="radio" name="printMode" value="ALL" checked onchange="onModeChange()"> 전체 출력</label>
+            </div>
+            <div class="control-group">
+                <label><input type="radio" name="printMode" value="PART" onchange="onModeChange()"> 품번별 출력</label>
+                <select id="partSelect" disabled onchange="applyFilter()"></select>
+            </div>
+            <div class="control-group">
+                <label><input type="radio" name="printMode" value="RANGE" onchange="onModeChange()"> 범위 출력</label>
+                <input type="number" id="rangeStart" placeholder="시작" style="width:70px;" disabled oninput="validateInput(this)"> ~ 
+                <input type="number" id="rangeEnd" placeholder="종료" style="width:70px;" disabled oninput="validateInput(this)">
+                <button onclick="applyFilter()" id="btnRange" style="padding:4px 8px;" disabled>적용</button>
+            </div>
+            <div class="control-group">
+                <label><input type="radio" name="printMode" value="SINGLE" onchange="onModeChange()"> 1개 출력</label>
+                <input type="number" id="singleIdx" placeholder="순번" style="width:70px;" disabled oninput="validateInput(this)">
+                <button onclick="applyFilter()" id="btnSingle" style="padding:4px 8px;" disabled>적용</button>
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+            <div>
+                <button onclick="window.print()" class="btn-print">라벨 인쇄</button>
+                <button onclick="location.href='/shipping/history'" class="btn-back">출고내역으로 복귀</button>
+            </div>
+            <span id="printSummary" style="font-size: 13px; font-weight: bold; color: #1e293b;">출력 대상: 0장</span>
+        </div>
+    </div>
+
+    <!-- 3. 하단 수기 발행 이력 대장 -->
+    <div class="history-table-wrapper">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-weight:bold; font-size:13px; color:#334155;">수기 발행 이력 대장</span>
+                <span id="historyTotalCount" style="font-size:12px; color:#64748b;">총 0건</span>
+            </div>
+            <button type="button" onclick="downloadManualExcel()" class="btn-excel">이력 엑셀 다운로드</button>
+        </div>
+        <table class="history-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px;">순번</th>
+                    <th style="width: 130px;">등록일시</th>
+                    <th style="width: 80px;">고객사</th>
+                    <th style="width: 90px;">납품일자</th>
+                    <th style="width: 100px;">품번</th>
+                    <th style="width: 200px;">품명</th>
+                    <th style="width: 60px;">수량</th>
+                    <th style="width: 140px;">시리얼</th>
+                    <th style="width: 160px;">바코드</th>
+                    <th style="width: 60px;">관리</th>
+                </tr>
+            </thead>
+            <tbody id="historyTableBody">
+                <tr><td colspan="10">등록된 수기 발행 데이터가 없습니다.</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div id="labelsContainer"></div>
+{% endblock %}
+
+{% block extra_script %}
+<script src="/static/js/barcode_engine.js"></script>
+<script src="/static/js/label_templates.js"></script>
+
+<script>
+    let MANUAL_DATA = [];
+
+    async function loadManualHistory() {
+        try {
+            const res = await fetch('/api/manual/data');
+            const json = await res.json();
+            MANUAL_DATA = json.data || [];
+
+            renderHistoryTable();
+            initControls();
+            applyFilter();
+        } catch (e) {
+            console.error("수기 데이터 조회 실패:", e);
+        }
+    }
+
+    function renderHistoryTable() {
+        const tbody = document.getElementById('historyTableBody');
+        const totalCount = document.getElementById('historyTotalCount');
+        totalCount.innerText = `총 ${MANUAL_DATA.length}건`;
+
+        if (MANUAL_DATA.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="10">등록된 수기 발행 데이터가 없습니다.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = MANUAL_DATA.map((row, idx) => `
+            <tr>
+                <td>${idx + 1}</td>
+                <td>${row.created_at}</td>
+                <td>${row.customer}</td>
+                <td>${row.delivery_date}</td>
+                <td>${row.part_no}</td>
+                <td>${row.part_name}</td>
+                <td>${Number(row.qty).toLocaleString()}</td>
+                <td>${row.serial}</td>
+                <td style="font-family:monospace; font-size:11px;">${row.barcode}</td>
+                <td>
+                    <button class="btn-del" onclick="deleteHistoryItem(${row.id})">삭제</button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    async function handleManualSubmit(e) {
+        e.preventDefault();
+
+        const lotVal = document.getElementById('inLotNo').value.trim();
+        const moldVal = String(document.getElementById('inMoldNo').value.trim()).padStart(2, '0');
+        const boxVal = String(document.getElementById('inBoxNo').value.trim()).padStart(3, '0');
+        const generatedSerial = `${lotVal}${moldVal}${boxVal}110657`;
+
+        const payload = {
+            customer: document.getElementById('inCustomer').value.trim(),
+            delivery_date: document.getElementById('inDeliveryDate').value.trim(),
+            part_no: document.getElementById('inPartNo').value.trim(),
+            part_name: document.getElementById('inPartName').value.trim(),
+            qty: document.getElementById('inQty').value.trim(),
+            serial: generatedSerial
+        };
+
+        const res = await fetch('/api/manual/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+
+        if (result.status === 'success') {
+            document.getElementById('inPartNo').value = '';
+            document.getElementById('inPartName').value = '';
+            document.getElementById('inQty').value = '';
+            document.getElementById('inBoxNo').value = '';
+            await loadManualHistory();
+        }
+    }
+
+    async function deleteHistoryItem(id) {
+        if (!confirm('해당 수기 발행 이력을 삭제하시겠습니까?')) return;
+        await fetch('/api/manual/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id })
+        });
+        await loadManualHistory();
+    }
+
+    function downloadManualExcel() {
+        if (MANUAL_DATA.length === 0) {
+            alert('다운로드할 수기 발행 이력 데이터가 없습니다.');
+            return;
+        }
+        window.location.href = '/api/manual/download-excel';
+    }
+
+    function initControls() {
+        const totalCount = MANUAL_DATA.length;
+        const partSelect = document.getElementById('partSelect');
+        partSelect.innerHTML = "";
+        const partSet = new Set();
+
+        MANUAL_DATA.forEach(row => {
+            if (row.part_no) partSet.add(row.part_no.trim());
+        });
+
+        // 품번 오름차순 정렬
+        Array.from(partSet).sort().forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = p;
+            partSelect.appendChild(opt);
+        });
+
+        if (totalCount > 0) {
+            document.getElementById('singleIdx').min = 1;
+            document.getElementById('singleIdx').max = totalCount;
+            document.getElementById('singleIdx').value = 1;
+
+            document.getElementById('rangeStart').min = 1;
+            document.getElementById('rangeStart').max = totalCount;
+            document.getElementById('rangeStart').value = 1;
+
+            document.getElementById('rangeEnd').min = 1;
+            document.getElementById('rangeEnd').max = totalCount;
+            document.getElementById('rangeEnd').value = totalCount;
+        }
+    }
+
+    function validateInput(el) {
+        const maxVal = MANUAL_DATA.length;
+        if (maxVal === 0) { el.value = 1; return; }
+        let val = parseInt(el.value, 10);
+        if (isNaN(val) || val < 1) el.value = 1;
+        else if (val > maxVal) el.value = maxVal;
+    }
+
+    function onModeChange() {
+        const mode = document.querySelector('input[name="printMode"]:checked').value;
+        document.getElementById('partSelect').disabled = (mode !== 'PART');
+        document.getElementById('rangeStart').disabled = (mode !== 'RANGE');
+        document.getElementById('rangeEnd').disabled = (mode !== 'RANGE');
+        document.getElementById('btnRange').disabled = (mode !== 'RANGE');
+        document.getElementById('singleIdx').disabled = (mode !== 'SINGLE');
+        document.getElementById('btnSingle').disabled = (mode !== 'SINGLE');
+        applyFilter();
+    }
+
+    function applyFilter() {
+        const container = document.getElementById('labelsContainer');
+        const summary = document.getElementById('printSummary');
+
+        if (!MANUAL_DATA || MANUAL_DATA.length === 0) {
+            container.innerHTML = "<p style='text-align:center; padding:30px; color:#64748b;'>출력할 수기 발행 데이터가 없습니다. 상단에서 라벨 데이터를 입력해 주십시오.</p>";
+            summary.innerText = "출력 대상: 0장";
+            return;
+        }
+
+        const mode = document.querySelector('input[name="printMode"]:checked').value;
+        let targetList = [];
+
+        if (mode === 'ALL') {
+            targetList = MANUAL_DATA;
+        } else if (mode === 'PART') {
+            const selectedPart = document.getElementById('partSelect').value;
+            targetList = MANUAL_DATA.filter(row => row.part_no.trim() === selectedPart);
+        } else if (mode === 'RANGE') {
+            const start = Math.max(1, parseInt(document.getElementById('rangeStart').value, 10) || 1);
+            const end = Math.min(MANUAL_DATA.length, parseInt(document.getElementById('rangeEnd').value, 10) || MANUAL_DATA.length);
+            targetList = MANUAL_DATA.slice(start - 1, end);
+        } else if (mode === 'SINGLE') {
+            let idx = parseInt(document.getElementById('singleIdx').value, 10) || 1;
+            idx = Math.max(1, Math.min(MANUAL_DATA.length, idx));
+            targetList = [MANUAL_DATA[idx - 1]];
+        }
+
+        summary.innerText = `출력 대상: 총 ${targetList.length}장 (수기 이력 전체 ${MANUAL_DATA.length}장 중)`;
+        
+        let htmlBuffer = "";
+        targetList.forEach(row => {
+            htmlBuffer += LabelTemplates.renderShipmentLabel({
+                customer: row.customer,
+                delivery_date: row.delivery_date,
+                part_no: row.part_no,
+                part_name: row.part_name,
+                qty: row.qty,
+                serial: row.serial,
+                barcode: row.barcode
+            });
+        });
+
+        container.innerHTML = htmlBuffer;
+    }
+
+    loadManualHistory();
+</script>
+{% endblock %}

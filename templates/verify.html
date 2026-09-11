@@ -1,0 +1,408 @@
+{% extends "base.html" %}
+
+{% block title %}출고 라벨 확인 - 출하 관리 시스템{% endblock %}
+
+{% block extra_head %}
+<style>
+    .scanner-box {
+        background: #ffffff;
+        border: 2px solid #2980b9;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    .scanner-input {
+        width: 100%;
+        padding: 12px 15px;
+        font-size: 16px;
+        font-weight: bold;
+        border: 2px solid #bdc3c7;
+        border-radius: 6px;
+        box-sizing: border-box;
+        outline: none;
+    }
+
+    .scanner-input:focus {
+        border-color: #2980b9;
+        background-color: #fcfcfc;
+    }
+
+    .status-dashboard {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 15px;
+        margin-top: 15px;
+    }
+
+    .stat-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 15px;
+        text-align: center;
+    }
+
+    .stat-title {
+        font-size: 12px;
+        color: #64748b;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .stat-value {
+        font-size: 22px;
+        font-weight: 900;
+        color: #1e293b;
+    }
+
+    .alert-banner {
+        padding: 12px 20px;
+        border-radius: 6px;
+        font-weight: bold;
+        font-size: 14px;
+        margin-top: 15px;
+        display: none;
+    }
+
+    .alert-success { background-color: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+    .alert-warning { background-color: #fef9c3; color: #a16207; border: 1px solid #fde047; }
+    .alert-danger { background-color: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+
+    .scan-log-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+        font-size: 13px;
+        table-layout: fixed;
+    }
+
+    .scan-log-table th, .scan-log-table td {
+        border: 1px solid #cbd5e1;
+        padding: 8px 6px;
+        text-align: center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .scan-log-table th {
+        background-color: #f1f5f9;
+        font-weight: bold;
+        color: #334155;
+    }
+
+    .badge-ok { color: #16a34a; font-weight: bold; }
+    .badge-dup { color: #d97706; font-weight: bold; }
+    .badge-err { color: #dc2626; font-weight: bold; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="page-title">출고 라벨 실물 검증 (바코드 스캔)</h1>
+
+    <div class="scanner-box">
+        <label style="font-weight: bold; font-size: 14px; display: block; margin-bottom: 8px;">
+            바코드 스캐너 입력 대기 중 (실물 라벨을 스캔하십시오)
+        </label>
+        <input type="text" id="barcodeScanner" class="scanner-input" placeholder="바코드를 스캔하면 자동으로 검증됩니다." autofocus autocomplete="off">
+        
+        <div id="alertBanner" class="alert-banner"></div>
+
+        <div class="status-dashboard">
+            <div class="stat-card">
+                <div class="stat-title">출고 총 대상 수량</div>
+                <div class="stat-value" id="statTotal">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">검증 완료 수량</div>
+                <div class="stat-value" style="color: #16a34a;" id="statScanned">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">미검증 잔여 수량</div>
+                <div class="stat-value" style="color: #dc2626;" id="statRemaining">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-title">검증 진행률</div>
+                <div class="stat-value" style="color: #2563eb;" id="statProgress">0%</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-weight:bold;">스캔 검증 이력 (최근 스캔순)</div>
+            <div style="display:flex; gap:8px;">
+                <button onclick="downloadScanLogCSV()" style="padding: 6px 14px; background:#28a745; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">검증 로그 다운로드 (CSV)</button>
+                <button onclick="resetScanHistory()" style="padding: 6px 14px; background:#6c757d; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">스캔 이력 초기화</button>
+            </div>
+        </div>
+        <div style="width: 100%; overflow-x: auto;">
+            <table class="scan-log-table">
+                <thead>
+                    <tr>
+                        <th style="width: 5%;">순번</th>
+                        <th style="width: 9%;">스캔 시각</th>
+                        <th style="width: 25%;">스캔 바코드</th>
+                        <th style="width: 12%;">품번</th>
+                        <th style="width: 6%;">수량</th>
+                        <th style="width: 8%;">LOT</th>
+                        <th style="width: 6%;">금형</th>
+                        <th style="width: 7%;">박스 번호</th>
+                        <th style="width: 8%;">회사코드</th>
+                        <th style="width: 14%;">검증 결과</th>
+                    </tr>
+                </thead>
+                <tbody id="scanLogBody">
+                    <tr>
+                        <td colspan="10" style="color: #94a3b8; padding: 20px;">스캔된 라벨이 없습니다.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    let TARGET_MAP = new Map();
+    let SCANNED_SET = new Set();
+    let SCAN_LOGS = [];
+
+    const STORAGE_LOGS_KEY = 'VERIFY_SCAN_LOGS_DATA';
+    const STORAGE_SET_KEY = 'VERIFY_SCANNED_SET_DATA';
+
+    async function initVerifyMaster() {
+        const res = await fetch('/api/data');
+        const json = await res.json();
+        const data = json.data || [];
+
+        TARGET_MAP.clear();
+
+        data.forEach((row, i) => {
+            const rawBarcode = String(row['바코드'] || row[Object.keys(row)[2]] || '').trim();
+            if (rawBarcode) {
+                TARGET_MAP.set(rawBarcode, { ...row, originalIndex: i + 1 });
+            }
+        });
+
+        loadScanHistoryFromStorage();
+        renderLogTable();
+        updateDashboard();
+        focusScanner();
+    }
+
+    function loadScanHistoryFromStorage() {
+        try {
+            const savedLogs = localStorage.getItem(STORAGE_LOGS_KEY);
+            const savedSet = localStorage.getItem(STORAGE_SET_KEY);
+
+            SCAN_LOGS = savedLogs ? JSON.parse(savedLogs) : [];
+            SCANNED_SET = savedSet ? new Set(JSON.parse(savedSet)) : new Set();
+        } catch (e) {
+            console.error("로컬 스토리지 데이터 복원 오류:", e);
+            SCAN_LOGS = [];
+            SCANNED_SET = new Set();
+        }
+    }
+
+    function saveScanHistoryToStorage() {
+        try {
+            localStorage.setItem(STORAGE_LOGS_KEY, JSON.stringify(SCAN_LOGS));
+            localStorage.setItem(STORAGE_SET_KEY, JSON.stringify(Array.from(SCANNED_SET)));
+        } catch (e) {
+            console.error("로컬 스토리지 저장 오류:", e);
+        }
+    }
+
+    function focusScanner() {
+        const input = document.getElementById('barcodeScanner');
+        if (input) input.focus();
+    }
+
+    function updateDashboard() {
+        const total = TARGET_MAP.size;
+        const scanned = SCANNED_SET.size;
+        const remaining = total - scanned;
+        const percent = total > 0 ? ((scanned / total) * 100).toFixed(1) : 0;
+
+        document.getElementById('statTotal').innerText = total.toLocaleString();
+        document.getElementById('statScanned').innerText = scanned.toLocaleString();
+        document.getElementById('statRemaining').innerText = remaining.toLocaleString();
+        document.getElementById('statProgress').innerText = `${percent}%`;
+    }
+
+    function showAlert(message, type) {
+        const banner = document.getElementById('alertBanner');
+        banner.className = `alert-banner alert-${type}`;
+        banner.innerText = message;
+        banner.style.display = 'block';
+    }
+
+    document.getElementById('barcodeScanner').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            const code = this.value.trim();
+            if (code) {
+                processBarcode(code);
+                this.value = '';
+            }
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A' && e.target.tagName !== 'INPUT') {
+            focusScanner();
+        }
+    });
+
+    function parseBarcodeDetails(code, matchedRow) {
+        let partNo = "-";
+        let qty = "-";
+        let lot = "-";
+        let mold = "-";
+        let box = "-";
+        let company = "-";
+
+        if (matchedRow) {
+            partNo = matchedRow['품번'] || matchedRow['품 번'] || matchedRow['part_no'] || "-";
+            qty = matchedRow['수량'] || matchedRow['박스수량'] || matchedRow['qty'] || "-";
+        }
+
+        const matchPQS = code.match(/P(.*?)Q(.*?)S(.*)/);
+        if (matchPQS) {
+            if (partNo === "-") partNo = matchPQS[1];
+            if (qty === "-") qty = matchPQS[2];
+        }
+
+        let serialStr = "";
+        const serialMatch = code.match(/\d{17}/);
+        if (serialMatch) {
+            serialStr = serialMatch[0];
+        } else if (matchedRow && (matchedRow['SERIAL'] || matchedRow['serial'])) {
+            serialStr = String(matchedRow['SERIAL'] || matchedRow['serial']).trim();
+        }
+
+        if (serialStr && serialStr.length >= 17) {
+            const s = serialStr.slice(-17);
+            lot = s.substring(0, 6);
+            mold = s.substring(6, 8);
+            box = s.substring(8, 11);
+            company = s.substring(11, 17);
+        }
+
+        return { partNo, qty, lot, mold, box, company };
+    }
+
+    function processBarcode(code) {
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+        
+        let statusText = "";
+        let badgeHtml = "";
+        
+        const matchedRow = TARGET_MAP.get(code);
+        const details = parseBarcodeDetails(code, matchedRow);
+
+        if (!TARGET_MAP.has(code)) {
+            showAlert(`[불일치 오류] 출고 원장에 등록되지 않은 바코드입니다: ${code}`, 'danger');
+            badgeHtml = "<span class='badge-err'>미등록 불일치 (ERROR)</span>";
+            statusText = "미등록 불일치";
+        } else if (SCANNED_SET.has(code)) {
+            showAlert(`[중복 경고] 이미 스캔 검증이 완료된 라벨입니다: ${code}`, 'warning');
+            badgeHtml = "<span class='badge-dup'>중복 스캔 (DUPLICATE)</span>";
+            statusText = "중복 스캔";
+        } else {
+            SCANNED_SET.add(code);
+            showAlert(`[검증 일치] 정상 라벨 확인 완료: ${code}`, 'success');
+            badgeHtml = "<span class='badge-ok'>정상 일치 (OK)</span>";
+            statusText = "정상 일치";
+        }
+
+        SCAN_LOGS.unshift({ 
+            time: timeStr, 
+            barcode: code, 
+            partNo: details.partNo,
+            qty: details.qty,
+            lot: details.lot,
+            mold: details.mold,
+            box: details.box,
+            company: details.company,
+            status: statusText,
+            badge: badgeHtml 
+        });
+
+        saveScanHistoryToStorage();
+        renderLogTable();
+        updateDashboard();
+    }
+
+    function renderLogTable() {
+        const tbody = document.getElementById('scanLogBody');
+        if (SCAN_LOGS.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='10' style='color: #94a3b8; padding: 20px;'>스캔된 라벨이 없습니다.</td></tr>";
+            return;
+        }
+
+        let html = "";
+        SCAN_LOGS.forEach((log, idx) => {
+            html += `
+                <tr>
+                    <td>${SCAN_LOGS.length - idx}</td>
+                    <td>${log.time}</td>
+                    <td style="font-family: monospace; font-weight: bold; text-align: center;">${log.barcode}</td>
+                    <td style="font-weight: bold;">${log.partNo}</td>
+                    <td>${log.qty !== '-' ? Number(log.qty).toLocaleString() : '-'}</td>
+                    <td style="font-family: monospace;">${log.lot}</td>
+                    <td style="font-family: monospace;">${log.mold}</td>
+                    <td style="font-family: monospace; font-weight: bold;">${log.box}</td>
+                    <td style="font-family: monospace;">${log.company}</td>
+                    <td>${log.badge}</td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+    }
+
+    function resetScanHistory() {
+        if (confirm("현재까지의 스캔 검증 이력을 초기화하시겠습니까?")) {
+            SCANNED_SET.clear();
+            SCAN_LOGS = [];
+            
+            localStorage.removeItem(STORAGE_LOGS_KEY);
+            localStorage.removeItem(STORAGE_SET_KEY);
+
+            document.getElementById('alertBanner').style.display = 'none';
+            renderLogTable();
+            updateDashboard();
+            focusScanner();
+        }
+    }
+
+    function downloadScanLogCSV() {
+        if (SCAN_LOGS.length === 0) {
+            alert("저장할 스캔 검증 이력이 없습니다.");
+            return;
+        }
+
+        let csvContent = "\uFEFF순번,스캔시각,바코드,품번,수량,LOT,금형,박스번호,회사코드,검증결과\n";
+        SCAN_LOGS.slice().reverse().forEach((log, i) => {
+            csvContent += `${i + 1},"${log.time}","\t${log.barcode}","${log.partNo}","${log.qty}","${log.lot}","${log.mold}","${log.box}","${log.company}","${log.status}"\n`;
+        });
+
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const today = new Date();
+        const dateStr = today.toISOString().slice(2,10).replace(/-/g, '');
+        a.href = url;
+        a.download = `라벨검증로그_${dateStr}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
+    initVerifyMaster();
+</script>
+{% endblock %}

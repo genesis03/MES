@@ -1,0 +1,498 @@
+{% extends "base.html" %}
+
+{% block title %}계정 관리 - 출하 관리 시스템{% endblock %}
+
+{% block extra_head %}
+<style>
+    .admin-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 24px;
+    }
+    .admin-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .admin-title { font-size: 18px; font-weight: 800; color: #1e293b; }
+    .btn-create {
+        background-color: #2563eb;
+        color: #ffffff;
+        border: none;
+        padding: 9px 16px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+    .user-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+    .user-table th, .user-table td { border: 1px solid #cbd5e1; padding: 10px 8px; text-align: center; }
+    .user-table th { background-color: #f1f5f9; font-weight: bold; color: #334155; }
+    .badge-role-admin { background: #fee2e2; color: #b91c1c; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; }
+    .badge-role-user { background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 11px; }
+
+    .btn-action-edit { background-color: #0284c7; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: bold; }
+    .btn-action-del { background-color: #dc2626; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer; font-weight: bold; margin-left: 4px; }
+
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+    .modal-box {
+        background: #ffffff;
+        border-radius: 8px;
+        width: 100%;
+        max-width: 480px;
+        padding: 24px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    .modal-title { font-size: 16px; font-weight: bold; color: #1e293b; margin-bottom: 16px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; font-weight: bold; color: #475569; margin-bottom: 6px; }
+    .form-input, .form-select { width: 100%; padding: 8px 10px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 4px; box-sizing: border-box; }
+
+    /* 권한 트리 박스 */
+    .perm-tree-box {
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 12px;
+        margin-top: 6px;
+    }
+    .perm-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 6px 0;
+        border-bottom: 1px dashed #e2e8f0;
+    }
+    .perm-row:last-child { border-bottom: none; }
+    .perm-row label { margin-bottom: 0; font-weight: normal; }
+    .perm-select { width: 110px; padding: 4px 6px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-card">
+    <div class="admin-header">
+        <div class="admin-title">시스템 계정 및 계층형 권한 관리</div>
+        <button class="btn-create" onclick="openCreateModal()">+ 신규 계정 추가</button>
+    </div>
+
+    <table class="user-table">
+        <thead>
+            <tr>
+                <th style="width: 6%;">ID</th>
+                <th style="width: 12%;">아이디</th>
+                <th style="width: 9%;">역할</th>
+                <th style="width: 18%;">메뉴 권한 요약</th>
+                <th style="width: 11%;">사용 부서</th>
+                <th style="width: 11%;">사용자</th>
+                <th style="width: 11%;">비고</th>
+                <th style="width: 13%;">생성일시</th>
+                <th style="width: 9%;">관리</th>
+            </tr>
+        </thead>
+        <tbody id="userTableBody">
+            <tr><td colspan="9" style="padding: 20px; color: #94a3b8;">계정 목록을 조회 중입니다...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- 모달 공통 폼 -->
+<div id="userModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-title" id="modalTitle">계정 설정</div>
+        <input type="hidden" id="modalUserId">
+
+        <div class="form-group">
+            <label>아이디</label>
+            <input type="text" id="modalUsername" class="form-input" autocomplete="off">
+        </div>
+        <div class="form-group">
+            <label>비밀번호 <span id="pwdNotice" style="font-weight:normal; color:#64748b;"></span></label>
+            <input type="password" id="modalPassword" class="form-input" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+            <label>역할 (Role)</label>
+            <select id="modalRole" class="form-select" onchange="toggleRoleUI()">
+                <option value="USER">일반 계정 (USER)</option>
+                <option value="ADMIN">관리자 계정 (ADMIN)</option>
+            </select>
+        </div>
+
+        <div id="permissionConfigArea" class="form-group">
+            <label>계층형 메뉴별 권한 설정</label>
+            <div class="perm-tree-box">
+                <!-- 1. 기초 정보 -->
+                <div class="perm-row">
+                    <label style="font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" id="parentBasicInfo"> [상위] 기초 정보 메뉴 사용 허용
+                    </label>
+                    <span style="font-size: 11px; color: #64748b;">PLM 기준정보</span>
+                </div>
+
+                <!-- 2. 영업관리 -->
+                <div class="perm-row">
+                    <label style="font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" id="parentSales"> [상위] 영업관리 메뉴 사용 허용
+                    </label>
+                    <span style="font-size: 11px; color: #64748b;">수주/출하지시</span>
+                </div>
+
+                <!-- 3. 구매관리 -->
+                <div class="perm-row">
+                    <label style="font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" id="parentPurchase"> [상위] 구매관리 메뉴 사용 허용
+                    </label>
+                    <span style="font-size: 11px; color: #64748b;">발주/자재수급</span>
+                </div>
+
+                <!-- 4. 생산관리 -->
+                <div class="perm-row">
+                    <label style="font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" id="parentProduction"> [상위] 생산관리 메뉴 사용 허용
+                    </label>
+                    <span style="font-size: 11px; color: #64748b;">작업지시/실적</span>
+                </div>
+
+                <!-- 5. 입고관리 -->
+                <div class="perm-row">
+                    <label style="font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" id="parentInbound"> [상위] 입고관리 메뉴 사용 허용
+                    </label>
+                    <span style="font-size: 11px; color: #64748b;">원자재입고/LOT</span>
+                </div>
+
+                <!-- 6. 출고관리 (기존 계층 유지) -->
+                <div style="padding: 6px 0; border-bottom: 1px dashed #e2e8f0;">
+                    <div style="font-weight: bold; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" id="parentShipping" onchange="toggleChildPerms()">
+                        <label for="parentShipping" style="cursor:pointer; font-weight:bold;">[상위] 출고관리 메뉴 사용 허용</label>
+                    </div>
+                    <div id="childPermsBox" style="margin-left: 20px;">
+                        <div class="perm-row">
+                            <label>출고 내역 및 LOT 계산</label>
+                            <select id="perm_history" class="perm-select">
+                                <option value="NONE">접근 차단</option>
+                                <option value="READ">읽기 전용</option>
+                                <option value="WRITE">수정/작성</option>
+                            </select>
+                        </div>
+                        <div class="perm-row">
+                            <label>바코드 출력 (일괄)</label>
+                            <select id="perm_print" class="perm-select">
+                                <option value="NONE">접근 차단</option>
+                                <option value="READ">읽기 전용</option>
+                                <option value="WRITE">수정/작성</option>
+                            </select>
+                        </div>
+                        <div class="perm-row">
+                            <label>바코드 출력 (수기)</label>
+                            <select id="perm_manual" class="perm-select">
+                                <option value="NONE">접근 차단</option>
+                                <option value="READ">읽기 전용</option>
+                                <option value="WRITE">수정/작성</option>
+                            </select>
+                        </div>
+                        <div class="perm-row">
+                            <label>출하 바코드 검증</label>
+                            <select id="perm_verify" class="perm-select">
+                                <option value="NONE">접근 차단</option>
+                                <option value="READ">읽기 전용</option>
+                                <option value="WRITE">수정/작성</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 7. 품질관리 -->
+                <div class="perm-row">
+                    <label style="font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                        <input type="checkbox" id="parentQuality"> [상위] 품질관리 메뉴 사용 허용
+                    </label>
+                    <span style="font-size: 11px; color: #64748b;">수입/공정/출하검사</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>사용 부서</label>
+            <input type="text" id="modalDepartment" class="form-input" placeholder="예: 품질관리팀, 생산관리팀">
+        </div>
+        <div class="form-group">
+            <label>사용자 <span style="color:#dc2626;">* (필수)</span></label>
+            <input type="text" id="modalName" class="form-input" placeholder="사용자 성명을 입력해 주십시오">
+        </div>
+        <div class="form-group">
+            <label>비고</label>
+            <input type="text" id="modalNote" class="form-input" placeholder="특이사항 및 메모">
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px;">
+            <button onclick="closeModal()" style="padding: 7px 12px; background:#cbd5e1; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">취소</button>
+            <button onclick="submitUserForm()" style="padding: 7px 16px; background:#2563eb; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">저장</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    let USERS_DATA = [];
+    let IS_EDIT_MODE = false;
+
+    async function loadUsers() {
+        const res = await fetch('/api/admin/users');
+        const json = await res.json();
+        USERS_DATA = json.data || [];
+        renderTable();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('userTableBody');
+        if (USERS_DATA.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='9' style='padding: 20px; color:#94a3b8;'>등록된 계정이 없습니다.</td></tr>";
+            return;
+        }
+
+        let html = "";
+        USERS_DATA.forEach(u => {
+            const roleBadge = u.role === 'ADMIN' 
+                ? "<span class='badge-role-admin'>관리자</span>" 
+                : "<span class='badge-role-user'>일반사용자</span>";
+            
+            let permSummary = "전체 제어 (Full Access)";
+            if (u.role !== 'ADMIN') {
+                const p = u.permissions || {};
+                const activeMenus = [];
+                if (p.basic_info && p.basic_info.enabled) activeMenus.push("기초");
+                if (p.sales && p.sales.enabled) activeMenus.push("영업");
+                if (p.purchase && p.purchase.enabled) activeMenus.push("구매");
+                if (p.production && p.production.enabled) activeMenus.push("생산");
+                if (p.inbound && p.inbound.enabled) activeMenus.push("입고");
+                if (p.shipping && p.shipping.enabled) activeMenus.push("출고");
+                if (p.quality && p.quality.enabled) activeMenus.push("품질");
+
+                if (activeMenus.length === 0) {
+                    permSummary = "<span style='color:#dc2626;'>모든 메뉴 차단</span>";
+                } else {
+                    permSummary = activeMenus.join(', ');
+                    if (p.shipping && p.shipping.enabled) {
+                        const sm = p.shipping.menus || {};
+                        permSummary += ` <span style='font-size:11px; color:#64748b;'>(출고:${sm.history || 'N'}/${sm.print || 'N'}/${sm.manual || 'N'}/${sm.verify || 'N'})</span>`;
+                    }
+                }
+            }
+
+            const actions = `
+                <button class="btn-action-edit" onclick="openEditModal(${u.id})">수정</button>
+                ${u.is_self ? "" : `<button class="btn-action-del" onclick="deleteUser(${u.id}, '${u.username}')">삭제</button>`}
+            `;
+
+            html += `
+                <tr>
+                    <td>${u.id}</td>
+                    <td style="font-weight: bold;">${u.username} ${u.is_self ? '<span style="color:#2563eb; font-size:10px;">(본인)</span>' : ''}</td>
+                    <td>${roleBadge}</td>
+                    <td style="font-size:12px; color:#475569;">${permSummary}</td>
+                    <td style="font-size:12px; color:#334155;">${u.department || '-'}</td>
+                    <td style="font-weight: bold; color:#0f172a;">${u.name || '-'}</td>
+                    <td style="font-size:12px; color:#64748b;">${u.note || '-'}</td>
+                    <td style="font-size:12px; color:#64748b;">${u.created_at}</td>
+                    <td>${actions}</td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+    }
+
+    function toggleRoleUI() {
+        const role = document.getElementById('modalRole').value;
+        const permArea = document.getElementById('permissionConfigArea');
+        permArea.style.display = (role === 'ADMIN') ? 'none' : 'block';
+    }
+
+    function toggleChildPerms() {
+        const enabled = document.getElementById('parentShipping').checked;
+        const selects = document.querySelectorAll('#childPermsBox select');
+        selects.forEach(s => s.disabled = !enabled);
+    }
+
+    function openCreateModal() {
+        IS_EDIT_MODE = false;
+        document.getElementById('modalTitle').innerText = "신규 계정 추가";
+        document.getElementById('modalUserId').value = "";
+        document.getElementById('modalUsername').value = "";
+        document.getElementById('modalUsername').disabled = false;
+        document.getElementById('modalPassword').value = "";
+        document.getElementById('pwdNotice').innerText = "(필수 입력)";
+        document.getElementById('modalRole').value = "USER";
+        
+        document.getElementById('modalDepartment').value = "";
+        document.getElementById('modalName').value = "";
+        document.getElementById('modalNote').value = "";
+
+        // 대메뉴 권한 초기화 (기본: 출고관리만 허용)
+        document.getElementById('parentBasicInfo').checked = false;
+        document.getElementById('parentSales').checked = false;
+        document.getElementById('parentPurchase').checked = false;
+        document.getElementById('parentProduction').checked = false;
+        document.getElementById('parentInbound').checked = false;
+        document.getElementById('parentShipping').checked = true;
+        document.getElementById('parentQuality').checked = false;
+
+        document.getElementById('perm_history').value = "READ";
+        document.getElementById('perm_print').value = "READ";
+        document.getElementById('perm_manual').value = "READ";
+        document.getElementById('perm_verify').value = "READ";
+
+        toggleRoleUI();
+        toggleChildPerms();
+        document.getElementById('userModal').style.display = 'flex';
+    }
+
+    function openEditModal(userId) {
+        IS_EDIT_MODE = true;
+        const u = USERS_DATA.find(x => x.id === userId);
+        if (!u) return;
+
+        document.getElementById('modalTitle').innerText = "계정 권한 및 정보 수정";
+        document.getElementById('modalUserId').value = u.id;
+        document.getElementById('modalUsername').value = u.username;
+        document.getElementById('modalUsername').disabled = true;
+        document.getElementById('modalPassword').value = "";
+        document.getElementById('pwdNotice').innerText = "(변경 시에만 입력)";
+        document.getElementById('modalRole').value = u.role;
+
+        document.getElementById('modalDepartment').value = u.department || "";
+        document.getElementById('modalName').value = u.name || "";
+        document.getElementById('modalNote').value = u.note || "";
+
+        const p = u.permissions || {};
+        
+        // 각 대메뉴 활성화 상태 바인딩
+        document.getElementById('parentBasicInfo').checked = !!(p.basic_info && p.basic_info.enabled);
+        document.getElementById('parentSales').checked = !!(p.sales && p.sales.enabled);
+        document.getElementById('parentPurchase').checked = !!(p.purchase && p.purchase.enabled);
+        document.getElementById('parentProduction').checked = !!(p.production && p.production.enabled);
+        document.getElementById('parentInbound').checked = !!(p.inbound && p.inbound.enabled);
+
+        const s = p.shipping || { enabled: false, menus: {} };
+        document.getElementById('parentShipping').checked = !!s.enabled;
+
+        const m = s.menus || {};
+        document.getElementById('perm_history').value = m.history || "NONE";
+        document.getElementById('perm_print').value = m.print || "NONE";
+        document.getElementById('perm_manual').value = m.manual || "NONE";
+        document.getElementById('perm_verify').value = m.verify || "NONE";
+
+        document.getElementById('parentQuality').checked = !!(p.quality && p.quality.enabled);
+
+        toggleRoleUI();
+        toggleChildPerms();
+        document.getElementById('userModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('userModal').style.display = 'none';
+    }
+
+    async function submitUserForm() {
+        const id = document.getElementById('modalUserId').value;
+        const username = document.getElementById('modalUsername').value.trim();
+        const password = document.getElementById('modalPassword').value.trim();
+        const role = document.getElementById('modalRole').value;
+        const department = document.getElementById('modalDepartment').value.trim();
+        const name = document.getElementById('modalName').value.trim();
+        const note = document.getElementById('modalNote').value.trim();
+
+        if (!IS_EDIT_MODE && (!username || !password)) {
+            alert("아이디와 비밀번호를 모두 입력해 주십시오.");
+            return;
+        }
+
+        if (!name) {
+            alert("사용자 성명을 입력해 주십시오.");
+            document.getElementById('modalName').focus();
+            return;
+        }
+
+        const permissions = {
+            basic_info: {
+                enabled: document.getElementById('parentBasicInfo').checked
+            },
+            sales: {
+                enabled: document.getElementById('parentSales').checked
+            },
+            purchase: {
+                enabled: document.getElementById('parentPurchase').checked
+            },
+            production: {
+                enabled: document.getElementById('parentProduction').checked
+            },
+            inbound: {
+                enabled: document.getElementById('parentInbound').checked
+            },
+            shipping: {
+                enabled: document.getElementById('parentShipping').checked,
+                menus: {
+                    history: document.getElementById('perm_history').value,
+                    print: document.getElementById('perm_print').value,
+                    manual: document.getElementById('perm_manual').value,
+                    verify: document.getElementById('perm_verify').value
+                }
+            },
+            quality: {
+                enabled: document.getElementById('parentQuality').checked
+            }
+        };
+
+        const endpoint = IS_EDIT_MODE ? '/api/admin/users/update' : '/api/admin/users/create';
+        const payload = IS_EDIT_MODE 
+            ? { id: Number(id), role, permissions, password, department, name, note }
+            : { username, password, role, permissions, department, name, note };
+
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+
+        if (res.ok) {
+            alert(json.message);
+            closeModal();
+            loadUsers();
+        } else {
+            alert(json.detail || "작업 처리에 실패했습니다.");
+        }
+    }
+
+    async function deleteUser(id, username) {
+        if (!confirm(`'${username}' 계정을 영구 삭제하시겠습니까?`)) return;
+        const res = await fetch('/api/admin/users/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        const json = await res.json();
+        if (res.ok) {
+            alert(json.message);
+            loadUsers();
+        } else {
+            alert(json.detail || "삭제 실패");
+        }
+    }
+
+    loadUsers();
+</script>
+{% endblock %}

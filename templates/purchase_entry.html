@@ -1,0 +1,59 @@
+<!-- Include at the end of purchase.html's content block; base.html stays unchanged. -->
+<style>
+  #purchase-entry { margin-top:24px; padding:20px; background:white; border:1px solid var(--border-color); border-radius:6px; }
+  #purchase-entry h2 { margin-bottom:16px; font-size:18px; }
+  .purchase-fields { display:flex; gap:12px; flex-wrap:wrap; align-items:end; margin-bottom:16px; }
+  .purchase-fields label { display:flex; flex-direction:column; gap:5px; font-size:13px; }
+  .purchase-fields input, #purchase-entry td input, #purchase-entry td select { padding:8px; border:1px solid var(--border-color); border-radius:4px; max-width:180px; }
+  #purchase-entry td input[type=number] { width:100px; }
+  #purchase-entry button, .purchase-dialog button { padding:7px 12px; cursor:pointer; }
+  .purchase-dialog { margin:auto; width:min(900px,95vw); max-height:85vh; padding:20px; border:1px solid var(--border-color); border-radius:8px; }
+  .purchase-dialog::backdrop { background:rgba(0,0,0,.45); }
+  .purchase-dialog header { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  #purchase-message { margin:12px 0; font-size:13px; }
+  #purchase-entry .purchase-scroll, .purchase-dialog .purchase-scroll { overflow:auto; max-height:45vh; }
+</style>
+<section id="purchase-entry" aria-labelledby="purchase-entry-title">
+  <h2 id="purchase-entry-title">구매 입고 등록</h2>
+  <form id="purchase-inbound-form">
+    <div class="purchase-fields">
+      <label>입고일자<input type="date" id="purchase-date" required></label>
+      <label>거래처명<input id="purchase-partner" maxlength="100" required></label>
+      <label>송장번호<input id="purchase-invoice" maxlength="50"></label>
+      <button type="button" id="purchase-add">품목 검색·추가</button>
+      <button type="button" id="purchase-load">발주서 불러오기</button>
+    </div>
+    {% if not warehouse_masters or not storage_locations %}
+    <p>사용 중인 창고와 저장위치를 기준정보에 등록한 후 입고할 수 있습니다.</p>
+    {% endif %}
+    <div class="purchase-scroll">
+      <table class="data-table">
+        <thead><tr><th>발주번호</th><th>품번 / 품명 / 규격</th><th>단위</th><th>입고수량</th><th>공급사 LOT *</th><th>창고 *</th><th>저장위치 *</th><th>행 관리</th></tr></thead>
+        <tbody id="purchase-inbound-rows"></tbody>
+      </table>
+    </div>
+    <p id="purchase-message" role="status" aria-live="polite"></p>
+    <button class="btn-create" id="purchase-confirm" type="submit">입고 확정</button>
+  </form>
+</section>
+
+<template id="purchase-warehouse-select"><select required aria-label="창고">
+  <option value="">창고 선택</option>
+  {% for warehouse in warehouse_masters %}
+  <option value="{{ warehouse.warehouse_code }}">{{ warehouse.warehouse_code }} · {{ warehouse.warehouse_name }}</option>
+  {% endfor %}
+</select></template>
+<template id="purchase-location-select"><select required aria-label="저장위치">
+  <option value="">저장위치 선택</option>
+  {% for location in storage_locations %}
+  <option value="{{ location.location_code }}">{{ location.location_code }} · {{ location.location_name }}</option>
+  {% endfor %}
+</select></template>
+
+<dialog id="purchase-picker" class="purchase-dialog" aria-labelledby="purchase-picker-title">
+  <header><h3 id="purchase-picker-title">품목 검색</h3><button type="button" id="purchase-picker-close">닫기</button></header>
+  <div class="purchase-fields"><label>품번·품명·규격 검색<input id="purchase-keyword" maxlength="100"></label><button type="button" id="purchase-search">검색</button></div>
+  <p id="purchase-picker-message" role="status"></p>
+  <div class="purchase-scroll"><table class="data-table"><thead id="purchase-picker-head"></thead><tbody id="purchase-picker-rows"></tbody></table></div>
+  <div class="purchase-fields"><button type="button" id="purchase-prev">이전</button><span id="purchase-page"></span><button type="button" id="purchase-next">다음</button></div>
+</dialog>

@@ -1,0 +1,756 @@
+{% extends "base.html" %}
+
+{% block title %}품목 정보 관리 - 기준정보 관리{% endblock %}
+
+{% block extra_head %}
+<style>
+    .page-container {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        height: calc(100vh - 100px);
+    }
+
+    /* 상단 통합 컨트롤 바 */
+    .top-control-bar {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        padding: 12px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-shrink: 0;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+
+    .search-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .search-label {
+        font-size: 12.5px;
+        font-weight: bold;
+        color: #334155;
+    }
+
+    .search-select {
+        padding: 6px 8px;
+        font-size: 12.5px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        box-sizing: border-box;
+        background-color: #ffffff;
+        min-width: 110px;
+    }
+
+    .search-input {
+        padding: 6px 10px;
+        font-size: 12.5px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        width: 140px;
+        box-sizing: border-box;
+    }
+
+    .action-btn-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .btn-action {
+        padding: 7px 18px;
+        font-size: 13px;
+        font-weight: bold;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        color: #ffffff;
+        min-width: 70px;
+    }
+
+    .btn-search { background-color: #0284c7; }
+    .btn-search:hover { background-color: #0369a1; }
+    .btn-delete { background-color: #ea580c; }
+    .btn-delete:hover { background-color: #c2410c; }
+    .btn-new { background-color: #16a34a; }
+    .btn-new:hover { background-color: #15803d; }
+    .btn-save { background-color: #2563eb; }
+    .btn-save:hover { background-color: #1d4ed8; }
+
+    /* 메인 2열 레이아웃 */
+    .split-layout {
+        display: flex;
+        gap: 16px;
+        flex: 1;
+        min-height: 0;
+    }
+
+    /* 좌측 품번 리스트 */
+    .list-panel {
+        width: 38%;
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .panel-header {
+        padding: 12px 16px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 14px;
+        font-weight: 800;
+        color: #1e293b;
+        background-color: #f8fafc;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .table-scroll-container {
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .item-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+        table-layout: fixed;
+    }
+
+    .item-table th, .item-table td {
+        border-bottom: 1px solid #e2e8f0;
+        padding: 8px 10px;
+        text-align: left;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .item-table th {
+        background-color: #f1f5f9;
+        font-weight: bold;
+        color: #475569;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+
+    .item-table tbody tr {
+        cursor: pointer;
+    }
+
+    .item-table tbody tr:hover {
+        background-color: #f8fafc;
+    }
+
+    .item-table tbody tr.selected {
+        background-color: #e0f2fe !important;
+        font-weight: bold;
+    }
+
+    /* 우측 상세 정보 패널 */
+    .detail-panel {
+        width: 62%;
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .form-scroll-container {
+        flex: 1;
+        padding: 24px;
+        overflow-y: auto;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px 24px;
+    }
+
+    .form-field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .form-field.col-span-2 {
+        grid-column: span 2;
+    }
+
+    .field-label {
+        font-size: 12px;
+        font-weight: bold;
+        color: #334155;
+    }
+
+    .field-label .required {
+        color: #dc2626;
+    }
+
+    .field-label .optional {
+        color: #64748b;
+        font-weight: normal;
+        font-size: 11px;
+    }
+
+    .field-input, .field-select {
+        padding: 7px 10px;
+        font-size: 13px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        box-sizing: border-box;
+        width: 100%;
+        background-color: #ffffff;
+    }
+
+    .field-input:disabled {
+        background-color: #f1f5f9;
+        color: #64748b;
+        cursor: not-allowed;
+    }
+
+    .field-textarea {
+        padding: 8px 10px;
+        font-size: 13px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        box-sizing: border-box;
+        width: 100%;
+        resize: vertical;
+        min-height: 60px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <!-- 상단 컨트롤 툴바 (필터 확장) -->
+    <div class="top-control-bar">
+        <div class="search-group">
+            <span class="search-label">계정</span>
+            <select id="searchAccountType" class="search-select" onchange="loadItemList()">
+                <option value="">계정 전체</option>
+            </select>
+
+            <span class="search-label" style="margin-left: 6px;">자재유형</span>
+            <select id="searchMaterialType" class="search-select" onchange="loadItemList()">
+                <option value="">자재 전체</option>
+            </select>
+
+            <span class="search-label" style="margin-left: 6px;">품번</span>
+            <input type="text" id="searchPartNo" class="search-input" placeholder="품번 검색" onkeydown="if(event.key==='Enter') loadItemList()">
+
+            <span class="search-label" style="margin-left: 6px;">품명</span>
+            <input type="text" id="searchPartName" class="search-input" placeholder="품명 검색" onkeydown="if(event.key==='Enter') loadItemList()">
+
+            <button class="btn-action btn-search" onclick="loadItemList()">조회</button>
+        </div>
+        <div class="action-btn-group">
+            <button class="btn-action btn-delete" onclick="handleDeleteItem()">삭제</button>
+            <button class="btn-action btn-new" onclick="initNewForm()">신규</button>
+            <button class="btn-action btn-save" onclick="handleSaveItem()">저장</button>
+        </div>
+    </div>
+
+    <!-- 좌우 2열 레이아웃 -->
+    <div class="split-layout">
+        <!-- 좌측 품번 리스트 -->
+        <div class="list-panel">
+            <div class="panel-header">
+                <span>품번 리스트</span>
+                <span id="listCount" style="font-size: 11.5px; color: #64748b; font-weight: normal;">총 0건</span>
+            </div>
+            <div class="table-scroll-container">
+                <table class="item-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 28%;">계정 / 자재</th>
+                            <th style="width: 36%;">품번</th>
+                            <th style="width: 36%;">품명</th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemTableBody">
+                        <tr>
+                            <td colspan="3" style="text-align: center; padding: 40px; color: #94a3b8;">데이터를 조회 중입니다...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 우측 상세 정보 패널 -->
+        <div class="detail-panel">
+            <div class="panel-header">
+                <span>상세정보</span>
+                <span id="modeBadge" style="font-size: 11px; font-weight: bold; color: #16a34a;">신규 입력 모드</span>
+            </div>
+            <div class="form-scroll-container">
+                <input type="hidden" id="detailId">
+
+                <div class="form-grid">
+                    <!-- 1행 좌: 품번 (필수) -->
+                    <div class="form-field">
+                        <label class="field-label">품번 <span class="required">*</span></label>
+                        <input type="text" id="detailPartNo" class="field-input" placeholder="예: 310186-1" autocomplete="off">
+                    </div>
+
+                    <!-- 1행 우: 차종 (선택 입력) -->
+                    <div class="form-field">
+                        <label class="field-label">차종 <span class="optional">(선택 입력)</span></label>
+                        <input type="text" id="detailVehicleModel" class="field-input" placeholder="예: SW1, QV1, CT1" autocomplete="off">
+                    </div>
+
+                    <!-- 2행 전체너비: 품명 (길게 입력 가능하도록 가로 100% 병합) -->
+                    <div class="form-field col-span-2">
+                        <label class="field-label">품명 <span class="required">*</span></label>
+                        <input type="text" id="detailPartName" class="field-input" placeholder="품목 명칭을 입력하세요" autocomplete="off">
+                    </div>
+
+                    <!-- 3행 좌: 계정유형 (필수) -->
+                    <div class="form-field">
+                        <label class="field-label">계정유형 <span class="required">*</span></label>
+                        <select id="detailAccountType" class="field-select">
+                            <option value="">불러오는 중...</option>
+                        </select>
+                    </div>
+
+                    <!-- 3행 우: 자재유형 (필수) -->
+                    <div class="form-field">
+                        <label class="field-label">자재유형 <span class="required">*</span></label>
+                        <select id="detailMaterialType" class="field-select">
+                            <option value="">불러오는 중...</option>
+                        </select>
+                    </div>
+
+                    <!-- ITEM (품목군) -->
+                    <div class="form-field">
+                        <label class="field-label">ITEM (품목군)</label>
+                        <input type="text" id="detailItemGroup" class="field-input" placeholder="품목 그룹 명칭">
+                    </div>
+
+                    <!-- 리비전 (Revision) -->
+                    <div class="form-field">
+                        <label class="field-label">리비전 (Revision) <span class="required">*</span></label>
+                        <input type="text" id="detailRevision" class="field-input" value="Rev.00">
+                    </div>
+
+                    <!-- 규격 / 사양 -->
+                    <div class="form-field">
+                        <label class="field-label">규격 / 사양</label>
+                        <input type="text" id="detailSpec" class="field-input" placeholder="재질, 치수, 도금 규격 등">
+                    </div>
+
+                    <!-- 단위 -->
+                    <div class="form-field">
+                        <label class="field-label">단위 <span class="required">*</span></label>
+                        <select id="detailUnit" class="field-select">
+                            <option value="">불러오는 중...</option>
+                        </select>
+                    </div>
+
+                    <!-- 표준 포장 수량 (SNP) -->
+                    <div class="form-field">
+                        <label class="field-label">표준 포장 수량 (SNP)</label>
+                        <input type="number" id="detailSnp" class="field-input" min="0" value="0" placeholder="0">
+                    </div>
+
+                    <!-- 최소 발주 수량 (MOQ) -->
+                    <div class="form-field">
+                        <label class="field-label">MOQ (최소 발주 수량)</label>
+                        <input type="number" id="detailMoq" class="field-input" min="0" value="0" placeholder="0">
+                    </div>
+
+                    <!-- 안전 재고 -->
+                    <div class="form-field">
+                        <label class="field-label">안전 재고</label>
+                        <input type="number" id="detailSafetyStock" class="field-input" min="0" value="0" placeholder="0">
+                    </div>
+
+                    <!-- 무게 (소수점 3자리) -->
+                    <div class="form-field">
+                        <label class="field-label">무게 (Weight)</label>
+                        <input type="number" id="detailWeight" class="field-input" step="0.001" min="0" value="0.000" placeholder="0.000">
+                    </div>
+
+                    <!-- 저장위치 -->
+                    <div class="form-field">
+                        <label class="field-label">저장위치</label>
+                        <select id="detailInboundLoc" class="field-select">
+                            <option value="">선택 (Select...)</option>
+                        </select>
+                    </div>
+
+                    <!-- 공정 -->
+                    <div class="form-field">
+                        <label class="field-label">공정</label>
+                        <select id="detailProductionLoc" class="field-select">
+                            <option value="">선택 (Select...)</option>
+                        </select>
+                    </div>
+
+                    <!-- 사용 여부 -->
+                    <div class="form-field">
+                        <label class="field-label">사용 여부 <span class="required">*</span></label>
+                        <select id="detailIsActive" class="field-select">
+                            <option value="Y">Y (사용)</option>
+                            <option value="N">N (사용 중단 / 단종)</option>
+                        </select>
+                    </div>
+
+                    <!-- 비고 -->
+                    <div class="form-field col-span-2">
+                        <label class="field-label">비고</label>
+                        <textarea id="detailNote" class="field-textarea" placeholder="특이사항 메모"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    let LOOKUP_DATA = {
+        common: {},
+        locations: { inbound: [], production: [], warehouse: [] }
+    };
+    let ITEMS_LIST = [];
+    let CURRENT_ITEM_ID = null;
+
+    // 1. 기준정보 룩업 조회 및 드롭다운 초기화
+    async function initLookupData() {
+        try {
+            const [resCommon, resLoc] = await Promise.all([
+                fetch('/api/common-codes/lookup'),
+                fetch('/api/locations/lookup')
+            ]);
+
+            if (resCommon.ok) {
+                const jsonCommon = await resCommon.json();
+                LOOKUP_DATA.common = jsonCommon.data || {};
+            }
+            if (resLoc.ok) {
+                const jsonLoc = await resLoc.json();
+                LOOKUP_DATA.locations = jsonLoc.data || { inbound: [], production: [], warehouse: [] };
+            }
+
+            // 상단 검색 필터용 콤보상자 바인딩
+            populateSearchSelect('searchAccountType', LOOKUP_DATA.common['ACCOUNT_TYPE'] || [], '계정 전체');
+            populateSearchSelect('searchMaterialType', LOOKUP_DATA.common['MATERIAL_TYPE'] || [], '자재 전체');
+
+            // 상세 입력 폼용 콤보상자 바인딩
+            populateCommonSelect('detailAccountType', LOOKUP_DATA.common['ACCOUNT_TYPE'] || [], '계정유형 선택');
+            populateCommonSelect('detailMaterialType', LOOKUP_DATA.common['MATERIAL_TYPE'] || [], '자재유형 선택');
+            populateCommonSelect('detailUnit', LOOKUP_DATA.common['UNIT'] || [], '단위 선택');
+
+            populateLocationSelect('detailInboundLoc', LOOKUP_DATA.locations.inbound || [], '저장위치 선택');
+            populateLocationSelect('detailProductionLoc', LOOKUP_DATA.locations.production || [], '공정 선택');
+
+        } catch (err) {
+            console.error("기준정보 로드 실패:", err);
+        }
+    }
+
+    function populateSearchSelect(selectId, items, defaultLabel) {
+        const select = document.getElementById(selectId);
+        let html = `<option value="">${defaultLabel}</option>`;
+        items.forEach(it => {
+            html += `<option value="${it.code}">${it.name}</option>`;
+        });
+        select.innerHTML = html;
+    }
+
+    function populateCommonSelect(selectId, items, placeholder) {
+        const select = document.getElementById(selectId);
+        let html = `<option value="">${placeholder}</option>`;
+        items.forEach(it => {
+            html += `<option value="${it.code}">${it.name}</option>`;
+        });
+        select.innerHTML = html;
+    }
+
+    function populateLocationSelect(selectId, locNames, placeholder) {
+        const select = document.getElementById(selectId);
+        let html = `<option value="">${placeholder}</option>`;
+        locNames.forEach(name => {
+            html += `<option value="${name}">${name}</option>`;
+        });
+        select.innerHTML = html;
+    }
+
+    function getCodeName(groupCode, val) {
+        if (!val) return "";
+        const list = LOOKUP_DATA.common[groupCode] || [];
+        const found = list.find(x => x.code === val || x.name === val);
+        return found ? found.name : val;
+    }
+
+    function setSelectValueSafely(selectId, val) {
+        const el = document.getElementById(selectId);
+        if (!el) return;
+        el.value = val || "";
+        if (val && el.selectedIndex <= 0) {
+            for (let i = 0; i < el.options.length; i++) {
+                if (el.options[i].value === val || el.options[i].text === val || el.options[i].text.startsWith(val)) {
+                    el.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    // 2. 품목 목록 조회 (검색 조건 적용)
+    async function loadItemList() {
+        const accountType = document.getElementById('searchAccountType').value;
+        const materialType = document.getElementById('searchMaterialType').value;
+        const partNo = document.getElementById('searchPartNo').value.trim();
+        const partName = document.getElementById('searchPartName').value.trim();
+
+        const params = new URLSearchParams();
+        if (accountType) params.append('account_type', accountType);
+        if (materialType) params.append('material_type', materialType);
+        if (partNo) params.append('part_no', partNo);
+        if (partName) params.append('part_name', partName);
+
+        const tbody = document.getElementById('itemTableBody');
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 30px; color: #94a3b8;">조회 중입니다...</td></tr>`;
+
+        try {
+            const res = await fetch(`/api/basic-info/items?${params.toString()}`);
+            if (!res.ok) throw new Error("데이터 조회 실패");
+            
+            const json = await res.json();
+            ITEMS_LIST = json.data || [];
+            renderTable();
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 30px; color: #dc2626;">조회 중 오류가 발생했습니다.</td></tr>`;
+        }
+    }
+
+    // 3. 목록 테이블 렌더링
+    function renderTable() {
+        const tbody = document.getElementById('itemTableBody');
+        document.getElementById('listCount').innerText = `총 ${ITEMS_LIST.length}건`;
+
+        if (ITEMS_LIST.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 40px; color: #94a3b8;">조회된 품목이 없습니다.</td></tr>`;
+            initNewForm();
+            return;
+        }
+
+        let html = "";
+        ITEMS_LIST.forEach(item => {
+            const isSelected = (CURRENT_ITEM_ID === item.id) ? "selected" : "";
+            const accName = getCodeName('ACCOUNT_TYPE', item.account_type);
+            const matName = getCodeName('MATERIAL_TYPE', item.material_type);
+            const categoryText = matName ? `${accName}/${matName}` : accName;
+
+            html += `
+                <tr class="${isSelected}" onclick="selectItem(${item.id})">
+                    <td style="color: #64748b;">${categoryText}</td>
+                    <td style="font-weight: bold; color: #1e293b;">${item.part_no}</td>
+                    <td>${item.part_name}</td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+
+        if (!CURRENT_ITEM_ID && ITEMS_LIST.length > 0) {
+            selectItem(ITEMS_LIST[0].id);
+        }
+    }
+
+    // 4. 품목 선택 시 상세 정보 바인딩
+    function selectItem(id) {
+        CURRENT_ITEM_ID = id;
+        const item = ITEMS_LIST.find(x => x.id === id);
+        if (!item) return;
+
+        const rows = document.querySelectorAll('#itemTableBody tr');
+        rows.forEach(r => r.classList.remove('selected'));
+        event?.currentTarget?.classList?.add('selected');
+
+        document.getElementById('modeBadge').innerText = `수정 모드 (ID: ${item.id})`;
+        document.getElementById('modeBadge').style.color = "#0284c7";
+
+        document.getElementById('detailId').value = item.id;
+        document.getElementById('detailPartNo').value = item.part_no;
+        document.getElementById('detailVehicleModel').value = item.vehicle_model || "";
+        document.getElementById('detailPartName').value = item.part_name;
+        document.getElementById('detailItemGroup').value = item.item_group || "";
+        document.getElementById('detailRevision').value = item.revision || "Rev.00";
+        document.getElementById('detailSpec').value = item.spec || "";
+        document.getElementById('detailSnp').value = item.snp || 0;
+        document.getElementById('detailMoq').value = item.moq || 0;
+        document.getElementById('detailSafetyStock').value = item.safety_stock || 0;
+        document.getElementById('detailWeight').value = Number(item.weight || 0).toFixed(3);
+        document.getElementById('detailIsActive').value = item.is_active || "Y";
+        document.getElementById('detailNote').value = item.note || "";
+
+        setSelectValueSafely('detailAccountType', item.account_type);
+        setSelectValueSafely('detailMaterialType', item.material_type);
+        setSelectValueSafely('detailUnit', item.unit);
+        setSelectValueSafely('detailInboundLoc', item.inbound_loc);
+        setSelectValueSafely('detailProductionLoc', item.production_loc);
+    }
+
+    // 5. 신규 등록 폼 초기화
+    function initNewForm() {
+        CURRENT_ITEM_ID = null;
+
+        const rows = document.querySelectorAll('#itemTableBody tr');
+        rows.forEach(r => r.classList.remove('selected'));
+
+        document.getElementById('modeBadge').innerText = "신규 입력 모드";
+        document.getElementById('modeBadge').style.color = "#16a34a";
+
+        document.getElementById('detailId').value = "";
+        document.getElementById('detailPartNo').value = "";
+        document.getElementById('detailVehicleModel').value = "";
+        document.getElementById('detailPartName').value = "";
+        document.getElementById('detailAccountType').value = "";
+        document.getElementById('detailMaterialType').value = "";
+        document.getElementById('detailItemGroup').value = "";
+        document.getElementById('detailRevision').value = "Rev.00";
+        document.getElementById('detailSpec').value = "";
+        document.getElementById('detailUnit').value = "EA";
+        document.getElementById('detailSnp').value = "0";
+        document.getElementById('detailMoq').value = "0";
+        document.getElementById('detailSafetyStock').value = "0";
+        document.getElementById('detailWeight').value = "0.000";
+        document.getElementById('detailInboundLoc').value = "";
+        document.getElementById('detailProductionLoc').value = "";
+        document.getElementById('detailIsActive').value = "Y";
+        document.getElementById('detailNote').value = "";
+
+        document.getElementById('detailPartNo').focus();
+    }
+
+    // 6. 저장 처리 (필수 검증)
+    async function handleSaveItem() {
+        const id = document.getElementById('detailId').value;
+        const partNo = document.getElementById('detailPartNo').value.trim();
+        const partName = document.getElementById('detailPartName').value.trim();
+        const accountType = document.getElementById('detailAccountType').value;
+        const materialType = document.getElementById('detailMaterialType').value;
+
+        if (!partNo) {
+            alert("품번은 필수 입력 항목입니다.");
+            document.getElementById('detailPartNo').focus();
+            return;
+        }
+        if (!partName) {
+            alert("품명은 필수 입력 항목입니다.");
+            document.getElementById('detailPartName').focus();
+            return;
+        }
+        if (!accountType) {
+            alert("계정유형을 선택해 주십시오.");
+            document.getElementById('detailAccountType').focus();
+            return;
+        }
+        if (!materialType) {
+            alert("자재유형을 선택해 주십시오. (필수 항목)");
+            document.getElementById('detailMaterialType').focus();
+            return;
+        }
+
+        const payload = {
+            id: id ? Number(id) : null,
+            part_no: partNo,
+            vehicle_model: document.getElementById('detailVehicleModel').value.trim(),
+            part_name: partName,
+            account_type: accountType,
+            material_type: materialType,
+            item_group: document.getElementById('detailItemGroup').value.trim(),
+            revision: document.getElementById('detailRevision').value.trim() || "Rev.00",
+            spec: document.getElementById('detailSpec').value.trim(),
+            unit: document.getElementById('detailUnit').value || "EA",
+            snp: Number(document.getElementById('detailSnp').value) || 0,
+            moq: Number(document.getElementById('detailMoq').value) || 0,
+            safety_stock: Number(document.getElementById('detailSafetyStock').value) || 0,
+            weight: parseFloat(document.getElementById('detailWeight').value) || 0.0,
+            inbound_loc: document.getElementById('detailInboundLoc').value,
+            production_loc: document.getElementById('detailProductionLoc').value,
+            is_active: document.getElementById('detailIsActive').value,
+            note: document.getElementById('detailNote').value.trim()
+        };
+
+        const isEdit = !!id;
+        const endpoint = isEdit ? '/api/basic-info/items/update' : '/api/basic-info/items/create';
+
+        try {
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const json = await res.json();
+
+            if (res.ok) {
+                alert(json.message);
+                if (!isEdit && json.id) {
+                    CURRENT_ITEM_ID = json.id;
+                }
+                loadItemList();
+            } else {
+                alert(json.detail || "작업 처리에 실패했습니다.");
+            }
+        } catch (err) {
+            alert("서버 통신 중 오류가 발생했습니다.");
+        }
+    }
+
+    // 7. 삭제 처리
+    async function handleDeleteItem() {
+        const id = document.getElementById('detailId').value;
+        const partNo = document.getElementById('detailPartNo').value;
+
+        if (!id) {
+            alert("삭제할 품목을 좌측 목록에서 먼저 선택해 주십시오.");
+            return;
+        }
+
+        if (!confirm(`선택한 품목 [${partNo}]을(를) 영구 삭제하시겠습니까?`)) {
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/basic-info/items/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: Number(id) })
+            });
+            const json = await res.json();
+
+            if (res.ok) {
+                alert(json.message);
+                initNewForm();
+                loadItemList();
+            } else {
+                alert(json.detail || "삭제 처리에 실패했습니다.");
+            }
+        } catch (err) {
+            alert("서버 통신 중 오류가 발생했습니다.");
+        }
+    }
+
+    // 초기 로딩: 기준정보 룩업 완료 후 품목 리스트 조회
+    document.addEventListener("DOMContentLoaded", async function() {
+        await initLookupData();
+        await loadItemList();
+    });
+</script>
+{% endblock %}

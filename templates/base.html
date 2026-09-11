@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}출하 관리 시스템{% endblock %}</title>
+    
+    <style>
+        :root {
+            --sidebar-width: 240px;
+            --primary-color: #2563eb;
+            --bg-color: #f8fafc;
+            --sidebar-bg: #1e293b;
+            --sidebar-text: #94a3b8;
+            --sidebar-hover: #334155;
+            --sidebar-active-text: #ffffff;
+            --border-color: #cbd5e1;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", "맑은 고딕", helvetica, sans-serif;
+            background-color: var(--bg-color);
+            color: #1e293b;
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--sidebar-bg);
+            color: var(--sidebar-text);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+            user-select: none;
+        }
+
+        .sidebar-brand {
+            padding: 18px 20px;
+            font-size: 16px;
+            font-weight: 900;
+            color: #ffffff;
+            letter-spacing: -0.5px;
+            border-bottom: 1px solid #334155;
+        }
+
+        .sidebar-user-panel {
+            padding: 14px 20px;
+            background-color: #0f172a;
+            border-bottom: 1px solid #334155;
+        }
+        .user-info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .user-name-text { color: #f8fafc; font-weight: bold; font-size: 13px; }
+        .user-role-tag {
+            font-size: 10.5px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #334155;
+            color: #cbd5e1;
+            font-weight: bold;
+        }
+        .btn-top-logout {
+            display: block;
+            text-align: center;
+            padding: 6px 0;
+            background-color: #dc2626;
+            color: #ffffff;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .btn-top-logout:hover { background-color: #b91c1c; }
+
+        .sidebar-menu { list-style: none; padding: 12px 0; flex: 1; }
+        .menu-item { display: flex; flex-direction: column; margin-bottom: 4px; }
+        .menu-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            font-size: 13.5px;
+            font-weight: bold;
+            color: #e2e8f0;
+            cursor: pointer;
+        }
+        .menu-title:hover { background-color: var(--sidebar-hover); color: #ffffff; }
+        .arrow-icon { font-size: 10px; transition: transform 0.3s ease; }
+        .menu-item.open .arrow-icon { transform: rotate(180deg); }
+
+        .submenu {
+            list-style: none;
+            background-color: #0f172a;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s cubic-bezier(0, 1, 0, 1);
+        }
+        .menu-item.open .submenu { max-height: 500px; transition: max-height 0.3s ease-in-out; }
+        .submenu-item a {
+            display: block;
+            padding: 10px 20px 10px 34px;
+            font-size: 12.5px;
+            color: var(--sidebar-text);
+            text-decoration: none;
+        }
+        .submenu-item a:hover { color: #ffffff; background-color: #1e293b; }
+        .submenu-item a.active { color: #ffffff; font-weight: bold; background-color: var(--primary-color); }
+
+        .main-content { flex: 1; padding: 30px; overflow-y: auto; }
+
+        @media print {
+            .sidebar, .no-print { display: none !important; }
+            body { background: #ffffff; display: block; }
+            .main-content { padding: 0; overflow: visible; }
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+
+    <nav class="sidebar no-print">
+        <div class="sidebar-brand">출하관리</div>
+
+        {% if user %}
+        <div class="sidebar-user-panel">
+            <div class="user-info-row">
+                <span class="user-name-text">{{ user.username }}</span>
+                <span class="user-role-tag">{{ "관리자" if user.role == "ADMIN" else "일반계정" }}</span>
+            </div>
+            <a href="/logout" class="btn-top-logout">로그아웃</a>
+        </div>
+        {% endif %}
+
+        <ul class="sidebar-menu">
+            {% if user %}
+
+            <!-- 1. 기초 정보 (PLM 기준정보) -->
+            {% if user.role == "ADMIN" or (user.perms and user.perms.basic_info and user.perms.basic_info.enabled) %}
+            <li class="menu-item" id="basicInfoMenu">
+                <div class="menu-title" onclick="toggleAccordion('basicInfoMenu')">
+                    <span>기초 정보</span>
+                    <span class="arrow-icon">▼</span>
+                </div>
+                <ul class="submenu">
+                    <li class="submenu-item">
+                        <a href="/basic-info/partners" id="nav-partners">거래처 관리</a>
+                        <a href="/basic-info/items" id="nav-item-master">품목 정보 관리</a>
+                        <a href="/basic-info/bom" id="nav-sub-item">BOM 관리</a>
+                    </li>
+                </ul>
+            </li>
+            {% endif %}
+
+            <!-- 2. 영업관리 -->
+            {% if user.role == "ADMIN" or (user.perms and user.perms.sales and user.perms.sales.enabled) %}
+            <li class="menu-item" id="salesMenu">
+                <div class="menu-title" onclick="toggleAccordion('salesMenu')">
+                    <span>영업관리</span>
+                    <span class="arrow-icon">▼</span>
+                </div>
+                <ul class="submenu">
+                    <li class="submenu-item">
+                        <a href="javascript:void(0);" style="color: #64748b; cursor: default;">준비 중</a>
+                    </li>
+                </ul>
+            </li>
+            {% endif %}
+
+            <!-- 3. 구매관리 -->
+            {% if user.role == "ADMIN" or (user.perms and user.perms.purchase and user.perms.purchase.enabled) %}
+            <li class="menu-item" id="purchaseMenu">
+                <div class="menu-title" onclick="toggleAccordion('purchaseMenu')">
+                    <span>구매관리</span>
+                    <span class="arrow-icon">▼</span>
+                </div>
+                <ul class="submenu">
+                    <li class="submenu-item">
+                        <a href="javascript:void(0);" style="color: #64748b; cursor: default;">준비 중</a>
+                    </li>
+                </ul>
+            </li>
+            {% endif %}
+
+            <!-- 4. 생산관리 -->
+            {% if user.role == "ADMIN" or (user.perms and user.perms.production and user.perms.production.enabled) %}
+            <li class="menu-item" id="productionMenu">
+                <div class="menu-title" onclick="toggleAccordion('productionMenu')">
+                    <span>생산관리</span>
+                    <span class="arrow-icon">▼</span>
+                </div>
+                <ul class="submenu">
+                    <li class="submenu-item">
+                        <a href="javascript:void(0);" style="color: #64748b; cursor: default;">준비 중</a>
+                    </li>
+                </ul>
+            </li>
+            {% endif %}
+
+            <!-- 5. 재고 관리 (구 입고관리) -->
+            {% if user.role == "ADMIN" or (user.perms and user.perms.inbound and user.perms.inbound.enabled) %}
+            <li class="menu-item" id="inboundMenu">
+                <div class="menu-title" onclick="toggleAccordion('inboundMenu')">
+                    <span>재고관리</span>
+                    <span class="arrow-icon">▼</span>
+                </div>
+                <ul class="submenu">
+                    <li class="submenu-item">
+                        <a href="javascript:void(0);" style="color: #64748b; cursor: default;">준비 중</a>
+                    </li>
+                </ul>
+            </li>
+            {% endif %}
+
+            <!-- 6. 출고관리 (기존 유지) -->
+            {% if user.role == "ADMIN" or (user.perms and user.perms.shipping and user.perms.shipping.enabled) %}
+            <li class="menu-item open" id="shippingMenu">
+                <div class="menu-title" onclick="toggleAccordion('shippingMenu')">
+                    <span>출고관리</span>
+                    <span class="arrow-icon">▼</span>
+                </div>
+                <ul class="submenu">
+                    {% if user.role == "ADMIN" or user.perms.shipping.menus.history != "NONE" %}
+                    <li class="submenu-item">
+                        <a href="/shipping/history" id="nav-history">출고 내역 및 LOT 계산</a>
+                    </li>
+                    {% endif %}
+                    {% if user.role == "ADMIN" or user.perms.shipping.menus.print != "NONE" %}
+                    <li class="submenu-item">
+                        <a href="/shipping/print" id="nav-print">바코드 출력 (파일 일괄)</a>
+                    </li>
+                    {% endif %}
+                    {% if user.role == "ADMIN" or user.perms.shipping.menus.manual != "NONE" %}
+                    <li class="submenu-item">
+                        <a href="/shipping/manual" id="nav-manual">바코드 출력 (수기 개별)</a>
+                    </li>
+                    {% endif %}
+                    {% if user.role == "ADMIN" or user.perms.shipping.menus.verify != "NONE" %}
+                    <li class="submenu-item">
+                        <a href="/shipping/verify" id="nav-verify">출하 바코드 검증</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </li>
+            {% endif %}
+
+            <!-- 7. 품질관리 -->
+            {% if user.role == "ADMIN" or (user.perms and user.perms.quality and user.perms.quality.enabled) %}
+            <li class="menu-item" id="qualityMenu">
+                <div class="menu-title" onclick="toggleAccordion('qualityMenu')">
+                    <span>품질관리</span>
+                    <span class="arrow-icon">▼</span>
+                </div>
+                <ul class="submenu">
+                    <li class="submenu-item">
+                        <a href="javascript:void(0);" style="color: #64748b; cursor: default;">준비 중</a>
+                    </li>
+                </ul>
+            </li>
+            {% endif %}
+
+            <!-- 8. 관리자 메뉴 (공정 및 저장위치 관리 매핑) -->
+            {% if user.role == "ADMIN" %}
+            <li class="menu-item open" id="adminMenu">
+                <div class="menu-title" onclick="toggleAccordion('adminMenu')">
+                    <span>관리자 메뉴</span>
+                    <span class="arrow-icon">▼</span>
+                </div>
+                <ul class="submenu">
+                    <li class="submenu-item">
+                        <a href="/admin/users" id="nav-admin-users">계정 관리</a>
+                    </li>
+                    <li class="submenu-item">
+                        <a href="/admin/common-codes" id="nav-admin-common-codes">공통 코드 관리</a>
+                    </li>
+                    <li class="submenu-item">
+                        <a href="/admin/processes-locations" id="nav-admin-processes-locations">공정 및 저장위치 관리</a>
+                    </li>
+                </ul>
+            </li>
+            {% endif %}
+
+            {% endif %}
+        </ul>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script>
+        function toggleAccordion(menuId) {
+            const el = document.getElementById(menuId);
+            if (el) el.classList.toggle('open');
+        }
+
+        document.addEventListener("DOMContentLoaded", function() {
+            const currentPath = window.location.pathname;
+            const routeMap = {
+                "/": "nav-history",
+                "/shipping": "nav-history",
+                "/shipping/history": "nav-history",
+                "/shipping/print": "nav-print",
+                "/print": "nav-print",
+                "/shipping/manual": "nav-manual",
+                "/manual": "nav-manual",
+                "/shipping/verify": "nav-verify",
+                "/verify": "nav-verify",
+                "/admin/users": "nav-admin-users",
+                "/admin/common-codes": "nav-admin-common-codes",
+                "/admin/processes-locations": "nav-admin-processes-locations",
+                "/basic-info/items": "nav-item-master",
+                "/basic-info/bom": "nav-sub-item",
+                "/basic-info/partners": "nav-partners"
+            };
+            const activeNavId = routeMap[currentPath];
+            if (activeNavId) {
+                const targetLink = document.getElementById(activeNavId);
+                if (targetLink) {
+                    targetLink.classList.add('active');
+                    const parentMenuItem = targetLink.closest('.menu-item');
+                    if (parentMenuItem) parentMenuItem.classList.add('open');
+                }
+            }
+        });
+    </script>
+    {% block extra_script %}{% endblock %}
+</body>
+</html>

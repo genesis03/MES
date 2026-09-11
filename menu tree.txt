@@ -1,0 +1,17 @@
+BarcodeApp/
+├── app.py                     # [초슬림 진입점] FastAPI 초기화, static 마운트, 라우터 등록 (20줄 미만)
+├── core/
+│   ├── config.py              # 기본 경로(BASE_DIR) 및 DB 접속 URL 환경변수 처리
+│   └── database.py            # SQLite/PostgreSQL 자동 분기 엔진, SessionLocal, get_db 의존성
+├── models/
+│   ├── __init__.py            # 앱 기동 시 Base.metadata.create_all 트리거
+│   └── models.py              # ManualLabelModel, ShippingMasterModel 테이블 정의
+├── services/
+│   └── excel_service.py       # 출고 LOT 계산 엑셀(openpyxl) 및 수기발행 대장 생성 비즈니스 로직
+├── routers/
+│   ├── pages.py               # 화면 렌더링 라우트 (/, /shipping/history, /manual, /verify 등)
+│   ├── manual.py              # 수기 라벨 API (/api/manual/*)
+│   └── shipping.py            # 원장 업로드 및 분석 엑셀 API (/api/upload, /api/data, /api/generate-excel)
+├── templates/                 # 기존 화면 HTML 템플릿 유지 (base, history, manual, print, verify)
+├── static/                    # 기존 80x80 감열 라벨 CSS 및 SVG 바코드 엔진 JS 유지
+└── requirements.txt, Dockerfile, docker-compose.yml, run_server.bat

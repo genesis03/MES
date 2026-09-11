@@ -1,0 +1,38 @@
+from core.database import Base, engine
+from models.models import (
+    PurchaseOrderMaster, PurchaseOrderItem, PurchaseInboundMaster, PurchaseInboundItem,
+    UserModel,
+    ManualLabelModel,
+    ShippingMasterModel,
+    ItemMasterModel,
+    CommonCodeModel,
+    ProcessModel,
+    StorageLocationModel,
+    WarehouseMasterModel,
+    ItemBomModel,
+)
+from models.partner import Partner, PartnerContact
+from models.purchase import PurchaseMaster, PurchaseItem
+
+
+# 테이블 일괄 자동 생성 트리거
+Base.metadata.create_all(bind=engine)
+
+__all__ = [
+    "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
+    "Base",
+    "engine",
+    "UserModel",
+    "ManualLabelModel",
+    "ShippingMasterModel",
+    "ItemMasterModel",
+    "CommonCodeModel",
+    "ProcessModel",
+    "StorageLocationModel",
+    "WarehouseMasterModel",
+    "ItemBomModel",
+    "Partner",
+    "PartnerContact",
+    "PurchaseMaster",
+    "PurchaseItem",
+]

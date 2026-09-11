@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>출하 바코드 관리 시스템</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h2>출하 바코드 데이터 관리 대시보드</h2>
+        
+        <div class="card">
+            <h3>1. 데이터 업로드 (CSV / XLSX)</h3>
+            <input type="file" id="fileInput" accept=".csv, .xlsx, .xls">
+            <button onclick="uploadData()">업로드 실행</button>
+            <span id="uploadStatus"></span>
+        </div>
+
+        <div class="card">
+            <h3>2. 작업 메뉴</h3>
+            <button onclick="location.href='/print'" class="btn-primary">라벨 연속 인쇄 화면 열기</button>
+            <button onclick="location.href='/api/generate-excel'" class="btn-success">출고 LOT 계산 엑셀 다운로드</button>
+        </div>
+
+        <div class="card">
+            <h3>3. 로드된 데이터 미리보기</h3>
+            <div id="tableContainer">데이터 없음</div>
+        </div>
+    </div>
+
+    <script>
+        async function uploadData() {
+            const input = document.getElementById('fileInput');
+            if (!input.files[0]) {
+                alert("파일을 선택하십시오.");
+                return;
+            }
+            const formData = new FormData();
+            formData.append("file", input.files[0]);
+
+            const status = document.getElementById('uploadStatus');
+            status.innerText = "업로드 중...";
+
+            const res = await fetch('/api/upload', { method: 'POST', body: formData });
+            const result = await res.json();
+            
+            if (result.status === "success") {
+                status.innerText = `업로드 완료 (총 ${result.count}건)`;
+                loadDataPreview();
+            } else {
+                status.innerText = "업로드 실패";
+            }
+        }
+
+        async function loadDataPreview() {
+            const res = await fetch('/api/data');
+            const result = await res.json();
+            const container = document.getElementById('tableContainer');
+            
+            if (!result.data || result.data.length === 0) {
+                container.innerHTML = "데이터 없음";
+                return;
+            }
+
+            let html = "<table class='data-table'><thead><tr>";
+            Object.keys(result.data[0]).forEach(k => html += `<th>${k}</th>`);
+            html += "</tr></thead><tbody>";
+
+            result.data.slice(0, 10).forEach(row => {
+                html += "<tr>";
+                Object.values(row).forEach(v => html += `<td>${v}</td>`);
+                html += "</tr>";
+            });
+            html += "</tbody></table>";
+            if (result.data.length > 10) {
+                html += `<p style="color:#666; font-size:12px;">* 상위 10개 행만 표시됩니다. (총 ${result.data.length}건)</p>`;
+            }
+            container.innerHTML = html;
+        }
+
+        loadDataPreview();
+    </script>
+</body>
+</html>

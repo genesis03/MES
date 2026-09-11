@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}출고내역 관리 - 출하 관리 시스템{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="page-title">출고내역 관리</h1>
+    
+    <div class="card" style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:20px; margin-bottom:20px;">
+        <div style="font-weight:bold; margin-bottom:10px;">출고 원장 데이터 업로드 (CSV / XLSX)</div>
+        <div style="display:flex; gap:10px; align-items:center;">
+            <input type="file" id="fileInput" accept=".csv, .xlsx, .xls">
+            <button onclick="uploadData()" style="padding:8px 16px; background:#007bff; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">업로드 실행</button>
+            <button onclick="downloadExcel()" style="padding:8px 16px; background:#28a745; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">출고 LOT 계산 엑셀 다운로드</button>
+        </div>
+        <div id="uploadStatus" style="margin-top: 10px; font-weight: bold; color: #2980b9;"></div>
+    </div>
+
+    <div class="card" style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:20px;">
+        <div style="font-weight:bold; margin-bottom:10px;">로드된 출고 원장 데이터</div>
+        <div id="tableContainer" style="overflow-x:auto;">데이터를 업로드해 주십시오.</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    async function uploadData() {
+        const input = document.getElementById('fileInput');
+        if (!input.files[0]) {
+            alert("업로드할 파일을 선택하십시오.");
+            return;
+        }
+        const formData = new FormData();
+        formData.append("file", input.files[0]);
+
+        const status = document.getElementById('uploadStatus');
+        status.innerText = "데이터 처리 중...";
+
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        const result = await res.json();
+        
+        if (result.status === "success") {
+            status.innerText = `총 ${result.count}건의 데이터가 성공적으로 로드되었습니다.`;
+            loadDataPreview();
+        } else {
+            status.innerText = "업로드 처리 중 오류가 발생했습니다.";
+        }
+    }
+
+    async function loadDataPreview() {
+        const res = await fetch('/api/data');
+        const result = await res.json();
+        const container = document.getElementById('tableContainer');
+        
+        if (!result.data || result.data.length === 0) {
+            container.innerHTML = "조회할 데이터가 없습니다.";
+            return;
+        }
+
+        let html = "<table style='width:100%; border-collapse:collapse; font-size:13px;'><thead><tr style='background:#f1f5f9;'>";
+        Object.keys(result.data[0]).forEach(k => html += `<th style='border:1px solid #cbd5e1; padding:8px;'>${k}</th>`);
+        html += "</tr></thead><tbody>";
+
+        result.data.forEach(row => {
+            html += "<tr>";
+            Object.values(row).forEach(v => html += `<td style='border:1px solid #cbd5e1; padding:6px; text-align:center;'>${v}</td>`);
+            html += "</tr>";
+        });
+        html += "</tbody></table>";
+        container.innerHTML = html;
+    }
+
+    async function downloadExcel() {
+        const res = await fetch('/api/data');
+        const result = await res.json();
+        if (!result.data || result.data.length === 0) {
+            alert("다운로드할 데이터가 없습니다. 먼저 파일을 업로드해 주십시오.");
+            return;
+        }
+        window.location.href = '/api/generate-excel';
+    }
+
+    loadDataPreview();
+</script>
+{% endblock %}

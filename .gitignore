@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Local DB
+manual_labels.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Backup / output
+backup/
+output/
+*.bak
+*.tmp
+*.temp
+*.log
+
+# Archives
+BarcodeApp.zip
+*.zip
+
+# SSH / private keys
+ssh-key*.key
+ssh-key*.ppk
+*.pem
+*.key
+*.ppk
+
+# Windows / IDE
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+*.url
+*.lnk

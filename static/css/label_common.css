@@ -1,0 +1,177 @@
+@charset "UTF-8";
+
+/* ==========================================================================
+   80mm x 80mm 감열 라벨 표준 규격 (기존 디자인 100% 일치)
+   ========================================================================== */
+
+@page {
+    size: 80mm 80mm;
+    margin: 0;
+}
+
+* {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-sizing: border-box;
+}
+
+/* 외곽 용지 규격 */
+.label-page {
+    width: 80mm;
+    height: 80mm;
+    background: #ffffff;
+    margin: 0 auto 20px auto;
+    padding: 2.5mm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    page-break-inside: avoid;
+    page-break-after: always;
+}
+
+/* 실제 인쇄 테두리 박스 (75mm x 75mm) */
+.label-box {
+    width: 75mm;
+    height: 75mm;
+    border: 2px solid #000000;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: #ffffff;
+    padding-bottom: 1.5mm;
+}
+
+.table-wrapper {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+/* 1. 상단 상호 행 */
+.company-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    margin: 0;
+}
+
+.company-table td {
+    width: 50%;
+    border-bottom: 2px solid #000000;
+    padding: 6px 0;
+    text-align: center;
+    font-size: 10.5pt;
+    font-weight: 900;
+    letter-spacing: -0.3px;
+}
+
+.company-table td:first-child {
+    border-right: 2px solid #000000;
+}
+
+/* ==========================================================================
+   2. 본문 데이터 테이블 (행 높이 7.5mm 절대 고정)
+   ========================================================================== */
+.data-table-main {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    margin: 0;
+}
+
+/* 4개 행의 높이를 각각 7.5mm로 절대 고정 */
+.data-table-main tr {
+    height: 7.5mm !important;
+}
+
+.data-table-main tr td {
+    border-bottom: 1.5px solid #000000;
+    padding: 0 2px;
+    text-align: center;
+    vertical-align: middle;
+    font-weight: bold;
+    height: 7.5mm !important;
+    box-sizing: border-box;
+}
+
+.data-table-main tr:last-child td {
+    border-bottom: 2px solid #000000;
+}
+
+.data-table-main td:not(:last-child) {
+    border-right: 1.5px solid #000000;
+}
+
+.col-header {
+    width: 18%;
+    font-size: 10pt;
+    letter-spacing: -0.5px;
+}
+
+.col-value {
+    width: 54%;
+    font-size: 10pt;
+    word-break: break-all;
+}
+
+.col-side-header {
+    width: 28%;
+    font-size: 10pt;
+    letter-spacing: -0.3px;
+}
+
+/* 품명 텍스트: 2줄일 때도 7.5mm 영역 내 수직 중앙 정렬 유지 */
+.part-name-text {
+    font-size: 7.5pt;
+    line-height: 1.15;
+    font-weight: bold;
+    word-break: keep-all;
+    display: inline-block;
+    max-height: 7.0mm;
+    overflow: hidden;
+}
+/* 3. 하단 바코드 영역 */
+.barcode-section {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: 2mm;
+}
+
+.barcode-svg {
+    width: 100%;
+    height: 22mm;
+    display: block;
+    margin: 0 auto;
+    shape-rendering: crispEdges;
+}
+
+.barcode-text {
+    font-size: 7.5pt;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 3px;
+    font-family: "맑은 고딕", Arial, sans-serif;
+    letter-spacing: 0.2px;
+}
+
+.origin-text {
+    width: 100%;
+    text-align: right;
+    font-size: 11pt;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    padding-right: 1mm;
+    margin-top: 1.5mm;
+}
+
+@media print {
+    .label-page {
+        margin: 0 !important;
+        padding: 2.5mm !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+}

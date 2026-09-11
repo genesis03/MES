@@ -1,0 +1,645 @@
+{% extends "base.html" %}
+
+{% block title %}공장 및 창고 관리 - 시스템 관리{% endblock %}
+
+{% block extra_head %}
+<style>
+    .split-container {
+        display: flex;
+        gap: 20px;
+        align-items: flex-start;
+    }
+
+    .admin-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+
+    .factory-panel {
+        width: 35%;
+        flex-shrink: 0;
+    }
+
+    .warehouse-panel {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .admin-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+    }
+
+    .admin-title {
+        font-size: 16px;
+        font-weight: 800;
+        color: #1e293b;
+    }
+
+    .filter-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        gap: 8px;
+    }
+
+    .filter-select {
+        padding: 6px 10px;
+        font-size: 12.5px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        background-color: #ffffff;
+    }
+
+    .btn-create-sm {
+        background-color: #2563eb;
+        color: #ffffff;
+        border: none;
+        padding: 7px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: bold;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .btn-create-sm:hover { background-color: #1d4ed8; }
+
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+        table-layout: fixed;
+    }
+
+    .data-table th, .data-table td {
+        border: 1px solid #cbd5e1;
+        padding: 8px 6px;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .data-table th {
+        background-color: #f1f5f9;
+        font-weight: bold;
+        color: #334155;
+    }
+
+    .badge-active-y {
+        background: #dcfce7;
+        color: #15803d;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 11px;
+    }
+
+    .badge-active-n {
+        background: #fee2e2;
+        color: #b91c1c;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 11px;
+    }
+
+    .btn-action-edit {
+        background-color: #0284c7;
+        color: #fff;
+        border: none;
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+
+    .btn-action-del {
+        background-color: #dc2626;
+        color: #fff;
+        border: none;
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        font-weight: bold;
+        margin-left: 2px;
+    }
+
+    /* 공통 모달 스타일 */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-box {
+        background: #ffffff;
+        border-radius: 8px;
+        width: 100%;
+        max-width: 440px;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+
+    .modal-title {
+        font-size: 15px;
+        font-weight: bold;
+        color: #1e293b;
+        margin-bottom: 14px;
+    }
+
+    .form-group {
+        margin-bottom: 12px;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 12px;
+        font-weight: bold;
+        color: #475569;
+        margin-bottom: 5px;
+    }
+
+    .form-input, .form-select {
+        width: 100%;
+        padding: 7px 10px;
+        font-size: 13px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    .form-input:disabled {
+        background-color: #f1f5f9;
+        color: #64748b;
+        cursor: not-allowed;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="split-container">
+    <!-- 좌측: 공장 관리 패널 -->
+    <div class="admin-card factory-panel">
+        <div class="admin-header">
+            <div class="admin-title">1. 공장 마스터 관리</div>
+            <button class="btn-create-sm" onclick="openFactoryModal()">+ 공장 등록</button>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 25%;">코드</th>
+                    <th style="width: 40%;">공장 명칭</th>
+                    <th style="width: 15%;">상태</th>
+                    <th style="width: 20%;">관리</th>
+                </tr>
+            </thead>
+            <tbody id="factoryTableBody">
+                <tr><td colspan="4" style="padding: 20px; color:#94a3b8;">조회 중...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 우측: 창고 및 적치 위치 관리 패널 -->
+    <div class="admin-card warehouse-panel">
+        <div class="admin-header">
+            <div class="admin-title">2. 창고 및 적치 위치 관리</div>
+            <button class="btn-create-sm" onclick="openWarehouseModal()">+ 창고/위치 등록</button>
+        </div>
+
+        <div class="filter-row">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 12px; font-weight: bold; color: #475569;">공장 필터:</span>
+                <select id="warehouseFactoryFilter" class="filter-select" onchange="renderWarehouseTable()">
+                    <option value="">전체 공장 보기</option>
+                </select>
+                <select id="warehouseTypeFilter" class="filter-select" onchange="renderWarehouseTable()">
+                    <option value="">전체 구분 보기</option>
+                    <option value="입고">입고 창고</option>
+                    <option value="생산">생산 적치장</option>
+                    <option value="완제품">완제품 창고</option>
+                    <option value="외주">외주 창고</option>
+                </select>
+            </div>
+            <span id="warehouseCount" style="font-size: 12px; color: #64748b; font-weight: bold;">총 0건</span>
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 14%;">창고코드</th>
+                    <th style="width: 24%;">창고 / 위치 명칭</th>
+                    <th style="width: 16%;">소속 공장</th>
+                    <th style="width: 14%;">구분</th>
+                    <th style="width: 12%;">사용여부</th>
+                    <th style="width: 20%;">관리</th>
+                </tr>
+            </thead>
+            <tbody id="warehouseTableBody">
+                <tr><td colspan="6" style="padding: 20px; color:#94a3b8;">조회 중...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 1. 공장 등록/수정 모달 -->
+<div id="factoryModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-title" id="factoryModalTitle">공장 등록</div>
+        <input type="hidden" id="modalFactoryId">
+
+        <div class="form-group">
+            <label>공장 코드 <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalFactoryCode" class="form-input" placeholder="예: F100 (고유 코드)">
+        </div>
+        <div class="form-group">
+            <label>공장 명칭 <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalFactoryName" class="form-input" placeholder="예: 본사공장, 청주공장">
+        </div>
+        <div class="form-group">
+            <label>사용 여부</label>
+            <select id="modalFactoryIsActive" class="form-select">
+                <option value="Y">Y (사용)</option>
+                <option value="N">N (미사용)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>비고</label>
+            <input type="text" id="modalFactoryNote" class="form-input" placeholder="특이사항">
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
+            <button onclick="closeFactoryModal()" style="padding: 6px 12px; background:#cbd5e1; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">취소</button>
+            <button onclick="submitFactoryForm()" style="padding: 6px 16px; background:#2563eb; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 2. 창고 등록/수정 모달 -->
+<div id="warehouseModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-title" id="warehouseModalTitle">창고 및 위치 등록</div>
+        <input type="hidden" id="modalWarehouseId">
+
+        <div class="form-group">
+            <label>소속 공장 <span style="color:#dc2626;">*</span></label>
+            <select id="modalWarehouseFactoryId" class="form-select"></select>
+        </div>
+        <div class="form-group">
+            <label>창고 코드 <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalWarehouseCode" class="form-input" placeholder="예: WH-RAW-01 (고유 코드)">
+        </div>
+        <div class="form-group">
+            <label>창고 / 적치 위치 명칭 <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalWarehouseName" class="form-input" placeholder="예: 원자재 1창고, 프레스 1호라인">
+        </div>
+        <div class="form-group">
+            <label>창고 구분 <span style="color:#dc2626;">*</span></label>
+            <select id="modalWarehouseType" class="form-select">
+                <option value="입고">입고 (품목 '입고 저장 위치'에 바인딩)</option>
+                <option value="생산">생산 (품목 '생산 저장 위치'에 바인딩)</option>
+                <option value="완제품">완제품 (출하 완제품 보관장)</option>
+                <option value="외주">외주 (외주 입고장)</option>
+                <option value="기타">기타</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>사용 여부</label>
+            <select id="modalWarehouseIsActive" class="form-select">
+                <option value="Y">Y (품목 콤보상자에 표시)</option>
+                <option value="N">N (숨김 / 미사용)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>비고</label>
+            <input type="text" id="modalWarehouseNote" class="form-input" placeholder="적치 품목군 또는 위치 메모">
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
+            <button onclick="closeWarehouseModal()" style="padding: 6px 12px; background:#cbd5e1; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">취소</button>
+            <button onclick="submitWarehouseForm()" style="padding: 6px 16px; background:#2563eb; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">저장</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    let FACTORIES_DATA = [];
+    let WAREHOUSES_DATA = [];
+    let IS_FACTORY_EDIT = false;
+    let IS_WAREHOUSE_EDIT = false;
+
+    // 초기 데이터 일괄 로드
+    async function initData() {
+        await loadFactories();
+        await loadWarehouses();
+    }
+
+    // ==========================================
+    // [1] 공장 관리 기능 로직
+    // ==========================================
+    async function loadFactories() {
+        try {
+            const res = await fetch('/api/admin/factories');
+            const json = await res.json();
+            FACTORIES_DATA = json.data || [];
+            renderFactoryTable();
+            updateWarehouseFactoryOptions();
+        } catch (err) {
+            document.getElementById('factoryTableBody').innerHTML = `<tr><td colspan="4" style="padding:20px; color:#dc2626;">조회 실패</td></tr>`;
+        }
+    }
+
+    function renderFactoryTable() {
+        const tbody = document.getElementById('factoryTableBody');
+        if (FACTORIES_DATA.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="padding:20px; color:#94a3b8;">등록된 공장이 없습니다.</td></tr>`;
+            return;
+        }
+
+        let html = "";
+        FACTORIES_DATA.forEach(f => {
+            const badge = f.is_active === 'Y'
+                ? `<span class="badge-active-y">사용</span>`
+                : `<span class="badge-active-n">미사용</span>`;
+
+            html += `
+                <tr>
+                    <td style="font-weight:bold; color:#0284c7;">${f.factory_code}</td>
+                    <td style="text-align:left; padding-left:8px; font-weight:600;">${f.factory_name}</td>
+                    <td>${badge}</td>
+                    <td>
+                        <button class="btn-action-edit" onclick="openEditFactoryModal(${f.id})">수정</button>
+                        <button class="btn-action-del" onclick="deleteFactory(${f.id}, '${f.factory_name}')">삭제</button>
+                    </td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+    }
+
+    function openFactoryModal() {
+        IS_FACTORY_EDIT = false;
+        document.getElementById('factoryModalTitle').innerText = "신규 공장 등록";
+        document.getElementById('modalFactoryId').value = "";
+        document.getElementById('modalFactoryCode').value = "";
+        document.getElementById('modalFactoryCode').disabled = false;
+        document.getElementById('modalFactoryName').value = "";
+        document.getElementById('modalFactoryIsActive').value = "Y";
+        document.getElementById('modalFactoryNote').value = "";
+        document.getElementById('factoryModal').style.display = 'flex';
+        document.getElementById('modalFactoryCode').focus();
+    }
+
+    function openEditFactoryModal(id) {
+        IS_FACTORY_EDIT = true;
+        const target = FACTORIES_DATA.find(x => x.id === id);
+        if (!target) return;
+
+        document.getElementById('factoryModalTitle').innerText = "공장 정보 수정";
+        document.getElementById('modalFactoryId').value = target.id;
+        document.getElementById('modalFactoryCode').value = target.factory_code;
+        document.getElementById('modalFactoryCode').disabled = true;
+        document.getElementById('modalFactoryName').value = target.factory_name;
+        document.getElementById('modalFactoryIsActive').value = target.is_active;
+        document.getElementById('modalFactoryNote').value = target.note || "";
+        document.getElementById('factoryModal').style.display = 'flex';
+    }
+
+    function closeFactoryModal() {
+        document.getElementById('factoryModal').style.display = 'none';
+    }
+
+    async function submitFactoryForm() {
+        const id = document.getElementById('modalFactoryId').value;
+        const factory_code = document.getElementById('modalFactoryCode').value.trim().toUpperCase();
+        const factory_name = document.getElementById('modalFactoryName').value.trim();
+        const is_active = document.getElementById('modalFactoryIsActive').value;
+        const note = document.getElementById('modalFactoryNote').value.trim();
+
+        if (!factory_code || !factory_name) {
+            alert("공장 코드와 명칭을 모두 입력해 주십시오.");
+            return;
+        }
+
+        const endpoint = IS_FACTORY_EDIT ? '/api/admin/factories/update' : '/api/admin/factories/create';
+        const payload = IS_FACTORY_EDIT ? { id: Number(id), factory_name, is_active, note } : { factory_code, factory_name, is_active, note };
+
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+
+        if (res.ok) {
+            alert(json.message);
+            closeFactoryModal();
+            loadFactories();
+        } else {
+            alert(json.detail || "작업 처리에 실패했습니다.");
+        }
+    }
+
+    async function deleteFactory(id, name) {
+        if (!confirm(`'${name}' 공장을 삭제하시겠습니까?\n소속된 창고가 있으면 삭제할 수 없습니다.`)) return;
+
+        const res = await fetch('/api/admin/factories/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: Number(id) })
+        });
+        const json = await res.json();
+
+        if (res.ok) {
+            alert(json.message);
+            loadFactories();
+        } else {
+            alert(json.detail || "삭제 처리에 실패했습니다.");
+        }
+    }
+
+    // ==========================================
+    // [2] 창고 및 적치 위치 관리 기능 로직
+    // ==========================================
+    async function loadWarehouses() {
+        try {
+            const res = await fetch('/api/admin/warehouses');
+            const json = await res.json();
+            WAREHOUSES_DATA = json.data || [];
+            renderWarehouseTable();
+        } catch (err) {
+            document.getElementById('warehouseTableBody').innerHTML = `<tr><td colspan="6" style="padding:20px; color:#dc2626;">조회 실패</td></tr>`;
+        }
+    }
+
+    function updateWarehouseFactoryOptions() {
+        const filterSelect = document.getElementById('warehouseFactoryFilter');
+        const modalSelect = document.getElementById('modalWarehouseFactoryId');
+        const curFilter = filterSelect.value;
+
+        let fOptions = `<option value="">전체 공장 보기</option>`;
+        let mOptions = ``;
+
+        FACTORIES_DATA.forEach(f => {
+            fOptions += `<option value="${f.id}">[${f.factory_code}] ${f.factory_name}</option>`;
+            mOptions += `<option value="${f.id}">[${f.factory_code}] ${f.factory_name}</option>`;
+        });
+
+        filterSelect.innerHTML = fOptions;
+        modalSelect.innerHTML = mOptions;
+        filterSelect.value = curFilter;
+    }
+
+    function renderWarehouseTable() {
+        const tbody = document.getElementById('warehouseTableBody');
+        const fFilter = document.getElementById('warehouseFactoryFilter').value;
+        const tFilter = document.getElementById('warehouseTypeFilter').value;
+
+        let filtered = WAREHOUSES_DATA;
+        if (fFilter) filtered = filtered.filter(w => String(w.factory_id) === String(fFilter));
+        if (tFilter) filtered = filtered.filter(w => w.warehouse_type === tFilter);
+
+        document.getElementById('warehouseCount').innerText = `총 ${filtered.length}건`;
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="padding:20px; color:#94a3b8;">등록된 창고/위치가 없습니다.</td></tr>`;
+            return;
+        }
+
+        let html = "";
+        filtered.forEach(w => {
+            const badge = w.is_active === 'Y'
+                ? `<span class="badge-active-y">사용</span>`
+                : `<span class="badge-active-n">미사용</span>`;
+
+            html += `
+                <tr>
+                    <td style="font-weight:bold; color:#0284c7;">${w.warehouse_code}</td>
+                    <td style="text-align:left; padding-left:8px; font-weight:600;">${w.warehouse_name}</td>
+                    <td>${w.factory_name}</td>
+                    <td><span style="padding:2px 6px; background:#f1f5f9; border-radius:4px; font-size:11px;">${w.warehouse_type}</span></td>
+                    <td>${badge}</td>
+                    <td>
+                        <button class="btn-action-edit" onclick="openEditWarehouseModal(${w.id})">수정</button>
+                        <button class="btn-action-del" onclick="deleteWarehouse(${w.id}, '${w.warehouse_name}')">삭제</button>
+                    </td>
+                </tr>
+            `;
+        });
+        tbody.innerHTML = html;
+    }
+
+    function openWarehouseModal() {
+        if (FACTORIES_DATA.length === 0) {
+            alert("먼저 등록된 공장이 있어야 창고를 등록할 수 있습니다.");
+            return;
+        }
+
+        IS_WAREHOUSE_EDIT = false;
+        document.getElementById('warehouseModalTitle').innerText = "신규 창고 및 위치 등록";
+        document.getElementById('modalWarehouseId').value = "";
+        document.getElementById('modalWarehouseCode').value = "";
+        document.getElementById('modalWarehouseCode').disabled = false;
+        document.getElementById('modalWarehouseName').value = "";
+        document.getElementById('modalWarehouseType').value = "입고";
+        document.getElementById('modalWarehouseIsActive').value = "Y";
+        document.getElementById('modalWarehouseNote').value = "";
+        document.getElementById('warehouseModal').style.display = 'flex';
+        document.getElementById('modalWarehouseCode').focus();
+    }
+
+    function openEditWarehouseModal(id) {
+        IS_WAREHOUSE_EDIT = true;
+        const target = WAREHOUSES_DATA.find(x => x.id === id);
+        if (!target) return;
+
+        document.getElementById('warehouseModalTitle').innerText = "창고 및 위치 정보 수정";
+        document.getElementById('modalWarehouseId').value = target.id;
+        document.getElementById('modalWarehouseFactoryId').value = target.factory_id;
+        document.getElementById('modalWarehouseCode').value = target.warehouse_code;
+        document.getElementById('modalWarehouseCode').disabled = true;
+        document.getElementById('modalWarehouseName').value = target.warehouse_name;
+        document.getElementById('modalWarehouseType').value = target.warehouse_type;
+        document.getElementById('modalWarehouseIsActive').value = target.is_active;
+        document.getElementById('modalWarehouseNote').value = target.note || "";
+        document.getElementById('warehouseModal').style.display = 'flex';
+    }
+
+    function closeWarehouseModal() {
+        document.getElementById('warehouseModal').style.display = 'none';
+    }
+
+    async function submitWarehouseForm() {
+        const id = document.getElementById('modalWarehouseId').value;
+        const factory_id = document.getElementById('modalWarehouseFactoryId').value;
+        const warehouse_code = document.getElementById('modalWarehouseCode').value.trim().toUpperCase();
+        const warehouse_name = document.getElementById('modalWarehouseName').value.trim();
+        const warehouse_type = document.getElementById('modalWarehouseType').value;
+        const is_active = document.getElementById('modalWarehouseIsActive').value;
+        const note = document.getElementById('modalWarehouseNote').value.trim();
+
+        if (!factory_id) {
+            alert("소속 공장을 선택해 주십시오.");
+            return;
+        }
+        if (!warehouse_code || !warehouse_name) {
+            alert("창고 코드와 명칭을 모두 입력해 주십시오.");
+            return;
+        }
+
+        const endpoint = IS_WAREHOUSE_EDIT ? '/api/admin/warehouses/update' : '/api/admin/warehouses/create';
+        const payload = IS_WAREHOUSE_EDIT
+            ? { id: Number(id), factory_id: Number(factory_id), warehouse_name, warehouse_type, is_active, note }
+            : { factory_id: Number(factory_id), warehouse_code, warehouse_name, warehouse_type, is_active, note };
+
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+
+        if (res.ok) {
+            alert(json.message);
+            closeWarehouseModal();
+            loadWarehouses();
+        } else {
+            alert(json.detail || "작업 처리에 실패했습니다.");
+        }
+    }
+
+    async function deleteWarehouse(id, name) {
+        if (!confirm(`'${name}' 창고/위치를 삭제하시겠습니까?\n기존 품목 저장 위치와 연결되어 있을 수 있으므로 미사용 처리(N)를 권장합니다.`)) return;
+
+        const res = await fetch('/api/admin/warehouses/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: Number(id) })
+        });
+        const json = await res.json();
+
+        if (res.ok) {
+            alert(json.message);
+            loadWarehouses();
+        } else {
+            alert(json.detail || "삭제 처리에 실패했습니다.");
+        }
+    }
+
+    initData();
+</script>
+{% endblock %}

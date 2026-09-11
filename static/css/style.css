@@ -1,0 +1,148 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: "맑은 고딕", -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #f4f6f9;
+    color: #333;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* 좌측 사이드바 */
+.sidebar {
+    width: 240px;
+    background-color: #2c3e50;
+    color: #ecf0f1;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+
+.sidebar-header {
+    padding: 20px;
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    background-color: #1a252f;
+    border-bottom: 1px solid #34495e;
+}
+
+.menu-group {
+    padding: 15px 0;
+}
+
+.menu-title {
+    padding: 10px 20px;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #95a5a6;
+    letter-spacing: 1px;
+}
+
+.sub-menu {
+    list-style: none;
+}
+
+.sub-menu li a {
+    display: block;
+    padding: 12px 25px;
+    color: #bdc3c7;
+    text-decoration: none;
+    font-size: 14px;
+    transition: background 0.2s, color 0.2s;
+}
+
+.sub-menu li a:hover,
+.sub-menu li a.active {
+    background-color: #34495e;
+    color: #ffffff;
+    font-weight: bold;
+}
+
+/* 메인 본문 영역 */
+.main-content {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 30px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.page-title {
+    font-size: 20px;
+    font-weight: bold;
+    margin-bottom: 20px;
+    color: #2c3e50;
+}
+
+.card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.card-title {
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #34495e;
+    border-bottom: 2px solid #edf2f7;
+    padding-bottom: 8px;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+}
+
+button {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: bold;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-primary { background-color: #3498db; color: #fff; }
+.btn-primary:hover { background-color: #2980b9; }
+
+.btn-success { background-color: #27ae60; color: #fff; }
+.btn-success:hover { background-color: #219653; }
+
+.btn-secondary { background-color: #95a5a6; color: #fff; }
+.btn-secondary:hover { background-color: #7f8c8d; }
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 13px;
+}
+
+.data-table th, .data-table td {
+    border: 1px solid #e2e8f0;
+    padding: 8px 12px;
+    text-align: center;
+}
+
+.data-table th {
+    background-color: #f8fafc;
+    color: #475569;
+}
+
+.data-table tr:hover {
+    background-color: #f1f5f9;
+}

@@ -1,0 +1,610 @@
+{% extends "base.html" %}
+
+{% block title %}공정, 창고 및 저장위치 관리 - 시스템 관리{% endblock %}
+
+{% block extra_head %}
+<style>
+    .split-container {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+    }
+
+    .admin-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 16px;
+        box-sizing: border-box;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .admin-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+
+    .admin-title {
+        font-size: 14.5px;
+        font-weight: 800;
+        color: #1e293b;
+    }
+
+    .count-text {
+        font-size: 11.5px;
+        color: #64748b;
+        font-weight: bold;
+    }
+
+    .btn-create-sm {
+        background-color: #2563eb;
+        color: #ffffff;
+        border: none;
+        padding: 6px 10px;
+        border-radius: 4px;
+        font-size: 11.5px;
+        font-weight: bold;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .btn-create-sm:hover { background-color: #1d4ed8; }
+
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        table-layout: fixed;
+    }
+
+    .data-table th, .data-table td {
+        border: 1px solid #cbd5e1;
+        padding: 7px 4px;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .data-table th {
+        background-color: #f1f5f9;
+        font-weight: bold;
+        color: #334155;
+    }
+
+    .badge-active-y {
+        background: #dcfce7;
+        color: #15803d;
+        padding: 2px 5px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 10.5px;
+    }
+
+    .badge-active-n {
+        background: #fee2e2;
+        color: #b91c1c;
+        padding: 2px 5px;
+        border-radius: 4px;
+        font-weight: bold;
+        font-size: 10.5px;
+    }
+
+    .btn-action-edit {
+        background-color: #0284c7;
+        color: #fff;
+        border: none;
+        padding: 3px 5px;
+        border-radius: 3px;
+        font-size: 10.5px;
+        cursor: pointer;
+        font-weight: bold;
+    }
+
+    .btn-action-del {
+        background-color: #dc2626;
+        color: #fff;
+        border: none;
+        padding: 3px 5px;
+        border-radius: 3px;
+        font-size: 10.5px;
+        cursor: pointer;
+        font-weight: bold;
+        margin-left: 2px;
+    }
+
+    /* 모달 레이아웃 */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .modal-box {
+        background: #ffffff;
+        border-radius: 8px;
+        width: 100%;
+        max-width: 420px;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+
+    .modal-title {
+        font-size: 15px;
+        font-weight: bold;
+        color: #1e293b;
+        margin-bottom: 14px;
+    }
+
+    .form-group {
+        margin-bottom: 12px;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 12px;
+        font-weight: bold;
+        color: #475569;
+        margin-bottom: 5px;
+    }
+
+    .form-input, .form-select {
+        width: 100%;
+        padding: 7px 10px;
+        font-size: 13px;
+        border: 1px solid #cbd5e1;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+
+    .form-input:disabled {
+        background-color: #f1f5f9;
+        color: #64748b;
+        cursor: not-allowed;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="split-container">
+    <!-- 1. 공정 마스터 패널 -->
+    <div class="admin-card">
+        <div class="admin-header">
+            <div>
+                <span class="admin-title">공정 관리</span>
+                <span id="processCount" class="count-text">총 0건</span>
+            </div>
+            <button class="btn-create-sm" onclick="openProcessModal()">+ 공정 등록</button>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 28%;">코드</th>
+                    <th style="width: 32%;">명칭</th>
+                    <th style="width: 12%;">순서</th>
+                    <th style="width: 12%;">상태</th>
+                    <th style="width: 16%;">관리</th>
+                </tr>
+            </thead>
+            <tbody id="processTableBody">
+                <tr><td colspan="5" style="padding: 20px; color:#94a3b8;">조회 중...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 2. 창고 마스터 패널 (신규 추가) -->
+    <div class="admin-card">
+        <div class="admin-header">
+            <div>
+                <span class="admin-title">창고 관리</span>
+                <span id="warehouseCount" class="count-text">총 0건</span>
+            </div>
+            <button class="btn-create-sm" onclick="openWarehouseModal()">+ 창고 등록</button>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 28%;">코드</th>
+                    <th style="width: 32%;">명칭</th>
+                    <th style="width: 12%;">순서</th>
+                    <th style="width: 12%;">상태</th>
+                    <th style="width: 16%;">관리</th>
+                </tr>
+            </thead>
+            <tbody id="warehouseTableBody">
+                <tr><td colspan="5" style="padding: 20px; color:#94a3b8;">조회 중...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 3. 저장위치 마스터 패널 -->
+    <div class="admin-card">
+        <div class="admin-header">
+            <div>
+                <span class="admin-title">저장위치 관리</span>
+                <span id="locationCount" class="count-text">총 0건</span>
+            </div>
+            <button class="btn-create-sm" onclick="openLocationModal()">+ 위치 등록</button>
+        </div>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width: 28%;">코드</th>
+                    <th style="width: 32%;">명칭</th>
+                    <th style="width: 12%;">순서</th>
+                    <th style="width: 12%;">상태</th>
+                    <th style="width: 16%;">관리</th>
+                </tr>
+            </thead>
+            <tbody id="locationTableBody">
+                <tr><td colspan="5" style="padding: 20px; color:#94a3b8;">조회 중...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 공정 등록/수정 모달 -->
+<div id="processModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-title" id="processModalTitle">공정 등록</div>
+        <input type="hidden" id="modalProcessId">
+        <div class="form-group">
+            <label>공정 코드 <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalProcessCode" class="form-input" placeholder="예: PR-PRESS">
+        </div>
+        <div class="form-group">
+            <label>공정 명칭 <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalProcessName" class="form-input" placeholder="예: 프레스">
+        </div>
+        <div class="form-group">
+            <label>정렬 순서</label>
+            <input type="number" id="modalProcessSort" class="form-input" min="1" value="1">
+        </div>
+        <div class="form-group">
+            <label>사용 여부</label>
+            <select id="modalProcessIsActive" class="form-select">
+                <option value="Y">Y (사용)</option>
+                <option value="N">N (미사용)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>비고</label>
+            <input type="text" id="modalProcessNote" class="form-input" placeholder="설명">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
+            <button onclick="closeModal('processModal')" style="padding: 6px 12px; background:#cbd5e1; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">취소</button>
+            <button onclick="submitProcessForm()" style="padding: 6px 16px; background:#2563eb; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 창고 등록/수정 모달 (신규 추가) -->
+<div id="warehouseModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-title" id="warehouseModalTitle">창고 등록</div>
+        <input type="hidden" id="modalWarehouseId">
+        <div class="form-group">
+            <label>창고 코드 <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalWarehouseCode" class="form-input" placeholder="예: WH-RAW">
+        </div>
+        <div class="form-group">
+            <label>창고 명칭 <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalWarehouseName" class="form-input" placeholder="예: 원자재창고">
+        </div>
+        <div class="form-group">
+            <label>정렬 순서</label>
+            <input type="number" id="modalWarehouseSort" class="form-input" min="1" value="1">
+        </div>
+        <div class="form-group">
+            <label>사용 여부</label>
+            <select id="modalWarehouseIsActive" class="form-select">
+                <option value="Y">Y (사용)</option>
+                <option value="N">N (미사용)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>비고</label>
+            <input type="text" id="modalWarehouseNote" class="form-input" placeholder="설명">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
+            <button onclick="closeModal('warehouseModal')" style="padding: 6px 12px; background:#cbd5e1; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">취소</button>
+            <button onclick="submitWarehouseForm()" style="padding: 6px 16px; background:#2563eb; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">저장</button>
+        </div>
+    </div>
+</div>
+
+<!-- 저장위치 등록/수정 모달 -->
+<div id="locationModal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-title" id="locationModalTitle">저장위치 등록</div>
+        <input type="hidden" id="modalLocationId">
+        <div class="form-group">
+            <label>위치 코드 <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalLocationCode" class="form-input" placeholder="예: LOC-RAW-01">
+        </div>
+        <div class="form-group">
+            <label>위치 명칭 <span style="color:#dc2626;">*</span></label>
+            <input type="text" id="modalLocationName" class="form-input" placeholder="예: 원자재 랙 A열">
+        </div>
+        <div class="form-group">
+            <label>정렬 순서</label>
+            <input type="number" id="modalLocationSort" class="form-input" min="1" value="1">
+        </div>
+        <div class="form-group">
+            <label>사용 여부</label>
+            <select id="modalLocationIsActive" class="form-select">
+                <option value="Y">Y (사용)</option>
+                <option value="N">N (미사용)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>비고</label>
+            <input type="text" id="modalLocationNote" class="form-input" placeholder="설명">
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
+            <button onclick="closeModal('locationModal')" style="padding: 6px 12px; background:#cbd5e1; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">취소</button>
+            <button onclick="submitLocationForm()" style="padding: 6px 16px; background:#2563eb; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">저장</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+    let PROCESSES_DATA = [];
+    let WAREHOUSES_DATA = [];
+    let LOCATIONS_DATA = [];
+    let IS_PROCESS_EDIT = false;
+    let IS_WAREHOUSE_EDIT = false;
+    let IS_LOCATION_EDIT = false;
+
+    async function initData() {
+        await loadProcesses();
+        await loadWarehouses();
+        await loadLocations();
+    }
+
+    function closeModal(modalId) {
+        document.getElementById(modalId).style.display = 'none';
+    }
+
+    // 1. 공정 관리 스크립트
+    async function loadProcesses() {
+        const res = await fetch('/api/admin/processes');
+        const json = await res.json();
+        PROCESSES_DATA = json.data || [];
+        renderProcessTable();
+    }
+    function renderProcessTable() {
+        const tbody = document.getElementById('processTableBody');
+        document.getElementById('processCount').innerText = `총 ${PROCESSES_DATA.length}건`;
+        if (PROCESSES_DATA.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="padding:20px; color:#94a3b8;">등록된 공정이 없습니다.</td></tr>`;
+            return;
+        }
+        let html = "";
+        PROCESSES_DATA.forEach(p => {
+            const badge = p.is_active === 'Y' ? `<span class="badge-active-y">사용</span>` : `<span class="badge-active-n">미사용</span>`;
+            html += `<tr>
+                <td style="font-weight:bold; color:#0284c7;">${p.process_code}</td>
+                <td style="text-align:left; padding-left:6px; font-weight:600;">${p.process_name}</td>
+                <td>${p.sort_order}</td>
+                <td>${badge}</td>
+                <td>
+                    <button class="btn-action-edit" onclick="openEditProcessModal(${p.id})">수정</button>
+                    <button class="btn-action-del" onclick="deleteProcess(${p.id}, '${p.process_name}')">삭제</button>
+                </td>
+            </tr>`;
+        });
+        tbody.innerHTML = html;
+    }
+    function openProcessModal() {
+        IS_PROCESS_EDIT = false;
+        document.getElementById('processModalTitle').innerText = "신규 공정 등록";
+        document.getElementById('modalProcessId').value = "";
+        document.getElementById('modalProcessCode').value = "";
+        document.getElementById('modalProcessCode').disabled = false;
+        document.getElementById('modalProcessName').value = "";
+        document.getElementById('modalProcessSort').value = "1";
+        document.getElementById('modalProcessIsActive').value = "Y";
+        document.getElementById('modalProcessNote').value = "";
+        document.getElementById('processModal').style.display = 'flex';
+    }
+    function openEditProcessModal(id) {
+        IS_PROCESS_EDIT = true;
+        const target = PROCESSES_DATA.find(x => x.id === id);
+        if (!target) return;
+        document.getElementById('processModalTitle').innerText = "공정 정보 수정";
+        document.getElementById('modalProcessId').value = target.id;
+        document.getElementById('modalProcessCode').value = target.process_code;
+        document.getElementById('modalProcessCode').disabled = true;
+        document.getElementById('modalProcessName').value = target.process_name;
+        document.getElementById('modalProcessSort').value = target.sort_order;
+        document.getElementById('modalProcessIsActive').value = target.is_active;
+        document.getElementById('modalProcessNote').value = target.note || "";
+        document.getElementById('processModal').style.display = 'flex';
+    }
+    async function submitProcessForm() {
+        const id = document.getElementById('modalProcessId').value;
+        const process_code = document.getElementById('modalProcessCode').value.trim().toUpperCase();
+        const process_name = document.getElementById('modalProcessName').value.trim();
+        const sort_order = Number(document.getElementById('modalProcessSort').value) || 1;
+        const is_active = document.getElementById('modalProcessIsActive').value;
+        const note = document.getElementById('modalProcessNote').value.trim();
+        if (!process_code || !process_name) { alert("코드와 명칭을 입력해 주십시오."); return; }
+        const endpoint = IS_PROCESS_EDIT ? '/api/admin/processes/update' : '/api/admin/processes/create';
+        const payload = IS_PROCESS_EDIT ? { id: Number(id), process_name, sort_order, is_active, note } : { process_code, process_name, sort_order, is_active, note };
+        const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const json = await res.json();
+        if (res.ok) { alert(json.message); closeModal('processModal'); loadProcesses(); } else { alert(json.detail || "오류 발생"); }
+    }
+    async function deleteProcess(id, name) {
+        if (!confirm(`'${name}' 공정을 삭제하시겠습니까?`)) return;
+        const res = await fetch('/api/admin/processes/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: Number(id) }) });
+        const json = await res.json();
+        if (res.ok) { alert(json.message); loadProcesses(); } else { alert(json.detail || "삭제 실패"); }
+    }
+
+    // 2. 창고 관리 스크립트 (신규 추가)
+    async function loadWarehouses() {
+        const res = await fetch('/api/admin/warehouses-master');
+        const json = await res.json();
+        WAREHOUSES_DATA = json.data || [];
+        renderWarehouseTable();
+    }
+    function renderWarehouseTable() {
+        const tbody = document.getElementById('warehouseTableBody');
+        document.getElementById('warehouseCount').innerText = `총 ${WAREHOUSES_DATA.length}건`;
+        if (WAREHOUSES_DATA.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="padding:20px; color:#94a3b8;">등록된 창고가 없습니다.</td></tr>`;
+            return;
+        }
+        let html = "";
+        WAREHOUSES_DATA.forEach(w => {
+            const badge = w.is_active === 'Y' ? `<span class="badge-active-y">사용</span>` : `<span class="badge-active-n">미사용</span>`;
+            html += `<tr>
+                <td style="font-weight:bold; color:#0284c7;">${w.warehouse_code}</td>
+                <td style="text-align:left; padding-left:6px; font-weight:600;">${w.warehouse_name}</td>
+                <td>${w.sort_order}</td>
+                <td>${badge}</td>
+                <td>
+                    <button class="btn-action-edit" onclick="openEditWarehouseModal(${w.id})">수정</button>
+                    <button class="btn-action-del" onclick="deleteWarehouse(${w.id}, '${w.warehouse_name}')">삭제</button>
+                </td>
+            </tr>`;
+        });
+        tbody.innerHTML = html;
+    }
+    function openWarehouseModal() {
+        IS_WAREHOUSE_EDIT = false;
+        document.getElementById('warehouseModalTitle').innerText = "신규 창고 등록";
+        document.getElementById('modalWarehouseId').value = "";
+        document.getElementById('modalWarehouseCode').value = "";
+        document.getElementById('modalWarehouseCode').disabled = false;
+        document.getElementById('modalWarehouseName').value = "";
+        document.getElementById('modalWarehouseSort').value = "1";
+        document.getElementById('modalWarehouseIsActive').value = "Y";
+        document.getElementById('modalWarehouseNote').value = "";
+        document.getElementById('warehouseModal').style.display = 'flex';
+    }
+    function openEditWarehouseModal(id) {
+        IS_WAREHOUSE_EDIT = true;
+        const target = WAREHOUSES_DATA.find(x => x.id === id);
+        if (!target) return;
+        document.getElementById('warehouseModalTitle').innerText = "창고 정보 수정";
+        document.getElementById('modalWarehouseId').value = target.id;
+        document.getElementById('modalWarehouseCode').value = target.warehouse_code;
+        document.getElementById('modalWarehouseCode').disabled = true;
+        document.getElementById('modalWarehouseName').value = target.warehouse_name;
+        document.getElementById('modalWarehouseSort').value = target.sort_order;
+        document.getElementById('modalWarehouseIsActive').value = target.is_active;
+        document.getElementById('modalWarehouseNote').value = target.note || "";
+        document.getElementById('warehouseModal').style.display = 'flex';
+    }
+    async function submitWarehouseForm() {
+        const id = document.getElementById('modalWarehouseId').value;
+        const warehouse_code = document.getElementById('modalWarehouseCode').value.trim().toUpperCase();
+        const warehouse_name = document.getElementById('modalWarehouseName').value.trim();
+        const sort_order = Number(document.getElementById('modalWarehouseSort').value) || 1;
+        const is_active = document.getElementById('modalWarehouseIsActive').value;
+        const note = document.getElementById('modalWarehouseNote').value.trim();
+        if (!warehouse_code || !warehouse_name) { alert("코드와 명칭을 입력해 주십시오."); return; }
+        const endpoint = IS_WAREHOUSE_EDIT ? '/api/admin/warehouses-master/update' : '/api/admin/warehouses-master/create';
+        const payload = IS_WAREHOUSE_EDIT ? { id: Number(id), warehouse_name, sort_order, is_active, note } : { warehouse_code, warehouse_name, sort_order, is_active, note };
+        const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const json = await res.json();
+        if (res.ok) { alert(json.message); closeModal('warehouseModal'); loadWarehouses(); } else { alert(json.detail || "오류 발생"); }
+    }
+    async function deleteWarehouse(id, name) {
+        if (!confirm(`'${name}' 창고를 삭제하시겠습니까?`)) return;
+        const res = await fetch('/api/admin/warehouses-master/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: Number(id) }) });
+        const json = await res.json();
+        if (res.ok) { alert(json.message); loadWarehouses(); } else { alert(json.detail || "삭제 실패"); }
+    }
+
+    // 3. 저장위치 관리 스크립트
+    async function loadLocations() {
+        const res = await fetch('/api/admin/storage-locations');
+        const json = await res.json();
+        LOCATIONS_DATA = json.data || [];
+        renderLocationTable();
+    }
+    function renderLocationTable() {
+        const tbody = document.getElementById('locationTableBody');
+        document.getElementById('locationCount').innerText = `총 ${LOCATIONS_DATA.length}건`;
+        if (LOCATIONS_DATA.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="padding:20px; color:#94a3b8;">등록된 저장위치가 없습니다.</td></tr>`;
+            return;
+        }
+        let html = "";
+        LOCATIONS_DATA.forEach(loc => {
+            const badge = loc.is_active === 'Y' ? `<span class="badge-active-y">사용</span>` : `<span class="badge-active-n">미사용</span>`;
+            html += `<tr>
+                <td style="font-weight:bold; color:#0284c7;">${loc.location_code}</td>
+                <td style="text-align:left; padding-left:6px; font-weight:600;">${loc.location_name}</td>
+                <td>${loc.sort_order}</td>
+                <td>${badge}</td>
+                <td>
+                    <button class="btn-action-edit" onclick="openEditLocationModal(${loc.id})">수정</button>
+                    <button class="btn-action-del" onclick="deleteLocation(${loc.id}, '${loc.location_name}')">삭제</button>
+                </td>
+            </tr>`;
+        });
+        tbody.innerHTML = html;
+    }
+    function openLocationModal() {
+        IS_LOCATION_EDIT = false;
+        document.getElementById('locationModalTitle').innerText = "신규 저장위치 등록";
+        document.getElementById('modalLocationId').value = "";
+        document.getElementById('modalLocationCode').value = "";
+        document.getElementById('modalLocationCode').disabled = false;
+        document.getElementById('modalLocationName').value = "";
+        document.getElementById('modalLocationSort').value = "1";
+        document.getElementById('modalLocationIsActive').value = "Y";
+        document.getElementById('modalLocationNote').value = "";
+        document.getElementById('locationModal').style.display = 'flex';
+    }
+    function openEditLocationModal(id) {
+        IS_LOCATION_EDIT = true;
+        const target = LOCATIONS_DATA.find(x => x.id === id);
+        if (!target) return;
+        document.getElementById('locationModalTitle').innerText = "저장위치 정보 수정";
+        document.getElementById('modalLocationId').value = target.id;
+        document.getElementById('modalLocationCode').value = target.location_code;
+        document.getElementById('modalLocationCode').disabled = true;
+        document.getElementById('modalLocationName').value = target.location_name;
+        document.getElementById('modalLocationSort').value = target.sort_order;
+        document.getElementById('modalLocationIsActive').value = target.is_active;
+        document.getElementById('modalLocationNote').value = target.note || "";
+        document.getElementById('locationModal').style.display = 'flex';
+    }
+    async function submitLocationForm() {
+        const id = document.getElementById('modalLocationId').value;
+        const location_code = document.getElementById('modalLocationCode').value.trim().toUpperCase();
+        const location_name = document.getElementById('modalLocationName').value.trim();
+        const sort_order = Number(document.getElementById('modalLocationSort').value) || 1;
+        const is_active = document.getElementById('modalLocationIsActive').value;
+        const note = document.getElementById('modalLocationNote').value.trim();
+        if (!location_code || !location_name) { alert("코드와 명칭을 입력해 주십시오."); return; }
+        const endpoint = IS_LOCATION_EDIT ? '/api/admin/storage-locations/update' : '/api/admin/storage-locations/create';
+        const payload = IS_LOCATION_EDIT ? { id: Number(id), location_name, sort_order, is_active, note } : { location_code, location_name, sort_order, is_active, note };
+        const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const json = await res.json();
+        if (res.ok) { alert(json.message); closeModal('locationModal'); loadLocations(); } else { alert(json.detail || "오류 발생"); }
+    }
+    async function deleteLocation(id, name) {
+        if (!confirm(`'${name}' 저장위치를 삭제하시겠습니까?`)) return;
+        const res = await fetch('/api/admin/storage-locations/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: Number(id) }) });
+        const json = await res.json();
+        if (res.ok) { alert(json.message); loadLocations(); } else { alert(json.detail || "삭제 실패"); }
+    }
+
+    initData();
+</script>
+{% endblock %}
