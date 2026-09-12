@@ -1,5 +1,7 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -12,9 +14,26 @@ templates = Jinja2Templates(directory="templates")
 
 
 @router.get("/purchase/orders", response_class=HTMLResponse)
-def purchase_orders_page(current_user=Depends(get_current_user)):
-    """기존 구매관리 화면의 발주 영역으로 연결하는 호환 라우트."""
-    return RedirectResponse(url="/purchase", status_code=303)
+def purchase_orders_page(
+    request: Request,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """일반구매 발주 입력 표준 화면."""
+    warehouses = db.query(WarehouseMasterModel).order_by(WarehouseMasterModel.warehouse_code).all()
+    storage_locations = db.query(StorageLocationModel).order_by(StorageLocationModel.location_code).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="purchase.html",
+        context={
+            "request": request,
+            "user": current_user,
+            "today": datetime.now().strftime("%Y-%m-%d"),
+            "warehouses": warehouses,
+            "warehouse_masters": warehouses,
+            "storage_locations": storage_locations,
+        },
+    )
 
 
 @router.get("/purchase/inbound", response_class=HTMLResponse)
