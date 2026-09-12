@@ -2,74 +2,71 @@
 {% block title %}발주 입력 - 구매관리{% endblock %}
 {% block extra_head %}
 <style>
-.po-card { background:#fff; border:1px solid #cbd5e1; border-radius:8px; padding:20px; margin-bottom:20px; }
-.po-card h2 { font-size:18px; margin:0 0 16px; }
-.po-fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; }
-.po-field { display:flex; flex-direction:column; gap:5px; font-size:13px; font-weight:600; }
-.po-field input,.po-field textarea,.po-filter input { width:100%; box-sizing:border-box; padding:8px; border:1px solid #cbd5e1; border-radius:4px; font:inherit; }
+.po-page { color:#1e293b; }
+.po-page h1 { font-size:20px; margin:0 0 12px; }
+.po-box { background:#fff; border:1px solid #cbd5e1; border-radius:6px; margin-bottom:14px; }
+.po-header { display:grid; grid-template-columns:1fr 1fr; gap:10px 24px; padding:16px 18px; }
+.po-field { display:grid; grid-template-columns:100px minmax(0,1fr); align-items:start; gap:8px; font-size:13px; }
+.po-field label { padding-top:8px; font-weight:600; white-space:nowrap; }
+.po-field input,.po-field textarea { box-sizing:border-box; width:100%; padding:7px 9px; border:1px solid #cbd5e1; border-radius:4px; font:inherit; background:#fff; }
 .po-field input[readonly] { background:#f8fafc; }
-.po-wide { grid-column:1/-1; }
-.po-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:14px 0; }
-.po-btn { padding:8px 14px; border:1px solid #94a3b8; border-radius:4px; background:#fff; cursor:pointer; }
-.po-primary { color:#fff; background:#2563eb; border-color:#2563eb; }
-.po-btn:disabled { opacity:.5; cursor:default; }
-.po-table-wrap { overflow-x:auto; }
-.po-table { width:100%; border-collapse:collapse; font-size:13px; }
-.po-table th,.po-table td { padding:9px 7px; border-bottom:1px solid #e2e8f0; text-align:left; vertical-align:middle; }
-.po-table th { background:#f8fafc; white-space:nowrap; }
-.po-table input { padding:7px; border:1px solid #cbd5e1; border-radius:4px; box-sizing:border-box; }
-.po-table input[type=number] { width:100px; }
-.po-table input[type=date] { min-width:140px; }
-.po-table input[type=text] { min-width:160px; }
-.po-results { margin-top:8px; border:1px solid #cbd5e1; border-radius:4px; max-height:220px; overflow:auto; }
-.po-results:empty { display:none; }
-.po-results button { border:0; background:transparent; text-align:left; width:100%; padding:8px; cursor:pointer; }
-.po-results button:hover { background:#eff6ff; }
-.po-search { display:flex; gap:8px; max-width:600px; }
-.po-search input { flex:1; min-width:0; padding:8px; border:1px solid #cbd5e1; border-radius:4px; }
-.po-muted { color:#64748b; font-size:12px; }
-.po-status { min-height:20px; font-size:13px; margin:8px 0; }
-.po-filter { display:flex; gap:8px; max-width:500px; margin-bottom:12px; }
+.po-field-wide { grid-column:1/-1; }
+.po-field-wide textarea { resize:vertical; }
+.po-lookup { min-width:0; }
+.po-lookup-hint { color:#64748b; font-size:11px; min-height:15px; padding-top:2px; }
+.po-suggestions { margin-top:3px; border:1px solid #cbd5e1; border-radius:4px; background:#fff; max-height:165px; overflow-y:auto; }
+.po-suggestions:empty { display:none; }
+.po-suggestions button { display:block; width:100%; border:0; border-bottom:1px solid #e2e8f0; padding:6px 8px; background:#fff; text-align:left; cursor:pointer; font:inherit; }
+.po-suggestions button:hover,.po-suggestions button:focus { background:#eff6ff; }
+.po-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:7px; padding:9px 0; }
+.po-btn { border:1px solid #cbd5e1; background:#fff; border-radius:4px; padding:6px 12px; font-size:12px; cursor:pointer; }
+.po-btn:hover { background:#f1f5f9; }
+.po-btn-primary { background:#2563eb; border-color:#2563eb; color:#fff; font-weight:700; }
+.po-btn-primary:hover { background:#1d4ed8; }
+.po-btn:disabled { opacity:.55; cursor:default; }
+.po-grid-wrap { overflow-x:auto; }
+.po-grid { border-collapse:collapse; width:100%; min-width:1020px; font-size:12px; }
+.po-grid th,.po-grid td { border:1px solid #dbe2eb; padding:4px; vertical-align:top; }
+.po-grid th { background:#f8fafc; text-align:center; font-weight:600; white-space:nowrap; height:30px; }
+.po-grid tbody tr:nth-child(even) { background:#fbfcfe; }
+.po-grid input { box-sizing:border-box; width:100%; min-width:0; border:1px solid transparent; background:transparent; padding:5px; font:inherit; border-radius:3px; }
+.po-grid input:focus { border-color:#2563eb; background:#fff; outline:none; }
+.po-grid input[readonly] { color:#475569; }
+.po-grid input[type=number] { text-align:right; }
+.po-grid input[type=date] { min-width:126px; }
+.po-grid td.po-seq { text-align:center; color:#64748b; padding-top:10px; width:32px; }
+.po-grid .po-suggestions { min-width:210px; font-size:12px; }
+.po-grid .po-row-status { color:#b45309; font-size:11px; }
+.po-grid .po-remove { border:0; background:transparent; color:#64748b; cursor:pointer; padding:5px; }
+.po-footer { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:12px 0; }
+.po-message { font-size:13px; min-height:18px; }
+.po-history { padding:16px; }
+.po-history h2 { font-size:16px; margin:0 0 12px; }
+.po-history-filter { display:flex; gap:7px; margin-bottom:10px; }
+.po-history-filter input { width:250px; max-width:100%; padding:7px; border:1px solid #cbd5e1; border-radius:4px; }
+.po-history .po-grid { min-width:900px; }
+@media(max-width:750px) { .po-header { grid-template-columns:1fr; } .po-field-wide { grid-column:1; } }
 </style>
 {% endblock %}
 {% block content %}
-<div class="container">
-  <h1 class="page-title">발주 입력</h1>
-  <section class="po-card">
-    <h2>발주 정보</h2>
-    <form id="po-form">
-      <div class="po-fields">
-        <label class="po-field">발주번호<input id="po-number" value="저장 시 자동 발번" readonly></label>
-        <label class="po-field">발주일자<input id="po-date" type="date" required></label>
-        <label class="po-field">납기요청일<input id="po-requested-date" type="date"></label>
-        <label class="po-field">담당자<input id="po-manager" maxlength="50"></label>
-        <label class="po-field">상태<input value="발주완료" readonly></label>
-        <div class="po-field po-wide">
-          <label for="po-vendor-query">거래처 검색 (코드 또는 거래처명)</label>
-          <div class="po-search"><input id="po-vendor-query" autocomplete="off" placeholder="코드나 거래처명을 입력하세요"><button class="po-btn" type="button" id="po-vendor-search">검색</button></div>
-          <div id="po-vendor-results" class="po-results"></div>
-          <span class="po-muted" id="po-selected-vendor">선택된 거래처 없음</span>
-        </div>
-        <label class="po-field po-wide">비고<textarea id="po-note" rows="2" maxlength="1000"></textarea></label>
-      </div>
-      <h2 style="margin-top:24px;">발주 품목</h2>
-      <div class="po-actions"><button class="po-btn" type="button" id="po-item-toggle">+ 품목 검색·추가</button><span class="po-muted">품목 마스터에서 선택한 뒤 각 행에 수량과 납기일을 입력하세요.</span></div>
-      <div id="po-item-picker" hidden>
-        <div class="po-search"><input id="po-item-query" placeholder="품번·품명·규격 검색"><button class="po-btn" type="button" id="po-item-search">검색</button></div>
-        <div class="po-table-wrap"><table class="po-table"><thead><tr><th>품번</th><th>품명</th><th>규격</th><th>단위</th><th>선택</th></tr></thead><tbody id="po-item-results"></tbody></table></div>
-      </div>
-      <div class="po-table-wrap"><table class="po-table"><thead><tr><th>품번</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>납기일</th><th>비고</th><th></th></tr></thead><tbody id="po-lines"><tr id="po-empty"><td colspan="8" class="po-muted">품목을 추가하세요.</td></tr></tbody></table></div>
-      <div class="po-actions"><button class="po-btn" type="button" id="po-new">신규</button><button class="po-btn po-primary" type="submit" id="po-save">발주 저장</button><span id="po-message" class="po-status" role="status"></span></div>
-    </form>
-  </section>
-  <section class="po-card">
-    <h2>발주 목록</h2>
-    <div class="po-filter"><input id="po-list-query" placeholder="거래처명 검색"><button class="po-btn" type="button" id="po-list-search">조회</button></div>
-    <div class="po-table-wrap"><table class="po-table"><thead><tr><th>발주번호</th><th>발주일자</th><th>납기요청일</th><th>거래처</th><th>담당자</th><th>품번</th><th>품명</th><th>수량</th><th>납기일</th><th>상태</th></tr></thead><tbody id="po-list"></tbody></table></div>
-  </section>
+<div class="container po-page">
+  <h1>발주서 입력</h1>
+  <form id="po-form" class="po-box">
+    <div class="po-header">
+      <div class="po-field"><label for="po-date">발주일자</label><input id="po-date" type="date" required></div>
+      <div class="po-field"><label for="po-vendor-query">거래처</label><div class="po-lookup"><input id="po-vendor-query" autocomplete="off" placeholder="거래처 코드 또는 이름 입력" required><div id="po-vendor-results" class="po-suggestions"></div><div id="po-vendor-hint" class="po-lookup-hint">등록된 공급사 거래처에서 조회합니다.</div></div></div>
+      <div class="po-field"><label for="po-manager">담당자</label><input id="po-manager" maxlength="50"></div>
+      <div class="po-field"><label for="po-requested-date">납기요청일</label><input id="po-requested-date" type="date"></div>
+      <div class="po-field"><label for="po-number">발주번호</label><input id="po-number" value="저장 시 자동 발번" readonly></div>
+      <div class="po-field"><label for="po-state">상태</label><input id="po-state" value="발주완료" readonly></div>
+      <div class="po-field po-field-wide"><label for="po-note">비고</label><textarea id="po-note" rows="2" maxlength="1000"></textarea></div>
+    </div>
+    <div class="po-toolbar"><button class="po-btn" type="button" id="po-add-row">+ 행 추가</button><span class="po-lookup-hint">품번 또는 품명을 입력하면 품목 마스터의 품명·규격·단위를 채웁니다.</span></div>
+    <div class="po-grid-wrap"><table class="po-grid"><colgroup><col style="width:36px"><col style="width:170px"><col style="width:180px"><col style="width:130px"><col style="width:65px"><col style="width:95px"><col style="width:145px"><col style="width:180px"><col style="width:42px"></colgroup><thead><tr><th>No.</th><th>품번 / 품명 검색</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>납기일</th><th>비고</th><th></th></tr></thead><tbody id="po-lines"></tbody></table></div>
+    <div class="po-footer"><button class="po-btn" type="button" id="po-new">신규</button><button class="po-btn po-btn-primary" type="submit" id="po-save">저장</button><span id="po-message" class="po-message" role="status"></span></div>
+  </form>
+  <section class="po-box po-history"><h2>발주 목록</h2><div class="po-history-filter"><input id="po-list-query" placeholder="거래처명 검색"><button class="po-btn" type="button" id="po-list-search">조회</button></div><div class="po-grid-wrap"><table class="po-grid"><thead><tr><th>발주번호</th><th>발주일자</th><th>납기요청일</th><th>거래처</th><th>담당자</th><th>품번</th><th>품명</th><th>수량</th><th>납기일</th><th>상태</th></tr></thead><tbody id="po-list"></tbody></table></div></section>
 </div>
 {% endblock %}
-{% block extra_script %}
-<script src="{{ url_for('static', path='purchase_orders.js') }}" defer></script>
-{% endblock %}
+{% block extra_script %}<script src="{{ url_for('static', path='purchase_orders.js') }}" defer></script>{% endblock %}
 
