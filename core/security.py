@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import os
+from datetime import datetime
 from typing import Optional, Union, Any
 from fastapi import Request, HTTPException, status, Depends
 from sqlalchemy.orm import Session
@@ -301,6 +302,7 @@ def init_default_accounts(db: Optional[Session] = None) -> None:
 
     try:
         from models.models import UserModel
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         admin_user = db.query(UserModel).filter(UserModel.username == "admin").first()
         if not admin_user:
@@ -308,6 +310,7 @@ def init_default_accounts(db: Optional[Session] = None) -> None:
                 "username": "admin",
                 "password_hash": hash_password("admin1234"),
                 "role": "admin",
+                "created_at": now_str,
             }
             if hasattr(UserModel, "name"):
                 admin_data["name"] = "관리자"
@@ -323,6 +326,7 @@ def init_default_accounts(db: Optional[Session] = None) -> None:
                 "username": "user",
                 "password_hash": hash_password("user1234"),
                 "role": "user",
+                "created_at": now_str,
             }
             if hasattr(UserModel, "name"):
                 user_data["name"] = "일반사용자"
