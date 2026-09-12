@@ -1,8 +1,9 @@
 # routers/bom.py 상단부
+from datetime import datetime
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -30,13 +31,13 @@ router = APIRouter()
 # 이 아래부터 기존 엔드포인트 코드가 이어집니다.
 # --------------------------------------------------------------------------
 
-def check_bom_permission(user: UserModel) -> bool:
+def check_bom_permission(user) -> bool:
     """BOM 관리 메뉴 접근 권한 확인"""
     if not user:
         return False
-    if user.role == "ADMIN":
+    if str(getattr(user, "role", "")).upper() == "ADMIN":
         return True
-    return bool(user.perms and user.perms.get("basic_info", {}).get("enabled", False))
+    return check_permission(user, "bom", "READ")
 
 
 # 1. 화면 렌더링 라우터
