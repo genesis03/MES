@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from models.models import StorageLocationModel, WarehouseMasterModel
+from models.partner import Partner
 
 router = APIRouter(tags=["Purchase Pages"])
 templates = Jinja2Templates(directory="templates")
@@ -22,6 +23,15 @@ def purchase_orders_page(
     """일반구매 발주 입력 표준 화면."""
     warehouses = db.query(WarehouseMasterModel).order_by(WarehouseMasterModel.warehouse_code).all()
     storage_locations = db.query(StorageLocationModel).order_by(StorageLocationModel.location_code).all()
+    vendors = (
+        db.query(Partner)
+        .filter(
+            Partner.is_active == "Y",
+            Partner.partner_type.in_(["VENDOR", "BOTH"]),
+        )
+        .order_by(Partner.partner_name.asc())
+        .all()
+    )
     return templates.TemplateResponse(
         request=request,
         name="purchase.html",
@@ -32,6 +42,7 @@ def purchase_orders_page(
             "warehouses": warehouses,
             "warehouse_masters": warehouses,
             "storage_locations": storage_locations,
+            "vendors": vendors,
         },
     )
 
