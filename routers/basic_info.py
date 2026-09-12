@@ -1,8 +1,9 @@
 # routers/basic_info.py 상단부
+from datetime import datetime
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Form
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
@@ -27,13 +28,13 @@ router = APIRouter()
 # 이 아래부터 기존 @router.get("/basic-info/items", ...) 코드가 이어집니다.
 # --------------------------------------------------------------------------
 
-def check_basic_info_permission(user: UserModel) -> bool:
+def check_basic_info_permission(user: Any) -> bool:
     """기초 정보 메뉴 접근 권한 확인"""
     if not user:
         return False
-    if user.role == "ADMIN":
+    if str(getattr(user, "role", "")).strip().upper() == "ADMIN":
         return True
-    return bool(user.perms and user.perms.get("basic_info", {}).get("enabled", False))
+    return check_permission(user, "basic_info", "READ")
 
 
 # 1. 화면 렌더링 라우터
