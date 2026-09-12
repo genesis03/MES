@@ -40,11 +40,6 @@
 .po-grid .po-remove { border:0; background:transparent; color:#64748b; cursor:pointer; padding:5px; }
 .po-footer { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:12px 0; }
 .po-message { font-size:13px; min-height:18px; }
-.po-history { padding:16px; }
-.po-history h2 { font-size:16px; margin:0 0 12px; }
-.po-history-filter { display:flex; gap:7px; margin-bottom:10px; }
-.po-history-filter input { width:250px; max-width:100%; padding:7px; border:1px solid #cbd5e1; border-radius:4px; }
-.po-history .po-grid { min-width:900px; }
 @media(max-width:750px) { .po-header { grid-template-columns:1fr; } .po-field-wide { grid-column:1; } }
 </style>
 {% endblock %}
@@ -65,7 +60,6 @@
     <div class="po-grid-wrap"><table class="po-grid"><colgroup><col style="width:36px"><col style="width:170px"><col style="width:180px"><col style="width:130px"><col style="width:65px"><col style="width:95px"><col style="width:145px"><col style="width:180px"><col style="width:42px"></colgroup><thead><tr><th>No.</th><th>품번 / 품명 검색</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>납기일</th><th>비고</th><th></th></tr></thead><tbody id="po-lines"></tbody></table></div>
     <div class="po-footer"><button class="po-btn" type="button" id="po-new">신규</button><button class="po-btn po-btn-primary" type="submit" id="po-save">저장</button><span id="po-message" class="po-message" role="status"></span></div>
   </form>
-  <section class="po-box po-history"><h2>발주 목록</h2><div class="po-history-filter"><input id="po-list-query" placeholder="거래처명 검색"><button class="po-btn" type="button" id="po-list-search">조회</button></div><div class="po-grid-wrap"><table class="po-grid"><thead><tr><th>발주번호</th><th>발주일자</th><th>납기요청일</th><th>거래처</th><th>담당자</th><th>품번</th><th>품명</th><th>수량</th><th>납기일</th><th>상태</th></tr></thead><tbody id="po-list"></tbody></table></div></section>
 </div>
 {% endblock %}
 {% block extra_script %}<script src="{{ url_for('static', path='purchase_orders.js') }}" defer></script>{% endblock %}

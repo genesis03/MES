@@ -210,38 +210,15 @@
       });
       $('po-number').value = data.po_no;
       message(data.po_no + ' 저장되었습니다. 새 발주는 신규를 누르세요.');
-      loadOrders();
     } catch (error) {
       $('po-save').disabled = false;
-      message(error.message + ' 통신 오류라면 목록에서 저장 여부를 먼저 확인하세요.');
+      message(error.message + ' 통신 오류라면 발주 조회에서 저장 여부를 먼저 확인하세요.');
     } finally { saving = false; }
-  }
-  async function loadOrders() {
-    const body = $('po-list'); body.replaceChildren();
-    try {
-      const supplier = $('po-list-query').value.trim();
-      const data = await request('/api/purchase/orders?' + new URLSearchParams({supplier, limit: '1000'}));
-      if (!data.data.length) {
-        const tr = body.insertRow(); cell(tr, '등록된 발주가 없습니다.').colSpan = 10; return;
-      }
-      data.data.forEach(order => {
-        const tr = body.insertRow();
-        [order.po_no, order.order_date, order.due_date, order.supplier_name, order.manager_name,
-          order.part_no, order.part_name, order.order_qty, order.delivery_date, order.status].forEach(value => cell(tr, value));
-      });
-    } catch (error) {
-      const tr = body.insertRow(); cell(tr, error.message).colSpan = 10;
-    }
   }
   $('po-vendor-query').addEventListener('input', searchVendorSoon);
   $('po-add-row').addEventListener('click', () => addRow().query.focus());
   $('po-new').addEventListener('click', resetOrder);
   $('po-form').addEventListener('submit', saveOrder);
-  $('po-list-search').addEventListener('click', loadOrders);
-  $('po-list-query').addEventListener('keydown', event => {
-    if (event.key === 'Enter') { event.preventDefault(); loadOrders(); }
-  });
   resetOrder();
-  loadOrders();
 })();
 
