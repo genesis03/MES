@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
 
+from core.database import get_db
 from core.security import get_current_user
+from models.models import StorageLocationModel, WarehouseMasterModel
 
 router = APIRouter(tags=["Purchase Pages"])
 templates = Jinja2Templates(directory="templates")
@@ -15,9 +18,34 @@ def purchase_orders_page(current_user=Depends(get_current_user)):
 
 
 @router.get("/purchase/inbound", response_class=HTMLResponse)
-def purchase_inbound_page(current_user=Depends(get_current_user)):
-    """기존 구매관리 화면의 구매 입고 영역으로 연결하는 표준 라우트."""
-    return RedirectResponse(url="/purchase#purchase-entry", status_code=303)
+def purchase_inbound_page(
+    request: Request,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """일반구매 입고 전용 화면."""
+    warehouses = (
+        db.query(WarehouseMasterModel)
+        .filter(WarehouseMasterModel.is_active == "Y")
+        .order_by(WarehouseMasterModel.warehouse_code)
+        .all()
+    )
+    storage_locations = (
+        db.query(StorageLocationModel)
+        .filter(StorageLocationModel.is_active == "Y")
+        .order_by(StorageLocationModel.location_code)
+        .all()
+    )
+    return templates.TemplateResponse(
+        request=request,
+        name="purchase_inbound.html",
+        context={
+            "request": request,
+            "user": current_user,
+            "warehouse_masters": warehouses,
+            "storage_locations": storage_locations,
+        },
+    )
 
 
 @router.get("/purchase/inquiry/orders", response_class=HTMLResponse)
