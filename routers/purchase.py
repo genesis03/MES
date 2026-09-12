@@ -249,6 +249,30 @@ def get_purchase_db():
         yield db
 
 
+@api_router.get("/vendors/search")
+def search_purchase_vendors(
+    keyword: str = Query("", max_length=100),
+    offset: int = Query(0, ge=0), limit: int = Query(30, ge=1, le=100),
+    db: Session = Depends(get_purchase_db), current_user=Depends(get_current_user),
+):
+    from models.partner import Partner
+    query = db.query(Partner).filter(
+        Partner.is_active == "Y", Partner.partner_type.in_(["VENDOR", "BOTH"])
+    )
+    keyword = keyword.strip()
+    if keyword:
+        query = query.filter(or_(
+            Partner.partner_code.contains(keyword, autoescape=True),
+            Partner.partner_name.contains(keyword, autoescape=True),
+        ))
+    total = query.count()
+    rows = query.order_by(Partner.partner_code).offset(offset).limit(limit).all()
+    return {"total": total, "items": [
+        {"id": row.id, "partner_code": row.partner_code, "partner_name": row.partner_name,
+         "manager_name": row.manager_name or ""} for row in rows
+    ]}
+
+
 def purchase_creator(user):
     value = user.get("username") if isinstance(user, dict) else getattr(user, "username", None)
     if not value or len(str(value)) > 50:
@@ -391,4 +415,7 @@ def purchase_order_list(
             "data": [{"id": m.id, "po_no": m.po_no, "order_date": m.order_date,
                       "supplier_name": m.partner_name, "part_no": i.part_no, "part_name": p.part_name,
                       "order_qty": i.order_qty, "unit": i.unit, "due_date": m.delivery_due_date or "",
+                      "delivery_date": i.delivery_date or "", "item_note": i.note or "",
+                      "manager_name": m.manager_name or "", "note": m.note or "",
                       "status": labels[m.status]} for m, i, p in rows]}
+

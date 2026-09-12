@@ -156,6 +156,7 @@ class PurchaseOrderMaster(Base):
     partner_id = Column(Integer, ForeignKey("partners.id"))
     partner_name = Column(String(100), nullable=False)
     status = Column(String(20), default="ORDERED", nullable=False)
+    manager_name = Column(String(50))
     note = Column(Text)
     created_by = Column(String(50))
     created_at = Column(DateTime, default=datetime.now, nullable=False)
@@ -175,6 +176,8 @@ class PurchaseOrderItem(Base):
     part_no = Column(String(50), ForeignKey("item_master.part_no"), nullable=False)
     order_qty = Column(Float, nullable=False)
     unit = Column(String(10), nullable=False)
+    delivery_date = Column(String(10))
+    note = Column(Text)
     received_qty = Column(Float, default=0.0, nullable=False)
     unit_price = Column(Float, default=0.0, nullable=False)
     supply_price = Column(Float, default=0.0, nullable=False)
@@ -215,3 +218,4 @@ class PurchaseInboundItem(Base):
     warehouse_code = Column(String(20), ForeignKey("warehouse_masters.warehouse_code"), nullable=False)
     storage_location = Column(String(20), ForeignKey("storage_locations.location_code"), nullable=False)
     unit_price = Column(Float, default=0.0, nullable=False)
+

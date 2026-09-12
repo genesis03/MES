@@ -82,6 +82,29 @@ def test_partial_and_complete(setup):
     assert c.get('/api/purchase/orders/unreceived').json()['total'] == 0
 
 
+def test_inline_order_entry_and_vendor_code_search(setup):
+    client, factory = setup
+    with factory() as db:
+        db.get(Partner, 1).partner_code = 'V-SEARCH'
+        db.get(Partner, 2).partner_type = 'CUSTOMER'
+        db.commit()
+    found = client.get('/api/purchase/vendors/search', params={'keyword': 'V-SEARCH'})
+    assert found.status_code == 200
+    assert [row['id'] for row in found.json()['items']] == [1]
+    assert client.get('/api/purchase/vendors/search', params={'keyword': '다른공급사'}).json()['total'] == 0
+
+    response = order(client, manager_name='구매담당', delivery_due_date='2026-09-20',
+                     items=[{'part_no': 'A', 'order_qty': 10, 'delivery_date': '2026-09-18', 'note': '먼저 납품'},
+                            {'part_no': 'B', 'order_qty': 5, 'delivery_date': '2026-09-25', 'note': '나중 납품'}])
+    assert response.status_code == 201, response.text
+    data = response.json()
+    assert data['manager_name'] == '구매담당'
+    assert [(item['delivery_date'], item['note']) for item in data['items']] == [
+        ('2026-09-18', '먼저 납품'), ('2026-09-25', '나중 납품')]
+    assert all(item['unit_price'] == 0 for item in data['items'])
+    assert order(client, items=[{'part_no': 'A', 'order_qty': 1, 'delivery_date': '2026-02-30'}]).status_code == 422
+
+
 def test_atomic_rollback(setup):
     c, factory = setup
     item = order(c).json()['items'][0]['id']
@@ -240,3 +263,4 @@ def test_constraint_failure_rolls_back(setup):
             assert db.scalar(select(func.count()).select_from(PurchaseInboundMaster)) == 0
     finally:
         event.remove(PurchaseInboundItem, 'before_insert', invalid_insert)
+

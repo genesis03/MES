@@ -17,9 +17,16 @@ class Input(BaseModel):
 class OrderItemCreate(Input):
     part_no: Text50
     order_qty: PositiveQty
+    delivery_date: str | None = None
+    note: str | None = Field(default=None, max_length=500)
     unit_price: Money = 0.0
     supply_price: Money = 0.0
     vat_price: Money = 0.0
+
+    @field_validator("delivery_date")
+    @classmethod
+    def validate_delivery_date(cls, value):
+        return iso_date(value) if value is not None else value
 
 
 class Header(Input):
@@ -35,8 +42,10 @@ def iso_date(value):
 
 
 class OrderCreate(Header):
+    partner_id: int = Field(gt=0)
     order_date: str
     delivery_due_date: str | None = None
+    manager_name: str | None = Field(default=None, max_length=50)
     note: str | None = None
     items: list[OrderItemCreate] = Field(min_length=1, max_length=1000)
 
@@ -78,6 +87,8 @@ class OrderItemOut(Output):
     part_no: str
     order_qty: float
     received_qty: float
+    delivery_date: str | None
+    note: str | None
     unit_price: float
     supply_price: float
     vat_price: float
@@ -92,6 +103,7 @@ class OrderOut(Output):
     partner_id: int | None
     partner_name: str
     status: str
+    manager_name: str | None
     note: str | None
     created_by: str | None
     created_at: datetime
@@ -121,3 +133,4 @@ class InboundOut(Output):
     created_by: str | None
     created_at: datetime
     items: list[InboundItemOut]
+

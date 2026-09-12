@@ -70,9 +70,16 @@ def create_order(db, payload, created_by):
     from schemas.purchase import OrderOut
     with purchase_transaction(db):
         validate_master_data(db, payload)
+        partner = db.get(Partner, payload.partner_id)
+        if partner.is_active != "Y" or partner.partner_type not in ("VENDOR", "BOTH"):
+            raise HTTPException(422, "활성 공급사 거래처만 발주할 수 있습니다.")
         master = PurchaseOrderMaster(**payload.model_dump(exclude={"items", "created_by"}), created_by=created_by,
                                      po_no=next_number(db, PurchaseOrderMaster.po_no, "PO"))
-        master.items = [PurchaseOrderItem(**item.model_dump()) for item in payload.items]
+        parts = {part.part_no: part for part in db.query(ItemMasterModel).filter(
+            ItemMasterModel.part_no.in_({item.part_no for item in payload.items})
+        )}
+        master.items = [PurchaseOrderItem(**item.model_dump(), unit=parts[item.part_no].unit)
+                        for item in payload.items]
         db.add(master)
         db.flush()
         result = OrderOut.model_validate(master)
@@ -113,3 +120,4 @@ def create_inbound(db, payload, created_by):
         db.flush()
         result = InboundOut.model_validate(master)
     return result
+
