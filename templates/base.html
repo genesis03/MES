@@ -173,7 +173,7 @@
             </li>
             {% endif %}
 
-            <!-- 3. 구매관리 -->
+<!-- 3. 구매관리 -->
             {% if user.role == "ADMIN" or (user.perms and user.perms.purchase and user.perms.purchase.enabled) %}
             <li class="menu-item" id="purchaseMenu">
                 <div class="menu-title" onclick="toggleAccordion('purchaseMenu')">
@@ -181,21 +181,18 @@
                     <span class="arrow-icon">▼</span>
                 </div>
                 <ul class="submenu">
-                    <!-- 기본 구매 -->
+                    <!-- [입력] 일반 구매 -->
                     <li class="submenu-item">
                         <a href="/purchase/orders">발주 입력</a>
                     </li>
                     <li class="submenu-item">
                         <a href="/purchase">구매 입력</a>
                     </li>
-                    <li class="submenu-item">
-                        <a href="/purchase/status">발주 내역 조회</a>
-                    </li>
 
                     <!-- 구분선 -->
                     <li style="border-top: 1px dashed #334155; margin: 6px 12px;"></li>
 
-                    <!-- 외주 가공 -->
+                    <!-- [입력] 외주 가공 -->
                     <li class="submenu-item">
                         <a href="/subcontract/orders">발주 입력 (외주가공)</a>
                     </li>
@@ -205,16 +202,19 @@
                     <li class="submenu-item">
                         <a href="/subcontract/inbound">외주 가공 입고 처리</a>
                     </li>
+
+                    <!-- 통합 구분선 -->
+                    <li style="border-top: 1px solid #475569; margin: 8px 12px;"></li>
+
+                    <!-- [통합 조회 및 관제] -->
                     <li class="submenu-item">
-                        <a href="/subcontract/status">발주 내역 조회 (외주가공)</a>
+                        <a href="/purchase/inquiry/orders">발주 조회</a>
                     </li>
-
-                    <!-- 구분선 -->
-                    <li style="border-top: 1px dashed #334155; margin: 6px 12px;"></li>
-
                     <li class="submenu-item">
-                        <!-- 구매관리 미입고 현황 -->
-                        <a href="/subcontract/status">미구매 현황</a>
+                        <a href="/purchase/inquiry/inbounds">입고 조회</a>
+                    </li>
+                    <li class="submenu-item">
+                        <a href="/purchase/unreceived">미구매 현황</a>
                     </li>
                 </ul>
             </li>
