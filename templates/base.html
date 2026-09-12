@@ -173,7 +173,7 @@
             </li>
             {% endif %}
 
-<!-- 3. 구매관리 -->
+            <!-- 3. 구매관리 -->
             {% if user.role == "ADMIN" or (user.perms and user.perms.purchase and user.perms.purchase.enabled) %}
             <li class="menu-item" id="purchaseMenu">
                 <div class="menu-title" onclick="toggleAccordion('purchaseMenu')">
@@ -183,10 +183,10 @@
                 <ul class="submenu">
                     <!-- [입력] 일반 구매 -->
                     <li class="submenu-item">
-                        <a href="/purchase/orders">발주 입력</a>
+                        <a href="/purchase/orders" id="nav-purchase-orders">발주 입력</a>
                     </li>
                     <li class="submenu-item">
-                        <a href="/purchase">구매 입력</a>
+                        <a href="/purchase/inbound" id="nav-purchase-inbound">구매 입력</a>
                     </li>
 
                     <!-- 구분선 -->
@@ -194,13 +194,13 @@
 
                     <!-- [입력] 외주 가공 -->
                     <li class="submenu-item">
-                        <a href="/subcontract/orders">발주 입력 (외주가공)</a>
+                        <a href="/subcontract/orders" id="nav-subcontract-orders">발주 입력 (외주가공)</a>
                     </li>
                     <li class="submenu-item">
-                        <a href="/subcontract/outbound">외주 가공 출고 처리</a>
+                        <a href="/subcontract/outbound" id="nav-subcontract-outbound">외주 가공 출고 처리</a>
                     </li>
                     <li class="submenu-item">
-                        <a href="/subcontract/inbound">외주 가공 입고 처리</a>
+                        <a href="/subcontract/inbound" id="nav-subcontract-inbound">외주 가공 입고 처리</a>
                     </li>
 
                     <!-- 통합 구분선 -->
@@ -208,13 +208,13 @@
 
                     <!-- [통합 조회 및 관제] -->
                     <li class="submenu-item">
-                        <a href="/purchase/inquiry/orders">발주 조회</a>
+                        <a href="/purchase/inquiry/orders" id="nav-purchase-inquiry-orders">발주 조회</a>
                     </li>
                     <li class="submenu-item">
-                        <a href="/purchase/inquiry/inbounds">입고 조회</a>
+                        <a href="/purchase/inquiry/inbounds" id="nav-purchase-inquiry-inbounds">입고 조회</a>
                     </li>
                     <li class="submenu-item">
-                        <a href="/purchase/unreceived">미구매 현황</a>
+                        <a href="/purchase/unreceived" id="nav-purchase-unreceived">미구매 현황</a>
                     </li>
                 </ul>
             </li>
