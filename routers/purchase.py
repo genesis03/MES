@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -44,21 +44,9 @@ class PurchaseCreatePayload(BaseModel):
 # 2. 화면 렌더링
 # ---------------------------------------------------------------------------
 @router.get("", response_class=HTMLResponse)
-def purchase_page(request: Request, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    """
-    구매(입고) 관리 메인 화면 반환
-    """
-    return templates.TemplateResponse(
-        request=request,
-        name="purchase.html",
-        context={
-            "request": request,
-            "user": current_user,
-            "today": datetime.now().strftime("%Y-%m-%d"),
-            "warehouses": db.query(WarehouseMasterModel).order_by(WarehouseMasterModel.warehouse_code).all(),
-            "storage_locations": db.query(StorageLocationModel).order_by(StorageLocationModel.location_code).all(),
-        }
-    )
+def purchase_page(current_user: dict = Depends(get_current_user)):
+    """기존 /purchase 진입 경로는 표준 발주 입력 화면으로 연결."""
+    return RedirectResponse(url="/purchase/orders", status_code=303)
 
 
 # ---------------------------------------------------------------------------
