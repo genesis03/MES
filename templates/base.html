@@ -143,7 +143,7 @@
 
             <!-- 1. 기초 정보 (PLM 기준정보) -->
             {% if user.role == "ADMIN" or (user.perms and user.perms.basic_info and user.perms.basic_info.enabled) %}
-            <li class="menu-item" id="basicInfoMenu">
+            <li class="menu-item{% if request.url.path.startswith('/basic-info/') %} open{% endif %}" id="basicInfoMenu">
                 <div class="menu-title" onclick="toggleAccordion('basicInfoMenu')">
                     <span>기초 정보</span>
                     <span class="arrow-icon">▼</span>
@@ -175,7 +175,7 @@
 
             <!-- 3. 구매관리 -->
             {% if user.role == "ADMIN" or (user.perms and user.perms.purchase and user.perms.purchase.enabled) %}
-            <li class="menu-item" id="purchaseMenu">
+            <li class="menu-item{% if request.url.path.startswith('/purchase') or request.url.path.startswith('/subcontract/') %} open{% endif %}" id="purchaseMenu">
                 <div class="menu-title" onclick="toggleAccordion('purchaseMenu')">
                     <span>구매관리</span>
                     <span class="arrow-icon">▼</span>
