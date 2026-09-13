@@ -1,32 +1,64 @@
 {% extends "base.html" %}
-
-{% block title %}구매 입력 - 구매관리 시스템{% endblock %}
-
+{% block title %}구매 입력 - 구매관리{% endblock %}
 {% block extra_head %}
 <style>
-    .page-header {
-        margin-bottom: 18px;
-    }
-    .page-header h1 {
-        font-size: 22px;
-        margin-bottom: 6px;
-    }
-    .page-header p {
-        color: #64748b;
-        font-size: 13px;
-    }
+.pi-page h1 {font-size:20px;margin:0 0 12px}
+.pi-box {background:#fff;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:14px}
+.pi-header {display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;padding:16px 18px}
+.pi-field {display:grid;grid-template-columns:100px minmax(0,1fr);align-items:start;gap:8px;font-size:13px}
+.pi-field label {padding-top:8px;font-weight:600;white-space:nowrap}
+.pi-field input,.pi-field textarea {box-sizing:border-box;width:100%;padding:7px 9px;border:1px solid #cbd5e1;border-radius:4px;font:inherit}
+.pi-field input[readonly] {background:#f8fafc}
+.pi-wide {grid-column:1/-1}
+.pi-toolbar,.pi-footer {display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 0}
+.pi-btn {border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:6px 12px;font-size:12px;cursor:pointer}
+.pi-primary {background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
+.pi-confirm {background:#15803d;border-color:#15803d;color:#fff;font-weight:700}
+.pi-btn:disabled {opacity:.55;cursor:default}
+.pi-hint {color:#64748b;font-size:12px}
+.pi-search {display:flex;gap:8px;align-items:center;padding:12px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;margin-bottom:8px;flex-wrap:wrap}
+.pi-search input {width:260px;max-width:100%;padding:7px 9px;border:1px solid #cbd5e1;border-radius:4px}
+.pi-results {max-height:170px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:4px}
+.pi-results:empty {display:none}
+.pi-results button {display:block;width:100%;padding:8px;background:#fff;border:0;border-bottom:1px solid #e2e8f0;text-align:left;cursor:pointer}
+.pi-results button:hover {background:#eff6ff}
+.pi-grid-wrap {overflow-x:auto}
+.pi-grid {border-collapse:collapse;width:100%;min-width:1550px;font-size:12px}
+.pi-grid th,.pi-grid td {border:1px solid #dbe2eb;padding:4px;vertical-align:middle;white-space:nowrap}
+.pi-grid th {background:#f8fafc;text-align:center;height:30px}
+.pi-grid tbody tr:nth-child(even) {background:#fbfcfe}
+.pi-grid input {box-sizing:border-box;width:100%;min-width:0;border:1px solid transparent;background:transparent;padding:5px;font:inherit;border-radius:3px}
+.pi-grid input:focus {border-color:#2563eb;background:#fff;outline:none}
+.pi-grid input[type=number] {text-align:right}
+.pi-grid input[readonly] {color:#475569}
+.pi-grid td.pi-no {text-align:center;color:#64748b}
+.pi-lot {font-family:monospace;color:#166534}
+.pi-message {font-size:13px;min-height:18px}
+@media(max-width:750px) {.pi-header {grid-template-columns:1fr}.pi-wide {grid-column:1}}
 </style>
 {% endblock %}
-
 {% block content %}
-<div class="page-header">
-    <h1>구매 입력</h1>
-    <p>발주 대사 및 자재 입고를 처리합니다.</p>
+<div class="container pi-page">
+<h1>구매 입력</h1>
+<form id="pi-form" class="pi-box">
+<div class="pi-header">
+<div class="pi-field"><label for="pi-date">입고일자</label><input id="pi-date" type="date" required></div>
+<div class="pi-field"><label for="pi-vendor">거래처</label><input id="pi-vendor" readonly placeholder="발주를 불러오면 표시됩니다"></div>
+<div class="pi-field"><label for="pi-manager">담당자</label><input id="pi-manager" readonly></div>
+<div class="pi-field"><label for="pi-po-no">발주번호</label><input id="pi-po-no" readonly></div>
+<div class="pi-field"><label for="pi-inbound-no">구매번호</label><input id="pi-inbound-no" readonly value="저장 시 자동 발번"></div>
+<div class="pi-field"><label for="pi-status">상태</label><input id="pi-status" readonly value="입력 중"></div>
+<div class="pi-field"><label for="pi-invoice">송장번호</label><input id="pi-invoice" maxlength="50"></div>
+<div class="pi-field pi-wide"><label for="pi-note">비고</label><textarea id="pi-note" rows="2" maxlength="1000"></textarea></div>
 </div>
-
-{% include "purchase_entry.html" %}
+<div class="pi-toolbar"><button class="pi-btn" type="button" id="pi-load-po">발주 불러오기</button><button class="pi-btn" type="button" id="pi-load-draft">임시저장 불러오기</button><span class="pi-hint">발주를 선택하면 미입고 품목과 잔량을 가져옵니다.</span></div>
+<div id="pi-po-search" class="pi-search" hidden><input id="pi-po-query" placeholder="발주번호 입력 (빈칸이면 전체 조회)"><button class="pi-btn" type="button" id="pi-po-search-button">조회</button><span id="pi-po-search-message" class="pi-hint"></span><div id="pi-po-results" class="pi-results" style="width:100%"></div></div>
+<div id="pi-draft-search" class="pi-search" hidden><input id="pi-draft-query" placeholder="구매번호 입력 (빈칸이면 최근 임시저장)"><button class="pi-btn" type="button" id="pi-draft-search-button">조회</button><div id="pi-draft-results" class="pi-results" style="width:100%"></div></div>
+<div class="pi-grid-wrap"><table class="pi-grid"><thead><tr><th>No.</th><th>발주번호</th><th>품번</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>미입고수량</th><th>입고수량</th><th>납기일</th><th>공급사 LOT</th><th>입고창고</th><th>저장위치</th><th>원자재 LOT 번호</th><th>비고</th><th></th></tr></thead><tbody id="pi-lines"><tr><td colspan="16" class="pi-hint">발주 불러오기로 품목을 선택하세요.</td></tr></tbody></table></div>
+<datalist id="pi-warehouse-options">{% for warehouse in warehouse_masters %}<option value="{{ warehouse.warehouse_code }}">{{ warehouse.warehouse_name }}</option>{% endfor %}</datalist>
+<datalist id="pi-location-options">{% for location in storage_locations %}<option value="{{ location.location_code }}">{{ location.location_name }}</option>{% endfor %}</datalist>
+<div class="pi-footer"><button class="pi-btn" type="button" id="pi-new">신규</button><button class="pi-btn pi-primary" type="submit" id="pi-save">저장</button><button class="pi-btn pi-confirm" type="button" id="pi-confirm" disabled>입고 확정</button><span id="pi-message" class="pi-message" role="status"></span></div>
+</form></div>
 {% endblock %}
+{% block extra_script %}<script src="{{ url_for('static', path='purchase_inbound.js') }}" defer></script>{% endblock %}
 
-{% block extra_script %}
-<script src="{{ url_for('static', path='purchase_entry.js') }}" defer></script>
-{% endblock %}

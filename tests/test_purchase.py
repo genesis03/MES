@@ -82,6 +82,36 @@ def test_partial_and_complete(setup):
     assert c.get('/api/purchase/orders/unreceived').json()['total'] == 0
 
 
+def test_purchase_draft_generates_lot_only_on_confirmation(setup):
+    client, factory = setup
+    from models.models import WarehouseMasterModel, StorageLocationModel
+    with factory() as db:
+        db.add(WarehouseMasterModel(warehouse_code='RM', warehouse_name='자재 창고', created_at='2026-09-13'))
+        db.add(StorageLocationModel(location_code='S-LT', location_name='복합선반', created_at='2026-09-13'))
+        db.commit()
+    po = order(client, qty=10).json()
+    po_item_id = po['items'][0]['id']
+    body = {'inbound_date': '2026-09-13', 'partner_id': 1, 'partner_name': '공급사',
+            'items': [{'po_item_id': po_item_id, 'part_no': 'A', 'inbound_qty': 3,
+                       'supplier_lot_no': 'SUP-1', 'warehouse_code': 'RM', 'storage_location': 'S-LT'}]}
+    saved = client.post('/api/purchase/inbound/drafts', json=body)
+    assert saved.status_code == 201, saved.text
+    draft = saved.json()
+    assert draft['status'] == 'DRAFT' and draft['items'][0]['internal_lot_no'] is None
+    assert client.get('/api/purchase/inbound/history').json()['total'] == 0
+    with factory() as db:
+        assert db.get(PurchaseOrderItem, po_item_id).received_qty == 0
+    body['items'][0]['inbound_qty'] = 4
+    revised = client.put(f"/api/purchase/inbound/drafts/{draft['id']}", json=body)
+    assert revised.status_code == 200 and revised.json()['items'][0]['internal_lot_no'] is None
+    confirmed = client.post(f"/api/purchase/inbound/drafts/{draft['id']}/confirm")
+    assert confirmed.status_code == 200, confirmed.text
+    assert confirmed.json()['items'][0]['internal_lot_no'].startswith('LOT-IN-')
+    with factory() as db:
+        assert db.get(PurchaseOrderItem, po_item_id).received_qty == 4
+    assert client.post(f"/api/purchase/inbound/drafts/{draft['id']}/confirm").status_code == 409
+
+
 def test_inline_order_entry_and_vendor_code_search(setup):
     client, factory = setup
     with factory() as db:

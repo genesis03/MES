@@ -4,7 +4,7 @@ from sqlalchemy import inspect, text
 
 
 def ensure_purchase_entry_columns(engine):
-    if engine.dialect.name != "sqlite":
+    if engine.dialect.name not in ("sqlite", "postgresql"):
         return
     columns = {
         "purchase_order_masters": {"manager_name": "VARCHAR(50)"},
@@ -12,6 +12,11 @@ def ensure_purchase_entry_columns(engine):
             "delivery_date": "VARCHAR(10)",
             "note": "TEXT",
         },
+        "purchase_inbound_masters": {
+            "status": "VARCHAR(20) NOT NULL DEFAULT 'CONFIRMED'",
+            "note": "TEXT",
+        },
+        "purchase_inbound_items": {"note": "TEXT"},
     }
     with engine.begin() as connection:
         inspector = inspect(connection)
@@ -19,5 +24,6 @@ def ensure_purchase_entry_columns(engine):
             existing = {column["name"] for column in inspector.get_columns(table)}
             for name, data_type in additions.items():
                 if name not in existing:
-                    connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {data_type}"))
+                    clause = "ADD COLUMN IF NOT EXISTS" if engine.dialect.name == "postgresql" else "ADD COLUMN"
+                    connection.execute(text(f"ALTER TABLE {table} {clause} {name} {data_type}"))
 

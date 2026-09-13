@@ -238,7 +238,7 @@ from decimal import Decimal
 from core.database import SessionLocal
 from models.models import PurchaseOrderMaster, PurchaseOrderItem, PurchaseInboundMaster, PurchaseInboundItem
 from schemas.purchase import OrderCreate, InboundCreate, OrderOut, InboundOut
-from services.purchase_service import create_order, create_inbound
+from services.purchase_service import create_order, create_inbound, confirm_inbound, update_inbound_draft
 
 api_router = APIRouter(prefix="/api/purchase", tags=["Purchase Orders / Inbound"])
 
@@ -311,8 +311,10 @@ def unreceived_orders(
     rows = query.order_by(PurchaseOrderMaster.order_date, PurchaseOrderMaster.id, PurchaseOrderItem.id).offset(offset).limit(limit).all()
     return {"total": total, "offset": offset, "limit": limit, "items": [
         {"po_id": m.id, "po_no": m.po_no, "order_date": m.order_date, "delivery_due_date": m.delivery_due_date,
-         "partner_id": m.partner_id, "partner_name": m.partner_name, "po_status": m.status,
+         "partner_id": m.partner_id, "partner_name": m.partner_name, "manager_name": m.manager_name or "",
+         "po_status": m.status,
          "po_item_id": i.id, "part_no": i.part_no, "part_name": p.part_name, "spec": p.spec or "",
+         "item_delivery_date": i.delivery_date,
          "order_qty": i.order_qty, "received_qty": i.received_qty,
          "remaining_qty": float(Decimal(str(i.order_qty)) - Decimal(str(i.received_qty))),
          "unit_price": i.unit_price, "unit": i.unit, "status": i.status} for m, i, p in rows]} 
@@ -321,6 +323,66 @@ def unreceived_orders(
 @api_router.post("/inbound", response_model=InboundOut, status_code=201)
 def post_inbound(payload: InboundCreate, db: Session = Depends(get_purchase_db), current_user=Depends(get_current_user)):
     return create_inbound(db, payload, purchase_creator(current_user))
+
+
+@api_router.post("/inbound/drafts", response_model=InboundOut, status_code=201)
+def save_inbound_draft(payload: InboundCreate, db: Session = Depends(get_purchase_db), current_user=Depends(get_current_user)):
+    return create_inbound(db, payload, purchase_creator(current_user), draft=True)
+
+
+@api_router.get("/inbound/drafts", response_model=list[InboundOut])
+def list_inbound_drafts(
+    inbound_no: Optional[str] = Query(None, max_length=30),
+    db: Session = Depends(get_purchase_db), current_user=Depends(get_current_user),
+):
+    query = db.query(PurchaseInboundMaster).filter(PurchaseInboundMaster.status == "DRAFT")
+    if inbound_no:
+        query = query.filter(PurchaseInboundMaster.inbound_no.contains(inbound_no.strip(), autoescape=True))
+    return query.order_by(PurchaseInboundMaster.id.desc()).limit(30).all()
+
+
+@api_router.get("/inbound/drafts/{inbound_id}")
+def get_inbound_draft(
+    inbound_id: int, db: Session = Depends(get_purchase_db), current_user=Depends(get_current_user),
+):
+    master = db.get(PurchaseInboundMaster, inbound_id)
+    if master is None or master.status != "DRAFT":
+        raise HTTPException(404, "임시저장된 구매 입력을 찾을 수 없습니다.")
+    items = []
+    for row in master.items:
+        po_item = db.get(PurchaseOrderItem, row.po_item_id) if row.po_item_id else None
+        part = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == row.part_no).one_or_none()
+        items.append({
+            "po_item_id": row.po_item_id, "po_no": po_item.order.po_no if po_item else "",
+            "part_no": row.part_no, "part_name": part.part_name if part else "",
+            "spec": (part.spec or "") if part else "", "unit": row.unit,
+            "order_qty": po_item.order_qty if po_item else None,
+            "remaining_qty": po_item.order_qty - po_item.received_qty if po_item else None,
+            "delivery_date": po_item.delivery_date if po_item else None,
+            "inbound_qty": row.inbound_qty, "supplier_lot_no": row.supplier_lot_no,
+            "warehouse_code": row.warehouse_code, "storage_location": row.storage_location,
+            "note": row.note or "",
+        })
+    first_po_item = db.get(PurchaseOrderItem, master.items[0].po_item_id) if master.items and master.items[0].po_item_id else None
+    return {"id": master.id, "inbound_no": master.inbound_no, "inbound_date": master.inbound_date,
+            "partner_id": master.partner_id, "partner_name": master.partner_name,
+            "manager_name": first_po_item.order.manager_name if first_po_item else "",
+            "invoice_no": master.invoice_no or "", "note": master.note or "", "items": items}
+
+
+@api_router.put("/inbound/drafts/{inbound_id}", response_model=InboundOut)
+def revise_inbound_draft(
+    inbound_id: int, payload: InboundCreate,
+    db: Session = Depends(get_purchase_db), current_user=Depends(get_current_user),
+):
+    return update_inbound_draft(db, inbound_id, payload)
+
+
+@api_router.post("/inbound/drafts/{inbound_id}/confirm", response_model=InboundOut)
+def confirm_inbound_draft(
+    inbound_id: int, db: Session = Depends(get_purchase_db), current_user=Depends(get_current_user),
+):
+    return confirm_inbound(db, inbound_id)
 
 
 @api_router.get("/inbound/history")
@@ -338,7 +400,7 @@ def inbound_history(
         PurchaseInboundItem, PurchaseInboundItem.inbound_id == PurchaseInboundMaster.id
     ).outerjoin(PurchaseOrderItem, PurchaseOrderItem.id == PurchaseInboundItem.po_item_id).outerjoin(
         PurchaseOrderMaster, PurchaseOrderMaster.id == PurchaseOrderItem.po_id
-    )
+    ).filter(PurchaseInboundMaster.status == "CONFIRMED")
     if start_date:
         query = query.filter(PurchaseInboundMaster.inbound_date >= start_date.isoformat())
     if end_date:

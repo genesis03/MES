@@ -8,7 +8,8 @@ from fastapi import HTTPException
 from sqlalchemy import Integer, cast, func, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from models.models import ItemMasterModel, PurchaseOrderMaster, PurchaseOrderItem, PurchaseInboundMaster, PurchaseInboundItem
+from models.models import (ItemMasterModel, PurchaseOrderMaster, PurchaseOrderItem,
+                           PurchaseInboundMaster, PurchaseInboundItem, WarehouseMasterModel, StorageLocationModel)
 from models.partner import Partner
 
 
@@ -86,37 +87,123 @@ def create_order(db, payload, created_by):
     return result
 
 
-def create_inbound(db, payload, created_by):
+def linked_order_item(db, item, master):
+    if item.po_item_id is None:
+        return None
+    po_item = db.get(PurchaseOrderItem, item.po_item_id)
+    if po_item is None:
+        raise HTTPException(404, f"발주 상세를 찾을 수 없습니다: {item.po_item_id}")
+    order = po_item.order
+    if order.status == "CANCELLED":
+        raise HTTPException(409, "취소된 발주에는 입고할 수 없습니다.")
+    if po_item.part_no != item.part_no:
+        raise HTTPException(422, "발주 품목과 입고 품목이 일치하지 않습니다.")
+    if order.partner_id != master.partner_id or order.partner_name != master.partner_name:
+        raise HTTPException(422, "발주 거래처와 입고 거래처가 일치하지 않습니다.")
+    return po_item
+
+
+def validate_inbound_storage(db, items):
+    warehouse_codes = {item.warehouse_code for item in items}
+    location_codes = {item.storage_location for item in items}
+    warehouses = set(db.scalars(select(WarehouseMasterModel.warehouse_code).where(
+        WarehouseMasterModel.warehouse_code.in_(warehouse_codes), WarehouseMasterModel.is_active == "Y")))
+    locations = set(db.scalars(select(StorageLocationModel.location_code).where(
+        StorageLocationModel.location_code.in_(location_codes), StorageLocationModel.is_active == "Y")))
+    if warehouses != warehouse_codes or locations != location_codes:
+        raise HTTPException(422, "등록된 활성 창고와 저장위치를 입력하세요.")
+
+
+def confirm_saved_inbound(db, master, preserve_lot=False):
+    affected = {}
+    for position, item in enumerate(master.items, start=1):
+        po_item = linked_order_item(db, item, master)
+        if po_item is not None:
+            received = float(Decimal(str(po_item.received_qty)) + Decimal(str(item.inbound_qty)))
+            if not math.isfinite(received):
+                raise HTTPException(422, "누적 입고수량이 저장 가능한 범위를 초과했습니다.")
+            po_item.received_qty = received
+            po_item.status = "COMPLETED" if received >= po_item.order_qty else "PARTIAL"
+            affected[po_item.order.id] = po_item.order
+        item.internal_lot_no = (item.internal_lot_no if preserve_lot else None) or f"LOT-{master.inbound_no}-{position:03d}"
+    for order in affected.values():
+        order.status = "COMPLETED" if all(i.received_qty >= i.order_qty for i in order.items) else "PARTIAL"
+    master.status = "CONFIRMED"
+
+
+def create_inbound(db, payload, created_by, draft=False):
     from schemas.purchase import InboundOut
     with purchase_transaction(db):
         validate_master_data(db, payload)
+        if draft:
+            validate_inbound_storage(db, payload.items)
         master = PurchaseInboundMaster(**payload.model_dump(exclude={"items", "created_by"}), created_by=created_by,
-                                       inbound_no=next_number(db, PurchaseInboundMaster.inbound_no, "IN"))
-        affected = {}
-        for position, item in enumerate(payload.items, start=1):
-            if item.po_item_id is not None:
-                po_item = db.get(PurchaseOrderItem, item.po_item_id)
-                if po_item is None:
-                    raise HTTPException(404, f"발주 상세를 찾을 수 없습니다: {item.po_item_id}")
-                order = po_item.order
-                if order.status == "CANCELLED":
-                    raise HTTPException(409, "취소된 발주에는 입고할 수 없습니다.")
-                if po_item.part_no != item.part_no:
-                    raise HTTPException(422, "발주 품목과 입고 품목이 일치하지 않습니다.")
-                if order.partner_id != payload.partner_id or order.partner_name != payload.partner_name:
-                    raise HTTPException(422, "발주 거래처와 입고 거래처가 일치하지 않습니다.")
-                received = float(Decimal(str(po_item.received_qty)) + Decimal(str(item.inbound_qty)))
-                if not math.isfinite(received):
-                    raise HTTPException(422, "누적 입고수량이 저장 가능한 범위를 초과했습니다.")
-                po_item.received_qty = received
-                po_item.status = "COMPLETED" if received >= po_item.order_qty else "PARTIAL"
-                affected[order.id] = order
+                                       inbound_no=next_number(db, PurchaseInboundMaster.inbound_no, "IN"),
+                                       status="DRAFT" if draft else "CONFIRMED")
+        parts = {part.part_no: part for part in db.query(ItemMasterModel).filter(
+            ItemMasterModel.part_no.in_({item.part_no for item in payload.items})
+        )}
+        for item in payload.items:
+            if draft and item.po_item_id is None:
+                raise HTTPException(422, "발주를 불러온 품목만 임시저장할 수 있습니다.")
             values = item.model_dump()
-            values["internal_lot_no"] = item.internal_lot_no or f"LOT-{master.inbound_no}-{position:03d}"
-            master.items.append(PurchaseInboundItem(**values))
-        for order in affected.values():
-            order.status = "COMPLETED" if all(i.received_qty >= i.order_qty for i in order.items) else "PARTIAL"
+            values["unit"] = parts[item.part_no].unit
+            if draft:
+                values["internal_lot_no"] = None
+            row = PurchaseInboundItem(**values)
+            linked_order_item(db, row, master)
+            master.items.append(row)
         db.add(master)
+        if not draft:
+            confirm_saved_inbound(db, master, preserve_lot=True)
+        db.flush()
+        result = InboundOut.model_validate(master)
+    return result
+
+
+def confirm_inbound(db, inbound_id):
+    from schemas.purchase import InboundOut
+    with purchase_transaction(db):
+        master = db.get(PurchaseInboundMaster, inbound_id)
+        if master is None:
+            raise HTTPException(404, "구매 입력을 찾을 수 없습니다.")
+        if master.status != "DRAFT":
+            raise HTTPException(409, "이미 입고 확정된 구매 입력입니다.")
+        confirm_saved_inbound(db, master)
+        db.flush()
+        result = InboundOut.model_validate(master)
+    return result
+
+
+def update_inbound_draft(db, inbound_id, payload):
+    from schemas.purchase import InboundOut
+    with purchase_transaction(db):
+        master = db.get(PurchaseInboundMaster, inbound_id)
+        if master is None:
+            raise HTTPException(404, "구매 입력을 찾을 수 없습니다.")
+        if master.status != "DRAFT":
+            raise HTTPException(409, "확정된 입고는 수정할 수 없습니다.")
+        validate_master_data(db, payload)
+        validate_inbound_storage(db, payload.items)
+        if any(item.po_item_id is None for item in payload.items):
+            raise HTTPException(422, "발주를 불러온 품목만 저장할 수 있습니다.")
+        master.inbound_date = payload.inbound_date
+        master.partner_id = payload.partner_id
+        master.partner_name = payload.partner_name
+        master.invoice_no = payload.invoice_no
+        master.note = payload.note
+        parts = {part.part_no: part for part in db.query(ItemMasterModel).filter(
+            ItemMasterModel.part_no.in_({item.part_no for item in payload.items})
+        )}
+        new_items = []
+        for item in payload.items:
+            values = item.model_dump()
+            values["unit"] = parts[item.part_no].unit
+            values["internal_lot_no"] = None
+            row = PurchaseInboundItem(**values)
+            linked_order_item(db, row, master)
+            new_items.append(row)
+        master.items = new_items
         db.flush()
         result = InboundOut.model_validate(master)
     return result

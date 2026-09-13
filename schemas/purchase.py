@@ -61,6 +61,7 @@ class InboundItemCreate(Input):
     inbound_qty: PositiveQty
     supplier_lot_no: Text100
     internal_lot_no: Text100 | None = None
+    note: str | None = Field(default=None, max_length=500)
     warehouse_code: Text20 = "RM"
     storage_location: Text20 = "S-LT"
     unit_price: Money = 0.0
@@ -69,6 +70,7 @@ class InboundItemCreate(Input):
 class InboundCreate(Header):
     inbound_date: str
     invoice_no: Text50 | None = None
+    note: str | None = Field(default=None, max_length=1000)
     items: list[InboundItemCreate] = Field(min_length=1, max_length=1000)
 
     @field_validator("inbound_date")
@@ -118,6 +120,7 @@ class InboundItemOut(Output):
     inbound_qty: float
     supplier_lot_no: str
     internal_lot_no: str | None
+    note: str | None
     warehouse_code: str
     storage_location: str
     unit_price: float
@@ -130,6 +133,8 @@ class InboundOut(Output):
     partner_id: int | None
     partner_name: str
     invoice_no: str | None
+    status: str
+    note: str | None
     created_by: str | None
     created_at: datetime
     items: list[InboundItemOut]
