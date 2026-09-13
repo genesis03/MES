@@ -1,13 +1,23 @@
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import get_current_user
-from models.models import StorageLocationModel, WarehouseMasterModel
+from models.models import (
+    ItemMasterModel,
+    PurchaseInboundItem,
+    PurchaseInboundMaster,
+    PurchaseOrderItem,
+    PurchaseOrderMaster,
+    StorageLocationModel,
+    WarehouseMasterModel,
+)
 from models.partner import Partner
 
 router = APIRouter(tags=["Purchase Pages"])
@@ -82,14 +92,8 @@ def purchase_inbound_page(
 def purchase_order_inquiry_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(
         request=request,
-        name="purchase_route_ready.html",
-        context={
-            "request": request,
-            "user": current_user,
-            "page_title": "발주 조회",
-            "page_description": "일반구매와 외주가공 발주를 통합 조회하는 화면입니다.",
-            "route_path": "/purchase/inquiry/orders",
-        },
+        name="purchase_order_inquiry.html",
+        context={"request": request, "user": current_user},
     )
 
 
@@ -97,15 +101,144 @@ def purchase_order_inquiry_page(request: Request, current_user=Depends(get_curre
 def purchase_inbound_inquiry_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(
         request=request,
-        name="purchase_route_ready.html",
-        context={
-            "request": request,
-            "user": current_user,
-            "page_title": "입고 조회",
-            "page_description": "일반구매와 외주가공 입고 이력을 통합 조회하는 화면입니다.",
-            "route_path": "/purchase/inquiry/inbounds",
-        },
+        name="purchase_inbound_inquiry.html",
+        context={"request": request, "user": current_user},
     )
+
+
+@router.get("/api/purchase/inquiry/orders")
+def purchase_order_inquiry_api(
+    start_date: Optional[str] = Query(None, max_length=10),
+    end_date: Optional[str] = Query(None, max_length=10),
+    po_no: Optional[str] = Query(None, max_length=30),
+    partner_name: Optional[str] = Query(None, max_length=100),
+    part_no: Optional[str] = Query(None, max_length=50),
+    status: Optional[str] = Query(None, max_length=20),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    labels = {
+        "ORDERED": "발주완료",
+        "PARTIAL": "부분입고",
+        "COMPLETED": "입고완료",
+        "CANCELLED": "취소",
+    }
+    if status and status not in labels:
+        raise HTTPException(status_code=422, detail="지원하지 않는 발주 상태입니다.")
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=422, detail="시작일은 종료일 이후일 수 없습니다.")
+
+    query = (
+        db.query(PurchaseOrderMaster, PurchaseOrderItem, ItemMasterModel)
+        .join(PurchaseOrderItem, PurchaseOrderItem.po_id == PurchaseOrderMaster.id)
+        .join(ItemMasterModel, ItemMasterModel.part_no == PurchaseOrderItem.part_no)
+    )
+    if start_date:
+        query = query.filter(PurchaseOrderMaster.order_date >= start_date)
+    if end_date:
+        query = query.filter(PurchaseOrderMaster.order_date <= end_date)
+    if po_no:
+        query = query.filter(PurchaseOrderMaster.po_no.contains(po_no.strip(), autoescape=True))
+    if partner_name:
+        query = query.filter(PurchaseOrderMaster.partner_name.contains(partner_name.strip(), autoescape=True))
+    if part_no:
+        query = query.filter(PurchaseOrderItem.part_no.contains(part_no.strip(), autoescape=True))
+    if status:
+        query = query.filter(PurchaseOrderMaster.status == status)
+
+    total = query.count()
+    rows = query.order_by(PurchaseOrderMaster.order_date.desc(), PurchaseOrderMaster.id.desc(), PurchaseOrderItem.id).limit(2000).all()
+    items = []
+    for master, item, part in rows:
+        items.append({
+            "type": "GENERAL",
+            "po_id": master.id,
+            "po_no": master.po_no,
+            "order_date": master.order_date,
+            "delivery_due_date": master.delivery_due_date or "",
+            "partner_id": master.partner_id,
+            "partner_name": master.partner_name,
+            "manager_name": master.manager_name or "",
+            "part_no": item.part_no,
+            "part_name": part.part_name,
+            "spec": part.spec or "",
+            "order_qty": item.order_qty,
+            "unit": item.unit,
+            "item_delivery_date": item.delivery_date or "",
+            "status": master.status,
+            "status_name": labels.get(master.status, master.status),
+            "note": item.note or master.note or "",
+        })
+    return {"total": total, "items": items}
+
+
+@router.get("/api/purchase/inquiry/inbounds")
+def purchase_inbound_inquiry_api(
+    start_date: Optional[str] = Query(None, max_length=10),
+    end_date: Optional[str] = Query(None, max_length=10),
+    inbound_no: Optional[str] = Query(None, max_length=30),
+    po_no: Optional[str] = Query(None, max_length=30),
+    partner_name: Optional[str] = Query(None, max_length=100),
+    part_no: Optional[str] = Query(None, max_length=50),
+    lot: Optional[str] = Query(None, max_length=100),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=422, detail="시작일은 종료일 이후일 수 없습니다.")
+
+    query = (
+        db.query(PurchaseInboundMaster, PurchaseInboundItem, ItemMasterModel, PurchaseOrderMaster.po_no)
+        .join(PurchaseInboundItem, PurchaseInboundItem.inbound_id == PurchaseInboundMaster.id)
+        .join(ItemMasterModel, ItemMasterModel.part_no == PurchaseInboundItem.part_no)
+        .outerjoin(PurchaseOrderItem, PurchaseOrderItem.id == PurchaseInboundItem.po_item_id)
+        .outerjoin(PurchaseOrderMaster, PurchaseOrderMaster.id == PurchaseOrderItem.po_id)
+        .filter(PurchaseInboundMaster.status == "CONFIRMED")
+    )
+    if start_date:
+        query = query.filter(PurchaseInboundMaster.inbound_date >= start_date)
+    if end_date:
+        query = query.filter(PurchaseInboundMaster.inbound_date <= end_date)
+    if inbound_no:
+        query = query.filter(PurchaseInboundMaster.inbound_no.contains(inbound_no.strip(), autoescape=True))
+    if po_no:
+        query = query.filter(PurchaseOrderMaster.po_no.contains(po_no.strip(), autoescape=True))
+    if partner_name:
+        query = query.filter(PurchaseInboundMaster.partner_name.contains(partner_name.strip(), autoescape=True))
+    if part_no:
+        query = query.filter(PurchaseInboundItem.part_no.contains(part_no.strip(), autoescape=True))
+    if lot:
+        keyword = lot.strip()
+        query = query.filter(or_(
+            PurchaseInboundItem.supplier_lot_no.contains(keyword, autoescape=True),
+            PurchaseInboundItem.internal_lot_no.contains(keyword, autoescape=True),
+        ))
+
+    total = query.count()
+    rows = query.order_by(PurchaseInboundMaster.inbound_date.desc(), PurchaseInboundMaster.id.desc(), PurchaseInboundItem.id).limit(2000).all()
+    items = []
+    for master, item, part, order_no in rows:
+        items.append({
+            "type": "GENERAL",
+            "inbound_id": master.id,
+            "inbound_no": master.inbound_no,
+            "inbound_date": master.inbound_date,
+            "po_no": order_no or "",
+            "partner_id": master.partner_id,
+            "partner_name": master.partner_name,
+            "part_no": item.part_no,
+            "part_name": part.part_name,
+            "spec": part.spec or "",
+            "inbound_qty": item.inbound_qty,
+            "unit": item.unit,
+            "supplier_lot_no": item.supplier_lot_no,
+            "internal_lot_no": item.internal_lot_no or "",
+            "warehouse_code": item.warehouse_code,
+            "storage_location": item.storage_location,
+            "inspection_status": item.inspection_status,
+            "note": item.note or master.note or "",
+        })
+    return {"total": total, "items": items}
 
 
 @router.get("/purchase/unreceived", response_class=HTMLResponse)
