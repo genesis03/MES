@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}입고 조회 - 구매관리{% endblock %}
+
+{% block extra_head %}
+<style>
+    .inquiry-wrap { max-width: 100%; }
+    .page-head { margin-bottom:18px; }
+    .page-head h1 { font-size:24px; margin:0 0 5px; }
+    .page-sub { color:#64748b; font-size:13px; }
+    .tab-row { display:flex; gap:6px; margin-bottom:12px; }
+    .tab-btn { border:1px solid #cbd5e1; background:#fff; color:#475569; border-radius:5px; padding:7px 15px; cursor:pointer; font-weight:700; }
+    .tab-btn.active { background:#2563eb; color:#fff; border-color:#2563eb; }
+    .filter-card { background:#fff; border:1px solid #cbd5e1; border-radius:7px; padding:13px; margin-bottom:14px; display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
+    .filter-field { display:flex; flex-direction:column; gap:4px; }
+    .filter-field label { font-size:11px; font-weight:700; color:#64748b; }
+    .filter-field input { height:34px; border:1px solid #cbd5e1; border-radius:4px; padding:0 9px; min-width:145px; }
+    .btn { height:34px; border:0; border-radius:4px; padding:0 16px; cursor:pointer; font-weight:700; }
+    .btn-primary { background:#2563eb; color:#fff; }
+    .btn-light { background:#e2e8f0; color:#334155; }
+    .summary { margin-left:auto; font-size:13px; color:#475569; font-weight:700; }
+    .table-box { background:#fff; border:1px solid #cbd5e1; border-radius:7px; overflow:auto; }
+    table { width:100%; border-collapse:collapse; min-width:1550px; font-size:12px; }
+    th { position:sticky; top:0; background:#f1f5f9; color:#334155; border-bottom:2px solid #cbd5e1; padding:9px 7px; white-space:nowrap; }
+    td { border-bottom:1px solid #e2e8f0; padding:8px 7px; text-align:center; white-space:nowrap; }
+    td.left { text-align:left; }
+    .type-badge { display:inline-block; border-radius:12px; padding:3px 8px; background:#dbeafe; color:#1d4ed8; font-weight:700; }
+    .lot { font-family:Consolas, monospace; font-weight:700; color:#334155; }
+    .empty { padding:35px !important; color:#94a3b8; }
+    .notice { margin-top:10px; font-size:12px; color:#64748b; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="inquiry-wrap">
+    <div class="page-head">
+        <h1>입고 조회</h1>
+        <div class="page-sub">일반구매와 외주가공 입고 이력을 한 화면에서 조회합니다.</div>
+    </div>
+
+    <div class="tab-row">
+        <button class="tab-btn active" onclick="changeInboundType('ALL', this)">전체</button>
+        <button class="tab-btn" onclick="changeInboundType('GENERAL', this)">일반구매</button>
+        <button class="tab-btn" onclick="changeInboundType('SUBCONTRACT', this)">외주가공</button>
+    </div>
+
+    <div class="filter-card">
+        <div class="filter-field"><label>시작일</label><input type="date" id="inboundStartDate"></div>
+        <div class="filter-field"><label>종료일</label><input type="date" id="inboundEndDate"></div>
+        <div class="filter-field"><label>입고번호</label><input type="text" id="inboundNo" placeholder="IN-..."></div>
+        <div class="filter-field"><label>발주번호</label><input type="text" id="inboundPoNo" placeholder="PO-..."></div>
+        <div class="filter-field"><label>거래처</label><input type="text" id="inboundPartner" placeholder="거래처명"></div>
+        <div class="filter-field"><label>품번</label><input type="text" id="inboundPartNo" placeholder="품번"></div>
+        <div class="filter-field"><label>LOT</label><input type="text" id="inboundLot" placeholder="공급사/내부 LOT"></div>
+        <button class="btn btn-primary" onclick="loadInboundInquiry()">조회</button>
+        <button class="btn btn-light" onclick="resetInboundInquiry()">초기화</button>
+        <div class="summary">조회 <span id="inboundCount">0</span>건</div>
+    </div>
+
+    <div class="table-box">
+        <table>
+            <thead>
+                <tr>
+                    <th>구분</th><th>입고번호</th><th>입고일자</th><th>발주번호</th><th>거래처</th>
+                    <th>품번</th><th>품명</th><th>규격</th><th>입고수량</th><th>단위</th>
+                    <th>공급사 LOT</th><th>내부 LOT</th><th>창고</th><th>저장위치</th><th>검사상태</th><th>비고</th>
+                </tr>
+            </thead>
+            <tbody id="inboundInquiryBody"><tr><td colspan="16" class="empty">조회 중입니다...</td></tr></tbody>
+        </table>
+    </div>
+    <div class="notice" id="inboundNotice"></div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+let inboundType='ALL';
+const escInbound = (v) => { const e=document.createElement('span'); e.textContent=v ?? ''; return e.innerHTML; };
+
+function changeInboundType(type, btn) {
+    inboundType=type;
+    document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+    btn.classList.add('active');
+    loadInboundInquiry();
+}
+
+function resetInboundInquiry() {
+    ['inboundStartDate','inboundEndDate','inboundNo','inboundPoNo','inboundPartner','inboundPartNo','inboundLot'].forEach(id=>document.getElementById(id).value='');
+    loadInboundInquiry();
+}
+
+async function loadInboundInquiry() {
+    const body=document.getElementById('inboundInquiryBody');
+    const notice=document.getElementById('inboundNotice');
+    body.innerHTML='<tr><td colspan="16" class="empty">조회 중입니다...</td></tr>';
+    notice.textContent='';
+
+    if (inboundType==='SUBCONTRACT') {
+        document.getElementById('inboundCount').textContent='0';
+        body.innerHTML='<tr><td colspan="16" class="empty">외주가공 입고 기능 구현 후 이 화면에 통합됩니다.</td></tr>';
+        return;
+    }
+
+    const p=new URLSearchParams();
+    const map={
+        start_date:'inboundStartDate', end_date:'inboundEndDate', inbound_no:'inboundNo', po_no:'inboundPoNo',
+        partner_name:'inboundPartner', part_no:'inboundPartNo', lot:'inboundLot'
+    };
+    Object.entries(map).forEach(([k,id])=>{ const v=document.getElementById(id).value.trim(); if(v) p.set(k,v); });
+
+    try {
+        const r=await fetch('/api/purchase/inquiry/inbounds?' + p.toString());
+        const data=await r.json();
+        if(!r.ok) throw new Error(data.detail || '조회 실패');
+        const rows=data.items || [];
+        document.getElementById('inboundCount').textContent=Number(data.total || rows.length).toLocaleString();
+        if(!rows.length) {
+            body.innerHTML='<tr><td colspan="16" class="empty">조회된 입고 내역이 없습니다.</td></tr>';
+            return;
+        }
+        body.innerHTML=rows.map(x=>`<tr>
+            <td><span class="type-badge">일반구매</span></td><td>${escInbound(x.inbound_no)}</td><td>${escInbound(x.inbound_date)}</td>
+            <td>${escInbound(x.po_no)}</td><td class="left">${escInbound(x.partner_name)}</td>
+            <td>${escInbound(x.part_no)}</td><td class="left">${escInbound(x.part_name)}</td><td class="left">${escInbound(x.spec)}</td>
+            <td>${Number(x.inbound_qty || 0).toLocaleString()}</td><td>${escInbound(x.unit)}</td>
+            <td class="lot">${escInbound(x.supplier_lot_no)}</td><td class="lot">${escInbound(x.internal_lot_no)}</td>
+            <td>${escInbound(x.warehouse_code)}</td><td>${escInbound(x.storage_location)}</td><td>${escInbound(x.inspection_status)}</td><td class="left">${escInbound(x.note)}</td>
+        </tr>`).join('');
+        if(inboundType==='ALL') notice.textContent='현재 전체 조회에는 일반구매 입고가 표시되며, 외주가공 입고는 해당 기능 구현 후 자동으로 통합됩니다.';
+    } catch(e) {
+        body.innerHTML=`<tr><td colspan="16" class="empty" style="color:#dc2626;">${escInbound(e.message)}</td></tr>`;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadInboundInquiry);
+</script>
+{% endblock %}
