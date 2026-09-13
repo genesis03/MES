@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}발주 조회 - 구매관리{% endblock %}
+
+{% block extra_head %}
+<style>
+    .inquiry-wrap { max-width: 100%; }
+    .page-head { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-bottom:18px; }
+    .page-head h1 { font-size:24px; margin:0 0 5px; }
+    .page-sub { color:#64748b; font-size:13px; }
+    .tab-row { display:flex; gap:6px; margin-bottom:12px; }
+    .tab-btn { border:1px solid #cbd5e1; background:#fff; color:#475569; border-radius:5px; padding:7px 15px; cursor:pointer; font-weight:700; }
+    .tab-btn.active { background:#2563eb; color:#fff; border-color:#2563eb; }
+    .filter-card { background:#fff; border:1px solid #cbd5e1; border-radius:7px; padding:13px; margin-bottom:14px; display:flex; flex-wrap:wrap; gap:8px; align-items:end; }
+    .filter-field { display:flex; flex-direction:column; gap:4px; }
+    .filter-field label { font-size:11px; font-weight:700; color:#64748b; }
+    .filter-field input, .filter-field select { height:34px; border:1px solid #cbd5e1; border-radius:4px; padding:0 9px; min-width:145px; background:#fff; }
+    .btn { height:34px; border:0; border-radius:4px; padding:0 16px; cursor:pointer; font-weight:700; }
+    .btn-primary { background:#2563eb; color:#fff; }
+    .btn-light { background:#e2e8f0; color:#334155; }
+    .summary { margin-left:auto; font-size:13px; color:#475569; font-weight:700; }
+    .table-box { background:#fff; border:1px solid #cbd5e1; border-radius:7px; overflow:auto; }
+    table { width:100%; border-collapse:collapse; min-width:1450px; font-size:12px; }
+    th { position:sticky; top:0; background:#f1f5f9; color:#334155; border-bottom:2px solid #cbd5e1; padding:9px 7px; white-space:nowrap; }
+    td { border-bottom:1px solid #e2e8f0; padding:8px 7px; text-align:center; white-space:nowrap; }
+    td.left { text-align:left; }
+    .type-badge { display:inline-block; border-radius:12px; padding:3px 8px; background:#dbeafe; color:#1d4ed8; font-weight:700; }
+    .status-badge { display:inline-block; border-radius:12px; padding:3px 8px; font-weight:700; }
+    .st-wait { background:#fef3c7; color:#a16207; }
+    .st-partial { background:#e0f2fe; color:#0369a1; }
+    .st-done { background:#dcfce7; color:#15803d; }
+    .st-cancel { background:#fee2e2; color:#b91c1c; }
+    .empty { padding:35px !important; color:#94a3b8; }
+    .notice { margin-top:10px; font-size:12px; color:#64748b; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="inquiry-wrap">
+    <div class="page-head">
+        <div>
+            <h1>발주 조회</h1>
+            <div class="page-sub">일반구매와 외주가공 발주를 한 화면에서 조회합니다.</div>
+        </div>
+    </div>
+
+    <div class="tab-row">
+        <button class="tab-btn active" data-type="ALL" onclick="changeOrderType('ALL', this)">전체</button>
+        <button class="tab-btn" data-type="GENERAL" onclick="changeOrderType('GENERAL', this)">일반구매</button>
+        <button class="tab-btn" data-type="SUBCONTRACT" onclick="changeOrderType('SUBCONTRACT', this)">외주가공</button>
+    </div>
+
+    <div class="filter-card">
+        <div class="filter-field"><label>시작일</label><input type="date" id="orderStartDate"></div>
+        <div class="filter-field"><label>종료일</label><input type="date" id="orderEndDate"></div>
+        <div class="filter-field"><label>발주번호</label><input type="text" id="orderPoNo" placeholder="PO-..."></div>
+        <div class="filter-field"><label>거래처</label><input type="text" id="orderPartner" placeholder="거래처명"></div>
+        <div class="filter-field"><label>품번</label><input type="text" id="orderPartNo" placeholder="품번"></div>
+        <div class="filter-field"><label>상태</label>
+            <select id="orderStatus">
+                <option value="">전체</option>
+                <option value="ORDERED">발주완료</option>
+                <option value="PARTIAL">부분입고</option>
+                <option value="COMPLETED">입고완료</option>
+                <option value="CANCELLED">취소</option>
+            </select>
+        </div>
+        <button class="btn btn-primary" onclick="loadOrderInquiry()">조회</button>
+        <button class="btn btn-light" onclick="resetOrderInquiry()">초기화</button>
+        <div class="summary">조회 <span id="orderCount">0</span>건</div>
+    </div>
+
+    <div class="table-box">
+        <table>
+            <thead>
+                <tr>
+                    <th>구분</th><th>발주번호</th><th>발주일자</th><th>납기요청일</th><th>거래처</th><th>담당자</th>
+                    <th>품번</th><th>품명</th><th>규격</th><th>발주수량</th><th>단위</th><th>품목 납기일</th><th>상태</th><th>비고</th>
+                </tr>
+            </thead>
+            <tbody id="orderInquiryBody"><tr><td colspan="14" class="empty">조회 중입니다...</td></tr></tbody>
+        </table>
+    </div>
+    <div class="notice" id="orderNotice"></div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+let orderType = 'ALL';
+const esc = (v) => { const e=document.createElement('span'); e.textContent=v ?? ''; return e.innerHTML; };
+
+function changeOrderType(type, btn) {
+    orderType = type;
+    document.querySelectorAll('.tab-btn').forEach(x => x.classList.remove('active'));
+    btn.classList.add('active');
+    loadOrderInquiry();
+}
+
+function resetOrderInquiry() {
+    ['orderStartDate','orderEndDate','orderPoNo','orderPartner','orderPartNo'].forEach(id => document.getElementById(id).value='');
+    document.getElementById('orderStatus').value='';
+    loadOrderInquiry();
+}
+
+function statusClass(status) {
+    if (status === 'COMPLETED') return 'st-done';
+    if (status === 'PARTIAL') return 'st-partial';
+    if (status === 'CANCELLED') return 'st-cancel';
+    return 'st-wait';
+}
+
+async function loadOrderInquiry() {
+    const body = document.getElementById('orderInquiryBody');
+    const notice = document.getElementById('orderNotice');
+    body.innerHTML='<tr><td colspan="14" class="empty">조회 중입니다...</td></tr>';
+    notice.textContent='';
+
+    if (orderType === 'SUBCONTRACT') {
+        document.getElementById('orderCount').textContent='0';
+        body.innerHTML='<tr><td colspan="14" class="empty">외주가공 발주 기능 구현 후 이 화면에 통합됩니다.</td></tr>';
+        return;
+    }
+
+    const p = new URLSearchParams();
+    const map = {
+        start_date:'orderStartDate', end_date:'orderEndDate', po_no:'orderPoNo',
+        partner_name:'orderPartner', part_no:'orderPartNo', status:'orderStatus'
+    };
+    Object.entries(map).forEach(([k,id]) => { const v=document.getElementById(id).value.trim(); if(v) p.set(k,v); });
+
+    try {
+        const r = await fetch('/api/purchase/inquiry/orders?' + p.toString());
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || '조회 실패');
+        const rows = data.items || [];
+        document.getElementById('orderCount').textContent = Number(data.total || rows.length).toLocaleString();
+        if (!rows.length) {
+            body.innerHTML='<tr><td colspan="14" class="empty">조회된 발주 내역이 없습니다.</td></tr>';
+            return;
+        }
+        body.innerHTML = rows.map(x => `<tr>
+            <td><span class="type-badge">일반구매</span></td>
+            <td>${esc(x.po_no)}</td><td>${esc(x.order_date)}</td><td>${esc(x.delivery_due_date)}</td>
+            <td class="left">${esc(x.partner_name)}</td><td>${esc(x.manager_name)}</td>
+            <td>${esc(x.part_no)}</td><td class="left">${esc(x.part_name)}</td><td class="left">${esc(x.spec)}</td>
+            <td>${Number(x.order_qty || 0).toLocaleString()}</td><td>${esc(x.unit)}</td><td>${esc(x.item_delivery_date)}</td>
+            <td><span class="status-badge ${statusClass(x.status)}">${esc(x.status_name)}</span></td><td class="left">${esc(x.note)}</td>
+        </tr>`).join('');
+        if (orderType === 'ALL') notice.textContent='현재 전체 조회에는 일반구매 발주가 표시되며, 외주가공 발주는 해당 기능 구현 후 자동으로 통합됩니다.';
+    } catch(e) {
+        body.innerHTML=`<tr><td colspan="14" class="empty" style="color:#dc2626;">${esc(e.message)}</td></tr>`;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', loadOrderInquiry);
+</script>
+{% endblock %}
