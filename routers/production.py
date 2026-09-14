@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -7,8 +6,8 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import get_current_user
-from models.models import ItemMasterModel
-from models.production import ProductionPlan, ProductionWorkOrder
+from models.models import ItemMasterModel, ProcessModel
+from models.production import ProductionPerformance, ProductionPlan, ProductionWorkOrder
 
 router = APIRouter(prefix="/api/production", tags=["Production"])
 
@@ -38,6 +37,16 @@ class ProductionOrderPayload(BaseModel):
 
 class ProductionOrderStatusPayload(BaseModel):
     status: str
+
+
+class ProductionPerformancePayload(BaseModel):
+    work_order_id: int
+    performance_date: str
+    process_code: str
+    good_qty: float = Field(gt=0)
+    defect_qty: float = Field(ge=0, default=0)
+    operator_name: Optional[str] = None
+    note: Optional[str] = None
 
 
 def _user_name(user) -> str:
@@ -86,6 +95,24 @@ def _serialize_order(order: ProductionWorkOrder, item: Optional[ItemMasterModel]
     }
 
 
+def _serialize_performance(perf, order, item, process):
+    return {
+        "id": perf.id,
+        "performance_date": perf.performance_date,
+        "work_order_id": order.id,
+        "work_order_no": order.work_order_no,
+        "part_no": order.part_no,
+        "part_name": item.part_name if item else "",
+        "process_code": perf.process_code,
+        "process_name": process.process_name if process else "",
+        "good_qty": perf.good_qty,
+        "defect_qty": perf.defect_qty,
+        "operator_name": perf.operator_name or "",
+        "note": perf.note or "",
+        "created_by": perf.created_by or "",
+    }
+
+
 @router.get("/items")
 def production_items(
     keyword: Optional[str] = Query(None),
@@ -103,6 +130,20 @@ def production_items(
         {"part_no": item.part_no, "part_name": item.part_name, "unit": item.unit or "EA"}
         for item in items
     ]
+
+
+@router.get("/processes")
+def production_processes(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    rows = (
+        db.query(ProcessModel)
+        .filter(ProcessModel.is_active == "Y")
+        .order_by(ProcessModel.sort_order.asc(), ProcessModel.process_code.asc())
+        .all()
+    )
+    return [{"process_code": x.process_code, "process_name": x.process_name} for x in rows]
 
 
 @router.get("/plans")
@@ -218,6 +259,26 @@ def list_orders(
     return [_serialize_order(order, item_map.get(order.part_no)) for order in orders]
 
 
+@router.get("/performance/orders")
+def performance_orders(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    orders = (
+        db.query(ProductionWorkOrder)
+        .filter(ProductionWorkOrder.status.in_(["WAITING", "IN_PROGRESS"]))
+        .order_by(ProductionWorkOrder.order_date.desc(), ProductionWorkOrder.id.desc())
+        .all()
+    )
+    item_map = {
+        item.part_no: item
+        for item in db.query(ItemMasterModel).filter(
+            ItemMasterModel.part_no.in_({o.part_no for o in orders})
+        ).all()
+    } if orders else {}
+    return [_serialize_order(order, item_map.get(order.part_no)) for order in orders]
+
+
 @router.post("/orders")
 def create_order(
     payload: ProductionOrderPayload,
@@ -227,7 +288,6 @@ def create_order(
     part_no = payload.part_no.strip()
     _item_or_404(db, part_no)
 
-    plan = None
     if payload.plan_id is not None:
         plan = db.query(ProductionPlan).filter(ProductionPlan.id == payload.plan_id).first()
         if not plan:
@@ -281,18 +341,119 @@ def update_order_status(
     order = db.query(ProductionWorkOrder).filter(ProductionWorkOrder.id == order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="작업지시를 찾을 수 없습니다.")
+
     status = payload.status.strip().upper()
-    if status not in STATUS_NAMES:
-        raise HTTPException(status_code=400, detail="사용할 수 없는 작업지시 상태입니다.")
-    if status == "IN_PROGRESS" and order.status != "IN_PROGRESS":
-        raise HTTPException(status_code=400, detail="생산중 상태는 첫 생산실적 등록 시 자동으로 변경됩니다.")
-    if status == "WAITING" and order.status != "WAITING":
-        raise HTTPException(status_code=400, detail="생산이 시작된 작업지시는 대기 상태로 되돌릴 수 없습니다.")
+    if status not in {"COMPLETED", "CANCELLED"}:
+        raise HTTPException(status_code=400, detail="완료 또는 취소 버튼으로만 상태를 변경할 수 있습니다.")
+    if order.status in {"COMPLETED", "CANCELLED"}:
+        raise HTTPException(status_code=400, detail="이미 종료된 작업지시입니다.")
+    if status == "COMPLETED" and order.production_qty <= 0:
+        raise HTTPException(status_code=400, detail="생산실적이 없는 작업지시는 완료 처리할 수 없습니다.")
     if status == "CANCELLED" and order.production_qty > 0:
         raise HTTPException(status_code=400, detail="생산실적이 존재하는 작업지시는 취소할 수 없습니다.")
+
     order.status = status
     db.commit()
     return {"status": "success", "message": "작업지시 상태가 변경되었습니다."}
+
+
+@router.get("/performances")
+def list_performances(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    work_order_no: Optional[str] = Query(None),
+    part_no: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    query = db.query(ProductionPerformance).filter(ProductionPerformance.performance_type == "MACHINING")
+    if start_date:
+        query = query.filter(ProductionPerformance.performance_date >= start_date)
+    if end_date:
+        query = query.filter(ProductionPerformance.performance_date <= end_date)
+
+    rows = query.order_by(ProductionPerformance.performance_date.desc(), ProductionPerformance.id.desc()).all()
+    if not rows:
+        return []
+
+    order_ids = {x.work_order_id for x in rows}
+    orders = db.query(ProductionWorkOrder).filter(ProductionWorkOrder.id.in_(order_ids)).all()
+    order_map = {x.id: x for x in orders}
+    if work_order_no:
+        value = work_order_no.strip().lower()
+        rows = [x for x in rows if value in order_map[x.work_order_id].work_order_no.lower()]
+    if part_no:
+        value = part_no.strip().lower()
+        rows = [x for x in rows if value in order_map[x.work_order_id].part_no.lower()]
+
+    part_nos = {order_map[x.work_order_id].part_no for x in rows}
+    item_map = {
+        x.part_no: x for x in db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_(part_nos)).all()
+    } if part_nos else {}
+    process_codes = {x.process_code for x in rows}
+    process_map = {
+        x.process_code: x for x in db.query(ProcessModel).filter(ProcessModel.process_code.in_(process_codes)).all()
+    } if process_codes else {}
+
+    return [
+        _serialize_performance(
+            x,
+            order_map[x.work_order_id],
+            item_map.get(order_map[x.work_order_id].part_no),
+            process_map.get(x.process_code),
+        )
+        for x in rows
+    ]
+
+
+@router.post("/performances")
+def create_performance(
+    payload: ProductionPerformancePayload,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    order = db.query(ProductionWorkOrder).filter(ProductionWorkOrder.id == payload.work_order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="작업지시를 찾을 수 없습니다.")
+    if order.status in {"COMPLETED", "CANCELLED"}:
+        raise HTTPException(status_code=400, detail="완료 또는 취소된 작업지시에는 생산실적을 등록할 수 없습니다.")
+
+    process_code = payload.process_code.strip()
+    process = (
+        db.query(ProcessModel)
+        .filter(ProcessModel.process_code == process_code, ProcessModel.is_active == "Y")
+        .first()
+    )
+    if not process:
+        raise HTTPException(status_code=404, detail="사용 가능한 공정을 찾을 수 없습니다.")
+
+    perf = ProductionPerformance(
+        work_order_id=order.id,
+        performance_type="MACHINING",
+        performance_date=payload.performance_date,
+        process_code=process_code,
+        good_qty=payload.good_qty,
+        defect_qty=payload.defect_qty,
+        operator_name=(payload.operator_name or "").strip() or None,
+        note=(payload.note or "").strip() or None,
+        created_by=_user_name(current_user),
+    )
+    db.add(perf)
+    order.production_qty = float(order.production_qty or 0) + payload.good_qty
+    if order.status == "WAITING":
+        order.status = "IN_PROGRESS"
+    db.commit()
+    db.refresh(perf)
+
+    over_qty = max(float(order.production_qty or 0) - float(order.order_qty or 0), 0)
+    return {
+        "status": "success",
+        "id": perf.id,
+        "work_order_status": order.status,
+        "production_qty": order.production_qty,
+        "over_qty": over_qty,
+        "message": "생산실적이 등록되었습니다." if over_qty <= 0 else f"생산실적이 등록되었습니다. 지시수량을 {over_qty:g} 초과했습니다.",
+    }
 
 
 @router.delete("/orders/{order_id}")
