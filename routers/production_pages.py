@@ -65,6 +65,15 @@ def production_orders_page(request: Request, current_user=Depends(get_current_us
     )
 
 
+@router.get("/production/orders/inquiry", response_class=HTMLResponse)
+def production_orders_inquiry_page(request: Request, current_user=Depends(get_current_user)):
+    return templates.TemplateResponse(
+        request=request,
+        name="production_orders_inquiry.html",
+        context={"request": request, "user": current_user},
+    )
+
+
 @router.get("/production/performance/machining", response_class=HTMLResponse)
 def production_machining_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(
