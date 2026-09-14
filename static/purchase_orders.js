@@ -240,7 +240,7 @@
       const wasEdit = Boolean(editingId);
       message(wasEdit ? '수정 저장 중…' : '저장 중…');
       const data = await request(wasEdit ? '/api/purchase/orders/' + editingId : '/api/purchase/orders', {
-        method: wasEdit ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+        method: wasEdit ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body:JSON.stringify(payload)
       });
       editingId = data.id;
       $('po-number').value = data.po_no;
@@ -275,12 +275,12 @@
   }
 
   function init() {
+    const editId = Number(new URLSearchParams(location.search).get('edit'));
     $('po-vendor-query').addEventListener('input', searchVendorSoon);
     $('po-add-row').addEventListener('click', () => addRow().query.focus());
     $('po-new').addEventListener('click', resetOrder);
     $('po-form').addEventListener('submit', saveOrder);
     resetOrder();
-    const editId = Number(new URLSearchParams(location.search).get('edit'));
     if (Number.isInteger(editId) && editId > 0) loadOrder(editId);
   }
 
