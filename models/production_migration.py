@@ -15,20 +15,23 @@ def ensure_production_order_columns(engine) -> None:
         if "priority" not in columns:
             _add_column(engine, "production_work_orders", "priority INTEGER NOT NULL DEFAULT 4")
 
-    if "production_performances" not in tables:
-        return
+    if "production_performances" in tables:
+        columns = {col["name"] for col in inspect(engine).get_columns("production_performances")}
+        additions = {
+            "shift_type": "shift_type VARCHAR(10)",
+            "operator_id": "operator_id INTEGER",
+            "equipment_id": "equipment_id INTEGER",
+            "equipment_code": "equipment_code VARCHAR(30)",
+            "equipment_name": "equipment_name VARCHAR(100)",
+            "source_lot_no": "source_lot_no VARCHAR(100)",
+            "setup_qty": "setup_qty FLOAT NOT NULL DEFAULT 0",
+            "consumed_qty": "consumed_qty FLOAT NOT NULL DEFAULT 0",
+        }
+        for name, column_sql in additions.items():
+            if name not in columns:
+                _add_column(engine, "production_performances", column_sql)
 
-    columns = {col["name"] for col in inspect(engine).get_columns("production_performances")}
-    additions = {
-        "shift_type": "shift_type VARCHAR(10)",
-        "operator_id": "operator_id INTEGER",
-        "equipment_id": "equipment_id INTEGER",
-        "equipment_code": "equipment_code VARCHAR(30)",
-        "equipment_name": "equipment_name VARCHAR(100)",
-        "source_lot_no": "source_lot_no VARCHAR(100)",
-        "setup_qty": "setup_qty FLOAT NOT NULL DEFAULT 0",
-        "consumed_qty": "consumed_qty FLOAT NOT NULL DEFAULT 0",
-    }
-    for name, column_sql in additions.items():
-        if name not in columns:
-            _add_column(engine, "production_performances", column_sql)
+    if "production_runs" in tables:
+        run_columns = {col["name"] for col in inspect(engine).get_columns("production_runs")}
+        if "performance_type" not in run_columns:
+            _add_column(engine, "production_runs", "performance_type VARCHAR(20) NOT NULL DEFAULT 'MACHINING'")
