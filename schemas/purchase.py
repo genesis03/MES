@@ -58,6 +58,7 @@ class OrderCreate(Header):
 
 
 class InboundItemCreate(Input):
+    inbound_item_id: int | None = Field(default=None, gt=0)
     po_item_id: int | None = Field(default=None, gt=0)
     part_no: Text50
     inbound_qty: PositiveQty
