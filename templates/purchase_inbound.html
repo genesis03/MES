@@ -47,7 +47,6 @@
 <div class="pi-field"><label for="pi-po-no">발주번호</label><input id="pi-po-no" readonly></div>
 <div class="pi-field"><label for="pi-inbound-no">구매번호</label><input id="pi-inbound-no" readonly value="저장 시 자동 발번"></div>
 <div class="pi-field"><label for="pi-status">상태</label><input id="pi-status" readonly value="입력 중"></div>
-<div class="pi-field"><label for="pi-invoice">송장번호</label><input id="pi-invoice" maxlength="50"></div>
 <div class="pi-field pi-wide"><label for="pi-note">비고</label><textarea id="pi-note" rows="2" maxlength="1000"></textarea></div>
 </div>
 <div class="pi-toolbar"><button class="pi-btn" type="button" id="pi-load-po">발주 불러오기</button><span class="pi-hint">기존 구매 수정은 입고 조회에서 순번 선택 후 선택수정을 누릅니다.</span></div>
@@ -58,4 +57,4 @@
 <div class="pi-footer"><button class="pi-btn" type="button" id="pi-new">신규</button><button class="pi-btn pi-primary" type="submit" id="pi-save">저장</button><button class="pi-btn pi-confirm" type="button" id="pi-confirm" disabled>입고 확정</button><span id="pi-message" class="pi-message" role="status"></span></div>
 </form></div>
 {% endblock %}
-{% block extra_script %}<script src="{{ url_for('static', path='purchase_inbound.js') }}?v=20260914-2" defer></script>{% endblock %}
+{% block extra_script %}<script src="/static/purchase_inbound.js?v=20260914-3"></script>{% endblock %}
