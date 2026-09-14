@@ -68,7 +68,7 @@
     <div class="action-row">
         <button id="editSelectedInbound" class="btn btn-primary" onclick="editSelectedInbound()" disabled>선택수정</button>
         <button id="deleteSelectedInbounds" class="btn btn-danger" onclick="deleteSelectedInbounds()" disabled>선택삭제 (0)</button>
-        <div style="font-size:12px;color:#64748b;">임시저장과 확정 구매 모두 수정 진입 가능. 확정 구매는 기존 LOT 번호를 유지하며 행 추가/삭제는 제한됩니다.</div>
+        <div style="font-size:12px;color:#64748b;">확정 구매도 다음 공정에서 LOT가 사용되지 않았다면 삭제할 수 있습니다. 다음 공정 사용 LOT는 삭제가 차단됩니다.</div>
         <div class="summary">조회 <span id="inboundCount">0</span>건</div>
     </div>
 
@@ -103,7 +103,7 @@ function editSelectedInbound(){if(selectedInboundIds.size!==1)return;const id=[.
 
 async function deleteSelectedInbounds(){
     const ids=[...selectedInboundIds];if(!ids.length)return;
-    if(!confirm(`선택한 입고 ${ids.length}건을 삭제하시겠습니까?\n확정 입고는 삭제되지 않습니다.`))return;
+    if(!confirm(`선택한 구매 ${ids.length}건을 삭제하시겠습니까?\n다음 공정에서 사용된 내부 LOT가 있는 구매는 삭제되지 않습니다.`))return;
     try{const r=await fetch('/api/purchase/inquiry/inbounds/delete-selected',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});const data=await r.json();if(!r.ok)throw new Error(data.detail||'삭제 실패');alert(data.message||'삭제했습니다.');selectedInboundIds.clear();loadInboundInquiry();}catch(e){alert(e.message);}
 }
 
