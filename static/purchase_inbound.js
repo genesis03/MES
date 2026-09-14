@@ -37,7 +37,8 @@
 
   async function request(url, options) {
     const response = await fetch(url, options);
-    const data = await response.json();
+    let data = {};
+    try { data = await response.json(); } catch (_) {}
     if (!response.ok) {
       const detail = Array.isArray(data.detail) ? data.detail.map(x => x.msg).join(' / ') : data.detail;
       throw new Error(detail || '처리하지 못했습니다.');
@@ -108,10 +109,9 @@
     $('pi-po-results').replaceChildren();
     $('pi-po-message').textContent = '';
     $('pi-save').disabled = false; $('pi-confirm').disabled = true;
-    ['pi-date', 'pi-invoice', 'pi-note'].forEach(id => { $(id).disabled = false; });
+    ['pi-date', 'pi-note'].forEach(id => { $(id).disabled = false; });
     lines = []; partner = null; inboundId = null; mode = 'new';
     emptyLines(); message('');
-    history.replaceState(null, '', '/purchase/inbound');
   }
 
   function displayPO(rows) {
@@ -178,7 +178,7 @@
       inbound_date: $('pi-date').value,
       partner_id: partner.id,
       partner_name: partner.name,
-      invoice_no: $('pi-invoice').value.trim() || null,
+      invoice_no: null,
       note: $('pi-note').value.trim() || null,
       items
     };
@@ -242,7 +242,6 @@
       $('pi-manager').value = data.manager_name || '';
       $('pi-po-no').value = data.items[0]?.po_no || '';
       $('pi-inbound-no').value = data.inbound_no;
-      $('pi-invoice').value = data.invoice_no || '';
       $('pi-note').value = data.note || '';
       $('pi-status').value = mode === 'confirmed' ? '입고 확정(정정)' : '임시저장';
       (data.items || []).forEach(item => addLine(item, mode !== 'confirmed'));
@@ -255,19 +254,28 @@
   }
 
   function init() {
-    const editId = Number(new URLSearchParams(location.search).get('edit'));
-    $('pi-load-po').addEventListener('click', () => {
+    const required = ['pi-form','pi-date','pi-vendor','pi-manager','pi-po-no','pi-inbound-no','pi-status','pi-note','pi-load-po','pi-po-list','pi-po-results','pi-po-message','pi-lines','pi-warehouse-options','pi-location-options','pi-new','pi-save','pi-confirm','pi-message'];
+    const missing = required.filter(id => !$(id));
+    if (missing.length) {
+      console.error('Purchase inbound UI missing elements:', missing);
+      return;
+    }
+
+    $('pi-load-po').addEventListener('click', event => {
+      event.preventDefault();
       $('pi-po-list').hidden = !$('pi-po-list').hidden;
       if (!$('pi-po-list').hidden) loadOpenOrders();
     });
-    $('pi-new').addEventListener('click', reset);
+    $('pi-new').addEventListener('click', event => { event.preventDefault(); reset(); });
     $('pi-form').addEventListener('submit', save);
-    $('pi-confirm').addEventListener('click', confirm);
-    ['pi-date', 'pi-invoice', 'pi-note'].forEach(id => $(id).addEventListener('input', markDirty));
+    $('pi-confirm').addEventListener('click', event => { event.preventDefault(); confirm(); });
+    ['pi-date', 'pi-note'].forEach(id => $(id).addEventListener('input', markDirty));
+
     reset();
+    const editId = Number(new URLSearchParams(location.search).get('edit'));
     if (Number.isInteger(editId) && editId > 0) loadInbound(editId);
   }
 
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once:true});
   else init();
 })();
