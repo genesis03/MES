@@ -2,7 +2,7 @@
 {% block title %}발주 입력 (외주가공){% endblock %}
 {% block extra_head %}
 <style>
-.so-page h1{font-size:20px;margin:0 0 12px}.so-box{background:#fff;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:14px}.so-head{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;padding:16px 18px}.so-field{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;align-items:center;font-size:13px}.so-field label{font-weight:700}.so-field input,.so-field select,.so-field textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;padding:7px 9px;font:inherit;background:#fff}.so-field input[readonly]{background:#f8fafc}.so-wide{grid-column:1/-1}.so-toolbar,.so-footer{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0}.so-btn{border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:6px 12px;font-size:12px;cursor:pointer}.so-btn:hover{background:#f1f5f9}.so-btn:disabled{opacity:.45;cursor:not-allowed}.so-primary{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}.so-confirm{background:#15803d;border-color:#15803d;color:#fff;font-weight:700}.so-grid-wrap{overflow:auto}.so-grid{border-collapse:collapse;width:100%;min-width:1520px;font-size:12px}.so-grid th,.so-grid td{border:1px solid #dbe2eb;padding:4px;vertical-align:top}.so-grid th{background:#f8fafc;text-align:center;white-space:nowrap}.so-grid input,.so-grid select{width:100%;box-sizing:border-box;border:1px solid transparent;background:transparent;padding:5px;font:inherit;border-radius:3px}.so-grid input:focus,.so-grid select:focus{background:#fff;border-color:#2563eb;outline:none}.so-grid input[readonly]{color:#475569}.so-seq{text-align:center;padding-top:10px!important;color:#64748b}.so-suggestions{position:relative;z-index:30;background:#fff;border:1px solid #cbd5e1;border-radius:4px;max-height:180px;overflow:auto}.so-suggestions:empty{display:none}.so-suggestions button{display:block;width:100%;border:0;border-bottom:1px solid #e2e8f0;background:#fff;text-align:left;padding:6px;cursor:pointer}.so-status-ok{color:#15803d;font-weight:700}.so-status-wait{color:#b45309;font-weight:700}.so-message{font-size:13px;min-height:18px}.so-vendor-selected{border-color:#16a34a!important;background:#f0fdf4!important}.so-modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:9999}.so-modal-backdrop[hidden]{display:none}.so-modal{width:min(900px,94vw);max-height:86vh;background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(15,23,42,.3);display:flex;flex-direction:column}.so-modal-head{padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;gap:12px;align-items:center}.so-modal-body{padding:14px 16px;overflow:auto}.so-modal-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}.so-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:8px}.so-lot-table{width:100%;border-collapse:collapse;font-size:12px}.so-lot-table th,.so-lot-table td{border:1px solid #dbe2eb;padding:7px;text-align:center}.so-lot-table th{background:#f8fafc}.so-modal-foot{padding:12px 16px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:8px}.so-hint{font-size:11px;color:#64748b}.so-error{color:#dc2626}.so-remove{border:0;background:transparent;color:#64748b;cursor:pointer;font-size:16px}@media(max-width:760px){.so-head{grid-template-columns:1fr}.so-wide{grid-column:1}.so-modal-summary{grid-template-columns:1fr 1fr}}
+.so-page h1{font-size:20px;margin:0 0 12px}.so-box{background:#fff;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:14px}.so-head{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;padding:16px 18px}.so-field{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;align-items:center;font-size:13px}.so-field label{font-weight:700}.so-field input,.so-field select,.so-field textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;padding:7px 9px;font:inherit;background:#fff}.so-field input[readonly]{background:#f8fafc}.so-wide{grid-column:1/-1}.so-toolbar,.so-footer{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0}.so-btn{border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:6px 12px;font-size:12px;cursor:pointer}.so-btn:hover{background:#f1f5f9}.so-btn:disabled{opacity:.45;cursor:not-allowed}.so-primary{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}.so-confirm{background:#15803d;border-color:#15803d;color:#fff;font-weight:700}.so-grid-wrap{overflow:auto}.so-grid{border-collapse:collapse;width:100%;min-width:1520px;font-size:12px}.so-grid th,.so-grid td{border:1px solid #dbe2eb;padding:4px;vertical-align:top}.so-grid th{background:#f8fafc;text-align:center;white-space:nowrap}.so-grid input,.so-grid select{width:100%;box-sizing:border-box;border:1px solid transparent;background:transparent;padding:5px;font:inherit;border-radius:3px}.so-grid input:focus,.so-grid select:focus{background:#fff;border-color:#2563eb;outline:none}.so-grid input[readonly]{color:#475569}.so-seq{text-align:center;padding-top:10px!important;color:#64748b}.so-suggestions{position:relative;z-index:30;background:#fff;border:1px solid #cbd5e1;border-radius:4px;max-height:180px;overflow:auto}.so-suggestions:empty{display:none}.so-suggestions button{display:block;width:100%;border:0;border-bottom:1px solid #e2e8f0;background:#fff;text-align:left;padding:6px;cursor:pointer}.so-status-ok{color:#15803d;font-weight:700}.so-status-wait{color:#b45309;font-weight:700}.so-message{font-size:13px;min-height:18px}.so-vendor-selected{border-color:#16a34a!important;background:#f0fdf4!important}.so-modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:9999}.so-modal-backdrop[hidden]{display:none}.so-modal{width:min(900px,94vw);max-height:86vh;background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(15,23,42,.3);display:flex;flex-direction:column}.so-modal-head{padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;gap:12px;align-items:center}.so-modal-body{padding:14px 16px;overflow:auto}.so-modal-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}.so-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:8px}.so-lot-scan{display:grid;grid-template-columns:120px minmax(220px,1fr) minmax(180px,2fr);gap:8px;align-items:center;margin:10px 0;padding:10px;background:#f8fafc;border:1px solid #dbe2eb;border-radius:5px}.so-lot-scan label{font-weight:700}.so-lot-scan input{width:100%;box-sizing:border-box;border:1px solid #94a3b8;border-radius:4px;padding:8px 10px;font:inherit;background:#fff}.so-lot-scan input:focus{border-color:#2563eb;outline:none;box-shadow:0 0 0 2px rgba(37,99,235,.12)}.so-scan-ok{color:#15803d;font-size:12px;font-weight:700}.so-scan-error{color:#dc2626;font-size:12px;font-weight:700}.so-lot-table{width:100%;border-collapse:collapse;font-size:12px}.so-lot-table th,.so-lot-table td{border:1px solid #dbe2eb;padding:7px;text-align:center}.so-lot-table th{background:#f8fafc}.so-modal-foot{padding:12px 16px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:8px}.so-hint{font-size:11px;color:#64748b}.so-error{color:#dc2626}.so-remove{border:0;background:transparent;color:#64748b;cursor:pointer;font-size:16px}@media(max-width:760px){.so-head{grid-template-columns:1fr}.so-wide{grid-column:1}.so-modal-summary{grid-template-columns:1fr 1fr}.so-lot-scan{grid-template-columns:1fr}}
 </style>
 {% endblock %}
 {% block content %}
@@ -31,6 +31,7 @@
     <div class="so-modal-head"><div><strong id="so-lot-title">LOT 배정</strong><div class="so-hint">출고 LOT는 쪼개지 않고 LOT 전체수량을 배정합니다.</div></div><button type="button" class="so-btn" id="so-lot-close">닫기</button></div>
     <div class="so-modal-body">
       <div class="so-modal-summary"><div class="so-card">이전 품번<br><strong id="so-lot-part">-</strong></div><div class="so-card">발주수량<br><strong id="so-lot-required">0</strong></div><div class="so-card">선택 LOT 합계<br><strong id="so-lot-selected">0</strong></div><div class="so-card">차이<br><strong id="so-lot-balance">0</strong></div></div>
+      <div class="so-lot-scan"><label for="so-lot-scan-input">LOT 스캔/입력</label><input id="so-lot-scan-input" type="text" autocomplete="off" placeholder="바코드를 스캔하거나 LOT 번호 입력 후 Enter"><span id="so-lot-scan-message" class="so-hint">스캔하면 해당 LOT가 자동 선택됩니다.</span></div>
       <div id="so-lot-source-note" class="so-hint" style="margin-bottom:8px"></div>
       <table class="so-lot-table"><thead><tr><th style="width:50px">선택</th><th>LOT NO</th><th>LOT 전체수량</th><th>저장위치</th></tr></thead><tbody id="so-lot-body"><tr><td colspan="4">조회 중...</td></tr></tbody></table>
     </div>
@@ -38,4 +39,59 @@
   </div>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/subcontract_orders.js?v=20260914-1"></script>{% endblock %}
+{% block extra_script %}
+<script src="/static/subcontract_orders.js?v=20260914-2"></script>
+<script>
+(() => {
+  'use strict';
+  const modal = document.getElementById('so-lot-modal');
+  const scanInput = document.getElementById('so-lot-scan-input');
+  const scanMessage = document.getElementById('so-lot-scan-message');
+  const lotBody = document.getElementById('so-lot-body');
+  if (!modal || !scanInput || !scanMessage || !lotBody) return;
+
+  function setScanMessage(text, ok) {
+    scanMessage.textContent = text;
+    scanMessage.className = ok ? 'so-scan-ok' : 'so-scan-error';
+  }
+
+  function selectScannedLot() {
+    const scanned = scanInput.value.trim();
+    if (!scanned) return;
+    const normalized = scanned.toUpperCase();
+    const checkboxes = [...lotBody.querySelectorAll('input[type="checkbox"]')];
+    const target = checkboxes.find(box => String(box.value || '').trim().toUpperCase() === normalized);
+    if (!target) {
+      setScanMessage(`${scanned} : 현재 품번에서 사용 가능한 LOT가 아닙니다.`, false);
+      scanInput.select();
+      return;
+    }
+    if (target.checked) {
+      setScanMessage(`${target.value} : 이미 선택된 LOT입니다.`, true);
+    } else {
+      target.checked = true;
+      target.dispatchEvent(new Event('change', {bubbles:true}));
+      setScanMessage(`${target.value} : LOT 선택 완료`, true);
+      target.closest('tr')?.scrollIntoView({block:'nearest'});
+    }
+    scanInput.value = '';
+    scanInput.focus();
+  }
+
+  scanInput.addEventListener('keydown', event => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    selectScannedLot();
+  });
+
+  new MutationObserver(() => {
+    if (!modal.hidden) {
+      scanInput.value = '';
+      scanMessage.textContent = '스캔하면 해당 LOT가 자동 선택됩니다.';
+      scanMessage.className = 'so-hint';
+      setTimeout(() => scanInput.focus(), 0);
+    }
+  }).observe(modal, {attributes:true, attributeFilter:['hidden']});
+})();
+</script>
+{% endblock %}
