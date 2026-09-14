@@ -15,7 +15,6 @@ from models.partner import Partner
 
 @contextmanager
 def purchase_transaction(db):
-    # A dedicated fresh session avoids sharing the authentication read transaction.
     if db.in_transaction():
         raise RuntimeError("구매 저장에는 새 세션이 필요합니다.")
     try:
@@ -24,7 +23,6 @@ def purchase_transaction(db):
             db.execute(text("PRAGMA busy_timeout=30000"))
             db.execute(text("BEGIN IMMEDIATE"))
         elif dialect == "postgresql":
-            # Serialize numbering + receipt updates across workers, as on SQLite.
             db.execute(text("SELECT pg_advisory_xact_lock(70611701)"))
         else:
             raise HTTPException(501, "SQLite 또는 PostgreSQL만 지원합니다.")
@@ -44,7 +42,6 @@ def purchase_transaction(db):
 
 
 def next_number(db, column, kind):
-    # Numeric MAX, not text ordering: 1000 must follow 999.
     prefix = f"{kind}-{datetime.now():%Y%m%d}-"
     sequence = db.scalar(select(func.max(cast(func.substr(column, len(prefix) + 1), Integer))).where(column.startswith(prefix))) or 0
     number = f"{prefix}{sequence + 1:03d}"
@@ -67,13 +64,33 @@ def validate_master_data(db, payload):
         raise HTTPException(404, f"등록되지 않은 품목입니다: {', '.join(missing)}")
 
 
+def validate_storage_master(db, items):
+    warehouse_codes = {item.warehouse_code for item in items}
+    location_codes = {item.storage_location for item in items}
+    warehouses = set(db.scalars(select(WarehouseMasterModel.warehouse_code).where(
+        WarehouseMasterModel.warehouse_code.in_(warehouse_codes), WarehouseMasterModel.is_active == "Y")))
+    locations = set(db.scalars(select(StorageLocationModel.location_code).where(
+        StorageLocationModel.location_code.in_(location_codes), StorageLocationModel.is_active == "Y")))
+    if warehouses != warehouse_codes:
+        raise HTTPException(422, "등록된 활성 입고창고를 선택하세요.")
+    if locations != location_codes:
+        raise HTTPException(422, "등록된 활성 저장위치를 선택하세요.")
+
+
+def validate_vendor(db, payload):
+    partner = db.get(Partner, payload.partner_id)
+    if partner is None:
+        raise HTTPException(404, "거래처를 찾을 수 없습니다.")
+    if partner.is_active != "Y" or partner.partner_type not in ("VENDOR", "BOTH"):
+        raise HTTPException(422, "활성 공급사 거래처만 발주할 수 있습니다.")
+
+
 def create_order(db, payload, created_by):
     from schemas.purchase import OrderOut
     with purchase_transaction(db):
         validate_master_data(db, payload)
-        partner = db.get(Partner, payload.partner_id)
-        if partner.is_active != "Y" or partner.partner_type not in ("VENDOR", "BOTH"):
-            raise HTTPException(422, "활성 공급사 거래처만 발주할 수 있습니다.")
+        validate_vendor(db, payload)
+        validate_storage_master(db, payload.items)
         master = PurchaseOrderMaster(**payload.model_dump(exclude={"items", "created_by"}), created_by=created_by,
                                      po_no=next_number(db, PurchaseOrderMaster.po_no, "PO"))
         parts = {part.part_no: part for part in db.query(ItemMasterModel).filter(
@@ -82,6 +99,43 @@ def create_order(db, payload, created_by):
         master.items = [PurchaseOrderItem(**item.model_dump(), unit=parts[item.part_no].unit)
                         for item in payload.items]
         db.add(master)
+        db.flush()
+        result = OrderOut.model_validate(master)
+    return result
+
+
+def update_order(db, po_id, payload):
+    from schemas.purchase import OrderOut
+    with purchase_transaction(db):
+        master = db.get(PurchaseOrderMaster, po_id)
+        if master is None:
+            raise HTTPException(404, "발주를 찾을 수 없습니다.")
+        item_ids = [item.id for item in master.items]
+        has_receipt = any((item.received_qty or 0) > 0 for item in master.items)
+        if item_ids and not has_receipt:
+            has_receipt = db.query(PurchaseInboundItem.id).filter(PurchaseInboundItem.po_item_id.in_(item_ids)).first() is not None
+        if has_receipt:
+            raise HTTPException(409, "입고 이력이 있는 발주는 품목/수량을 직접 수정할 수 없습니다. 입고 이력을 먼저 확인하세요.")
+        if master.status == "CANCELLED":
+            raise HTTPException(409, "취소된 발주는 수정할 수 없습니다.")
+
+        validate_master_data(db, payload)
+        validate_vendor(db, payload)
+        validate_storage_master(db, payload.items)
+
+        master.order_date = payload.order_date
+        master.delivery_due_date = payload.delivery_due_date
+        master.partner_id = payload.partner_id
+        master.partner_name = payload.partner_name
+        master.manager_name = payload.manager_name
+        master.note = payload.note
+        master.status = "ORDERED"
+
+        parts = {part.part_no: part for part in db.query(ItemMasterModel).filter(
+            ItemMasterModel.part_no.in_({item.part_no for item in payload.items})
+        )}
+        master.items = [PurchaseOrderItem(**item.model_dump(), unit=parts[item.part_no].unit)
+                        for item in payload.items]
         db.flush()
         result = OrderOut.model_validate(master)
     return result
@@ -104,14 +158,7 @@ def linked_order_item(db, item, master):
 
 
 def validate_inbound_storage(db, items):
-    warehouse_codes = {item.warehouse_code for item in items}
-    location_codes = {item.storage_location for item in items}
-    warehouses = set(db.scalars(select(WarehouseMasterModel.warehouse_code).where(
-        WarehouseMasterModel.warehouse_code.in_(warehouse_codes), WarehouseMasterModel.is_active == "Y")))
-    locations = set(db.scalars(select(StorageLocationModel.location_code).where(
-        StorageLocationModel.location_code.in_(location_codes), StorageLocationModel.is_active == "Y")))
-    if warehouses != warehouse_codes or locations != location_codes:
-        raise HTTPException(422, "등록된 활성 창고와 저장위치를 입력하세요.")
+    validate_storage_master(db, items)
 
 
 def confirm_saved_inbound(db, master, preserve_lot=False):
@@ -135,8 +182,7 @@ def create_inbound(db, payload, created_by, draft=False):
     from schemas.purchase import InboundOut
     with purchase_transaction(db):
         validate_master_data(db, payload)
-        if draft:
-            validate_inbound_storage(db, payload.items)
+        validate_inbound_storage(db, payload.items)
         master = PurchaseInboundMaster(**payload.model_dump(exclude={"items", "created_by"}), created_by=created_by,
                                        inbound_no=next_number(db, PurchaseInboundMaster.inbound_no, "IN"),
                                        status="DRAFT" if draft else "CONFIRMED")
@@ -207,4 +253,3 @@ def update_inbound_draft(db, inbound_id, payload):
         db.flush()
         result = InboundOut.model_validate(master)
     return result
-
