@@ -57,6 +57,7 @@ class SubcontractInboundItem(Base):
     spec = Column(String(200), nullable=True)
     unit = Column(String(10), nullable=False)
     outbound_qty = Column(Float, nullable=False)
+    # 기존 컬럼은 DB 호환을 위해 유지합니다. 외주입고에서는 good_qty=실입고수량, defect_qty=0으로 사용합니다.
     good_qty = Column(Float, nullable=False)
     defect_qty = Column(Float, nullable=False, default=0)
     note = Column(Text, nullable=True)
@@ -81,10 +82,13 @@ class SubcontractInboundLot(Base):
     inbound_item_id = Column(Integer, ForeignKey("subcontract_inbound_items.id"), nullable=False, index=True)
     outbound_lot_id = Column(Integer, ForeignKey("subcontract_outbound_lots.id"), nullable=False, index=True)
     source_lot_no = Column(String(100), nullable=False, index=True)
+    # source_qty는 원 출고 LOT 배정수량, good_qty는 금회 실입고수량으로 사용합니다.
     source_qty = Column(Float, nullable=False)
     good_qty = Column(Float, nullable=False)
     defect_qty = Column(Float, nullable=False, default=0)
     defect_type = Column(String(20), nullable=True)
     child_lot_no = Column(String(100), nullable=True, index=True)
+    supplier_lot_no = Column(String(100), nullable=True, index=True)
+    sample_qty = Column(Float, nullable=False, default=0)
 
     inbound_item = relationship("SubcontractInboundItem", back_populates="lots")
