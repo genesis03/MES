@@ -2,7 +2,10 @@
 {% block title %}외주 가공 입고 처리{% endblock %}
 {% block extra_head %}
 <style>
-.si-in h1{font-size:20px;margin:0 0 12px}.si-box{background:#fff;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:12px}.si-head{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 20px;padding:16px}.si-field{display:grid;grid-template-columns:105px minmax(0,1fr);align-items:center;gap:8px;font-size:13px}.si-field label{font-weight:700}.si-field input,.si-field select{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #cbd5e1;border-radius:4px;background:#fff}.si-field input[readonly]{background:#f8fafc}.si-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 0 10px}.si-btn{border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:7px 13px;cursor:pointer;font-weight:700}.si-btn:disabled{opacity:.45;cursor:not-allowed}.si-primary{background:#2563eb;border-color:#2563eb;color:#fff}.si-danger{background:#dc2626;border-color:#dc2626;color:#fff}.si-lot-btn{background:#0f766e;border-color:#0f766e;color:#fff;padding:5px 10px}.si-table{width:100%;border-collapse:collapse;font-size:12px;min-width:1180px}.si-table th,.si-table td{border:1px solid #dbe2eb;padding:7px;text-align:center}.si-table th{background:#f8fafc;white-space:nowrap}.si-table td.left{text-align:left}.si-table input,.si-table select{width:100%;box-sizing:border-box;padding:5px;border:1px solid #cbd5e1;border-radius:3px;font-size:12px}.si-msg{font-size:12px;color:#475569}.si-modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:9999}.si-modal-bg[hidden]{display:none}.si-modal{width:min(1050px,96vw);max-height:86vh;background:#fff;border-radius:8px;display:flex;flex-direction:column}.si-modal-head,.si-modal-foot{padding:12px 14px;border-bottom:1px solid #e2e8f0;display:flex;gap:8px;align-items:center}.si-modal-foot{border-top:1px solid #e2e8f0;border-bottom:0;justify-content:flex-end}.si-modal-body{padding:12px 14px;overflow:auto}.si-search{display:flex;gap:8px;margin-bottom:10px}.si-search input{flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:4px}.si-out-row{cursor:pointer}.si-out-row:hover{background:#eff6ff}.si-out-row.selected{background:#dbeafe}.st-wait{color:#a16207;font-weight:700}.st-partial{color:#2563eb;font-weight:700}.st-done{color:#15803d;font-weight:700}.st-cancel{color:#b91c1c;font-weight:700}.si-summary{padding:10px 14px;font-size:12px;color:#334155;display:flex;gap:24px;flex-wrap:wrap}.si-item-current{font-weight:700;color:#2563eb}.si-lot-title{font-size:13px;color:#475569}.si-lot-title strong{color:#0f172a}@media(max-width:900px){.si-head{grid-template-columns:1fr}.si-field{grid-template-columns:100px 1fr}}
+.si-in h1{font-size:20px;margin:0 0 12px}.si-box{background:#fff;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:12px}.si-head{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 20px;padding:16px}.si-field{display:grid;grid-template-columns:105px minmax(0,1fr);align-items:center;gap:8px;font-size:13px}.si-field label{font-weight:700}.si-field input,.si-field select{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #cbd5e1;border-radius:4px;background:#fff}.si-field input[readonly]{background:#f8fafc}.si-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 0 10px}.si-btn{border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:7px 13px;cursor:pointer;font-weight:700}.si-btn:disabled{opacity:.45;cursor:not-allowed}.si-primary{background:#2563eb;border-color:#2563eb;color:#fff}.si-danger{background:#dc2626;border-color:#dc2626;color:#fff}.si-lot-btn{background:#0f766e;border-color:#0f766e;color:#fff;padding:5px 10px}.si-table{width:100%;border-collapse:collapse;font-size:12px;min-width:1180px}.si-table th,.si-table td{border:1px solid #dbe2eb;padding:7px;text-align:center}.si-table th{background:#f8fafc;white-space:nowrap}.si-table td.left{text-align:left}.si-msg{font-size:12px;color:#475569}.si-modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:9999}.si-modal-bg[hidden]{display:none}.si-modal{width:min(1050px,96vw);max-height:86vh;background:#fff;border-radius:8px;display:flex;flex-direction:column}.si-modal.wide{width:min(1600px,98vw);height:88vh}.si-modal-head,.si-modal-foot{padding:12px 14px;border-bottom:1px solid #e2e8f0;display:flex;gap:8px;align-items:center}.si-modal-foot{border-top:1px solid #e2e8f0;border-bottom:0;justify-content:flex-end}.si-modal-body{padding:12px 14px;overflow:auto}.si-search{display:flex;gap:8px;margin-bottom:10px}.si-search input{flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:4px}.si-out-row{cursor:pointer}.si-out-row:hover{background:#eff6ff}.si-out-row.selected{background:#dbeafe}.st-wait{color:#a16207;font-weight:700}.st-partial{color:#2563eb;font-weight:700}.st-done{color:#15803d;font-weight:700}.si-summary{padding:10px 14px;font-size:12px;color:#334155;display:flex;gap:24px;flex-wrap:wrap}.si-item-current{font-weight:700;color:#2563eb}
+.si-scan-wrap{padding:14px 18px;border-bottom:1px solid #bae6fd;background:#f8fdff}.si-scan-title{font-size:17px;font-weight:800;color:#4f8dc9;margin-bottom:10px}.si-scan-line{display:flex;align-items:center;gap:12px;max-width:620px;margin:0 auto}.si-scan-line label{font-weight:800;text-decoration:underline;white-space:nowrap}.si-scan-line input{flex:1;padding:9px 10px;border:1px solid #60a5fa;border-radius:4px;font-size:14px}.si-scan-help{font-size:12px;color:#2563eb;line-height:1.6;margin-top:8px;text-align:center}
+.si-lot-layout{display:grid;grid-template-columns:32% 18% 50%;gap:14px;padding:14px;min-height:520px;overflow:auto}.si-pane{border:1px solid #dbe2eb;background:#fff;display:flex;flex-direction:column;min-width:0}.si-pane-title{padding:10px 12px;font-weight:800;border-bottom:2px solid #93c5fd;background:#f8fafc}.si-pane-body{overflow:auto;flex:1}.si-mini{width:100%;border-collapse:collapse;font-size:12px}.si-mini th,.si-mini td{border:1px solid #e2e8f0;padding:7px;text-align:center}.si-mini th{background:#f8fafc;position:sticky;top:0;z-index:1}.si-mini td.left{text-align:left}.si-select-row{cursor:pointer}.si-select-row:hover{background:#eff6ff}.si-select-row.selected{background:#dbeafe}.si-pick-row{cursor:pointer}.si-pick-row:hover{background:#f0fdf4}.si-pick-row.disabled{color:#94a3b8;background:#f8fafc;cursor:default}.si-right-input{width:100%;padding:5px;border:1px solid #cbd5e1;border-radius:3px;box-sizing:border-box}.si-pane-foot{padding:8px 10px;border-top:1px solid #e2e8f0;font-size:12px;display:flex;justify-content:space-between;background:#fafafa}.si-empty{padding:18px;color:#64748b;text-align:center}.si-scan-error{color:#dc2626;font-size:12px;text-align:center;margin-top:6px;min-height:18px}
+@media(max-width:1000px){.si-head{grid-template-columns:1fr}.si-field{grid-template-columns:100px 1fr}.si-lot-layout{grid-template-columns:1fr;min-height:auto}.si-modal.wide{height:95vh}}
 </style>
 {% endblock %}
 {% block content %}
@@ -29,9 +32,7 @@
 
   <div class="si-box" style="overflow:auto">
     <table class="si-table">
-      <thead>
-        <tr><th>No.</th><th>입고 품번</th><th>품명</th><th>규격</th><th>단위</th><th>출고수량</th><th>기입고수량</th><th>입고가능수량</th><th>금회 입고수량</th><th>LOT 건수</th><th>입고상태</th><th>LOT 입고</th></tr>
-      </thead>
+      <thead><tr><th>No.</th><th>입고 품번</th><th>품명</th><th>규격</th><th>단위</th><th>출고수량</th><th>기입고수량</th><th>입고가능수량</th><th>금회 입고수량</th><th>LOT 건수</th><th>입고상태</th><th>LOT 입고</th></tr></thead>
       <tbody id="si-items"><tr><td colspan="12">외주가공 출고건을 불러오세요.</td></tr></tbody>
     </table>
     <div class="si-summary"><span>출고 합계: <strong id="si-total-out">0</strong></span><span>기입고 합계: <strong id="si-total-received">0</strong></span><span>금회 입고 합계: <strong id="si-total-current">0</strong></span><span>입고 후 잔량: <strong id="si-total-remaining">0</strong></span></div>
@@ -50,16 +51,36 @@
 </div>
 
 <div id="si-lot-modal" class="si-modal-bg" hidden>
-  <div class="si-modal">
-    <div class="si-modal-head"><strong>LOT별 입고 입력</strong><span id="si-lot-item-title" class="si-lot-title"></span></div>
-    <div class="si-modal-body">
-      <table class="si-table">
-        <thead><tr><th>No.</th><th>원 LOT</th><th>배정수량</th><th>기입고수량</th><th>입고가능수량</th><th>금회 입고수량</th><th>외주업체 LOT</th><th>샘플수량</th><th>신규 LOT</th></tr></thead>
-        <tbody id="si-lot-rows"><tr><td colspan="9">품번을 선택하세요.</td></tr></tbody>
-      </table>
+  <div class="si-modal wide">
+    <div class="si-scan-wrap">
+      <div class="si-scan-title">LOT No 스캔</div>
+      <div class="si-scan-line"><label>LOT No</label><input id="si-lot-scan" autocomplete="off" placeholder="바코드 스캔 또는 LOT 번호 입력 후 Enter"></div>
+      <div id="si-scan-error" class="si-scan-error"></div>
+      <div class="si-scan-help">품번을 먼저 선택하면 가운데에 해당 품번의 출고 LOT가 표시됩니다. LOT를 스캔하면 오른쪽 입고 LOT 리스트에 추가되고 입고 가능수량이 자동 입력됩니다.</div>
     </div>
+
+    <div class="si-lot-layout">
+      <section class="si-pane">
+        <div class="si-pane-title">입고 품번</div>
+        <div class="si-pane-body"><table class="si-mini"><thead><tr><th>입고 품번</th><th>입고 품명</th><th>ITEM</th></tr></thead><tbody id="si-popup-items"></tbody></table></div>
+        <div class="si-pane-foot"><span>품번 건수: <strong id="si-popup-item-count">0</strong></span><span>선택: <strong id="si-popup-item-selected">-</strong></span></div>
+      </section>
+
+      <section class="si-pane">
+        <div class="si-pane-title">출고 LOT 리스트</div>
+        <div class="si-pane-body"><table class="si-mini"><thead><tr><th>출고 LOT NO</th><th>입고가능</th></tr></thead><tbody id="si-popup-source-lots"><tr><td colspan="2" class="si-empty">품번을 선택하세요.</td></tr></tbody></table></div>
+        <div class="si-pane-foot"><span>건수: <strong id="si-popup-source-count">0</strong></span><span>계: <strong id="si-popup-source-total">0</strong></span></div>
+      </section>
+
+      <section class="si-pane">
+        <div class="si-pane-title">금회 입고 LOT 리스트</div>
+        <div class="si-pane-body"><table class="si-mini"><thead><tr><th>입고 LOT NO</th><th>외주업체 LOT</th><th>배정수량</th><th>기입고</th><th>입고가능</th><th>입고수량</th><th>샘플수량</th><th>신규 LOT</th><th></th></tr></thead><tbody id="si-popup-receive-lots"><tr><td colspan="9" class="si-empty">LOT를 스캔하거나 가운데 목록에서 선택하세요.</td></tr></tbody></table></div>
+        <div class="si-pane-foot"><span>건수: <strong id="si-popup-receive-count">0</strong></span><span>금회 입고 계: <strong id="si-popup-receive-total">0</strong></span></div>
+      </section>
+    </div>
+
     <div class="si-modal-foot"><span id="si-lot-message" class="si-msg" style="margin-right:auto"></span><button id="si-lot-close" class="si-btn" type="button">닫기</button><button id="si-lot-save" class="si-btn si-primary" type="button">적용</button></div>
   </div>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/subcontract_inbound.js?v=20260914-2"></script>{% endblock %}
+{% block extra_script %}<script src="/static/subcontract_inbound.js?v=20260914-3"></script>{% endblock %}
