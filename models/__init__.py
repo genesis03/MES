@@ -12,6 +12,7 @@ from models.models import (
     ItemBomModel,
 )
 from models.lot_relation import LotRelationModel
+from models.lot_consumption import LotConsumptionModel
 from models.production_lot import ProductionLotModel
 from models.production import ProductionPlan, ProductionWorkOrder, ProductionPerformance
 from models.worker import WorkerMaster, WorkerProcess
@@ -37,7 +38,7 @@ ensure_production_order_columns(engine)
 
 __all__ = [
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
-    "LotRelationModel",
+    "LotRelationModel", "LotConsumptionModel",
     "ProductionLotModel",
     "ProductionPlan", "ProductionWorkOrder", "ProductionPerformance",
     "WorkerMaster", "WorkerProcess",
