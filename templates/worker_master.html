@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}작업자 관리{% endblock %}
+
+{% block extra_head %}
+<style>
+    .page-head{margin-bottom:16px}.page-head h1{font-size:23px;margin-bottom:4px}.page-head p{font-size:12.5px;color:#64748b}
+    .panel{background:#fff;border:1px solid #dbe3ec;border-radius:5px;margin-bottom:14px}.panel-title{padding:10px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid #6495ed;color:#334155}.panel-body{padding:14px}
+    .form-grid{display:grid;grid-template-columns:160px 180px 180px 160px;gap:10px 12px;align-items:end}
+    label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px}input,select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:3px;padding:0 8px;background:#fff;font-size:13px}
+    .process-box{grid-column:1/5;border:1px solid #e2e8f0;background:#f8fafc;padding:10px;display:flex;gap:12px;flex-wrap:wrap}.process-box label{display:flex;gap:5px;align-items:center;margin:0;font-weight:500}.process-box input{width:auto;height:auto}
+    .actions{display:flex;justify-content:flex-end;gap:7px;margin-top:12px}.btn{border:0;border-radius:4px;padding:8px 14px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#334155}
+    .msg{font-size:12px;margin-top:9px}.ok{color:#15803d}.err{color:#b91c1c}
+    table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left}th{background:#f8fafc;color:#475569}.empty{text-align:center;color:#94a3b8;padding:18px}.tag{display:inline-block;background:#e2e8f0;border-radius:3px;padding:2px 6px;margin:1px 3px 1px 0}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head"><h1>작업자 관리</h1><p>작업자별 생산 가능 공정을 지정합니다. 생산실적 등록 시 선택한 공정에 등록된 작업자만 표시됩니다.</p></div>
+
+<div class="panel">
+    <div class="panel-title">작업자 등록 / 수정</div>
+    <div class="panel-body">
+        <input type="hidden" id="workerId">
+        <div class="form-grid">
+            <div><label>작업자코드 *</label><input type="text" id="workerCode" maxlength="30"></div>
+            <div><label>작업자명 *</label><input type="text" id="workerName" maxlength="50"></div>
+            <div><label>부서</label><input type="text" id="department" maxlength="50"></div>
+            <div><label>사용여부</label><select id="isActive"><option value="Y">사용</option><option value="N">미사용</option></select></div>
+            <div class="process-box" id="processBox">공정 정보를 불러오는 중입니다.</div>
+            <div style="grid-column:1/5"><label>비고</label><input type="text" id="note" maxlength="1000"></div>
+        </div>
+        <div class="actions"><button class="btn secondary" onclick="resetForm()">초기화</button><button class="btn primary" onclick="saveWorker()">저장</button></div>
+        <div id="msg" class="msg"></div>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-body" style="padding:0;overflow-x:auto">
+        <table>
+            <thead><tr><th>No.</th><th>작업자코드</th><th>작업자명</th><th>부서</th><th>생산 가능 공정</th><th>사용여부</th><th>비고</th><th>처리</th></tr></thead>
+            <tbody id="workerBody"><tr><td colspan="8" class="empty">조회된 작업자가 없습니다.</td></tr></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+let processes=[];let workers=[];
+document.addEventListener('DOMContentLoaded',async()=>{await loadProcesses();await loadWorkers();});
+async function loadProcesses(){const r=await fetch('/api/basic-info/workers/processes');processes=await r.json();processBox.innerHTML=processes.length?processes.map(x=>`<label><input type="checkbox" name="workerProcess" value="${x.process_code}">${x.process_code} | ${x.process_name}</label>`).join(''):'등록된 사용 공정이 없습니다.';}
+async function loadWorkers(){const r=await fetch('/api/basic-info/workers');workers=await r.json();if(!workers.length){workerBody.innerHTML='<tr><td colspan="8" class="empty">조회된 작업자가 없습니다.</td></tr>';return;}workerBody.innerHTML=workers.map((x,i)=>`<tr><td>${i+1}</td><td>${x.worker_code}</td><td>${x.worker_name}</td><td>${x.department||''}</td><td>${x.process_codes.map(p=>`<span class="tag">${p}</span>`).join('')}</td><td>${x.is_active==='Y'?'사용':'미사용'}</td><td>${x.note||''}</td><td><button class="btn secondary" style="padding:5px 9px" onclick="editWorker(${x.id})">수정</button></td></tr>`).join('');}
+function selectedProcesses(){return [...document.querySelectorAll('input[name="workerProcess"]:checked')].map(x=>x.value);}
+function setMsg(t,ok=false){msg.textContent=t;msg.className='msg '+(ok?'ok':'err');}
+function resetForm(){workerId.value='';workerCode.value='';workerName.value='';department.value='';isActive.value='Y';note.value='';document.querySelectorAll('input[name="workerProcess"]').forEach(x=>x.checked=false);setMsg('');}
+function editWorker(id){const x=workers.find(w=>w.id===id);if(!x)return;workerId.value=x.id;workerCode.value=x.worker_code;workerName.value=x.worker_name;department.value=x.department||'';isActive.value=x.is_active;note.value=x.note||'';document.querySelectorAll('input[name="workerProcess"]').forEach(c=>c.checked=x.process_codes.includes(c.value));window.scrollTo({top:0,behavior:'smooth'});}
+async function saveWorker(){const payload={worker_code:workerCode.value.trim(),worker_name:workerName.value.trim(),department:department.value.trim()||null,process_codes:selectedProcesses(),is_active:isActive.value,note:note.value.trim()||null};if(!payload.worker_code||!payload.worker_name){setMsg('작업자코드와 작업자명을 입력해 주세요.');return;}if(!payload.process_codes.length){setMsg('생산 가능한 공정을 최소 1개 이상 선택해 주세요.');return;}const id=workerId.value;const r=await fetch(id?`/api/basic-info/workers/${id}`:'/api/basic-info/workers',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){setMsg(d.detail||'저장에 실패했습니다.');return;}setMsg(d.message,true);resetForm();await loadWorkers();}
+</script>
+{% endblock %}
