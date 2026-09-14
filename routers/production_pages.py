@@ -9,10 +9,6 @@ templates = Jinja2Templates(directory="templates")
 
 
 PRODUCTION_PAGES = {
-    "/production/performance/machining": (
-        "가공 실적 등록",
-        "복합선반 LX, 탭핑 LB, 세레이션 등 가공 공정 실적을 등록하는 화면입니다.",
-    ),
     "/production/performance/assembly": (
         "조립 실적 등록",
         "단자·캡·씰 조립 LA 공정 실적을 등록하는 화면입니다.",
@@ -71,7 +67,11 @@ def production_orders_page(request: Request, current_user=Depends(get_current_us
 
 @router.get("/production/performance/machining", response_class=HTMLResponse)
 def production_machining_page(request: Request, current_user=Depends(get_current_user)):
-    return _render_production_ready(request, current_user, "/production/performance/machining")
+    return templates.TemplateResponse(
+        request=request,
+        name="production_machining.html",
+        context={"request": request, "user": current_user},
+    )
 
 
 @router.get("/production/performance/assembly", response_class=HTMLResponse)
