@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import get_current_user
+from models.lot_relation import LotRelationModel
 from models.models import (
     ItemMasterModel,
     PurchaseInboundItem,
@@ -217,6 +219,17 @@ def inquiry_inbounds(
     }
 
 
+def _recalculate_order_status(order):
+    if order.status == "CANCELLED":
+        return
+    if all((item.received_qty or 0) >= item.order_qty for item in order.items):
+        order.status = "COMPLETED"
+    elif any((item.received_qty or 0) > 0 for item in order.items):
+        order.status = "PARTIAL"
+    else:
+        order.status = "ORDERED"
+
+
 @router.post("/inbounds/delete-selected")
 def delete_selected_inbounds(
     payload: SelectedIds,
@@ -230,11 +243,48 @@ def delete_selected_inbounds(
     if missing:
         raise HTTPException(404, f"입고를 찾을 수 없습니다: {', '.join(map(str, missing))}")
 
-    blocked = [row.inbound_no for row in masters if row.status != "DRAFT"]
-    if blocked:
-        raise HTTPException(409, "확정된 입고는 LOT/재고 이력 보호를 위해 삭제할 수 없습니다: " + ", ".join(blocked))
+    confirmed_lots = sorted({
+        item.internal_lot_no
+        for master in masters if master.status == "CONFIRMED"
+        for item in master.items if item.internal_lot_no
+    })
+    used_lots = []
+    if confirmed_lots:
+        used_lots = [row[0] for row in db.query(LotRelationModel.parent_lot_no).filter(
+            LotRelationModel.parent_lot_no.in_(confirmed_lots)
+        ).distinct().all()]
+    if used_lots:
+        raise HTTPException(
+            409,
+            "다음 공정에서 이미 사용된 LOT가 있어 구매를 삭제할 수 없습니다: " + ", ".join(sorted(used_lots)),
+        )
+
+    affected_orders = {}
+    for master in masters:
+        if master.status == "CONFIRMED":
+            for inbound_item in master.items:
+                if inbound_item.po_item_id is None:
+                    continue
+                po_item = db.get(PurchaseOrderItem, inbound_item.po_item_id)
+                if po_item is None:
+                    continue
+                received = Decimal(str(po_item.received_qty or 0)) - Decimal(str(inbound_item.inbound_qty or 0))
+                po_item.received_qty = float(max(received, Decimal("0")))
+                if po_item.received_qty <= 0:
+                    po_item.status = "WAITING"
+                elif po_item.received_qty >= po_item.order_qty:
+                    po_item.status = "COMPLETED"
+                else:
+                    po_item.status = "PARTIAL"
+                affected_orders[po_item.order.id] = po_item.order
+
+    for order in affected_orders.values():
+        _recalculate_order_status(order)
 
     for master in masters:
         db.delete(master)
     db.commit()
-    return {"deleted": len(masters), "message": f"임시저장 입고 {len(masters)}건을 삭제했습니다."}
+    return {
+        "deleted": len(masters),
+        "message": f"구매 {len(masters)}건을 삭제했습니다. 확정 입고는 발주 입고수량과 상태도 함께 복구했습니다.",
+    }
