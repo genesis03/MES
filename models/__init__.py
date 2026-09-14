@@ -28,9 +28,11 @@ Base.metadata.create_all(bind=engine)
 from models.purchase_migration import ensure_purchase_entry_columns
 from models.subcontract_inbound_migration import ensure_subcontract_inbound_columns
 from models.quality_migration import ensure_quality_master_data
+from models.production_migration import ensure_production_order_columns
 ensure_purchase_entry_columns(engine)
 ensure_subcontract_inbound_columns(engine)
 ensure_quality_master_data(engine)
+ensure_production_order_columns(engine)
 
 __all__ = [
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
