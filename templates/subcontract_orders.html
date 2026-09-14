@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}발주 입력 (외주가공){% endblock %}
+{% block extra_head %}
+<style>
+.so-page h1{font-size:20px;margin:0 0 12px}.so-box{background:#fff;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:14px}.so-head{display:grid;grid-template-columns:1fr 1fr;gap:10px 24px;padding:16px 18px}.so-field{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px;align-items:center;font-size:13px}.so-field label{font-weight:700}.so-field input,.so-field select,.so-field textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;padding:7px 9px;font:inherit;background:#fff}.so-field input[readonly]{background:#f8fafc}.so-wide{grid-column:1/-1}.so-toolbar,.so-footer{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 0}.so-btn{border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:6px 12px;font-size:12px;cursor:pointer}.so-btn:hover{background:#f1f5f9}.so-btn:disabled{opacity:.45;cursor:not-allowed}.so-primary{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}.so-confirm{background:#15803d;border-color:#15803d;color:#fff;font-weight:700}.so-grid-wrap{overflow:auto}.so-grid{border-collapse:collapse;width:100%;min-width:1520px;font-size:12px}.so-grid th,.so-grid td{border:1px solid #dbe2eb;padding:4px;vertical-align:top}.so-grid th{background:#f8fafc;text-align:center;white-space:nowrap}.so-grid input,.so-grid select{width:100%;box-sizing:border-box;border:1px solid transparent;background:transparent;padding:5px;font:inherit;border-radius:3px}.so-grid input:focus,.so-grid select:focus{background:#fff;border-color:#2563eb;outline:none}.so-grid input[readonly]{color:#475569}.so-seq{text-align:center;padding-top:10px!important;color:#64748b}.so-suggestions{position:relative;z-index:30;background:#fff;border:1px solid #cbd5e1;border-radius:4px;max-height:180px;overflow:auto}.so-suggestions:empty{display:none}.so-suggestions button{display:block;width:100%;border:0;border-bottom:1px solid #e2e8f0;background:#fff;text-align:left;padding:6px;cursor:pointer}.so-status-ok{color:#15803d;font-weight:700}.so-status-wait{color:#b45309;font-weight:700}.so-message{font-size:13px;min-height:18px}.so-vendor-selected{border-color:#16a34a!important;background:#f0fdf4!important}.so-modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:9999}.so-modal-backdrop[hidden]{display:none}.so-modal{width:min(900px,94vw);max-height:86vh;background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(15,23,42,.3);display:flex;flex-direction:column}.so-modal-head{padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;gap:12px;align-items:center}.so-modal-body{padding:14px 16px;overflow:auto}.so-modal-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}.so-card{background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:8px}.so-lot-table{width:100%;border-collapse:collapse;font-size:12px}.so-lot-table th,.so-lot-table td{border:1px solid #dbe2eb;padding:7px;text-align:center}.so-lot-table th{background:#f8fafc}.so-modal-foot{padding:12px 16px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:8px}.so-hint{font-size:11px;color:#64748b}.so-error{color:#dc2626}.so-remove{border:0;background:transparent;color:#64748b;cursor:pointer;font-size:16px}@media(max-width:760px){.so-head{grid-template-columns:1fr}.so-wide{grid-column:1}.so-modal-summary{grid-template-columns:1fr 1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container so-page">
+  <h1>발주 입력 (외주가공)</h1>
+  <form id="so-form" class="so-box">
+    <div class="so-head">
+      <div class="so-field"><label>발주일자</label><input id="so-date" type="date" required></div>
+      <div class="so-field"><label>발주처</label><div><input id="so-vendor" list="so-vendors" autocomplete="off" placeholder="거래처 코드 또는 이름" required><datalist id="so-vendors">{% for vendor in vendors %}<option value="{{ vendor.partner_code }} · {{ vendor.partner_name }}" data-id="{{ vendor.id }}" data-code="{{ vendor.partner_code }}" data-name="{{ vendor.partner_name }}" data-manager="{{ vendor.manager_name or '' }}"></option>{% endfor %}</datalist><div id="so-vendor-hint" class="so-hint">등록된 활성 공급사에서 선택합니다.</div></div></div>
+      <div class="so-field"><label>가공유형</label><select id="so-process" required><option value="">선택</option>{% for process in processes %}<option value="{{ process.process_code }}" data-name="{{ process.process_name }}">{{ process.process_code }} · {{ process.process_name }}</option>{% endfor %}</select></div>
+      <div class="so-field"><label>납기일</label><input id="so-due-date" type="date"></div>
+      <div class="so-field"><label>외주 저장위치</label><select id="so-location" required><option value="">선택</option>{% for location in storage_locations %}<option value="{{ location.location_code }}">{{ location.location_code }} · {{ location.location_name }}</option>{% endfor %}</select></div>
+      <div class="so-field"><label>담당자</label><input id="so-manager" maxlength="50"></div>
+      <div class="so-field"><label>발주번호</label><input id="so-number" value="저장 시 자동 발번" readonly></div>
+      <div class="so-field"><label>상태</label><input id="so-status" value="작성중" readonly></div>
+      <div class="so-field so-wide"><label>비고</label><textarea id="so-note" rows="2" maxlength="1000"></textarea></div>
+    </div>
+    <div class="so-toolbar"><button class="so-btn" type="button" id="so-add-row">+ 행 추가</button><span class="so-hint">먼저 저장한 뒤 각 품목의 LOT를 전체수량 단위로 배정합니다.</span></div>
+    <div class="so-grid-wrap"><table class="so-grid"><thead><tr><th>No.</th><th>이전 품번</th><th>이전품 재고</th><th>발주 품번</th><th>발주 품명</th><th>규격</th><th>가공유형</th><th>단위</th><th>발주수량</th><th>납기일</th><th>LOT 배정수량</th><th>LOT 상태</th><th>비고</th><th>LOT 배정</th><th></th></tr></thead><tbody id="so-lines"></tbody></table></div>
+    <div class="so-footer"><button class="so-btn" type="button" id="so-new">신규</button><button class="so-btn so-primary" type="submit" id="so-save">저장</button><button class="so-btn so-confirm" type="button" id="so-confirm" disabled>발주</button><span id="so-message" class="so-message"></span></div>
+  </form>
+</div>
+
+<div id="so-lot-modal" class="so-modal-backdrop" hidden>
+  <div class="so-modal" role="dialog" aria-modal="true" aria-labelledby="so-lot-title">
+    <div class="so-modal-head"><div><strong id="so-lot-title">LOT 배정</strong><div class="so-hint">출고 LOT는 쪼개지 않고 LOT 전체수량을 배정합니다.</div></div><button type="button" class="so-btn" id="so-lot-close">닫기</button></div>
+    <div class="so-modal-body">
+      <div class="so-modal-summary"><div class="so-card">이전 품번<br><strong id="so-lot-part">-</strong></div><div class="so-card">발주수량<br><strong id="so-lot-required">0</strong></div><div class="so-card">선택 LOT 합계<br><strong id="so-lot-selected">0</strong></div><div class="so-card">차이<br><strong id="so-lot-balance">0</strong></div></div>
+      <div id="so-lot-source-note" class="so-hint" style="margin-bottom:8px"></div>
+      <table class="so-lot-table"><thead><tr><th style="width:50px">선택</th><th>LOT NO</th><th>LOT 전체수량</th><th>저장위치</th></tr></thead><tbody id="so-lot-body"><tr><td colspan="4">조회 중...</td></tr></tbody></table>
+    </div>
+    <div class="so-modal-foot"><button type="button" class="so-btn" id="so-lot-cancel">취소</button><button type="button" class="so-btn so-primary" id="so-lot-apply">적용</button></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_script %}<script src="/static/subcontract_orders.js?v=20260914-1"></script>{% endblock %}
