@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}작업지시 조회{% endblock %}
+
+{% block extra_head %}
+<style>
+    .page-head{display:flex;justify-content:space-between;align-items:end;margin-bottom:16px}.page-head h1{font-size:23px;margin-bottom:4px}.page-head p{font-size:12.5px;color:#64748b}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:5px;padding:16px;margin-bottom:14px}
+    .grid{display:grid;grid-template-columns:160px 160px minmax(220px,1fr) 160px auto;gap:10px 12px;align-items:end}
+    label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px}input,select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:3px;padding:0 8px;background:#fff}
+    .btn{border:0;border-radius:4px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;color:#fff}.primary{background:#2563eb}.danger{background:#dc2626}.success{background:#15803d}.warning{background:#d97706}.mini{padding:5px 9px}
+    table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left}th{background:#f8fafc;color:#475569}.num{text-align:right}.status{display:inline-block;font-weight:700;padding:4px 8px;border-radius:12px;background:#eef2f7;color:#334155}.row-actions{display:flex;gap:5px;flex-wrap:wrap}.empty{text-align:center;color:#94a3b8;padding:20px}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head"><div><h1>작업지시 조회</h1><p>발행된 작업지시를 조회하고 완료/취소 처리합니다.</p></div></div>
+<div class="card"><div class="grid">
+    <div><label>시작일</label><input type="date" id="startDate"></div>
+    <div><label>종료일</label><input type="date" id="endDate"></div>
+    <div><label>품번</label><input type="text" id="searchPartNo" placeholder="품번 일부 입력"></div>
+    <div><label>상태</label><select id="searchStatus"><option value="">전체</option><option value="WAITING">대기</option><option value="IN_PROGRESS">생산중</option><option value="COMPLETED">완료</option><option value="CANCELLED">취소</option></select></div>
+    <div><button class="btn primary" onclick="loadOrders()">조회</button></div>
+</div></div>
+<div class="card" style="padding:0;overflow:auto"><table>
+<thead><tr><th>No.</th><th>작업지시번호</th><th>지시일자</th><th>생산예정일</th><th>품번</th><th>품명</th><th class="num">지시수량</th><th class="num">생산수량</th><th class="num">진행률</th><th>우선순위</th><th>상태</th><th>비고</th><th>처리</th></tr></thead>
+<tbody id="orderBody"><tr><td colspan="13" class="empty">조회된 데이터가 없습니다.</td></tr></tbody>
+</table></div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+function actionButtons(x){const a=[];if(x.status==='WAITING'){a.push(`<button class="btn warning mini" onclick="setOrderStatus(${x.id},'CANCELLED')">취소</button>`);a.push(`<button class="btn danger mini" onclick="deleteOrder(${x.id})">삭제</button>`);}else if(x.status==='IN_PROGRESS'){a.push(`<button class="btn success mini" onclick="setOrderStatus(${x.id},'COMPLETED')">완료</button>`);}else if(x.status==='CANCELLED'){a.push(`<button class="btn danger mini" onclick="deleteOrder(${x.id})">삭제</button>`);}return a.join('');}
+async function loadOrders(){const q=new URLSearchParams();if(startDate.value)q.set('start_date',startDate.value);if(endDate.value)q.set('end_date',endDate.value);if(searchPartNo.value.trim())q.set('part_no',searchPartNo.value.trim());if(searchStatus.value)q.set('status',searchStatus.value);const r=await fetch('/api/production/orders?'+q.toString());const rows=await r.json();if(!rows.length){orderBody.innerHTML='<tr><td colspan="13" class="empty">조회된 데이터가 없습니다.</td></tr>';return;}orderBody.innerHTML=rows.map((x,i)=>`<tr><td>${i+1}</td><td>${x.work_order_no}</td><td>${x.order_date}</td><td>${x.scheduled_date||''}</td><td>${x.part_no}</td><td>${x.part_name}</td><td class="num">${Number(x.order_qty).toLocaleString()}</td><td class="num">${Number(x.production_qty).toLocaleString()}</td><td class="num">${x.progress_rate}%</td><td>${x.priority||4}</td><td><span class="status">${x.status_name}</span></td><td>${x.note||''}</td><td><div class="row-actions">${actionButtons(x)}</div></td></tr>`).join('');}
+async function setOrderStatus(id,status){const label=status==='COMPLETED'?'완료':'취소';if(!confirm(`이 작업지시를 ${label} 처리하시겠습니까?`))return;const r=await fetch(`/api/production/orders/${id}/status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});const d=await r.json();if(!r.ok){alert(d.detail||'상태 변경에 실패했습니다.');return;}await loadOrders();}
+async function deleteOrder(id){if(!confirm('작업지시를 삭제하시겠습니까?'))return;const r=await fetch('/api/production/orders/'+id,{method:'DELETE'});const d=await r.json();if(!r.ok){alert(d.detail||'삭제에 실패했습니다.');return;}await loadOrders();}
+document.addEventListener('DOMContentLoaded',loadOrders);
+</script>
+{% endblock %}
