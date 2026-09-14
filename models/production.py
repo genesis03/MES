@@ -60,6 +60,7 @@ class ProductionPerformance(Base):
     __table_args__ = (
         CheckConstraint("good_qty > 0", name="ck_production_performance_good_qty_positive"),
         CheckConstraint("defect_qty >= 0", name="ck_production_performance_defect_qty_nonnegative"),
+        CheckConstraint("setup_qty >= 0", name="ck_production_performance_setup_qty_nonnegative"),
         CheckConstraint(
             "performance_type IN ('MACHINING','ASSEMBLY')",
             name="ck_production_performance_type",
@@ -71,9 +72,17 @@ class ProductionPerformance(Base):
     performance_type = Column(String(20), nullable=False, default="MACHINING", index=True)
     performance_date = Column(String(10), nullable=False, index=True)
     process_code = Column(String(50), ForeignKey("processes.process_code"), nullable=False, index=True)
+    shift_type = Column(String(10), nullable=True, index=True)
+    operator_id = Column(Integer, ForeignKey("worker_masters.id"), nullable=True, index=True)
+    operator_name = Column(String(50), nullable=True)
+    equipment_id = Column(Integer, ForeignKey("equipment_masters.id"), nullable=True, index=True)
+    equipment_code = Column(String(30), nullable=True)
+    equipment_name = Column(String(100), nullable=True)
+    source_lot_no = Column(String(100), nullable=True, index=True)
     good_qty = Column(Float, nullable=False)
     defect_qty = Column(Float, nullable=False, default=0.0)
-    operator_name = Column(String(50), nullable=True)
+    setup_qty = Column(Float, nullable=False, default=0.0)
+    consumed_qty = Column(Float, nullable=False, default=0.0)
     note = Column(Text, nullable=True)
     created_by = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
