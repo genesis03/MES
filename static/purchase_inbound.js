@@ -23,6 +23,20 @@
     node.type = type; node.value = value == null ? '' : String(value);
     node.setAttribute('aria-label', label); return node;
   };
+  const selectFromList = (listId, label, value = '') => {
+    const node = document.createElement('select');
+    node.setAttribute('aria-label', label);
+    const blank = document.createElement('option'); blank.value = ''; blank.textContent = '선택'; node.append(blank);
+    [...$(listId).options].forEach(source => {
+      const option = document.createElement('option');
+      option.value = source.value;
+      option.textContent = source.value + (source.textContent ? ' · ' + source.textContent : '');
+      node.append(option);
+    });
+    node.value = value || '';
+    if (!node.value && node.options.length === 2) node.selectedIndex = 1;
+    return node;
+  };
   const message = text => { $('pi-message').textContent = text; };
   async function request(url, options) {
     const response = await fetch(url, options);
@@ -52,10 +66,8 @@
     qty.min = '0.000001'; qty.step = 'any';
     const date = field('date', '품목 납기일', item.delivery_date || ''); date.readOnly = true;
     const supplierLot = field('text', '공급사 LOT', item.supplier_lot_no || ''); supplierLot.maxLength = 100;
-    const warehouse = field('text', '입고창고', item.warehouse_code || 'RM'); warehouse.maxLength = 20;
-    warehouse.setAttribute('list', 'pi-warehouse-options');
-    const location = field('text', '저장위치', item.storage_location || 'S-LT'); location.maxLength = 20;
-    location.setAttribute('list', 'pi-location-options');
+    const warehouse = selectFromList('pi-warehouse-options', '입고창고', item.warehouse_code || '');
+    const location = selectFromList('pi-location-options', '저장위치', item.storage_location || '');
     const lot = field('text', '원자재 LOT 번호', item.internal_lot_no || ''); lot.readOnly = true; lot.className = 'pi-lot';
     lot.placeholder = '확정 시 생성';
     const note = field('text', '비고', item.note || ''); note.maxLength = 500;
@@ -69,7 +81,8 @@
       lines = lines.filter(value => value !== line); tr.remove(); renumber(); dirty();
       if (!lines.length) emptyLines();
     }));
-    [qty, supplierLot, warehouse, location, note].forEach(node => node.addEventListener('input', dirty));
+    [qty, supplierLot, warehouse, location, note].forEach(node => node.addEventListener('change', dirty));
+    [qty, supplierLot, note].forEach(node => node.addEventListener('input', dirty));
     lines.push(line); $('pi-lines').append(tr);
     return line;
   }
@@ -98,7 +111,7 @@
     $('pi-manager').value = rows[0].manager_name || '';
     lines = [];
     rows.forEach(row => addLine(row));
-    message(rows[0].po_no + '의 미입고 품목을 불러왔습니다.');
+    message(rows[0].po_no + '의 미입고 품목을 불러왔습니다. 창고와 저장위치를 확인하세요.');
   }
   async function searchPO() {
     const box = $('pi-po-results'); box.textContent = '조회 중…';
@@ -156,12 +169,12 @@
       const qty = Number(line.qty.value);
       if (!Number.isFinite(qty) || qty <= 0) throw new Error(line.seq.textContent + '행의 입고수량을 확인하세요.');
       if (!line.supplierLot.value.trim()) throw new Error(line.seq.textContent + '행의 공급사 LOT를 입력하세요.');
-      if (!line.warehouse.value.trim() || !line.location.value.trim())
-        throw new Error(line.seq.textContent + '행의 창고와 저장위치를 입력하세요.');
+      if (!line.warehouse.value) throw new Error(line.seq.textContent + '행의 입고창고를 선택하세요.');
+      if (!line.location.value) throw new Error(line.seq.textContent + '행의 저장위치를 선택하세요.');
       return {
         po_item_id: line.item.po_item_id, part_no: line.item.part_no,
         inbound_qty: qty, supplier_lot_no: line.supplierLot.value.trim(),
-        warehouse_code: line.warehouse.value.trim(), storage_location: line.location.value.trim(),
+        warehouse_code: line.warehouse.value, storage_location: line.location.value,
         note: line.note.value.trim() || null
       };
     });
@@ -199,7 +212,7 @@
       $('pi-status').value = '입고 확정';
       data.items.forEach((item, index) => { if (lines[index]) lines[index].lot.value = item.internal_lot_no || ''; });
       lines.forEach(line => {
-        line.tr.querySelectorAll('input,button').forEach(control => { control.disabled = true; });
+        line.tr.querySelectorAll('input,select,button').forEach(control => { control.disabled = true; });
       });
       ['pi-date', 'pi-invoice', 'pi-note'].forEach(id => { $(id).disabled = true; });
       message(data.inbound_no + ' 입고가 확정되었습니다. 원자재 LOT 번호가 생성되었습니다.');
@@ -228,4 +241,3 @@
   $('pi-confirm').addEventListener('click', confirm);
   reset();
 })();
-
