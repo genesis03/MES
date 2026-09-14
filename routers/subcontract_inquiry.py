@@ -1,13 +1,20 @@
-from typing import Optional
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import get_current_user
+from models.lot_relation import LotRelationModel
 from models.subcontract import SubcontractOrderItem, SubcontractOrderMaster
 
 router = APIRouter(prefix="/api/subcontract/inquiry", tags=["Subcontract Inquiry"])
+
+
+class SelectedIds(BaseModel):
+    ids: List[int] = Field(min_length=1, max_length=500)
+
 
 STATUS_NAMES = {
     "DRAFT": "작성중",
@@ -83,3 +90,52 @@ def inquiry_subcontract_orders(
             "allocated_qty": allocated_qty,
         })
     return {"total": total, "items": items}
+
+
+@router.post("/orders/delete-selected")
+def delete_selected_subcontract_orders(
+    payload: SelectedIds,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    ids = sorted(set(payload.ids))
+    masters = db.query(SubcontractOrderMaster).filter(SubcontractOrderMaster.id.in_(ids)).all()
+    found = {row.id for row in masters}
+    missing = [value for value in ids if value not in found]
+    if missing:
+        raise HTTPException(404, "외주가공 발주를 찾을 수 없습니다: " + ", ".join(map(str, missing)))
+
+    # LOT 배정 자체는 삭제를 막지 않습니다. 발주 삭제 시 cascade로 배정도 함께 해제됩니다.
+    # 단, 배정된 LOT가 이미 다음 공정에서 소비된 이력이 있으면 추적성 보호를 위해 삭제를 막습니다.
+    blocked = []
+    for master in masters:
+        allocated_lots = sorted({
+            allocation.lot_no
+            for item in master.items
+            for allocation in item.allocations
+            if allocation.lot_no
+        })
+        if not allocated_lots:
+            continue
+        used = (
+            db.query(LotRelationModel.parent_lot_no)
+            .filter(LotRelationModel.parent_lot_no.in_(allocated_lots))
+            .distinct()
+            .all()
+        )
+        if used:
+            blocked.append(master.order_no)
+
+    if blocked:
+        raise HTTPException(
+            409,
+            "다음 공정에서 이미 사용된 LOT가 있는 외주가공 발주는 삭제할 수 없습니다: " + ", ".join(blocked),
+        )
+
+    for master in masters:
+        db.delete(master)
+    db.commit()
+    return {
+        "deleted": len(masters),
+        "message": f"외주가공 발주 {len(masters)}건을 삭제했습니다. 연결된 LOT 배정도 함께 해제했습니다.",
+    }
