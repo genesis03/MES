@@ -124,7 +124,6 @@
     rows.forEach(row => addLine({
       ...row,
       delivery_date: row.item_delivery_date || row.delivery_date || '',
-      warehouse_code: row.warehouse_code || '',
       storage_location: row.storage_location || ''
     }, true));
     $('pi-po-list').hidden = true;
@@ -160,7 +159,6 @@
       if (!Number.isFinite(qty) || qty <= 0) throw new Error(line.seq.textContent + '행의 입고수량을 확인하세요.');
       if (!line.supplierLot.value.trim()) throw new Error(line.seq.textContent + '행의 공급사 LOT를 입력하세요.');
       if (!line.location.value) throw new Error(line.seq.textContent + '행의 저장위치를 선택하세요.');
-      if (!line.item.warehouse_code) throw new Error(line.seq.textContent + '행의 발주 데이터에 입고창고 정보가 없습니다. 발주를 확인하세요.');
       return {
         inbound_item_id: line.item.inbound_item_id || null,
         po_item_id: line.item.po_item_id,
@@ -168,7 +166,6 @@
         inbound_qty: qty,
         supplier_lot_no: line.supplierLot.value.trim(),
         internal_lot_no: line.item.internal_lot_no || null,
-        warehouse_code: line.item.warehouse_code,
         storage_location: line.location.value,
         note: line.note.value.trim() || null
       };
