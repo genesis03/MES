@@ -35,11 +35,12 @@
 .po-grid input[type=number] { text-align:right; }
 .po-grid input[type=date] { min-width:126px; }
 .po-grid td.po-seq { text-align:center; color:#64748b; padding-top:10px; width:32px; }
-.po-grid .po-suggestions { min-width:210px; font-size:12px; }
+.po-grid .po-suggestions { min-width:210px; font-size:12px; position:relative; z-index:20; }
 .po-grid .po-row-status { color:#b45309; font-size:11px; }
 .po-grid .po-remove { border:0; background:transparent; color:#64748b; cursor:pointer; padding:5px; }
 .po-footer { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:12px 0; }
 .po-message { font-size:13px; min-height:18px; }
+.po-vendor-selected { border-color:#16a34a !important; background:#f0fdf4 !important; }
 @media(max-width:750px) { .po-header { grid-template-columns:1fr; } .po-field-wide { grid-column:1; } }
 </style>
 {% endblock %}
@@ -49,7 +50,11 @@
   <form id="po-form" class="po-box">
     <div class="po-header">
       <div class="po-field"><label for="po-date">발주일자</label><input id="po-date" type="date" required></div>
-      <div class="po-field"><label for="po-vendor-query">거래처</label><div class="po-lookup"><input id="po-vendor-query" autocomplete="off" placeholder="거래처 코드 또는 이름 입력" required><div id="po-vendor-results" class="po-suggestions"></div><div id="po-vendor-hint" class="po-lookup-hint">등록된 공급사 거래처에서 조회합니다.</div></div></div>
+      <div class="po-field"><label for="po-vendor-query">거래처</label><div class="po-lookup">
+        <input id="po-vendor-query" list="po-vendor-options" autocomplete="off" placeholder="거래처 코드 또는 이름 입력" required>
+        <datalist id="po-vendor-options">{% for vendor in vendors %}<option value="{{ vendor.partner_code }} · {{ vendor.partner_name }}" data-id="{{ vendor.id }}" data-code="{{ vendor.partner_code }}" data-name="{{ vendor.partner_name }}" data-manager="{{ vendor.manager_name or '' }}"></option>{% endfor %}</datalist>
+        <div id="po-vendor-hint" class="po-lookup-hint">글자를 입력한 뒤 목록에서 거래처를 선택하세요.</div>
+      </div></div>
       <div class="po-field"><label for="po-manager">담당자</label><input id="po-manager" maxlength="50"></div>
       <div class="po-field"><label for="po-requested-date">납기요청일</label><input id="po-requested-date" type="date"></div>
       <div class="po-field"><label for="po-number">발주번호</label><input id="po-number" value="저장 시 자동 발번" readonly></div>
@@ -71,4 +76,4 @@
   </form>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="{{ url_for('static', path='purchase_orders.js') }}?v=20260914-2" defer></script>{% endblock %}
+{% block extra_script %}<script src="{{ url_for('static', path='purchase_orders.js') }}?v=20260914-3" defer></script>{% endblock %}
