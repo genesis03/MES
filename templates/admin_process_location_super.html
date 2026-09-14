@@ -1,0 +1,77 @@
+{% extends "admin_process_location.html" %}
+
+{% block extra_script %}
+{{ super() }}
+<script>
+    function openEditProcessModal(id) {
+        IS_PROCESS_EDIT = true;
+        const target = PROCESSES_DATA.find(x => x.id === id);
+        if (!target) return;
+        document.getElementById('processModalTitle').innerText = "공정 정보 수정 (최고관리자)";
+        document.getElementById('modalProcessId').value = target.id;
+        document.getElementById('modalProcessCode').value = target.process_code;
+        document.getElementById('modalProcessCode').disabled = false;
+        document.getElementById('modalProcessName').value = target.process_name;
+        document.getElementById('modalProcessSort').value = target.sort_order;
+        document.getElementById('modalProcessIsActive').value = target.is_active;
+        document.getElementById('modalProcessNote').value = target.note || "";
+        document.getElementById('processModal').style.display = 'flex';
+    }
+
+    async function submitProcessForm() {
+        const id = document.getElementById('modalProcessId').value;
+        const process_code = document.getElementById('modalProcessCode').value.trim().toUpperCase();
+        const process_name = document.getElementById('modalProcessName').value.trim();
+        const sort_order = Number(document.getElementById('modalProcessSort').value) || 1;
+        const is_active = document.getElementById('modalProcessIsActive').value;
+        const note = document.getElementById('modalProcessNote').value.trim();
+        if (!process_code || !process_name) {
+            alert("코드와 명칭을 입력해 주십시오.");
+            return;
+        }
+
+        if (!IS_PROCESS_EDIT) {
+            const res = await fetch('/api/admin/processes/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ process_code, process_name, sort_order, is_active, note })
+            });
+            const json = await res.json();
+            if (res.ok) {
+                alert(json.message);
+                closeModal('processModal');
+                loadProcesses();
+            } else {
+                alert(json.detail || "오류 발생");
+            }
+            return;
+        }
+
+        const current = PROCESSES_DATA.find(x => x.id === Number(id));
+        if (!current) return;
+        if (current.process_code !== process_code) {
+            const ok = confirm(
+                `공정코드를 ${current.process_code} → ${process_code}(으)로 변경하시겠습니까?\n` +
+                '연결된 품목/BOM/설비/작업자/생산실적/LOT 이력의 공정코드도 함께 변경됩니다.'
+            );
+            if (!ok) return;
+        }
+
+        const res = await fetch('/api/admin/processes/change-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: Number(id), process_code, process_name, sort_order, is_active, note
+            })
+        });
+        const json = await res.json();
+        if (res.ok) {
+            alert(json.message);
+            closeModal('processModal');
+            loadProcesses();
+        } else {
+            alert(json.detail || "공정 코드 변경 실패");
+        }
+    }
+</script>
+{% endblock %}
