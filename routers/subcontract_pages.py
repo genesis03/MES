@@ -47,3 +47,15 @@ def subcontract_orders_page(
             "storage_locations": storage_locations,
         },
     )
+
+
+@router.get("/subcontract/outbound", response_class=HTMLResponse)
+def subcontract_outbound_page(
+    request: Request,
+    current_user=Depends(get_current_user),
+):
+    return templates.TemplateResponse(
+        request=request,
+        name="subcontract_outbound.html",
+        context={"request": request, "user": current_user},
+    )
