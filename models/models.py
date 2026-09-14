@@ -220,6 +220,6 @@ class PurchaseInboundItem(Base):
     supplier_lot_no = Column(String(100), nullable=False, index=True)
     internal_lot_no = Column(String(100), index=True)
     note = Column(Text)
-    warehouse_code = Column(String(20), ForeignKey("warehouse_masters.warehouse_code"), nullable=False)
+    warehouse_code = Column(String(20), ForeignKey("warehouse_masters.warehouse_code"), nullable=True)
     storage_location = Column(String(20), ForeignKey("storage_locations.location_code"), nullable=False)
     unit_price = Column(Float, default=0.0, nullable=False)
