@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -10,6 +11,7 @@ from core.security import get_current_user
 from models.models import ItemMasterModel, PurchaseOrderItem, PurchaseOrderMaster
 from models.subcontract import SubcontractOrderItem, SubcontractOrderMaster
 from models.subcontract_outbound import SubcontractOutboundMaster
+from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundMaster
 
 router = APIRouter(prefix="/api/purchase", tags=["Purchase Unreceived"])
 page_router = APIRouter(tags=["Purchase Unreceived Page"])
@@ -23,6 +25,21 @@ def unreceived_page(request: Request, current_user=Depends(get_current_user)):
         name="purchase_unreceived.html",
         context={"request": request, "user": current_user},
     )
+
+
+def _subcontract_received_qty(db: Session, order_item_id: int) -> float:
+    """취소되지 않은 외주가공 입고의 실입고수량 합계."""
+    value = (
+        db.query(func.coalesce(func.sum(SubcontractInboundItem.good_qty), 0.0))
+        .join(SubcontractInboundMaster, SubcontractInboundMaster.id == SubcontractInboundItem.inbound_id)
+        .filter(
+            SubcontractInboundItem.order_item_id == order_item_id,
+            SubcontractInboundMaster.status == "RECEIVED",
+        )
+        .scalar()
+        or 0.0
+    )
+    return float(value)
 
 
 @router.get("/unreceived")
@@ -94,6 +111,14 @@ def unreceived_list(
             query = query.filter(SubcontractOrderMaster.order_no.contains(order_no.strip(), autoescape=True))
 
         for master, item in query.order_by(SubcontractOrderMaster.order_date.desc(), SubcontractOrderMaster.id.desc(), SubcontractOrderItem.id).all():
+            order_qty = float(item.order_qty or 0)
+            received_qty = _subcontract_received_qty(db, item.id)
+            remaining_qty = max(order_qty - received_qty, 0.0)
+
+            # 전량 외주입고가 완료된 품목은 미입고 현황에서 제외합니다.
+            if remaining_qty <= 0:
+                continue
+
             active_outbound = (
                 db.query(SubcontractOutboundMaster)
                 .filter(
@@ -103,7 +128,12 @@ def unreceived_list(
                 .order_by(SubcontractOutboundMaster.id.desc())
                 .first()
             )
-            order_qty = float(item.order_qty or 0)
+
+            if received_qty > 0:
+                stage = "부분입고"
+            else:
+                stage = "외주출고완료" if active_outbound else "출고대기"
+
             rows.append({
                 "type": "SUBCONTRACT",
                 "type_name": "외주가공",
@@ -117,9 +147,9 @@ def unreceived_list(
                 "spec": item.spec or "",
                 "unit": item.unit,
                 "order_qty": order_qty,
-                "received_qty": 0.0,
-                "remaining_qty": order_qty,
-                "stage": "외주출고완료" if active_outbound else "출고대기",
+                "received_qty": received_qty,
+                "remaining_qty": remaining_qty,
+                "stage": stage,
                 "note": item.note or master.note or "",
                 "previous_part_no": item.previous_part_no,
             })
