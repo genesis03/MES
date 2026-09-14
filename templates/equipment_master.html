@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}설비 관리 - 기초 정보{% endblock %}
+
+{% block extra_head %}
+<style>
+.eq-page{display:flex;flex-direction:column;gap:14px}.eq-head{display:flex;justify-content:space-between;align-items:center}.eq-head h1{font-size:22px;margin:0}.eq-sub{font-size:12px;color:#64748b;margin-top:4px}.eq-filter,.eq-panel{background:#fff;border:1px solid #cbd5e1;border-radius:7px}.eq-filter{padding:12px;display:flex;gap:8px;align-items:end;flex-wrap:wrap}.eq-field{display:flex;flex-direction:column;gap:4px}.eq-field label{font-size:11px;font-weight:700;color:#64748b}.eq-field input,.eq-field select,.eq-field textarea{border:1px solid #cbd5e1;border-radius:4px;padding:7px 9px;font:inherit}.eq-field input,.eq-field select{height:34px}.eq-btn{height:34px;border:0;border-radius:4px;padding:0 14px;font-weight:700;cursor:pointer}.eq-btn-primary{background:#2563eb;color:#fff}.eq-btn-light{background:#e2e8f0;color:#334155}.eq-btn-danger{background:#dc2626;color:#fff}.eq-layout{display:grid;grid-template-columns:minmax(580px,1.4fr) minmax(360px,.8fr);gap:14px}.eq-panel-head{padding:11px 14px;border-bottom:1px solid #e2e8f0;font-weight:800;background:#f8fafc}.eq-table-wrap{overflow:auto;max-height:calc(100vh - 260px)}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:8px;border-bottom:1px solid #e2e8f0;white-space:nowrap;text-align:center}th{position:sticky;top:0;background:#f1f5f9;color:#334155}tbody tr{cursor:pointer}tbody tr:hover{background:#f8fafc}tbody tr.selected{background:#eff6ff}.eq-form{padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px}.eq-form .wide{grid-column:1/-1}.eq-actions{grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end;padding-top:4px}.eq-message{font-size:12px;min-height:18px;color:#475569}.eq-code{font-family:Consolas,monospace;font-weight:700}.eq-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-weight:700}.eq-on{background:#dcfce7;color:#15803d}.eq-off{background:#fee2e2;color:#b91c1c}@media(max-width:1000px){.eq-layout{grid-template-columns:1fr}.eq-table-wrap{max-height:420px}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="eq-page">
+  <div class="eq-head"><div><h1>설비 관리</h1><div class="eq-sub">제조 공정별 설비와 호기를 등록합니다. 생산실적 화면의 공정 → 작업자 → 호기 선택에 사용됩니다.</div></div></div>
+
+  <div class="eq-filter">
+    <div class="eq-field"><label>공정</label><select id="filterProcess"><option value="">전체</option></select></div>
+    <div class="eq-field"><label>검색</label><input id="filterKeyword" placeholder="설비코드 / 설비명 / 호기"></div>
+    <div class="eq-field"><label>사용여부</label><select id="filterActive"><option value="">전체</option><option value="Y">사용</option></select></div>
+    <button class="eq-btn eq-btn-primary" id="btnSearch" type="button">조회</button>
+    <button class="eq-btn eq-btn-light" id="btnReset" type="button">초기화</button>
+  </div>
+
+  <div class="eq-layout">
+    <section class="eq-panel">
+      <div class="eq-panel-head">설비 목록 <span id="rowCount" style="float:right;color:#64748b;font-weight:600">0건</span></div>
+      <div class="eq-table-wrap"><table><thead><tr><th>설비코드</th><th>설비명</th><th>제조 공정</th><th>호기</th><th>사용</th><th>정렬</th></tr></thead><tbody id="equipmentBody"><tr><td colspan="6">조회 중...</td></tr></tbody></table></div>
+    </section>
+
+    <section class="eq-panel">
+      <div class="eq-panel-head">설비 정보</div>
+      <div class="eq-form">
+        <input type="hidden" id="equipmentId">
+        <div class="eq-field"><label>설비코드 *</label><input id="equipmentCode" maxlength="30" placeholder="예: MC001"></div>
+        <div class="eq-field"><label>설비명 *</label><input id="equipmentName" maxlength="100" placeholder="예: 복합선반 1호기"></div>
+        <div class="eq-field"><label>제조 공정 *</label><select id="processCode"><option value="">선택</option></select></div>
+        <div class="eq-field"><label>호기 *</label><input id="machineNo" maxlength="20" placeholder="예: 1"></div>
+        <div class="eq-field"><label>사용여부</label><select id="isActive"><option value="Y">사용</option><option value="N">미사용</option></select></div>
+        <div class="eq-field"><label>정렬순서</label><input id="sortOrder" type="number" min="1" value="1"></div>
+        <div class="eq-field wide"><label>비고</label><textarea id="note" rows="3" maxlength="1000"></textarea></div>
+        <div class="eq-message wide" id="message"></div>
+        <div class="eq-actions"><button class="eq-btn eq-btn-light" id="btnNew" type="button">신규</button><button class="eq-btn eq-btn-danger" id="btnDelete" type="button" disabled>삭제</button><button class="eq-btn eq-btn-primary" id="btnSave" type="button">저장</button></div>
+      </div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+(() => {
+  'use strict';
+  const $=id=>document.getElementById(id); let rows=[];
+  const esc=v=>{const e=document.createElement('span');e.textContent=v??'';return e.innerHTML;};
+  async function request(url,options){const r=await fetch(url,options);let d={};try{d=await r.json();}catch(_){ }if(!r.ok)throw new Error(d.detail||'처리하지 못했습니다.');return d;}
+  function message(text){$('message').textContent=text||'';}
+  function resetForm(){['equipmentId','equipmentCode','equipmentName','machineNo','note'].forEach(id=>$(id).value='');$('processCode').value='';$('isActive').value='Y';$('sortOrder').value='1';$('btnDelete').disabled=true;document.querySelectorAll('#equipmentBody tr').forEach(x=>x.classList.remove('selected'));message('');}
+  async function loadProcesses(){const data=await request('/api/basic-info/equipment/processes');const options=data.map(x=>`<option value="${esc(x.process_code)}">${esc(x.process_code)} · ${esc(x.process_name)}</option>`).join('');$('processCode').innerHTML='<option value="">선택</option>'+options;$('filterProcess').innerHTML='<option value="">전체</option>'+options;}
+  function selectRow(id){const row=rows.find(x=>Number(x.id)===Number(id));if(!row)return;$('equipmentId').value=row.id;$('equipmentCode').value=row.equipment_code;$('equipmentName').value=row.equipment_name;$('processCode').value=row.process_code;$('machineNo').value=row.machine_no;$('isActive').value=row.is_active;$('sortOrder').value=row.sort_order||1;$('note').value=row.note||'';$('btnDelete').disabled=false;document.querySelectorAll('#equipmentBody tr[data-id]').forEach(x=>x.classList.toggle('selected',Number(x.dataset.id)===Number(id)));message('');}
+  async function loadRows(){const p=new URLSearchParams();if($('filterProcess').value)p.set('process_code',$('filterProcess').value);if($('filterKeyword').value.trim())p.set('keyword',$('filterKeyword').value.trim());if($('filterActive').value==='Y')p.set('active_only','true');rows=await request('/api/basic-info/equipment?'+p.toString());$('rowCount').textContent=`${rows.length.toLocaleString()}건`;const body=$('equipmentBody');if(!rows.length){body.innerHTML='<tr><td colspan="6">등록된 설비가 없습니다.</td></tr>';return;}body.innerHTML=rows.map(x=>`<tr data-id="${x.id}"><td class="eq-code">${esc(x.equipment_code)}</td><td>${esc(x.equipment_name)}</td><td>${esc(x.process_name)}</td><td>${esc(x.machine_no)}</td><td><span class="eq-badge ${x.is_active==='Y'?'eq-on':'eq-off'}">${x.is_active==='Y'?'사용':'미사용'}</span></td><td>${Number(x.sort_order||1)}</td></tr>`).join('');body.querySelectorAll('tr[data-id]').forEach(tr=>tr.addEventListener('click',()=>selectRow(tr.dataset.id)));}
+  function payload(){return {equipment_code:$('equipmentCode').value.trim(),equipment_name:$('equipmentName').value.trim(),process_code:$('processCode').value,machine_no:$('machineNo').value.trim(),is_active:$('isActive').value,sort_order:Number($('sortOrder').value||1),note:$('note').value.trim()||null};}
+  async function save(){try{const id=Number($('equipmentId').value||0);const data=await request(id?`/api/basic-info/equipment/${id}`:'/api/basic-info/equipment',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())});message(data.message);await loadRows();if(data.id)selectRow(data.id);else if(id)selectRow(id);}catch(e){message(e.message);}}
+  async function remove(){const id=Number($('equipmentId').value||0);if(!id)return;if(!confirm('선택한 설비를 삭제하시겠습니까?'))return;try{const data=await request(`/api/basic-info/equipment/${id}`,{method:'DELETE'});resetForm();message(data.message);await loadRows();}catch(e){message(e.message);}}
+  $('btnSearch').addEventListener('click',loadRows);$('btnReset').addEventListener('click',()=>{$('filterProcess').value='';$('filterKeyword').value='';$('filterActive').value='';loadRows();});$('filterKeyword').addEventListener('keydown',e=>{if(e.key==='Enter')loadRows();});$('btnNew').addEventListener('click',resetForm);$('btnSave').addEventListener('click',save);$('btnDelete').addEventListener('click',remove);
+  (async()=>{try{await loadProcesses();await loadRows();}catch(e){message(e.message);}})();
+})();
+</script>
+{% endblock %}
