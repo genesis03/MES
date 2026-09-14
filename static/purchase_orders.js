@@ -29,14 +29,16 @@
     return node;
   };
   const selectFromTemplate = (templateId, label, value = '') => {
+    const source = $(templateId);
     const node = document.createElement('select');
     node.setAttribute('aria-label', label);
-    [...$(templateId).options].forEach(option => node.append(option.cloneNode(true)));
+    [...source.options].forEach(option => node.append(option.cloneNode(true)));
     node.value = value || '';
     if (!node.value && node.options.length === 2) node.selectedIndex = 1;
     return node;
   };
   const message = text => { $('po-message').textContent = text; };
+
   async function request(url, options) {
     const response = await fetch(url, options);
     const data = await response.json();
@@ -46,6 +48,7 @@
     }
     return data;
   }
+
   function showSuggestions(box, items, label, choose) {
     box.replaceChildren();
     items.forEach(item => box.append(button(label(item), () => choose(item))));
@@ -72,8 +75,7 @@
     if (!autoOnly) {
       showSuggestions($('po-vendor-results'), data.items,
         item => item.partner_code + ' · ' + item.partner_name, selectVendor);
-      $('po-vendor-hint').textContent = data.items.length
-        ? '검색 결과를 선택하세요.' : '일치하는 공급사 거래처가 없습니다.';
+      $('po-vendor-hint').textContent = data.items.length ? '검색 결과를 선택하세요.' : '일치하는 공급사 거래처가 없습니다.';
     }
     return null;
   }
@@ -89,6 +91,7 @@
       if (version === vendorVersion) $('po-vendor-hint').textContent = err.message;
     }), 250);
   }
+
   function exactPart(items, query) {
     const value = query.trim().toLocaleLowerCase();
     return items.find(x => x.part_no.toLocaleLowerCase() === value) ||
@@ -101,7 +104,6 @@
     row.name.value = part.part_name || '';
     row.spec.value = part.spec || '';
     row.unit.value = part.unit || '';
-    if (part.inbound_loc && [...row.location.options].some(x => x.value === part.inbound_loc)) row.location.value = part.inbound_loc;
     if (!row.date.value) row.date.value = $('po-requested-date').value;
     row.suggestions.replaceChildren();
     row.status.textContent = '';
@@ -117,17 +119,16 @@
       showSuggestions(row.suggestions, data.items,
         item => [item.part_no, item.part_name, item.spec].filter(Boolean).join(' · '),
         item => selectPart(row, item));
-      row.status.textContent = data.items.length
-        ? '검색 결과에서 품목을 선택하세요.' : '품목 마스터에 일치하는 자료가 없습니다.';
+      row.status.textContent = data.items.length ? '검색 결과에서 품목을 선택하세요.' : '품목 마스터에 일치하는 자료가 없습니다.';
     }
     return null;
   }
+
   function renumber() { rows.forEach((row, index) => { row.seq.textContent = String(index + 1); }); }
   function addRow(item = null) {
     const tr = document.createElement('tr');
     const seq = cell(tr, String(rows.length + 1)); seq.className = 'po-seq';
-    const query = input('text', '품번 또는 품명 검색');
-    query.autocomplete = 'off'; query.placeholder = '품번 / 품명';
+    const query = input('text', '품번 또는 품명 검색'); query.autocomplete = 'off'; query.placeholder = '품번 / 품명';
     const suggestions = document.createElement('div'); suggestions.className = 'po-suggestions';
     const status = document.createElement('div'); status.className = 'po-row-status';
     const searchCell = cell(tr); searchCell.append(query, suggestions, status);
@@ -168,11 +169,14 @@
       spec.value = item.spec || '';
       unit.value = item.unit || '';
       qty.value = item.order_qty ?? '';
+      warehouse.value = item.warehouse_code || '';
+      location.value = item.storage_location || '';
       date.value = item.delivery_date || '';
       note.value = item.note || '';
     }
     return row;
   }
+
   function activeRows() {
     return rows.filter(row => row.query.value.trim() || row.qty.value || row.date.value || row.note.value.trim());
   }
@@ -185,15 +189,14 @@
     $('po-vendor-results').replaceChildren();
     $('po-vendor-hint').textContent = '등록된 공급사 거래처에서 조회합니다.';
     $('po-lines').replaceChildren();
-    $('po-load-panel').hidden = true;
-    $('po-load-results').replaceChildren();
-    $('po-load-message').textContent = '';
     clearTimeout(vendorTimer); vendorVersion++;
     rows.forEach(row => clearTimeout(row.timer));
     rows = []; vendor = null; editingId = null;
     for (let n = 0; n < 3; n++) addRow();
     message('');
+    history.replaceState(null, '', '/purchase/orders');
   }
+
   async function resolveEntries(used) {
     if (!vendor) {
       const query = $('po-vendor-query').value;
@@ -209,14 +212,13 @@
       if (!row.location.value) throw new Error(row.seq.textContent + '행의 저장위치를 선택하세요.');
     }
   }
+
   async function saveOrder(event) {
     event.preventDefault();
     if (saving || $('po-save').disabled) return;
     const used = activeRows();
     if (!used.length) { message('품목을 한 행 이상 입력하세요.'); return; }
-    saving = true;
-    $('po-save').disabled = true;
-    message('확인 중…');
+    saving = true; $('po-save').disabled = true; message('확인 중…');
     try {
       await resolveEntries(used);
       const payload = {
@@ -235,43 +237,20 @@
           note: row.note.value.trim() || null
         }))
       };
-      message(editingId ? '수정 저장 중…' : '저장 중…');
-      const data = await request(editingId ? '/api/purchase/orders/' + editingId : '/api/purchase/orders', {
-        method: editingId ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+      const wasEdit = Boolean(editingId);
+      message(wasEdit ? '수정 저장 중…' : '저장 중…');
+      const data = await request(wasEdit ? '/api/purchase/orders/' + editingId : '/api/purchase/orders', {
+        method: wasEdit ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
       });
       editingId = data.id;
       $('po-number').value = data.po_no;
       $('po-state').value = data.status === 'ORDERED' ? '발주완료' : data.status;
-      message(data.po_no + (editingId ? ' 저장되었습니다.' : ' 저장되었습니다.'));
+      message(data.po_no + (wasEdit ? ' 수정되었습니다.' : ' 저장되었습니다.'));
     } catch (error) {
       message(error.message + ' 통신 오류라면 발주 조회에서 저장 여부를 먼저 확인하세요.');
     } finally { saving = false; $('po-save').disabled = false; }
   }
 
-  async function searchOrders() {
-    const box = $('po-load-results');
-    const status = $('po-load-message');
-    box.textContent = '조회 중…'; status.textContent = '';
-    try {
-      const query = $('po-load-query').value.trim();
-      const params = new URLSearchParams({limit:'200'});
-      if (query) params.set('po_no', query);
-      const data = await request('/api/purchase/inquiry/orders?' + params.toString());
-      box.replaceChildren();
-      const seen = new Set();
-      const orders = [];
-      (data.items || []).forEach(row => {
-        if (!seen.has(row.po_id)) { seen.add(row.po_id); orders.push(row); }
-      });
-      orders.forEach(row => box.append(button(
-        [row.po_no, row.order_date, row.partner_name, row.status_name].filter(Boolean).join(' · '),
-        () => loadOrder(row.po_id)
-      )));
-      status.textContent = orders.length ? orders.length + '건을 찾았습니다.' : '조회된 발주가 없습니다.';
-    } catch (error) {
-      box.replaceChildren(); status.textContent = error.message;
-    }
-  }
   async function loadOrder(id) {
     try {
       const data = await request('/api/purchase/orders/' + id);
@@ -290,21 +269,21 @@
       $('po-note').value = data.note || '';
       (data.items || []).forEach(item => addRow(item));
       if (!rows.length) addRow();
-      $('po-load-panel').hidden = true;
       $('po-save').disabled = !data.editable;
       message(data.editable ? data.po_no + ' 수정 모드입니다.' : data.po_no + '은 입고 이력이 있어 직접 수정할 수 없습니다.');
     } catch (error) { message(error.message); }
   }
 
-  $('po-vendor-query').addEventListener('input', searchVendorSoon);
-  $('po-add-row').addEventListener('click', () => addRow().query.focus());
-  $('po-new').addEventListener('click', resetOrder);
-  $('po-load').addEventListener('click', () => {
-    $('po-load-panel').hidden = !$('po-load-panel').hidden;
-    if (!$('po-load-panel').hidden) searchOrders();
-  });
-  $('po-load-search').addEventListener('click', searchOrders);
-  $('po-load-query').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); searchOrders(); } });
-  $('po-form').addEventListener('submit', saveOrder);
-  resetOrder();
+  function init() {
+    $('po-vendor-query').addEventListener('input', searchVendorSoon);
+    $('po-add-row').addEventListener('click', () => addRow().query.focus());
+    $('po-new').addEventListener('click', resetOrder);
+    $('po-form').addEventListener('submit', saveOrder);
+    resetOrder();
+    const editId = Number(new URLSearchParams(location.search).get('edit'));
+    if (Number.isInteger(editId) && editId > 0) loadOrder(editId);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();
