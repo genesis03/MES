@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}생산 실적 현황{% endblock %}
+
+{% block extra_head %}
+<style>
+.page-head{margin-bottom:16px}.page-head h1{font-size:23px;margin:0 0 4px}.page-head p{font-size:12.5px;color:#64748b}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:14px;margin-bottom:14px}
+.filters{display:grid;grid-template-columns:150px 150px 150px 170px 190px 190px 170px auto;gap:8px 10px;align-items:end}
+label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px}input,select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;background:#fff}
+.btn{border:0;border-radius:4px;padding:8px 14px;font-weight:800;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#334155}
+.summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}.summary span{background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:7px 10px;font-size:12px}.summary b{margin-left:5px}
+table{width:100%;border-collapse:collapse;font-size:12px;min-width:1500px}th,td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left;white-space:nowrap}th{background:#f8fafc;color:#475569}.num{text-align:right}.empty{text-align:center;color:#94a3b8;padding:24px}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head"><h1>생산 실적 현황</h1><p>가공·조립 생산실적을 통합 조회합니다.</p></div>
+<div class="card">
+  <div class="filters">
+    <div><label>시작일</label><input type="date" id="startDate"></div>
+    <div><label>종료일</label><input type="date" id="endDate"></div>
+    <div><label>구분</label><select id="performanceType"><option value="">전체</option><option value="MACHINING">가공</option><option value="ASSEMBLY">조립</option></select></div>
+    <div><label>공정</label><select id="processCode"><option value="">전체</option></select></div>
+    <div><label>작업지시번호</label><input type="text" id="workOrderNo"></div>
+    <div><label>품번</label><input type="text" id="partNo"></div>
+    <div><label>작업자</label><input type="text" id="operatorName"></div>
+    <div style="display:flex;gap:6px"><button class="btn primary" onclick="loadRows()">조회</button><button class="btn secondary" onclick="resetFilters()">초기화</button></div>
+  </div>
+</div>
+<div class="summary"><span>조회건수 <b id="sumCount">0</b></span><span>양품 <b id="sumGood">0</b></span><span>불량 <b id="sumDefect">0</b></span><span>SET-UP <b id="sumSetup">0</b></span><span>LOT 차감 <b id="sumConsumed">0</b></span></div>
+<div class="card" style="padding:0;overflow:auto"><table>
+<thead><tr><th>No.</th><th>생산일자</th><th>구분</th><th>주/야</th><th>공정</th><th>작업자</th><th>생산호기</th><th>작업지시번호</th><th>품번</th><th>품명</th><th class="num">양품</th><th class="num">불량</th><th class="num">SET-UP</th><th class="num">LOT 차감</th><th>투입 LOT</th><th>비고</th></tr></thead>
+<tbody id="body"><tr><td colspan="16" class="empty">조회 중입니다.</td></tr></tbody>
+</table></div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+const n=v=>Number(v||0);
+async function jf(url){const r=await fetch(url);const d=await r.json();if(!r.ok)throw new Error(d.detail||'조회 실패');return d;}
+async function loadProcesses(){const rows=await jf('/api/production/processes');processCode.innerHTML='<option value="">전체</option>'+rows.map(x=>`<option value="${x.process_code}">${x.process_name}</option>`).join('');}
+function resetFilters(){startDate.value='';endDate.value='';performanceType.value='';processCode.value='';workOrderNo.value='';partNo.value='';operatorName.value='';loadRows();}
+async function loadRows(){const q=new URLSearchParams();if(startDate.value)q.set('start_date',startDate.value);if(endDate.value)q.set('end_date',endDate.value);if(performanceType.value)q.set('performance_type',performanceType.value);if(processCode.value)q.set('process_code',processCode.value);if(workOrderNo.value.trim())q.set('work_order_no',workOrderNo.value.trim());if(partNo.value.trim())q.set('part_no',partNo.value.trim());if(operatorName.value.trim())q.set('operator_name',operatorName.value.trim());try{const rows=await jf('/api/production/performance-status?'+q.toString());sumCount.textContent=rows.length.toLocaleString();sumGood.textContent=rows.reduce((s,x)=>s+n(x.good_qty),0).toLocaleString();sumDefect.textContent=rows.reduce((s,x)=>s+n(x.defect_qty),0).toLocaleString();sumSetup.textContent=rows.reduce((s,x)=>s+n(x.setup_qty),0).toLocaleString();sumConsumed.textContent=rows.reduce((s,x)=>s+n(x.consumed_qty),0).toLocaleString();body.innerHTML=rows.length?rows.map((x,i)=>`<tr><td>${i+1}</td><td>${x.performance_date}</td><td>${x.performance_type_name}</td><td>${x.shift_name}</td><td>${x.process_name||x.process_code}</td><td>${x.operator_name}</td><td>${x.equipment_name}</td><td>${x.work_order_no}</td><td>${x.part_no}</td><td>${x.part_name}</td><td class="num">${n(x.good_qty).toLocaleString()}</td><td class="num">${n(x.defect_qty).toLocaleString()}</td><td class="num">${n(x.setup_qty).toLocaleString()}</td><td class="num">${n(x.consumed_qty).toLocaleString()}</td><td>${x.source_lot_no||''}</td><td>${x.note||''}</td></tr>`).join(''):'<tr><td colspan="16" class="empty">조회된 생산실적이 없습니다.</td></tr>';}catch(e){body.innerHTML=`<tr><td colspan="16" class="empty" style="color:#b91c1c">${e.message}</td></tr>`;}}
+document.addEventListener('DOMContentLoaded',async()=>{await loadProcesses();await loadRows();});
+</script>
+{% endblock %}
