@@ -9,14 +9,6 @@ templates = Jinja2Templates(directory="templates")
 
 
 PRODUCTION_PAGES = {
-    "/production/plans": (
-        "생산계획",
-        "계획 대비 생산실적 관리를 위한 생산계획 화면입니다.",
-    ),
-    "/production/orders": (
-        "작업지시 입력",
-        "생산 작업지시를 등록하는 화면입니다.",
-    ),
     "/production/performance/machining": (
         "가공 실적 등록",
         "복합선반 LX, 탭핑 LB, 세레이션 등 가공 공정 실적을 등록하는 화면입니다.",
@@ -61,12 +53,20 @@ def _render_production_ready(request: Request, current_user, route_path: str):
 
 @router.get("/production/plans", response_class=HTMLResponse)
 def production_plans_page(request: Request, current_user=Depends(get_current_user)):
-    return _render_production_ready(request, current_user, "/production/plans")
+    return templates.TemplateResponse(
+        request=request,
+        name="production_plans.html",
+        context={"request": request, "user": current_user},
+    )
 
 
 @router.get("/production/orders", response_class=HTMLResponse)
 def production_orders_page(request: Request, current_user=Depends(get_current_user)):
-    return _render_production_ready(request, current_user, "/production/orders")
+    return templates.TemplateResponse(
+        request=request,
+        name="production_orders.html",
+        context={"request": request, "user": current_user},
+    )
 
 
 @router.get("/production/performance/machining", response_class=HTMLResponse)
