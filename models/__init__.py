@@ -16,6 +16,7 @@ from models.production_lot import ProductionLotModel
 from models.subcontract import SubcontractOrderMaster, SubcontractOrderItem, SubcontractLotAllocation
 from models.subcontract_outbound import SubcontractOutboundMaster, SubcontractOutboundItem, SubcontractOutboundLot
 from models.subcontract_inbound import SubcontractInboundMaster, SubcontractInboundItem, SubcontractInboundLot
+from models.quality import QualityInboundResult
 from models.partner import Partner, PartnerContact
 from models.purchase import PurchaseMaster, PurchaseItem
 
@@ -24,8 +25,10 @@ from models.purchase import PurchaseMaster, PurchaseItem
 Base.metadata.create_all(bind=engine)
 from models.purchase_migration import ensure_purchase_entry_columns
 from models.subcontract_inbound_migration import ensure_subcontract_inbound_columns
+from models.quality_migration import ensure_quality_master_data
 ensure_purchase_entry_columns(engine)
 ensure_subcontract_inbound_columns(engine)
+ensure_quality_master_data(engine)
 
 __all__ = [
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
@@ -34,6 +37,7 @@ __all__ = [
     "SubcontractOrderMaster", "SubcontractOrderItem", "SubcontractLotAllocation",
     "SubcontractOutboundMaster", "SubcontractOutboundItem", "SubcontractOutboundLot",
     "SubcontractInboundMaster", "SubcontractInboundItem", "SubcontractInboundLot",
+    "QualityInboundResult",
     "Base",
     "engine",
     "UserModel",
