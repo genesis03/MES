@@ -214,7 +214,7 @@
                         <a href="/purchase/inquiry/inbounds" id="nav-purchase-inquiry-inbounds">입고 조회</a>
                     </li>
                     <li class="submenu-item">
-                        <a href="/purchase/unreceived" id="nav-purchase-unreceived">미구매 현황</a>
+                        <a href="/purchase/unreceived" id="nav-purchase-unreceived">미입고 현황</a>
                     </li>
                 </ul>
             </li>
@@ -284,14 +284,14 @@
 
             <!-- 7. 품질관리 -->
             {% if user.role == "ADMIN" or (user.perms and user.perms.quality and user.perms.quality.enabled) %}
-            <li class="menu-item" id="qualityMenu">
+            <li class="menu-item{% if request.url.path.startswith('/quality/') %} open{% endif %}" id="qualityMenu">
                 <div class="menu-title" onclick="toggleAccordion('qualityMenu')">
                     <span>품질관리</span>
                     <span class="arrow-icon">▼</span>
                 </div>
                 <ul class="submenu">
                     <li class="submenu-item">
-                        <a href="javascript:void(0);" style="color: #64748b; cursor: default;">준비 중</a>
+                        <a href="/quality/inbound-defects" id="nav-quality-inbound-defects">입고 품목 불량 처리</a>
                     </li>
                 </ul>
             </li>
@@ -358,7 +358,8 @@
                 "/subcontract/inbound": "nav-subcontract-inbound",
                 "/purchase/inquiry/orders": "nav-purchase-inquiry-orders",
                 "/purchase/inquiry/inbounds": "nav-purchase-inquiry-inbounds",
-                "/purchase/unreceived": "nav-purchase-unreceived"
+                "/purchase/unreceived": "nav-purchase-unreceived",
+                "/quality/inbound-defects": "nav-quality-inbound-defects"
             };
             const activeNavId = routeMap[currentPath];
             if (activeNavId) {
