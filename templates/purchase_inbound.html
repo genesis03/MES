@@ -22,7 +22,7 @@
 .pi-results button {display:block;width:100%;padding:8px;background:#fff;border:0;border-bottom:1px solid #e2e8f0;text-align:left;cursor:pointer}
 .pi-results button:hover {background:#eff6ff}
 .pi-grid-wrap {overflow-x:auto}
-.pi-grid {border-collapse:collapse;width:100%;min-width:1550px;font-size:12px}
+.pi-grid {border-collapse:collapse;width:100%;min-width:1430px;font-size:12px}
 .pi-grid th,.pi-grid td {border:1px solid #dbe2eb;padding:4px;vertical-align:middle;white-space:nowrap}
 .pi-grid th {background:#f8fafc;text-align:center;height:30px}
 .pi-grid tbody tr:nth-child(even) {background:#fbfcfe}
@@ -51,10 +51,9 @@
 </div>
 <div class="pi-toolbar"><button class="pi-btn" type="button" id="pi-load-po">발주 불러오기</button><span class="pi-hint">기존 구매 수정은 입고 조회에서 순번 선택 후 선택수정을 누릅니다.</span></div>
 <div id="pi-po-list" class="pi-results-wrap" hidden><div class="pi-hint" style="margin-bottom:6px">미입고 발주 목록</div><div id="pi-po-results" class="pi-results"></div><div id="pi-po-message" class="pi-hint" style="margin-top:6px"></div></div>
-<div class="pi-grid-wrap"><table class="pi-grid"><thead><tr><th>No.</th><th>발주번호</th><th>품번</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>미입고수량</th><th>입고수량</th><th>납기일</th><th>공급사 LOT</th><th>입고창고</th><th>저장위치</th><th>원자재 LOT 번호</th><th>비고</th><th></th></tr></thead><tbody id="pi-lines"><tr><td colspan="16" class="pi-hint">발주 불러오기로 품목을 선택하세요.</td></tr></tbody></table></div>
-<select id="pi-warehouse-options" hidden><option value="">선택</option>{% for warehouse in warehouse_masters %}<option value="{{ warehouse.warehouse_code }}">{{ warehouse.warehouse_code }} · {{ warehouse.warehouse_name }}</option>{% endfor %}</select>
+<div class="pi-grid-wrap"><table class="pi-grid"><thead><tr><th>No.</th><th>발주번호</th><th>품번</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>미입고수량</th><th>입고수량</th><th>납기일</th><th>공급사 LOT</th><th>저장위치</th><th>원자재 LOT 번호</th><th>비고</th><th></th></tr></thead><tbody id="pi-lines"><tr><td colspan="15" class="pi-hint">발주 불러오기로 품목을 선택하세요.</td></tr></tbody></table></div>
 <select id="pi-location-options" hidden><option value="">선택</option>{% for location in storage_locations %}<option value="{{ location.location_code }}">{{ location.location_code }} · {{ location.location_name }}</option>{% endfor %}</select>
 <div class="pi-footer"><button class="pi-btn" type="button" id="pi-new">신규</button><button class="pi-btn pi-primary" type="submit" id="pi-save">저장</button><button class="pi-btn pi-confirm" type="button" id="pi-confirm" disabled>입고 확정</button><span id="pi-message" class="pi-message" role="status"></span></div>
 </form></div>
 {% endblock %}
-{% block extra_script %}<script src="/static/purchase_inbound.js?v=20260914-3"></script>{% endblock %}
+{% block extra_script %}<script src="/static/purchase_inbound.js?v=20260914-4"></script>{% endblock %}
