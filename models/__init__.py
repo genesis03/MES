@@ -32,10 +32,12 @@ from models.purchase_migration import ensure_purchase_entry_columns
 from models.subcontract_inbound_migration import ensure_subcontract_inbound_columns
 from models.quality_migration import ensure_quality_master_data
 from models.production_migration import ensure_production_order_columns
+from models.process_reference_migration import ensure_process_code_references
 ensure_purchase_entry_columns(engine)
 ensure_subcontract_inbound_columns(engine)
 ensure_quality_master_data(engine)
 ensure_production_order_columns(engine)
+ensure_process_code_references(engine)
 
 __all__ = [
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
