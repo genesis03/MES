@@ -8,6 +8,7 @@ from core.database import get_db
 from core.security import get_current_user
 from models.lot_relation import LotRelationModel
 from models.subcontract import SubcontractOrderItem, SubcontractOrderMaster
+from models.subcontract_outbound import SubcontractOutboundMaster
 
 router = APIRouter(prefix="/api/subcontract/inquiry", tags=["Subcontract Inquiry"])
 
@@ -105,8 +106,20 @@ def delete_selected_subcontract_orders(
     if missing:
         raise HTTPException(404, "외주가공 발주를 찾을 수 없습니다: " + ", ".join(map(str, missing)))
 
-    # LOT 배정 자체는 삭제를 막지 않습니다. 발주 삭제 시 cascade로 배정도 함께 해제됩니다.
-    # 단, 배정된 LOT가 이미 다음 공정에서 소비된 이력이 있으면 추적성 보호를 위해 삭제를 막습니다.
+    outbound_orders = {
+        row[0]
+        for row in db.query(SubcontractOutboundMaster.order_id).filter(
+            SubcontractOutboundMaster.order_id.in_(ids),
+            SubcontractOutboundMaster.status == "OUTBOUND",
+        ).distinct().all()
+    }
+    if outbound_orders:
+        blocked_nos = [master.order_no for master in masters if master.id in outbound_orders]
+        raise HTTPException(
+            409,
+            "이미 외주 출고 처리된 발주는 삭제할 수 없습니다. 먼저 출고 취소를 처리하세요: " + ", ".join(blocked_nos),
+        )
+
     blocked = []
     for master in masters:
         allocated_lots = sorted({
