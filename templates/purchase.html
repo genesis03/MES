@@ -19,18 +19,24 @@
 .po-suggestions button { display:block; width:100%; border:0; border-bottom:1px solid #e2e8f0; padding:6px 8px; background:#fff; text-align:left; cursor:pointer; font:inherit; }
 .po-suggestions button:hover,.po-suggestions button:focus { background:#eff6ff; }
 .po-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:7px; padding:9px 0; }
+.po-load-panel { display:flex; gap:8px; align-items:center; padding:10px; margin-bottom:8px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:4px; flex-wrap:wrap; }
+.po-load-panel[hidden] { display:none; }
+.po-load-panel input { width:260px; max-width:100%; padding:7px 9px; border:1px solid #cbd5e1; border-radius:4px; }
+.po-load-results { width:100%; max-height:180px; overflow:auto; background:#fff; border:1px solid #cbd5e1; border-radius:4px; }
+.po-load-results:empty { display:none; }
+.po-load-results button { display:block; width:100%; border:0; border-bottom:1px solid #e2e8f0; padding:7px 9px; background:#fff; text-align:left; cursor:pointer; }
 .po-btn { border:1px solid #cbd5e1; background:#fff; border-radius:4px; padding:6px 12px; font-size:12px; cursor:pointer; }
 .po-btn:hover { background:#f1f5f9; }
 .po-btn-primary { background:#2563eb; border-color:#2563eb; color:#fff; font-weight:700; }
 .po-btn-primary:hover { background:#1d4ed8; }
 .po-btn:disabled { opacity:.55; cursor:default; }
 .po-grid-wrap { overflow-x:auto; }
-.po-grid { border-collapse:collapse; width:100%; min-width:1020px; font-size:12px; }
+.po-grid { border-collapse:collapse; width:100%; min-width:1280px; font-size:12px; }
 .po-grid th,.po-grid td { border:1px solid #dbe2eb; padding:4px; vertical-align:top; }
 .po-grid th { background:#f8fafc; text-align:center; font-weight:600; white-space:nowrap; height:30px; }
 .po-grid tbody tr:nth-child(even) { background:#fbfcfe; }
-.po-grid input { box-sizing:border-box; width:100%; min-width:0; border:1px solid transparent; background:transparent; padding:5px; font:inherit; border-radius:3px; }
-.po-grid input:focus { border-color:#2563eb; background:#fff; outline:none; }
+.po-grid input,.po-grid select { box-sizing:border-box; width:100%; min-width:0; border:1px solid transparent; background:transparent; padding:5px; font:inherit; border-radius:3px; }
+.po-grid input:focus,.po-grid select:focus { border-color:#2563eb; background:#fff; outline:none; }
 .po-grid input[readonly] { color:#475569; }
 .po-grid input[type=number] { text-align:right; }
 .po-grid input[type=date] { min-width:126px; }
@@ -56,11 +62,26 @@
       <div class="po-field"><label for="po-state">상태</label><input id="po-state" value="발주완료" readonly></div>
       <div class="po-field po-field-wide"><label for="po-note">비고</label><textarea id="po-note" rows="2" maxlength="1000"></textarea></div>
     </div>
-    <div class="po-toolbar"><button class="po-btn" type="button" id="po-add-row">+ 행 추가</button><span class="po-lookup-hint">품번 또는 품명을 입력하면 품목 마스터의 품명·규격·단위를 채웁니다.</span></div>
-    <div class="po-grid-wrap"><table class="po-grid"><colgroup><col style="width:36px"><col style="width:170px"><col style="width:180px"><col style="width:130px"><col style="width:65px"><col style="width:95px"><col style="width:145px"><col style="width:180px"><col style="width:42px"></colgroup><thead><tr><th>No.</th><th>품번 / 품명 검색</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>납기일</th><th>비고</th><th></th></tr></thead><tbody id="po-lines"></tbody></table></div>
+    <div class="po-toolbar">
+      <button class="po-btn" type="button" id="po-load">발주 불러오기/수정</button>
+      <button class="po-btn" type="button" id="po-add-row">+ 행 추가</button>
+      <span class="po-lookup-hint">거래처·품목·창고·저장위치는 기준정보에서 선택합니다.</span>
+    </div>
+    <div id="po-load-panel" class="po-load-panel" hidden>
+      <input id="po-load-query" placeholder="발주번호 또는 거래처명 입력 (빈칸이면 최근 발주)">
+      <button class="po-btn" type="button" id="po-load-search">조회</button>
+      <span id="po-load-message" class="po-lookup-hint"></span>
+      <div id="po-load-results" class="po-load-results"></div>
+    </div>
+    <div class="po-grid-wrap"><table class="po-grid">
+      <colgroup><col style="width:36px"><col style="width:160px"><col style="width:170px"><col style="width:120px"><col style="width:60px"><col style="width:90px"><col style="width:120px"><col style="width:120px"><col style="width:135px"><col style="width:160px"><col style="width:42px"></colgroup>
+      <thead><tr><th>No.</th><th>품번 / 품명 검색</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>입고창고</th><th>저장위치</th><th>납기일</th><th>비고</th><th></th></tr></thead>
+      <tbody id="po-lines"></tbody>
+    </table></div>
+    <select id="po-warehouse-template" hidden><option value="">선택</option>{% for warehouse in warehouse_masters %}<option value="{{ warehouse.warehouse_code }}">{{ warehouse.warehouse_code }} · {{ warehouse.warehouse_name }}</option>{% endfor %}</select>
+    <select id="po-location-template" hidden><option value="">선택</option>{% for location in storage_locations %}<option value="{{ location.location_code }}">{{ location.location_code }} · {{ location.location_name }}</option>{% endfor %}</select>
     <div class="po-footer"><button class="po-btn" type="button" id="po-new">신규</button><button class="po-btn po-btn-primary" type="submit" id="po-save">저장</button><span id="po-message" class="po-message" role="status"></span></div>
   </form>
 </div>
 {% endblock %}
 {% block extra_script %}<script src="{{ url_for('static', path='purchase_orders.js') }}" defer></script>{% endblock %}
-
