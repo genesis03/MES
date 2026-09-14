@@ -14,6 +14,7 @@ from models.models import (
 from models.lot_relation import LotRelationModel
 from models.production_lot import ProductionLotModel
 from models.subcontract import SubcontractOrderMaster, SubcontractOrderItem, SubcontractLotAllocation
+from models.subcontract_outbound import SubcontractOutboundMaster, SubcontractOutboundItem, SubcontractOutboundLot
 from models.partner import Partner, PartnerContact
 from models.purchase import PurchaseMaster, PurchaseItem
 
@@ -28,6 +29,7 @@ __all__ = [
     "LotRelationModel",
     "ProductionLotModel",
     "SubcontractOrderMaster", "SubcontractOrderItem", "SubcontractLotAllocation",
+    "SubcontractOutboundMaster", "SubcontractOutboundItem", "SubcontractOutboundLot",
     "Base",
     "engine",
     "UserModel",
