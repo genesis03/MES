@@ -8,6 +8,7 @@ from core.database import get_db
 from core.security import get_current_user
 from models.models import ItemMasterModel, ProcessModel
 from models.production import ProductionPerformance, ProductionPlan, ProductionWorkOrder
+from models.worker import WorkerMaster, WorkerProcess
 
 router = APIRouter(prefix="/api/production", tags=["Production"])
 
@@ -45,7 +46,7 @@ class ProductionPerformancePayload(BaseModel):
     process_code: str
     good_qty: float = Field(gt=0)
     defect_qty: float = Field(ge=0, default=0)
-    operator_name: Optional[str] = None
+    operator_id: Optional[int] = None
     note: Optional[str] = None
 
 
@@ -144,6 +145,34 @@ def production_processes(
         .all()
     )
     return [{"process_code": x.process_code, "process_name": x.process_name} for x in rows]
+
+
+@router.get("/workers")
+def production_workers(
+    process_code: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    code = process_code.strip()
+    rows = (
+        db.query(WorkerMaster)
+        .join(WorkerProcess, WorkerProcess.worker_id == WorkerMaster.id)
+        .filter(
+            WorkerMaster.is_active == "Y",
+            WorkerProcess.process_code == code,
+        )
+        .order_by(WorkerMaster.worker_code.asc())
+        .all()
+    )
+    return [
+        {
+            "id": x.id,
+            "worker_code": x.worker_code,
+            "worker_name": x.worker_name,
+            "department": x.department or "",
+        }
+        for x in rows
+    ]
 
 
 @router.get("/plans")
@@ -427,6 +456,22 @@ def create_performance(
     if not process:
         raise HTTPException(status_code=404, detail="사용 가능한 공정을 찾을 수 없습니다.")
 
+    operator_name = None
+    if payload.operator_id is not None:
+        worker = (
+            db.query(WorkerMaster)
+            .join(WorkerProcess, WorkerProcess.worker_id == WorkerMaster.id)
+            .filter(
+                WorkerMaster.id == payload.operator_id,
+                WorkerMaster.is_active == "Y",
+                WorkerProcess.process_code == process_code,
+            )
+            .first()
+        )
+        if not worker:
+            raise HTTPException(status_code=400, detail="선택한 작업자는 해당 공정에 등록할 수 없습니다.")
+        operator_name = worker.worker_name
+
     perf = ProductionPerformance(
         work_order_id=order.id,
         performance_type="MACHINING",
@@ -434,7 +479,7 @@ def create_performance(
         process_code=process_code,
         good_qty=payload.good_qty,
         defect_qty=payload.defect_qty,
-        operator_name=(payload.operator_name or "").strip() or None,
+        operator_name=operator_name,
         note=(payload.note or "").strip() or None,
         created_by=_user_name(current_user),
     )
