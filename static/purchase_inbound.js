@@ -49,7 +49,7 @@
   function renumber() { lines.forEach((line, index) => { line.seq.textContent = String(index + 1); }); }
   function emptyLines(text = '발주 불러오기로 품목을 선택하세요.') {
     $('pi-lines').replaceChildren();
-    const tr = $('pi-lines').insertRow(); cell(tr, text).colSpan = 16;
+    const tr = $('pi-lines').insertRow(); cell(tr, text).colSpan = 15;
   }
 
   function markDirty() {
@@ -73,14 +73,13 @@
     qty.min = '0.000001'; qty.step = 'any';
     const date = field('date', '품목 납기일', item.delivery_date || ''); date.readOnly = true;
     const supplierLot = field('text', '공급사 LOT', item.supplier_lot_no || ''); supplierLot.maxLength = 100;
-    const warehouse = selectFromTemplate('pi-warehouse-options', '입고창고', item.warehouse_code || '');
     const location = selectFromTemplate('pi-location-options', '저장위치', item.storage_location || '');
     const lot = field('text', '원자재 LOT 번호', item.internal_lot_no || ''); lot.readOnly = true; lot.className = 'pi-lot';
     lot.placeholder = '확정 시 생성';
     const note = field('text', '비고', item.note || ''); note.maxLength = 500;
-    [qty, date, supplierLot, warehouse, location, lot, note].forEach(node => cell(tr).append(node));
+    [qty, date, supplierLot, location, lot, note].forEach(node => cell(tr).append(node));
 
-    const line = {item, tr, seq, qty, supplierLot, warehouse, location, lot, note};
+    const line = {item, tr, seq, qty, supplierLot, location, lot, note};
     const controls = cell(tr);
     if (allowStructureChange) {
       controls.append(button('LOT 행 추가', () => {
@@ -94,7 +93,7 @@
     } else {
       controls.textContent = '정정';
     }
-    [qty, supplierLot, warehouse, location, note].forEach(node => node.addEventListener('change', markDirty));
+    [qty, supplierLot, location, note].forEach(node => node.addEventListener('change', markDirty));
     [qty, supplierLot, note].forEach(node => node.addEventListener('input', markDirty));
     lines.push(line); $('pi-lines').append(tr);
     return line;
@@ -129,7 +128,7 @@
       storage_location: row.storage_location || ''
     }, true));
     $('pi-po-list').hidden = true;
-    message(rows[0].po_no + '의 미입고 품목을 불러왔습니다. 창고와 저장위치를 확인하세요.');
+    message(rows[0].po_no + '의 미입고 품목을 불러왔습니다. 저장위치를 확인하세요.');
   }
 
   async function loadOpenOrders() {
@@ -160,8 +159,8 @@
       const qty = Number(line.qty.value);
       if (!Number.isFinite(qty) || qty <= 0) throw new Error(line.seq.textContent + '행의 입고수량을 확인하세요.');
       if (!line.supplierLot.value.trim()) throw new Error(line.seq.textContent + '행의 공급사 LOT를 입력하세요.');
-      if (!line.warehouse.value) throw new Error(line.seq.textContent + '행의 입고창고를 선택하세요.');
       if (!line.location.value) throw new Error(line.seq.textContent + '행의 저장위치를 선택하세요.');
+      if (!line.item.warehouse_code) throw new Error(line.seq.textContent + '행의 발주 데이터에 입고창고 정보가 없습니다. 발주를 확인하세요.');
       return {
         inbound_item_id: line.item.inbound_item_id || null,
         po_item_id: line.item.po_item_id,
@@ -169,7 +168,7 @@
         inbound_qty: qty,
         supplier_lot_no: line.supplierLot.value.trim(),
         internal_lot_no: line.item.internal_lot_no || null,
-        warehouse_code: line.warehouse.value,
+        warehouse_code: line.item.warehouse_code,
         storage_location: line.location.value,
         note: line.note.value.trim() || null
       };
@@ -254,7 +253,7 @@
   }
 
   function init() {
-    const required = ['pi-form','pi-date','pi-vendor','pi-manager','pi-po-no','pi-inbound-no','pi-status','pi-note','pi-load-po','pi-po-list','pi-po-results','pi-po-message','pi-lines','pi-warehouse-options','pi-location-options','pi-new','pi-save','pi-confirm','pi-message'];
+    const required = ['pi-form','pi-date','pi-vendor','pi-manager','pi-po-no','pi-inbound-no','pi-status','pi-note','pi-load-po','pi-po-list','pi-po-results','pi-po-message','pi-lines','pi-location-options','pi-new','pi-save','pi-confirm','pi-message'];
     const missing = required.filter(id => !$(id));
     if (missing.length) {
       console.error('Purchase inbound UI missing elements:', missing);
