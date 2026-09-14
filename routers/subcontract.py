@@ -8,8 +8,16 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from models.lot_relation import LotRelationModel
-from models.models import ItemMasterModel, ProcessModel, PurchaseInboundItem, PurchaseInboundMaster, StorageLocationModel
+from models.models import (
+    ItemBomModel,
+    ItemMasterModel,
+    ProcessModel,
+    PurchaseInboundItem,
+    PurchaseInboundMaster,
+    StorageLocationModel,
+)
 from models.partner import Partner
+from models.production_lot import ProductionLotModel
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from schemas.subcontract import LotAllocationInput, SubcontractOrderInput
 
@@ -44,10 +52,27 @@ def _processing(db: Session, code: str) -> ProcessModel:
     return row
 
 
-def _derive_order_part(previous_part_no: str, processing_name: str, requested: str | None) -> str:
-    compact_name = (processing_name or "").replace(" ", "")
+def _resolve_order_part(db: Session, previous_part_no: str, processing: ProcessModel, requested: str | None) -> str:
+    """외주가공 산출 품번은 문자열 조합이 아니라 BOM 관계를 우선 사용합니다."""
+    query = db.query(ItemBomModel).filter(ItemBomModel.child_part_no == previous_part_no)
+
+    if requested:
+        exact = query.filter(ItemBomModel.parent_part_no == requested.strip()).first()
+        if exact is not None:
+            return exact.parent_part_no
+
+    process_match = query.filter(ItemBomModel.process_code == processing.process_code).order_by(ItemBomModel.sort_order, ItemBomModel.id).first()
+    if process_match is not None:
+        return process_match.parent_part_no
+
+    candidates = query.order_by(ItemBomModel.sort_order, ItemBomModel.id).all()
+    if len(candidates) == 1:
+        return candidates[0].parent_part_no
+
+    compact_name = (processing.process_name or "").replace(" ", "")
     if "은도금" in compact_name:
-        return previous_part_no if previous_part_no.endswith("-Ag") else previous_part_no + "-Ag"
+        raise HTTPException(422, f"{previous_part_no}의 은도금 발주 품번을 BOM에서 찾을 수 없습니다.")
+
     return (requested or previous_part_no).strip()
 
 
@@ -71,12 +96,33 @@ def _validate_header(db: Session, payload: SubcontractOrderInput):
     return partner, processing
 
 
-def _available_purchase_lots(db: Session, part_no: str, current_item_id: int | None = None):
-    """현재 코드에서 확인 가능한 확정 구매 LOT를 반환합니다.
+def _available_qty(db: Session, lot_no: str, base_qty: float, current_item_id: int | None = None) -> float:
+    consumed = (
+        db.query(func.coalesce(func.sum(LotRelationModel.consumed_qty), 0.0))
+        .filter(LotRelationModel.parent_lot_no == lot_no)
+        .scalar()
+        or 0.0
+    )
+    reserved_query = (
+        db.query(func.coalesce(func.sum(SubcontractLotAllocation.allocated_qty), 0.0))
+        .join(SubcontractOrderItem, SubcontractOrderItem.id == SubcontractLotAllocation.order_item_id)
+        .join(SubcontractOrderMaster, SubcontractOrderMaster.id == SubcontractOrderItem.order_id)
+        .filter(
+            SubcontractLotAllocation.lot_no == lot_no,
+            SubcontractOrderMaster.status.in_(["DRAFT", "LOT_ALLOCATING", "ORDERED"]),
+        )
+    )
+    if current_item_id:
+        reserved_query = reserved_query.filter(SubcontractLotAllocation.order_item_id != current_item_id)
+    reserved = reserved_query.scalar() or 0.0
+    return float(Decimal(str(base_qty)) - Decimal(str(consumed)) - Decimal(str(reserved)))
 
-    생산 LOT 원장이 붙으면 이 함수의 공급원만 확장하면 외주 발주 화면은 그대로 사용할 수 있습니다.
-    """
-    rows = (
+
+def _available_lots(db: Session, part_no: str, current_item_id: int | None = None):
+    """구매 LOT + 생산 LOT 중 현재 외주발주에 사용할 수 있는 LOT를 반환합니다."""
+    result = []
+
+    purchase_rows = (
         db.query(PurchaseInboundItem)
         .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
         .filter(
@@ -88,36 +134,37 @@ def _available_purchase_lots(db: Session, part_no: str, current_item_id: int | N
         .order_by(PurchaseInboundItem.id)
         .all()
     )
-    result = []
-    for inbound_item in rows:
-        lot_no = inbound_item.internal_lot_no
-        consumed = (
-            db.query(func.coalesce(func.sum(LotRelationModel.consumed_qty), 0.0))
-            .filter(LotRelationModel.parent_lot_no == lot_no)
-            .scalar()
-            or 0.0
-        )
-        reserved_query = (
-            db.query(func.coalesce(func.sum(SubcontractLotAllocation.allocated_qty), 0.0))
-            .join(SubcontractOrderItem, SubcontractOrderItem.id == SubcontractLotAllocation.order_item_id)
-            .join(SubcontractOrderMaster, SubcontractOrderMaster.id == SubcontractOrderItem.order_id)
-            .filter(
-                SubcontractLotAllocation.lot_no == lot_no,
-                SubcontractOrderMaster.status.in_(["DRAFT", "LOT_ALLOCATING", "ORDERED"]),
-            )
-        )
-        if current_item_id:
-            reserved_query = reserved_query.filter(SubcontractLotAllocation.order_item_id != current_item_id)
-        reserved = reserved_query.scalar() or 0.0
-        available = float(Decimal(str(inbound_item.inbound_qty)) - Decimal(str(consumed)) - Decimal(str(reserved)))
+    for row in purchase_rows:
+        available = _available_qty(db, row.internal_lot_no, row.inbound_qty, current_item_id)
         if available > 0:
             result.append({
-                "lot_no": lot_no,
-                "part_no": inbound_item.part_no,
+                "lot_no": row.internal_lot_no,
+                "part_no": row.part_no,
                 "lot_qty": available,
-                "storage_location": inbound_item.storage_location,
+                "storage_location": row.storage_location,
                 "source": "PURCHASE",
             })
+
+    production_rows = (
+        db.query(ProductionLotModel)
+        .filter(
+            ProductionLotModel.part_no == part_no,
+            ProductionLotModel.status == "ACTIVE",
+        )
+        .order_by(ProductionLotModel.lot_no)
+        .all()
+    )
+    for row in production_rows:
+        available = _available_qty(db, row.lot_no, row.lot_qty, current_item_id)
+        if available > 0:
+            result.append({
+                "lot_no": row.lot_no,
+                "part_no": row.part_no,
+                "lot_qty": available,
+                "storage_location": row.storage_location or "",
+                "source": "PRODUCTION",
+            })
+
     return result
 
 
@@ -171,6 +218,28 @@ def _serialize_order(master: SubcontractOrderMaster):
     }
 
 
+@router.get("/bom-output")
+def subcontract_bom_output(
+    previous_part_no: str = Query(..., min_length=1, max_length=50),
+    process_code: str = Query(..., min_length=1, max_length=50),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    previous = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == previous_part_no).first()
+    if previous is None:
+        raise HTTPException(404, "품목 마스터에서 이전 품번을 찾을 수 없습니다.")
+    processing = _processing(db, process_code)
+    order_part_no = _resolve_order_part(db, previous_part_no, processing, None)
+    output = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == order_part_no).first()
+    return {
+        "previous_part_no": previous_part_no,
+        "order_part_no": order_part_no,
+        "order_part_name": output.part_name if output else previous.part_name,
+        "spec": output.spec if output else previous.spec or "",
+        "unit": output.unit if output else previous.unit,
+    }
+
+
 @router.get("/stock")
 def subcontract_stock(
     part_no: str = Query(..., min_length=1, max_length=50),
@@ -181,12 +250,12 @@ def subcontract_stock(
     part = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
     if part is None:
         raise HTTPException(404, "품목 마스터에서 이전 품번을 찾을 수 없습니다.")
-    lots = _available_purchase_lots(db, part_no, order_item_id)
+    lots = _available_lots(db, part_no, order_item_id)
     return {
         "part_no": part_no,
         "stock_qty": sum(float(row["lot_qty"]) for row in lots),
         "lots": lots,
-        "source_note": "현재 구매입고 LOT 기준 재고입니다. 생산 LOT 원장 연동 시 생산 LOT도 이 목록에 포함됩니다.",
+        "source_note": "구매입고 LOT와 생산 LOT의 현재 사용가능 수량입니다.",
     }
 
 
@@ -223,7 +292,7 @@ def create_subcontract_order(
     for item_payload in payload.items:
         previous = part_rows[item_payload.previous_part_no]
         processing = _processing(db, item_payload.processing_type_code)
-        order_part_no = _derive_order_part(previous.part_no, processing.process_name, item_payload.order_part_no)
+        order_part_no = _resolve_order_part(db, previous.part_no, processing, item_payload.order_part_no)
         output_master = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == order_part_no).first()
         master.items.append(SubcontractOrderItem(
             previous_part_no=previous.part_no,
@@ -280,7 +349,7 @@ def update_subcontract_order(
     for item_payload in payload.items:
         previous = part_rows[item_payload.previous_part_no]
         processing = _processing(db, item_payload.processing_type_code)
-        order_part_no = _derive_order_part(previous.part_no, processing.process_name, item_payload.order_part_no)
+        order_part_no = _resolve_order_part(db, previous.part_no, processing, item_payload.order_part_no)
         output_master = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == order_part_no).first()
         master.items.append(SubcontractOrderItem(
             previous_part_no=previous.part_no,
@@ -328,7 +397,7 @@ def set_subcontract_lots(
     if item is None or item.order_id != master.id:
         raise HTTPException(404, "외주가공 발주 품목을 찾을 수 없습니다.")
 
-    available = {row["lot_no"]: row for row in _available_purchase_lots(db, item.previous_part_no, item.id)}
+    available = {row["lot_no"]: row for row in _available_lots(db, item.previous_part_no, item.id)}
     requested = list(dict.fromkeys(payload.lot_nos))
     missing = [lot_no for lot_no in requested if lot_no not in available]
     if missing:
