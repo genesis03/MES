@@ -28,21 +28,33 @@
     return data;
   }
 
-  function processOptions() {
-    return [...$('so-process').options].map(option => ({code: option.value, name: option.dataset.name || ''}));
-  }
-  function processName(code) { return processOptions().find(x => x.code === code)?.name || ''; }
   function cloneProcessSelect(value = '') {
     const node = document.createElement('select');
     [...$('so-process').options].forEach(option => node.append(option.cloneNode(true)));
     node.value = value || $('so-process').value || '';
     return node;
   }
-  function derivePartNo(previousPartNo, processCode) {
-    if (!previousPartNo) return '';
-    const name = processName(processCode).replace(/\s/g, '');
-    if (name.includes('은도금')) return previousPartNo.endsWith('-Ag') ? previousPartNo : previousPartNo + '-Ag';
-    return previousPartNo;
+
+  async function resolveBomOutput(row) {
+    if (!row.part?.part_no || !row.process.value) {
+      row.orderPart.value = '';
+      return;
+    }
+    row.orderPart.value = 'BOM 조회중';
+    try {
+      const data = await request('/api/subcontract/bom-output?' + new URLSearchParams({
+        previous_part_no: row.part.part_no,
+        process_code: row.process.value
+      }));
+      if (!rows.includes(row) || row.part?.part_no !== data.previous_part_no) return;
+      row.orderPart.value = data.order_part_no || '';
+      row.orderName.value = data.order_part_name || '';
+      row.spec.value = data.spec || '';
+      row.unit.value = data.unit || '';
+    } catch (error) {
+      row.orderPart.value = '';
+      msg(error.message);
+    }
   }
 
   function vendorOptions() {
@@ -104,10 +116,11 @@
     row.name = part.part_name || '';
     row.spec.value = part.spec || '';
     row.unit.value = part.unit || '';
-    row.orderPart.value = derivePartNo(part.part_no, row.process.value);
-    row.orderName.value = part.part_name || '';
+    row.orderPart.value = '';
+    row.orderName.value = '';
     row.suggestions.replaceChildren();
     if (!row.date.value) row.date.value = $('so-due-date').value;
+    resolveBomOutput(row);
     loadStock(row);
   }
 
@@ -130,7 +143,7 @@
     const suggestions = document.createElement('div'); suggestions.className = 'so-suggestions';
     const prevCell = cell(tr); prevCell.append(previous, suggestions);
     const stock = input('text', '이전품 재고'); stock.readOnly = true; cell(tr).append(stock);
-    const orderPart = input('text', '발주 품번'); cell(tr).append(orderPart);
+    const orderPart = input('text', '발주 품번'); orderPart.readOnly = true; cell(tr).append(orderPart);
     const orderName = input('text', '발주 품명'); orderName.readOnly = true; cell(tr).append(orderName);
     const spec = input('text', '규격'); spec.readOnly = true; cell(tr).append(spec);
     const process = cloneProcessSelect(item?.processing_type_code || ''); cell(tr).append(process);
@@ -151,7 +164,7 @@
       const keyword = previous.value.trim(); const version = row.version;
       if (keyword) row.timer = setTimeout(() => searchPart(row, keyword, version).catch(error => { msg(error.message); }), 180);
     });
-    process.addEventListener('change', () => { if (row.part) row.orderPart.value = derivePartNo(row.part.part_no, process.value); });
+    process.addEventListener('change', () => { if (row.part) resolveBomOutput(row); });
     qty.addEventListener('input', () => { allocationStatus(row); updateConfirmState(); });
     lotBtn.addEventListener('click', () => openLotModal(row));
     remove.addEventListener('click', () => {
@@ -200,6 +213,8 @@
     (data.items || []).forEach((item, index) => {
       const row = rows[index]; if (!row) return;
       row.itemId = item.id;
+      row.previous.value = item.previous_part_no || '';
+      row.part = {part_no:item.previous_part_no, part_name:item.order_part_name || '', spec:item.spec || '', unit:item.unit || ''};
       row.orderPart.value = item.order_part_no || '';
       row.orderName.value = item.order_part_name || '';
       row.spec.value = item.spec || '';
@@ -234,8 +249,9 @@
     const items = used.map(row => {
       if (!row.part) throw new Error(`${row.seq.textContent}행의 이전 품번을 검색 결과에서 선택하세요.`);
       if (!row.process.value) throw new Error(`${row.seq.textContent}행의 가공유형을 선택하세요.`);
+      if (!row.orderPart.value.trim() || row.orderPart.value === 'BOM 조회중') throw new Error(`${row.seq.textContent}행의 BOM 발주 품번을 확인하세요.`);
       const qty = Number(row.qty.value); if (!Number.isFinite(qty) || qty <= 0) throw new Error(`${row.seq.textContent}행의 발주수량을 확인하세요.`);
-      return {previous_part_no:row.part.part_no, processing_type_code:row.process.value, order_part_no:row.orderPart.value.trim() || null, order_qty:qty, delivery_date:row.date.value || null, note:row.note.value.trim() || null};
+      return {previous_part_no:row.part.part_no, processing_type_code:row.process.value, order_part_no:row.orderPart.value.trim(), order_qty:qty, delivery_date:row.date.value || null, note:row.note.value.trim() || null};
     });
     return {order_date:$('so-date').value, partner_id:vendor.id, partner_name:vendor.name, processing_type_code:$('so-process').value, delivery_due_date:$('so-due-date').value || null, external_storage_location:$('so-location').value, manager_name:$('so-manager').value.trim() || null, note:$('so-note').value.trim() || null, items};
   }
@@ -306,7 +322,7 @@
     const required=['so-form','so-date','so-vendor','so-vendors','so-process','so-due-date','so-location','so-manager','so-number','so-status','so-note','so-add-row','so-lines','so-new','so-save','so-confirm','so-message','so-lot-modal','so-lot-close','so-lot-cancel','so-lot-apply','so-lot-body'];
     const missing=required.filter(id=>!$(id)); if(missing.length){console.error('Subcontract order UI missing:',missing);return;}
     $('so-vendor').addEventListener('input',resolveVendor); $('so-vendor').addEventListener('change',resolveVendor);
-    $('so-process').addEventListener('change',()=>rows.forEach(row=>{if(!row.process.value)row.process.value=$('so-process').value;if(row.part)row.orderPart.value=derivePartNo(row.part.part_no,row.process.value);}));
+    $('so-process').addEventListener('change',()=>rows.forEach(row=>{if(!row.process.value)row.process.value=$('so-process').value;if(row.part)resolveBomOutput(row);}));
     $('so-due-date').addEventListener('change',()=>rows.forEach(row=>{if(!row.date.value)row.date.value=$('so-due-date').value;}));
     $('so-add-row').addEventListener('click',()=>addRow(null,true)); $('so-new').addEventListener('click',reset); $('so-form').addEventListener('submit',save); $('so-confirm').addEventListener('click',confirmOrder);
     $('so-lot-close').addEventListener('click',closeLotModal); $('so-lot-cancel').addEventListener('click',closeLotModal); $('so-lot-apply').addEventListener('click',applyLots); $('so-lot-modal').addEventListener('click',event=>{if(event.target===$('so-lot-modal'))closeLotModal();});
