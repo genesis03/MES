@@ -29,6 +29,7 @@ class ProductionWorkOrder(Base):
     __table_args__ = (
         CheckConstraint("order_qty > 0", name="ck_production_order_qty_positive"),
         CheckConstraint("production_qty >= 0", name="ck_production_qty_nonnegative"),
+        CheckConstraint("priority BETWEEN 1 AND 4", name="ck_production_order_priority"),
         CheckConstraint(
             "status IN ('WAITING','IN_PROGRESS','COMPLETED','CANCELLED')",
             name="ck_production_order_status",
@@ -43,6 +44,7 @@ class ProductionWorkOrder(Base):
     part_no = Column(String(50), ForeignKey("item_master.part_no"), nullable=False, index=True)
     order_qty = Column(Float, nullable=False)
     production_qty = Column(Float, nullable=False, default=0.0)
+    priority = Column(Integer, nullable=False, default=4, index=True)
     status = Column(String(20), nullable=False, default="WAITING", index=True)
     note = Column(Text, nullable=True)
     created_by = Column(String(50), nullable=True)
