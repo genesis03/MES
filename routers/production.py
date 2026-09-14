@@ -1,13 +1,15 @@
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import get_current_user
-from models.models import ItemMasterModel, ProcessModel
+from models.models import ItemBomModel, ItemMasterModel, ProcessModel
 from models.production import ProductionPerformance, ProductionPlan, ProductionWorkOrder
+from models.production_lot import ProductionLotModel
 from models.worker import WorkerMaster, WorkerProcess
 
 router = APIRouter(prefix="/api/production", tags=["Production"])
@@ -33,7 +35,20 @@ class ProductionOrderPayload(BaseModel):
     plan_id: Optional[int] = None
     part_no: str
     order_qty: float = Field(gt=0)
+    priority: int = Field(default=4, ge=1, le=4)
     note: Optional[str] = None
+
+
+class ProductionOrderBatchItem(BaseModel):
+    part_no: str
+    order_qty: float = Field(gt=0)
+    priority: int = Field(default=4, ge=1, le=4)
+
+
+class ProductionOrderBatchPayload(BaseModel):
+    order_date: str
+    scheduled_date: Optional[str] = None
+    items: List[ProductionOrderBatchItem]
 
 
 class ProductionOrderStatusPayload(BaseModel):
@@ -65,6 +80,21 @@ def _item_or_404(db: Session, part_no: str):
     return item
 
 
+def _work_order_prefix_and_seq(db: Session, order_date: str):
+    date_key = order_date.replace("-", "")[2:]
+    prefix = f"W{date_key}"
+    last = (
+        db.query(ProductionWorkOrder)
+        .filter(ProductionWorkOrder.work_order_no.like(f"{prefix}%"))
+        .order_by(ProductionWorkOrder.work_order_no.desc())
+        .first()
+    )
+    seq = 1
+    if last and last.work_order_no[-3:].isdigit():
+        seq = int(last.work_order_no[-3:]) + 1
+    return prefix, seq
+
+
 def _serialize_plan(plan: ProductionPlan, item: Optional[ItemMasterModel] = None):
     return {
         "id": plan.id,
@@ -89,6 +119,7 @@ def _serialize_order(order: ProductionWorkOrder, item: Optional[ItemMasterModel]
         "order_qty": order.order_qty,
         "production_qty": order.production_qty,
         "progress_rate": round((order.production_qty / order.order_qty) * 100, 1) if order.order_qty else 0,
+        "priority": int(order.priority or 4),
         "status": order.status,
         "status_name": STATUS_NAMES.get(order.status, order.status),
         "note": order.note or "",
@@ -131,6 +162,88 @@ def production_items(
         {"part_no": item.part_no, "part_name": item.part_name, "unit": item.unit or "EA"}
         for item in items
     ]
+
+
+@router.get("/order-items/search")
+def search_order_items(
+    part_no: Optional[str] = Query(None),
+    part_name: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    query = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == "Y")
+    if part_no:
+        query = query.filter(ItemMasterModel.part_no.ilike(f"%{part_no.strip()}%"))
+    if part_name:
+        query = query.filter(ItemMasterModel.part_name.ilike(f"%{part_name.strip()}%"))
+
+    items = query.order_by(ItemMasterModel.part_no.asc()).limit(500).all()
+    if not items:
+        return []
+
+    part_nos = [x.part_no for x in items]
+
+    # 직상위 BOM 한 건을 화면의 모품번/공정/공정순서 기준으로 사용합니다.
+    bom_rows = (
+        db.query(ItemBomModel)
+        .filter(ItemBomModel.child_part_no.in_(part_nos))
+        .order_by(ItemBomModel.child_part_no.asc(), ItemBomModel.sort_order.asc(), ItemBomModel.id.asc())
+        .all()
+    )
+    bom_map = {}
+    for row in bom_rows:
+        if row.child_part_no not in bom_map:
+            bom_map[row.child_part_no] = row
+
+    process_codes = {
+        (bom_map.get(item.part_no).process_code if bom_map.get(item.part_no) else item.production_loc)
+        for item in items
+    }
+    process_codes.discard(None)
+    process_codes.discard("")
+    process_map = {
+        x.process_code: x
+        for x in db.query(ProcessModel).filter(ProcessModel.process_code.in_(process_codes)).all()
+    } if process_codes else {}
+
+    production_rows = (
+        db.query(ProductionWorkOrder.part_no, func.coalesce(func.sum(ProductionPerformance.good_qty), 0))
+        .join(ProductionPerformance, ProductionPerformance.work_order_id == ProductionWorkOrder.id)
+        .filter(ProductionWorkOrder.part_no.in_(part_nos))
+        .group_by(ProductionWorkOrder.part_no)
+        .all()
+    )
+    production_map = {part: float(qty or 0) for part, qty in production_rows}
+
+    stock_rows = (
+        db.query(ProductionLotModel.part_no, func.coalesce(func.sum(ProductionLotModel.lot_qty), 0))
+        .filter(
+            ProductionLotModel.part_no.in_(part_nos),
+            ProductionLotModel.status == "ACTIVE",
+        )
+        .group_by(ProductionLotModel.part_no)
+        .all()
+    )
+    stock_map = {part: float(qty or 0) for part, qty in stock_rows}
+
+    result = []
+    for item in items:
+        bom = bom_map.get(item.part_no)
+        process_code = (bom.process_code if bom else None) or item.production_loc or ""
+        process = process_map.get(process_code)
+        result.append({
+            "part_no": item.part_no,
+            "part_name": item.part_name,
+            "material_type": item.material_type or "",
+            "parent_part_no": bom.parent_part_no if bom else "",
+            "process_code": process_code,
+            "process_name": process.process_name if process else "",
+            "process_order": int(bom.sort_order or 0) if bom else 0,
+            "safety_stock": float(item.safety_stock or 0),
+            "current_stock": stock_map.get(item.part_no, 0),
+            "production_qty": production_map.get(item.part_no, 0),
+        })
+    return result
 
 
 @router.get("/processes")
@@ -278,7 +391,11 @@ def list_orders(
     if status:
         query = query.filter(ProductionWorkOrder.status == status)
 
-    orders = query.order_by(ProductionWorkOrder.order_date.desc(), ProductionWorkOrder.id.desc()).all()
+    orders = query.order_by(
+        ProductionWorkOrder.order_date.desc(),
+        ProductionWorkOrder.priority.asc(),
+        ProductionWorkOrder.id.desc(),
+    ).all()
     item_map = {
         item.part_no: item
         for item in db.query(ItemMasterModel).filter(
@@ -296,7 +413,7 @@ def performance_orders(
     orders = (
         db.query(ProductionWorkOrder)
         .filter(ProductionWorkOrder.status.in_(["WAITING", "IN_PROGRESS"]))
-        .order_by(ProductionWorkOrder.order_date.desc(), ProductionWorkOrder.id.desc())
+        .order_by(ProductionWorkOrder.priority.asc(), ProductionWorkOrder.order_date.desc(), ProductionWorkOrder.id.desc())
         .all()
     )
     item_map = {
@@ -324,17 +441,7 @@ def create_order(
         if plan.part_no != part_no:
             raise HTTPException(status_code=400, detail="생산계획 품번과 작업지시 품번이 일치하지 않습니다.")
 
-    date_key = payload.order_date.replace("-", "")[2:]
-    prefix = f"W{date_key}"
-    last = (
-        db.query(ProductionWorkOrder)
-        .filter(ProductionWorkOrder.work_order_no.like(f"{prefix}%"))
-        .order_by(ProductionWorkOrder.work_order_no.desc())
-        .first()
-    )
-    seq = 1
-    if last and last.work_order_no[-3:].isdigit():
-        seq = int(last.work_order_no[-3:]) + 1
+    prefix, seq = _work_order_prefix_and_seq(db, payload.order_date)
     work_order_no = f"{prefix}{seq:03d}"
 
     order = ProductionWorkOrder(
@@ -345,6 +452,7 @@ def create_order(
         part_no=part_no,
         order_qty=payload.order_qty,
         production_qty=0,
+        priority=payload.priority,
         status="WAITING",
         note=(payload.note or "").strip() or None,
         created_by=_user_name(current_user),
@@ -357,6 +465,46 @@ def create_order(
         "id": order.id,
         "work_order_no": order.work_order_no,
         "message": "작업지시가 등록되었습니다.",
+    }
+
+
+@router.post("/orders/batch")
+def create_orders_batch(
+    payload: ProductionOrderBatchPayload,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if not payload.order_date.strip():
+        raise HTTPException(status_code=400, detail="지시일자는 필수입니다.")
+    if not payload.items:
+        raise HTTPException(status_code=400, detail="작업지시 대상 품번을 선택해 주세요.")
+
+    prefix, seq = _work_order_prefix_and_seq(db, payload.order_date)
+    created = []
+    for index, row in enumerate(payload.items):
+        part_no = row.part_no.strip()
+        _item_or_404(db, part_no)
+        order = ProductionWorkOrder(
+            work_order_no=f"{prefix}{seq + index:03d}",
+            order_date=payload.order_date,
+            scheduled_date=(payload.scheduled_date or "").strip() or None,
+            plan_id=None,
+            part_no=part_no,
+            order_qty=row.order_qty,
+            production_qty=0,
+            priority=row.priority,
+            status="WAITING",
+            created_by=_user_name(current_user),
+        )
+        db.add(order)
+        created.append(order)
+
+    db.commit()
+    return {
+        "status": "success",
+        "count": len(created),
+        "work_order_nos": [x.work_order_no for x in created],
+        "message": f"작업지시 {len(created)}건이 생성되었습니다.",
     }
 
 
