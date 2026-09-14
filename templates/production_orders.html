@@ -3,65 +3,95 @@
 
 {% block extra_head %}
 <style>
-    .page-head{display:flex;justify-content:space-between;align-items:end;margin-bottom:18px}
-    .page-head h1{font-size:24px;margin-bottom:5px}.page-head p{font-size:13px;color:#64748b}
-    .card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:18px;margin-bottom:16px}
-    .grid{display:grid;grid-template-columns:160px 160px minmax(240px,1fr) 160px;gap:12px 14px;align-items:end}
-    label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:5px}
-    input,select{width:100%;height:36px;border:1px solid #cbd5e1;border-radius:5px;padding:0 9px;background:#fff}
-    .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}.btn{border:0;border-radius:5px;padding:9px 15px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#334155}.danger{background:#dc2626;color:#fff}.success{background:#15803d;color:#fff}.warning{background:#d97706;color:#fff}.mini{padding:5px 9px;font-size:11.5px}
-    table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{border-bottom:1px solid #e2e8f0;padding:9px;text-align:left}th{background:#f8fafc;color:#475569}.num{text-align:right}.msg{font-size:12px;margin-top:10px}.ok{color:#15803d}.err{color:#b91c1c}.status{display:inline-block;font-weight:700;padding:4px 8px;border-radius:12px;background:#eef2f7;color:#334155}.row-actions{display:flex;gap:5px;flex-wrap:wrap}
+    .page-head{display:flex;justify-content:space-between;align-items:end;margin-bottom:14px}
+    .page-head h1{font-size:23px;margin-bottom:4px}.page-head p{font-size:12.5px;color:#64748b}
+    .panel{background:#fff;border:1px solid #dbe3ec;border-radius:4px;margin-bottom:14px;overflow:hidden}
+    .toolbar{display:grid;grid-template-columns:145px 145px 170px 220px 170px 120px 150px 110px auto auto;gap:10px;align-items:end;padding:14px;border-top:1px solid #59a5d8}
+    label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px}
+    input,select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:3px;padding:0 8px;background:#fff;font-size:12.5px}
+    .btn{height:34px;border:0;border-radius:3px;padding:0 18px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap}
+    .search{background:#1597d3}.create{background:#126da8}.apply{background:#b12a29}.priority-btn{background:#475569}
+    .msg{padding:0 14px 12px;font-size:12px}.ok{color:#15803d}.err{color:#b91c1c}
+    .table-wrap{overflow:auto;max-height:calc(100vh - 245px)}
+    table{width:100%;border-collapse:collapse;font-size:12px;min-width:1450px}
+    th,td{border:1px solid #d8dee6;padding:7px 7px;white-space:nowrap}
+    th{position:sticky;top:0;background:#f8fafc;color:#64748b;text-align:center;font-weight:700;z-index:1}
+    td.num{text-align:right}td.center{text-align:center}
+    tbody tr:nth-child(even){background:#fafafa}tbody tr:hover{background:#eff6ff}
+    .row-priority{height:28px;min-width:72px}.row-qty{height:28px;text-align:right;min-width:95px}
+    .empty{text-align:center;color:#94a3b8;padding:24px}
+    .red{color:#ef4444}.blue{color:#2563eb}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="page-head"><div><h1>작업지시 입력</h1><p>품번별 작업지시를 등록합니다. 첫 생산실적 등록 시 상태가 대기에서 생산중으로 자동 변경됩니다.</p></div></div>
+<div class="page-head">
+    <div><h1>작업지시 입력</h1><p>품번/품명 조회 후 대상 품목을 선택하고 배정수량을 입력해 작업지시를 생성합니다.</p></div>
+</div>
 
-<div class="card">
-    <div class="grid">
+<div class="panel">
+    <div class="toolbar">
         <div><label>지시일자 *</label><input type="date" id="orderDate"></div>
         <div><label>생산예정일</label><input type="date" id="scheduledDate"></div>
-        <div><label>품번 *</label><select id="partNo"><option value="">선택</option></select></div>
-        <div><label>지시수량 *</label><input type="number" id="orderQty" min="0.001" step="0.001"></div>
-        <div style="grid-column:1/3"><label>생산계획 연결 (선택)</label><select id="planId"><option value="">연결 안 함</option></select></div>
-        <div style="grid-column:3/5"><label>비고</label><input type="text" id="note" maxlength="1000"></div>
+        <div><label>품번</label><input type="text" id="searchPartNo" placeholder="품번"></div>
+        <div><label>품명</label><input type="text" id="searchPartName" placeholder="품명"></div>
+        <div><label>배정 수량 일괄 적용</label><input type="number" id="bulkQty" min="0" step="0.001" value="0"></div>
+        <button class="btn apply" onclick="applyQty()">일괄 적용</button>
+        <div><label>우선순위 일괄 적용</label><select id="bulkPriority"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option></select></div>
+        <button class="btn priority-btn" onclick="applyPriority()">우선순위 적용</button>
+        <button class="btn create" onclick="createOrders()">생성</button>
+        <button class="btn search" onclick="loadItems()">조회</button>
     </div>
-    <div class="actions"><button class="btn secondary" onclick="resetForm()">초기화</button><button class="btn primary" onclick="saveOrder()">작업지시 등록</button></div>
     <div id="msg" class="msg"></div>
 </div>
 
-<div class="card">
-    <div class="grid" style="grid-template-columns:160px 160px minmax(200px,1fr) 160px auto;">
-        <div><label>시작일</label><input type="date" id="startDate"></div>
-        <div><label>종료일</label><input type="date" id="endDate"></div>
-        <div><label>품번</label><input type="text" id="searchPartNo" placeholder="품번 일부 입력"></div>
-        <div><label>상태</label><select id="searchStatus"><option value="">전체</option><option value="WAITING">대기</option><option value="IN_PROGRESS">생산중</option><option value="COMPLETED">완료</option><option value="CANCELLED">취소</option></select></div>
-        <div><button class="btn primary" onclick="loadOrders()">조회</button></div>
-    </div>
-</div>
-
-<div class="card">
-    <table>
-        <thead><tr><th>No.</th><th>작업지시번호</th><th>지시일자</th><th>생산예정일</th><th>품번</th><th>품명</th><th class="num">지시수량</th><th class="num">생산수량</th><th class="num">진행률</th><th>상태</th><th>비고</th><th>처리</th></tr></thead>
-        <tbody id="orderBody"><tr><td colspan="12">조회된 데이터가 없습니다.</td></tr></tbody>
-    </table>
+<div class="panel table-wrap">
+<table>
+    <thead><tr>
+        <th style="width:38px"><input type="checkbox" id="checkAll" onclick="toggleAll(this.checked)"></th>
+        <th>품번</th><th>품명</th><th>자재유형</th><th>모품번</th><th>공정</th><th>공정 순서</th>
+        <th class="red">우선 순위</th><th>안전재고</th><th>현재고</th><th>생산 수량</th><th class="red">배정 수량</th>
+    </tr></thead>
+    <tbody id="itemBody"><tr><td colspan="12" class="empty">품번 또는 품명을 입력하고 조회해 주세요.</td></tr></tbody>
+</table>
 </div>
 {% endblock %}
 
 {% block extra_script %}
 <script>
-let items=[];let plans=[];const today=new Date().toISOString().slice(0,10);
-document.addEventListener('DOMContentLoaded',async()=>{orderDate.value=today;await loadItems();await loadPlans();await loadOrders();});
-async function loadItems(){const r=await fetch('/api/production/items');items=await r.json();partNo.innerHTML='<option value="">선택</option>'+items.map(x=>`<option value="${x.part_no}">${x.part_no} | ${x.part_name}</option>`).join('');}
-async function loadPlans(){const r=await fetch('/api/production/plans');plans=await r.json();renderPlanOptions();}
-function renderPlanOptions(){const p=partNo.value;const filtered=p?plans.filter(x=>x.part_no===p):plans;planId.innerHTML='<option value="">연결 안 함</option>'+filtered.map(x=>`<option value="${x.id}">${x.plan_date} | ${x.part_no} | ${Number(x.plan_qty).toLocaleString()}</option>`).join('');}
-partNo.addEventListener('change',renderPlanOptions);
+let rows=[];const today=new Date().toISOString().slice(0,10);
+document.addEventListener('DOMContentLoaded',()=>{orderDate.value=today;});
+function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function fmt(v){return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:3});}
 function setMsg(t,ok=false){msg.textContent=t;msg.className='msg '+(ok?'ok':'err');}
-function resetForm(){orderDate.value=today;scheduledDate.value='';partNo.value='';orderQty.value='';planId.value='';note.value='';renderPlanOptions();setMsg('');}
-async function saveOrder(){const payload={order_date:orderDate.value,scheduled_date:scheduledDate.value||null,part_no:partNo.value,order_qty:Number(orderQty.value),plan_id:planId.value?Number(planId.value):null,note:note.value};if(!payload.order_date||!payload.part_no||!payload.order_qty){setMsg('지시일자, 품번, 지시수량을 입력해 주세요.');return;}const r=await fetch('/api/production/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){setMsg(d.detail||'등록에 실패했습니다.');return;}resetForm();setMsg(`${d.message} (${d.work_order_no})`,true);await loadOrders();}
-function actionButtons(x){const a=[];if(x.status==='WAITING'){a.push(`<button class="btn warning mini" onclick="setOrderStatus(${x.id},'CANCELLED')">취소</button>`);a.push(`<button class="btn danger mini" onclick="deleteOrder(${x.id})">삭제</button>`);}else if(x.status==='IN_PROGRESS'){a.push(`<button class="btn success mini" onclick="setOrderStatus(${x.id},'COMPLETED')">완료</button>`);}else if(x.status==='CANCELLED'){a.push(`<button class="btn danger mini" onclick="deleteOrder(${x.id})">삭제</button>`);}return a.join('');}
-async function loadOrders(){const q=new URLSearchParams();if(startDate.value)q.set('start_date',startDate.value);if(endDate.value)q.set('end_date',endDate.value);if(searchPartNo.value.trim())q.set('part_no',searchPartNo.value.trim());if(searchStatus.value)q.set('status',searchStatus.value);const r=await fetch('/api/production/orders?'+q.toString());const rows=await r.json();const b=orderBody;if(!rows.length){b.innerHTML='<tr><td colspan="12">조회된 데이터가 없습니다.</td></tr>';return;}b.innerHTML=rows.map((x,i)=>`<tr><td>${i+1}</td><td>${x.work_order_no}</td><td>${x.order_date}</td><td>${x.scheduled_date||''}</td><td>${x.part_no}</td><td>${x.part_name}</td><td class="num">${Number(x.order_qty).toLocaleString()}</td><td class="num">${Number(x.production_qty).toLocaleString()}</td><td class="num">${x.progress_rate}%</td><td><span class="status">${x.status_name}</span></td><td>${x.note||''}</td><td><div class="row-actions">${actionButtons(x)}</div></td></tr>`).join('');}
-async function setOrderStatus(id,status){const label=status==='COMPLETED'?'완료':'취소';if(!confirm(`이 작업지시를 ${label} 처리하시겠습니까?`))return;const r=await fetch(`/api/production/orders/${id}/status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});const d=await r.json();if(!r.ok){alert(d.detail||'상태 변경에 실패했습니다.');return;}await loadOrders();}
-async function deleteOrder(id){if(!confirm('작업지시를 삭제하시겠습니까?'))return;const r=await fetch('/api/production/orders/'+id,{method:'DELETE'});const d=await r.json();if(!r.ok){alert(d.detail||'삭제에 실패했습니다.');return;}await loadOrders();}
+async function loadItems(){
+    const q=new URLSearchParams();if(searchPartNo.value.trim())q.set('part_no',searchPartNo.value.trim());if(searchPartName.value.trim())q.set('part_name',searchPartName.value.trim());
+    const r=await fetch('/api/production/order-items/search?'+q.toString());const d=await r.json();if(!r.ok){setMsg(d.detail||'조회에 실패했습니다.');return;}
+    rows=d;checkAll.checked=false;renderRows();setMsg(`${rows.length}건 조회되었습니다.`,true);
+}
+function renderRows(){
+    if(!rows.length){itemBody.innerHTML='<tr><td colspan="12" class="empty">조회된 품목이 없습니다.</td></tr>';return;}
+    itemBody.innerHTML=rows.map((x,i)=>`<tr>
+        <td class="center"><input type="checkbox" class="row-check" data-i="${i}"></td>
+        <td>${esc(x.part_no)}</td><td>${esc(x.part_name)}</td><td>${esc(x.material_type)}</td><td>${esc(x.parent_part_no)}</td>
+        <td>${esc(x.process_code)}${x.process_name?' / '+esc(x.process_name):''}</td><td class="center">${x.process_order||''}</td>
+        <td><select class="row-priority" data-i="${i}"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option></select></td>
+        <td class="num">${fmt(x.safety_stock)}</td><td class="num">${fmt(x.current_stock)}</td><td class="num">${fmt(x.production_qty)}</td>
+        <td><input class="row-qty" type="number" min="0" step="0.001" data-i="${i}"></td>
+    </tr>`).join('');
+}
+function toggleAll(v){document.querySelectorAll('.row-check').forEach(x=>x.checked=v);}
+function selectedIndexes(){return [...document.querySelectorAll('.row-check:checked')].map(x=>Number(x.dataset.i));}
+function applyQty(){const value=Number(bulkQty.value||0);const selected=selectedIndexes();const targets=selected.length?selected:rows.map((_,i)=>i);targets.forEach(i=>{const el=document.querySelector(`.row-qty[data-i="${i}"]`);if(el)el.value=value||'';});}
+function applyPriority(){const value=bulkPriority.value;const selected=selectedIndexes();const targets=selected.length?selected:rows.map((_,i)=>i);targets.forEach(i=>{const el=document.querySelector(`.row-priority[data-i="${i}"]`);if(el)el.value=value;});}
+async function createOrders(){
+    if(!orderDate.value){setMsg('지시일자는 필수입니다.');return;}
+    const selected=selectedIndexes();if(!selected.length){setMsg('작업지시 대상 품번을 선택해 주세요.');return;}
+    const items=[];
+    for(const i of selected){const qty=Number(document.querySelector(`.row-qty[data-i="${i}"]`).value||0);const priority=Number(document.querySelector(`.row-priority[data-i="${i}"]`).value);if(qty<=0){setMsg(`${rows[i].part_no}의 배정수량을 입력해 주세요.`);return;}items.push({part_no:rows[i].part_no,order_qty:qty,priority});}
+    if(!confirm(`선택한 ${items.length}개 품번으로 작업지시를 생성하시겠습니까?`))return;
+    const r=await fetch('/api/production/orders/batch',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order_date:orderDate.value,scheduled_date:scheduledDate.value||null,items})});
+    const d=await r.json();if(!r.ok){setMsg(d.detail||'작업지시 생성에 실패했습니다.');return;}setMsg(`${d.message} (${d.work_order_nos.join(', ')})`,true);await loadItems();
+}
 </script>
 {% endblock %}
