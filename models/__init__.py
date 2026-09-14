@@ -13,6 +13,7 @@ from models.models import (
 )
 from models.lot_relation import LotRelationModel
 from models.production_lot import ProductionLotModel
+from models.production import ProductionPlan, ProductionWorkOrder
 from models.subcontract import SubcontractOrderMaster, SubcontractOrderItem, SubcontractLotAllocation
 from models.subcontract_outbound import SubcontractOutboundMaster, SubcontractOutboundItem, SubcontractOutboundLot
 from models.subcontract_inbound import SubcontractInboundMaster, SubcontractInboundItem, SubcontractInboundLot
@@ -34,6 +35,7 @@ __all__ = [
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
     "LotRelationModel",
     "ProductionLotModel",
+    "ProductionPlan", "ProductionWorkOrder",
     "SubcontractOrderMaster", "SubcontractOrderItem", "SubcontractLotAllocation",
     "SubcontractOutboundMaster", "SubcontractOutboundItem", "SubcontractOutboundLot",
     "SubcontractInboundMaster", "SubcontractInboundItem", "SubcontractInboundLot",
