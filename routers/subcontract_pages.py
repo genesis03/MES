@@ -59,3 +59,26 @@ def subcontract_outbound_page(
         name="subcontract_outbound.html",
         context={"request": request, "user": current_user},
     )
+
+
+@router.get("/subcontract/inbound", response_class=HTMLResponse)
+def subcontract_inbound_page(
+    request: Request,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    storage_locations = (
+        db.query(StorageLocationModel)
+        .filter(StorageLocationModel.is_active == "Y")
+        .order_by(StorageLocationModel.sort_order, StorageLocationModel.location_code)
+        .all()
+    )
+    return templates.TemplateResponse(
+        request=request,
+        name="subcontract_inbound.html",
+        context={
+            "request": request,
+            "user": current_user,
+            "storage_locations": storage_locations,
+        },
+    )
