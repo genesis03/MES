@@ -15,6 +15,7 @@ from models.lot_relation import LotRelationModel
 from models.lot_consumption import LotConsumptionModel
 from models.production_lot import ProductionLotModel
 from models.production import ProductionPlan, ProductionWorkOrder, ProductionPerformance
+from models.production_run import ProductionRun, ProductionRunMaterial, ProductionRunLotAllocation, ProductionRunDefect
 from models.worker import WorkerMaster, WorkerProcess
 from models.equipment import EquipmentMaster
 from models.subcontract import SubcontractOrderMaster, SubcontractOrderItem, SubcontractLotAllocation
@@ -41,6 +42,7 @@ __all__ = [
     "LotRelationModel", "LotConsumptionModel",
     "ProductionLotModel",
     "ProductionPlan", "ProductionWorkOrder", "ProductionPerformance",
+    "ProductionRun", "ProductionRunMaterial", "ProductionRunLotAllocation", "ProductionRunDefect",
     "WorkerMaster", "WorkerProcess",
     "EquipmentMaster",
     "SubcontractOrderMaster", "SubcontractOrderItem", "SubcontractLotAllocation",
