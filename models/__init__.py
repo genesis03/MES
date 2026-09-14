@@ -12,6 +12,7 @@ from models.models import (
     ItemBomModel,
 )
 from models.lot_relation import LotRelationModel
+from models.subcontract import SubcontractOrderMaster, SubcontractOrderItem, SubcontractLotAllocation
 from models.partner import Partner, PartnerContact
 from models.purchase import PurchaseMaster, PurchaseItem
 
@@ -24,6 +25,7 @@ ensure_purchase_entry_columns(engine)
 __all__ = [
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
     "LotRelationModel",
+    "SubcontractOrderMaster", "SubcontractOrderItem", "SubcontractLotAllocation",
     "Base",
     "engine",
     "UserModel",
