@@ -11,6 +11,7 @@ from models.models import (
     WarehouseMasterModel,
     ItemBomModel,
 )
+from models.lot_relation import LotRelationModel
 from models.partner import Partner, PartnerContact
 from models.purchase import PurchaseMaster, PurchaseItem
 
@@ -22,6 +23,7 @@ ensure_purchase_entry_columns(engine)
 
 __all__ = [
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
+    "LotRelationModel",
     "Base",
     "engine",
     "UserModel",
@@ -38,4 +40,3 @@ __all__ = [
     "PurchaseMaster",
     "PurchaseItem",
 ]
-
