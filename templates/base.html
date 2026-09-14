@@ -137,7 +137,6 @@
             <a href="/logout" class="btn-top-logout">로그아웃</a>
         </div>
         {% endif %}
-
         <ul class="sidebar-menu">
             {% if user %}
 
@@ -153,6 +152,7 @@
                         <a href="/basic-info/partners" id="nav-partners">거래처 관리</a>
                         <a href="/basic-info/items" id="nav-item-master">품목 정보 관리</a>
                         <a href="/basic-info/bom" id="nav-sub-item">BOM 관리</a>
+                        <a href="/basic-info/equipment" id="nav-equipment">설비 관리</a>
                         <a href="/basic-info/workers" id="nav-workers">작업자 관리</a>
                     </li>
                 </ul>
@@ -297,6 +297,7 @@
                 "/basic-info/items": "nav-item-master",
                 "/basic-info/bom": "nav-sub-item",
                 "/basic-info/partners": "nav-partners",
+                "/basic-info/equipment": "nav-equipment",
                 "/basic-info/workers": "nav-workers",
                 "/purchase/orders": "nav-purchase-orders",
                 "/purchase/inbound": "nav-purchase-inbound",
