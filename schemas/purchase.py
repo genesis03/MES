@@ -14,10 +14,18 @@ class Input(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
+def iso_date(value):
+    if not isinstance(value, str) or len(value) != 10 or date.fromisoformat(value).isoformat() != value:
+        raise ValueError("날짜는 YYYY-MM-DD 형식이어야 합니다.")
+    return value
+
+
 class OrderItemCreate(Input):
     part_no: Text50
     order_qty: PositiveQty
     delivery_date: str | None = None
+    warehouse_code: Text20
+    storage_location: Text20
     note: str | None = Field(default=None, max_length=500)
     unit_price: Money = 0.0
     supply_price: Money = 0.0
@@ -33,12 +41,6 @@ class Header(Input):
     partner_id: int | None = Field(default=None, gt=0)
     partner_name: Text100
     created_by: Text50 | None = None
-
-
-def iso_date(value):
-    if not isinstance(value, str) or len(value) != 10 or date.fromisoformat(value).isoformat() != value:
-        raise ValueError("날짜는 YYYY-MM-DD 형식이어야 합니다.")
-    return value
 
 
 class OrderCreate(Header):
@@ -62,8 +64,8 @@ class InboundItemCreate(Input):
     supplier_lot_no: Text100
     internal_lot_no: Text100 | None = None
     note: str | None = Field(default=None, max_length=500)
-    warehouse_code: Text20 = "RM"
-    storage_location: Text20 = "S-LT"
+    warehouse_code: Text20
+    storage_location: Text20
     unit_price: Money = 0.0
 
 
@@ -88,8 +90,11 @@ class OrderItemOut(Output):
     po_id: int
     part_no: str
     order_qty: float
+    unit: str
     received_qty: float
     delivery_date: str | None
+    warehouse_code: str | None
+    storage_location: str | None
     note: str | None
     unit_price: float
     supply_price: float
@@ -138,4 +143,3 @@ class InboundOut(Output):
     created_by: str | None
     created_at: datetime
     items: list[InboundItemOut]
-
