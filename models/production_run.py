@@ -11,12 +11,14 @@ class ProductionRun(Base):
     __table_args__ = (
         CheckConstraint("status IN ('IN_PROGRESS','COMPLETED','CANCELLED')", name="ck_production_run_status"),
         CheckConstraint("shift_type IN ('DAY','NIGHT')", name="ck_production_run_shift"),
+        CheckConstraint("performance_type IN ('MACHINING','ASSEMBLY')", name="ck_production_run_type"),
         CheckConstraint("good_qty >= 0 AND defect_qty >= 0 AND setup_qty >= 0", name="ck_production_run_qty"),
     )
 
     id = Column(Integer, primary_key=True)
     work_order_id = Column(Integer, ForeignKey("production_work_orders.id"), nullable=False, index=True)
     performance_id = Column(Integer, ForeignKey("production_performances.id"), nullable=True, index=True)
+    performance_type = Column(String(20), nullable=False, default="MACHINING", index=True)
     performance_date = Column(String(10), nullable=False, index=True)
     process_code = Column(String(50), ForeignKey("processes.process_code"), nullable=False, index=True)
     operator_id = Column(Integer, ForeignKey("worker_masters.id"), nullable=False, index=True)
