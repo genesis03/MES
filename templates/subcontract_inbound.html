@@ -2,7 +2,7 @@
 {% block title %}외주 가공 입고 처리{% endblock %}
 {% block extra_head %}
 <style>
-.si-in h1{font-size:20px;margin:0 0 12px}.si-box{background:#fff;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:12px}.si-head{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 20px;padding:16px}.si-field{display:grid;grid-template-columns:105px minmax(0,1fr);align-items:center;gap:8px;font-size:13px}.si-field label{font-weight:700}.si-field input,.si-field select{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #cbd5e1;border-radius:4px;background:#fff}.si-field input[readonly]{background:#f8fafc}.si-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 0 10px}.si-btn{border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:7px 13px;cursor:pointer;font-weight:700}.si-btn:disabled{opacity:.45;cursor:not-allowed}.si-primary{background:#2563eb;border-color:#2563eb;color:#fff}.si-danger{background:#dc2626;border-color:#dc2626;color:#fff}.si-lot-btn{padding:5px 9px;background:#0f766e;border-color:#0f766e;color:#fff}.si-table{width:100%;border-collapse:collapse;font-size:12px;min-width:1400px}.si-table th,.si-table td{border:1px solid #dbe2eb;padding:7px;text-align:center}.si-table th{background:#f8fafc;white-space:nowrap}.si-table td.left{text-align:left}.si-msg{font-size:12px;color:#475569}.si-modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:9999}.si-modal-bg[hidden]{display:none}.si-modal{width:min(980px,94vw);max-height:84vh;background:#fff;border-radius:8px;display:flex;flex-direction:column}.si-modal.small{width:min(640px,94vw)}.si-modal-head,.si-modal-foot{padding:12px 14px;border-bottom:1px solid #e2e8f0;display:flex;gap:8px;align-items:center}.si-modal-foot{border-top:1px solid #e2e8f0;border-bottom:0;justify-content:flex-end}.si-modal-body{padding:12px 14px;overflow:auto}.si-search{display:flex;gap:8px;margin-bottom:10px}.si-search input{flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:4px}.si-out-row{cursor:pointer}.si-out-row:hover{background:#eff6ff}.si-out-row.selected{background:#dbeafe}.st-wait{color:#a16207;font-weight:700}.st-partial{color:#2563eb;font-weight:700}.st-done{color:#15803d;font-weight:700}.si-summary{padding:10px 14px;font-size:12px;color:#334155;display:flex;gap:24px;flex-wrap:wrap}.si-lot-form{display:grid;grid-template-columns:140px minmax(0,1fr);gap:10px 12px;align-items:center}.si-lot-form label{font-size:12px;font-weight:700}.si-lot-form input{padding:8px;border:1px solid #cbd5e1;border-radius:4px}.si-lot-form input[readonly]{background:#f8fafc}.si-note{margin-top:12px;padding:9px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;font-size:12px;color:#475569}@media(max-width:900px){.si-head{grid-template-columns:1fr}.si-field{grid-template-columns:100px 1fr}}
+.si-in h1{font-size:20px;margin:0 0 12px}.si-box{background:#fff;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:12px}.si-head{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 20px;padding:16px}.si-field{display:grid;grid-template-columns:105px minmax(0,1fr);align-items:center;gap:8px;font-size:13px}.si-field label{font-weight:700}.si-field input,.si-field select{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #cbd5e1;border-radius:4px;background:#fff}.si-field input[readonly]{background:#f8fafc}.si-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 0 10px}.si-btn{border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:7px 13px;cursor:pointer;font-weight:700}.si-btn:disabled{opacity:.45;cursor:not-allowed}.si-primary{background:#2563eb;border-color:#2563eb;color:#fff}.si-danger{background:#dc2626;border-color:#dc2626;color:#fff}.si-lot-btn{background:#0f766e;border-color:#0f766e;color:#fff;padding:5px 10px}.si-table{width:100%;border-collapse:collapse;font-size:12px;min-width:1180px}.si-table th,.si-table td{border:1px solid #dbe2eb;padding:7px;text-align:center}.si-table th{background:#f8fafc;white-space:nowrap}.si-table td.left{text-align:left}.si-table input,.si-table select{width:100%;box-sizing:border-box;padding:5px;border:1px solid #cbd5e1;border-radius:3px;font-size:12px}.si-msg{font-size:12px;color:#475569}.si-modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:9999}.si-modal-bg[hidden]{display:none}.si-modal{width:min(1050px,96vw);max-height:86vh;background:#fff;border-radius:8px;display:flex;flex-direction:column}.si-modal-head,.si-modal-foot{padding:12px 14px;border-bottom:1px solid #e2e8f0;display:flex;gap:8px;align-items:center}.si-modal-foot{border-top:1px solid #e2e8f0;border-bottom:0;justify-content:flex-end}.si-modal-body{padding:12px 14px;overflow:auto}.si-search{display:flex;gap:8px;margin-bottom:10px}.si-search input{flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:4px}.si-out-row{cursor:pointer}.si-out-row:hover{background:#eff6ff}.si-out-row.selected{background:#dbeafe}.st-wait{color:#a16207;font-weight:700}.st-partial{color:#2563eb;font-weight:700}.st-done{color:#15803d;font-weight:700}.st-cancel{color:#b91c1c;font-weight:700}.si-summary{padding:10px 14px;font-size:12px;color:#334155;display:flex;gap:24px;flex-wrap:wrap}.si-item-current{font-weight:700;color:#2563eb}.si-lot-title{font-size:13px;color:#475569}.si-lot-title strong{color:#0f172a}@media(max-width:900px){.si-head{grid-template-columns:1fr}.si-field{grid-template-columns:100px 1fr}}
 </style>
 {% endblock %}
 {% block content %}
@@ -14,6 +14,7 @@
     <button id="si-cancel" class="si-btn si-danger" type="button" disabled>최근 입고 취소</button>
     <span id="si-message" class="si-msg"></span>
   </div>
+
   <div class="si-box si-head">
     <div class="si-field"><label>입고번호</label><input id="si-number" value="입고 시 자동 발번" readonly></div>
     <div class="si-field"><label>입고일자</label><input id="si-date" type="date"></div>
@@ -25,42 +26,39 @@
     <div class="si-field"><label>입고 저장위치</label><select id="si-location"><option value="">선택</option>{% for row in storage_locations %}<option value="{{ row.location_code }}">{{ row.location_code }}{% if row.location_name %} - {{ row.location_name }}{% endif %}</option>{% endfor %}</select></div>
     <div class="si-field"><label>담당자</label><input id="si-manager" readonly></div>
   </div>
+
   <div class="si-box" style="overflow:auto">
     <table class="si-table">
-      <thead><tr><th>No.</th><th>입고 품번</th><th>품명</th><th>원 LOT</th><th>배정수량</th><th>기입고수량</th><th>입고가능수량</th><th>금회 입고</th><th>외주업체 LOT</th><th>샘플수량</th><th>생성 LOT</th><th>단위</th><th>LOT 입고</th></tr></thead>
-      <tbody id="si-lots"><tr><td colspan="13">외주가공 출고건을 불러오세요.</td></tr></tbody>
+      <thead>
+        <tr><th>No.</th><th>입고 품번</th><th>품명</th><th>규격</th><th>단위</th><th>출고수량</th><th>기입고수량</th><th>입고가능수량</th><th>금회 입고수량</th><th>LOT 건수</th><th>입고상태</th><th>LOT 입고</th></tr>
+      </thead>
+      <tbody id="si-items"><tr><td colspan="12">외주가공 출고건을 불러오세요.</td></tr></tbody>
     </table>
-    <div class="si-summary"><span>배정 합계: <strong id="si-total-out">0</strong></span><span>기입고 합계: <strong id="si-total-received">0</strong></span><span>잔여 합계: <strong id="si-total-remain">0</strong></span><span>금회 입고: <strong id="si-total-current">0</strong></span></div>
+    <div class="si-summary"><span>출고 합계: <strong id="si-total-out">0</strong></span><span>기입고 합계: <strong id="si-total-received">0</strong></span><span>금회 입고 합계: <strong id="si-total-current">0</strong></span><span>입고 후 잔량: <strong id="si-total-remaining">0</strong></span></div>
   </div>
 </div>
 
-<div id="si-modal" class="si-modal-bg" hidden>
+<div id="si-load-modal" class="si-modal-bg" hidden>
   <div class="si-modal">
-    <div class="si-modal-head"><strong>외주가공 출고건 불러오기</strong><span style="margin-left:auto;font-size:12px;color:#64748b">출고완료 건을 표시합니다.</span></div>
+    <div class="si-modal-head"><strong>외주가공 출고건 불러오기</strong><span style="margin-left:auto;font-size:12px;color:#64748b">출고완료 건만 표시됩니다.</span></div>
     <div class="si-modal-body">
       <div class="si-search"><input id="si-search" placeholder="출고번호, 발주번호 또는 발주처"><button id="si-search-btn" class="si-btn" type="button">조회</button></div>
-      <table class="si-table"><thead><tr><th>No.</th><th>출고번호</th><th>출고일자</th><th>발주번호</th><th>발주처</th><th>가공유형</th><th>배정수량</th><th>기입고</th><th>잔여</th><th>입고상태</th></tr></thead><tbody id="si-outbounds"><tr><td colspan="10">조회 중...</td></tr></tbody></table>
+      <table class="si-table"><thead><tr><th>No.</th><th>출고번호</th><th>출고일자</th><th>발주번호</th><th>발주처</th><th>가공유형</th><th>출고수량</th><th>기입고</th><th>잔량</th><th>입고상태</th></tr></thead><tbody id="si-outbounds"><tr><td colspan="10">조회 중...</td></tr></tbody></table>
     </div>
-    <div class="si-modal-foot"><button id="si-modal-close" class="si-btn" type="button">닫기</button><button id="si-modal-apply" class="si-btn si-primary" type="button" disabled>선택</button></div>
+    <div class="si-modal-foot"><button id="si-load-close" class="si-btn" type="button">닫기</button><button id="si-load-apply" class="si-btn si-primary" type="button" disabled>선택</button></div>
   </div>
 </div>
 
 <div id="si-lot-modal" class="si-modal-bg" hidden>
-  <div class="si-modal small">
-    <div class="si-modal-head"><strong>LOT별 입고 수량 입력</strong></div>
+  <div class="si-modal">
+    <div class="si-modal-head"><strong>LOT별 입고 입력</strong><span id="si-lot-item-title" class="si-lot-title"></span></div>
     <div class="si-modal-body">
-      <div class="si-lot-form">
-        <label>원 LOT</label><input id="si-lot-source" readonly>
-        <label>LOT 배정수량</label><input id="si-lot-allocated" readonly>
-        <label>기입고수량</label><input id="si-lot-received" readonly>
-        <label>입고 가능수량</label><input id="si-lot-remaining" readonly>
-        <label>금회 입고수량</label><input id="si-lot-inbound" type="number" min="0" step="0.001">
-        <label>외주업체 LOT</label><input id="si-lot-supplier" maxlength="100" placeholder="외주업체 LOT 번호">
-        <label>샘플수량</label><input id="si-lot-sample" type="number" min="0" step="0.001" value="0">
-      </div>
-      <div class="si-note">부분입고 시 회사 표준 규칙에 따라 LZ + 일자 + 설비 01 + 일일순번 01~99 형식의 신규 LOT가 생성됩니다. 전량을 한 번에 입고하면 원 LOT를 유지합니다.</div>
+      <table class="si-table">
+        <thead><tr><th>No.</th><th>원 LOT</th><th>배정수량</th><th>기입고수량</th><th>입고가능수량</th><th>금회 입고수량</th><th>외주업체 LOT</th><th>샘플수량</th><th>신규 LOT</th></tr></thead>
+        <tbody id="si-lot-rows"><tr><td colspan="9">품번을 선택하세요.</td></tr></tbody>
+      </table>
     </div>
-    <div class="si-modal-foot"><button id="si-lot-clear" class="si-btn" type="button">입력 취소</button><button id="si-lot-close" class="si-btn" type="button">닫기</button><button id="si-lot-apply" class="si-btn si-primary" type="button">적용</button></div>
+    <div class="si-modal-foot"><span id="si-lot-message" class="si-msg" style="margin-right:auto"></span><button id="si-lot-close" class="si-btn" type="button">닫기</button><button id="si-lot-save" class="si-btn si-primary" type="button">적용</button></div>
   </div>
 </div>
 {% endblock %}
