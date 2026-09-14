@@ -15,8 +15,8 @@ from core.security import (
     check_permission,
     parse_user_permissions,
 )
-# 실제 존재하는 품목 마스터 모델만 import
-from models.models import ItemMasterModel
+# 실제 존재하는 품목/공정 마스터 모델만 import
+from models.models import ItemMasterModel, ProcessModel
 
 # 절대 경로 기준 templates 디렉터리 설정
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -35,6 +35,25 @@ def check_basic_info_permission(user: Any) -> bool:
     if str(getattr(user, "role", "")).strip().upper() == "ADMIN":
         return True
     return check_permission(user, "basic_info", "READ")
+
+
+def _normalize_process_code(db: Session, raw_value: Any) -> Optional[str]:
+    """품목 공정 입력값(코드 또는 명칭)을 process_code로 정규화합니다."""
+    value = str(raw_value or "").strip()
+    if not value:
+        return None
+
+    process = (
+        db.query(ProcessModel)
+        .filter(
+            (ProcessModel.process_code == value)
+            | (ProcessModel.process_name == value)
+        )
+        .first()
+    )
+    if not process:
+        raise HTTPException(status_code=400, detail=f"등록되지 않은 공정입니다. ({value})")
+    return process.process_code
 
 
 # 1. 화면 렌더링 라우터
@@ -79,6 +98,8 @@ async def get_items(
         query = query.filter(ItemMasterModel.material_type == material_type.strip())
 
     items = query.order_by(ItemMasterModel.part_no.asc()).all()
+    process_rows = db.query(ProcessModel).all()
+    process_name_by_code = {p.process_code: p.process_name for p in process_rows}
 
     data = [
         {
@@ -97,7 +118,10 @@ async def get_items(
             "safety_stock": it.safety_stock or 0,
             "weight": it.weight or 0.0,
             "inbound_loc": it.inbound_loc or "",
-            "production_loc": it.production_loc or "",
+            # 기존 화면은 공정명을 표시/선택하므로 표시값은 명칭으로 유지합니다.
+            # DB에는 production_loc을 process_code로 저장합니다.
+            "production_loc": process_name_by_code.get(it.production_loc, it.production_loc or ""),
+            "production_loc_code": it.production_loc or "",
             "is_active": it.is_active,
             "note": it.note or "",
             "created_at": it.created_at,
@@ -146,7 +170,7 @@ async def create_item(request: Request, db: Session = Depends(get_db)):
         safety_stock=int(body.get("safety_stock") or 0),
         weight=float(body.get("weight") or 0.0),
         inbound_loc=str(body.get("inbound_loc", "")).strip() or None,
-        production_loc=str(body.get("production_loc", "")).strip() or None,
+        production_loc=_normalize_process_code(db, body.get("production_loc")),
         is_active=str(body.get("is_active", "Y")).upper(),
         note=str(body.get("note", "")).strip() or None,
         created_at=now_str,
@@ -189,7 +213,7 @@ async def update_item(request: Request, db: Session = Depends(get_db)):
     target.safety_stock = int(body.get("safety_stock") or 0)
     target.weight = float(body.get("weight") or 0.0)
     target.inbound_loc = str(body.get("inbound_loc", "")).strip() or None
-    target.production_loc = str(body.get("production_loc", "")).strip() or None
+    target.production_loc = _normalize_process_code(db, body.get("production_loc"))
     target.is_active = str(body.get("is_active", target.is_active)).upper()
     target.note = str(body.get("note", "")).strip() or None
     target.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
