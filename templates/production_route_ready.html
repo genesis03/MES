@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ page_title }} - 생산관리{% endblock %}
+{% block content %}
+<div style="max-width:960px;">
+    <h1 style="font-size:24px;margin:0 0 8px;">{{ page_title }}</h1>
+    <div style="font-size:13px;color:#64748b;margin-bottom:18px;">{{ page_description }}</div>
+    <div style="background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:20px;">
+        <div style="font-size:14px;font-weight:700;color:#334155;margin-bottom:8px;">기능 준비 영역</div>
+        <div style="font-size:13px;color:#64748b;line-height:1.7;">
+            현재는 생산관리 메뉴 구조와 라우트만 구성한 상태입니다.<br>
+            실제 입력·조회·LOT 처리 로직은 해당 기능 개발 시 기존 기준정보와 LOT 구조를 사용해 구현합니다.
+        </div>
+        <div style="margin-top:14px;font-size:12px;color:#94a3b8;">경로: {{ route_path }}</div>
+    </div>
+</div>
+{% endblock %}
