@@ -65,7 +65,7 @@ class InboundItemCreate(Input):
     supplier_lot_no: Text100
     internal_lot_no: Text100 | None = None
     note: str | None = Field(default=None, max_length=500)
-    warehouse_code: Text20
+    warehouse_code: Text20 | None = None
     storage_location: Text20
     unit_price: Money = 0.0
 
@@ -127,7 +127,7 @@ class InboundItemOut(Output):
     supplier_lot_no: str
     internal_lot_no: str | None
     note: str | None
-    warehouse_code: str
+    warehouse_code: str | None
     storage_location: str
     unit_price: float
 
