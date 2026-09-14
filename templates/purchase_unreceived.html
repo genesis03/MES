@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}미입고 현황 - 구매관리{% endblock %}
+{% block extra_head %}
+<style>
+.unr-wrap h1{font-size:24px;margin:0 0 5px}.unr-sub{font-size:13px;color:#64748b;margin-bottom:14px}.unr-tabs{display:flex;gap:6px;margin-bottom:10px}.unr-tab{border:1px solid #cbd5e1;background:#fff;border-radius:5px;padding:7px 14px;font-weight:700;cursor:pointer}.unr-tab.active{background:#2563eb;color:#fff;border-color:#2563eb}.unr-filter{display:flex;flex-wrap:wrap;gap:8px;align-items:end;background:#fff;border:1px solid #cbd5e1;border-radius:7px;padding:12px;margin-bottom:10px}.unr-field{display:flex;flex-direction:column;gap:4px}.unr-field label{font-size:11px;font-weight:700;color:#64748b}.unr-field input{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px;min-width:150px}.unr-btn{height:34px;border:0;border-radius:4px;padding:0 15px;font-weight:700;cursor:pointer}.unr-primary{background:#2563eb;color:#fff}.unr-light{background:#e2e8f0;color:#334155}.unr-summary{display:flex;gap:18px;margin:10px 0;font-size:13px;font-weight:700;color:#475569}.unr-tablebox{background:#fff;border:1px solid #cbd5e1;border-radius:7px;overflow:auto}.unr-table{width:100%;border-collapse:collapse;min-width:1450px;font-size:12px}.unr-table th{background:#f1f5f9;padding:9px 7px;border-bottom:2px solid #cbd5e1;white-space:nowrap}.unr-table td{padding:8px 7px;border-bottom:1px solid #e2e8f0;text-align:center;white-space:nowrap}.unr-left{text-align:left!important}.badge{display:inline-block;border-radius:12px;padding:3px 8px;font-weight:700}.badge-general{background:#dbeafe;color:#1d4ed8}.badge-sub{background:#ede9fe;color:#6d28d9}.badge-over{background:#fee2e2;color:#b91c1c}.badge-due{background:#fef3c7;color:#a16207}.badge-ok{background:#dcfce7;color:#15803d}.unr-empty{padding:36px!important;color:#94a3b8}.unr-note{margin-top:9px;font-size:12px;color:#64748b}
+</style>
+{% endblock %}
+{% block content %}
+<div class="unr-wrap">
+  <h1>미입고 현황</h1>
+  <div class="unr-sub">발주 후 아직 입고되지 않은 잔량을 일반구매와 외주가공 기준으로 통합 조회합니다.</div>
+  <div class="unr-tabs">
+    <button class="unr-tab active" data-kind="ALL">전체</button>
+    <button class="unr-tab" data-kind="GENERAL">일반구매</button>
+    <button class="unr-tab" data-kind="SUBCONTRACT">외주가공</button>
+  </div>
+  <div class="unr-filter">
+    <div class="unr-field"><label>발주번호</label><input id="unr-order-no" placeholder="PO / SO"></div>
+    <div class="unr-field"><label>거래처</label><input id="unr-partner" placeholder="거래처명"></div>
+    <div class="unr-field"><label>품번</label><input id="unr-part-no" placeholder="품번"></div>
+    <button class="unr-btn unr-primary" id="unr-search">조회</button>
+    <button class="unr-btn unr-light" id="unr-reset">초기화</button>
+  </div>
+  <div class="unr-summary"><span>조회 <strong id="unr-count">0</strong>건</span><span>미입고 합계 <strong id="unr-total-qty">0</strong></span></div>
+  <div class="unr-tablebox"><table class="unr-table"><thead><tr>
+    <th>No.</th><th>구분</th><th>발주번호</th><th>발주일자</th><th>납기일</th><th>D-Day</th><th>거래처</th><th>이전 품번</th><th>품번</th><th>품명</th><th>규격</th><th>발주수량</th><th>입고수량</th><th>미입고수량</th><th>단위</th><th>진행상태</th><th>비고</th>
+  </tr></thead><tbody id="unr-body"><tr><td colspan="17" class="unr-empty">조회 중입니다...</td></tr></tbody></table></div>
+  <div class="unr-note">외주가공은 현재 입고 기능 구현 전이므로 발주수량 전체를 미입고로 표시합니다. 외주 입고 구현 시 실제 입고 누계만큼 자동 차감하도록 연결합니다.</div>
+</div>
+{% endblock %}
+{% block extra_script %}
+<script>
+(() => {
+  let kind='ALL';
+  const $=id=>document.getElementById(id);
+  const esc=v=>{const s=document.createElement('span');s.textContent=v??'';return s.innerHTML;};
+  const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6});
+  function dday(dateText){
+    if(!dateText)return {text:'-',cls:''};
+    const due=new Date(dateText+'T00:00:00'); const now=new Date(); now.setHours(0,0,0,0);
+    const diff=Math.round((due-now)/86400000);
+    if(diff<0)return {text:`D+${Math.abs(diff)}`,cls:'badge-over'};
+    if(diff===0)return {text:'D-Day',cls:'badge-due'};
+    return {text:`D-${diff}`,cls:'badge-ok'};
+  }
+  async function load(){
+    const p=new URLSearchParams({kind});
+    const map={order_no:'unr-order-no',partner_name:'unr-partner',part_no:'unr-part-no'};
+    Object.entries(map).forEach(([k,id])=>{const v=$(id).value.trim();if(v)p.set(k,v)});
+    $('unr-body').innerHTML='<tr><td colspan="17" class="unr-empty">조회 중입니다...</td></tr>';
+    try{
+      const r=await fetch('/api/purchase/unreceived?'+p.toString()); const d=await r.json(); if(!r.ok)throw new Error(d.detail||'조회 실패');
+      const rows=d.items||[]; $('unr-count').textContent=rows.length.toLocaleString(); $('unr-total-qty').textContent=fmt(rows.reduce((s,x)=>s+Number(x.remaining_qty||0),0));
+      if(!rows.length){$('unr-body').innerHTML='<tr><td colspan="17" class="unr-empty">미입고 내역이 없습니다.</td></tr>';return;}
+      $('unr-body').innerHTML=rows.map((x,i)=>{const dd=dday(x.due_date);const sub=x.type==='SUBCONTRACT';return `<tr><td>${i+1}</td><td><span class="badge ${sub?'badge-sub':'badge-general'}">${esc(x.type_name)}</span></td><td>${esc(x.order_no)}</td><td>${esc(x.order_date)}</td><td>${esc(x.due_date)}</td><td><span class="badge ${dd.cls}">${dd.text}</span></td><td class="unr-left">${esc(x.partner_name)}</td><td>${esc(x.previous_part_no||'')}</td><td>${esc(x.part_no)}</td><td class="unr-left">${esc(x.part_name)}</td><td class="unr-left">${esc(x.spec)}</td><td>${fmt(x.order_qty)}</td><td>${fmt(x.received_qty)}</td><td><strong>${fmt(x.remaining_qty)}</strong></td><td>${esc(x.unit)}</td><td>${esc(x.stage)}</td><td class="unr-left">${esc(x.note)}</td></tr>`}).join('');
+    }catch(e){$('unr-body').innerHTML=`<tr><td colspan="17" class="unr-empty" style="color:#dc2626">${esc(e.message)}</td></tr>`;}
+  }
+  document.querySelectorAll('.unr-tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.unr-tab').forEach(x=>x.classList.remove('active'));btn.classList.add('active');kind=btn.dataset.kind;load();}));
+  $('unr-search').addEventListener('click',load); $('unr-reset').addEventListener('click',()=>{['unr-order-no','unr-partner','unr-part-no'].forEach(id=>$(id).value='');load();});
+  load();
+})();
+</script>
+{% endblock %}
