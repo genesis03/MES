@@ -23,7 +23,9 @@ from models.purchase import PurchaseMaster, PurchaseItem
 # 테이블 일괄 자동 생성 트리거
 Base.metadata.create_all(bind=engine)
 from models.purchase_migration import ensure_purchase_entry_columns
+from models.subcontract_inbound_migration import ensure_subcontract_inbound_columns
 ensure_purchase_entry_columns(engine)
+ensure_subcontract_inbound_columns(engine)
 
 __all__ = [
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
