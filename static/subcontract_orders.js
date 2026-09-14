@@ -313,8 +313,21 @@
     try {
       const data = await request(`/api/subcontract/orders/${id}`);
       $('so-lines').replaceChildren(); rows = []; orderId = data.id;
-      $('so-date').value = data.order_date; $('so-due-date').value = data.delivery_due_date || ''; $('so-location').value = data.external_storage_location || ''; $('so-manager').value = data.manager_name || ''; $('so-note').value = data.note || ''; $('so-process').value = data.processing_type_code || ''; $('so-vendor').value = data.partner_name; vendor = {id:data.partner_id,name:data.partner_name,code:'',manager:data.manager_name||'',value:data.partner_name}; $('so-vendor').classList.add('so-vendor-selected'); $('so-vendor-hint').textContent = `불러온 발주처: ${data.partner_name}`;
-      (data.items || []).forEach(item => addRow(item)); if (!rows.length) addRow(); applyServerOrder(data); msg(`${data.order_no}을 불러왔습니다.`);
+      $('so-date').value = data.order_date;
+      $('so-due-date').value = data.delivery_due_date || '';
+      $('so-location').value = data.external_storage_location || '';
+      $('so-manager').value = data.manager_name || '';
+      $('so-note').value = data.note || '';
+      $('so-process').value = data.processing_type_code || '';
+      const matchedVendor = vendorOptions().find(x => x.id === Number(data.partner_id));
+      vendor = matchedVendor || {id:data.partner_id,name:data.partner_name,code:'',manager:data.manager_name||'',value:data.partner_name};
+      $('so-vendor').value = matchedVendor ? matchedVendor.value : data.partner_name;
+      $('so-vendor').classList.add('so-vendor-selected');
+      $('so-vendor-hint').textContent = `불러온 발주처: ${data.partner_name}`;
+      (data.items || []).forEach(item => addRow(item));
+      if (!rows.length) addRow();
+      applyServerOrder(data);
+      msg(`${data.order_no}을 불러왔습니다.`);
     } catch (error) { msg(error.message); }
   }
 
@@ -326,7 +339,9 @@
     $('so-due-date').addEventListener('change',()=>rows.forEach(row=>{if(!row.date.value)row.date.value=$('so-due-date').value;}));
     $('so-add-row').addEventListener('click',()=>addRow(null,true)); $('so-new').addEventListener('click',reset); $('so-form').addEventListener('submit',save); $('so-confirm').addEventListener('click',confirmOrder);
     $('so-lot-close').addEventListener('click',closeLotModal); $('so-lot-cancel').addEventListener('click',closeLotModal); $('so-lot-apply').addEventListener('click',applyLots); $('so-lot-modal').addEventListener('click',event=>{if(event.target===$('so-lot-modal'))closeLotModal();});
-    reset(); const editId=Number(new URLSearchParams(location.search).get('edit')); if(Number.isInteger(editId)&&editId>0)loadOrder(editId);
+    const editId=Number(new URLSearchParams(location.search).get('edit'));
+    reset();
+    if(Number.isInteger(editId)&&editId>0) loadOrder(editId);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true}); else init();
 })();
