@@ -50,3 +50,30 @@ class ProductionWorkOrder(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
 
     plan = relationship("ProductionPlan", back_populates="work_orders")
+    performances = relationship("ProductionPerformance", back_populates="work_order")
+
+
+class ProductionPerformance(Base):
+    __tablename__ = "production_performances"
+    __table_args__ = (
+        CheckConstraint("good_qty > 0", name="ck_production_performance_good_qty_positive"),
+        CheckConstraint("defect_qty >= 0", name="ck_production_performance_defect_qty_nonnegative"),
+        CheckConstraint(
+            "performance_type IN ('MACHINING','ASSEMBLY')",
+            name="ck_production_performance_type",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    work_order_id = Column(Integer, ForeignKey("production_work_orders.id"), nullable=False, index=True)
+    performance_type = Column(String(20), nullable=False, default="MACHINING", index=True)
+    performance_date = Column(String(10), nullable=False, index=True)
+    process_code = Column(String(50), ForeignKey("processes.process_code"), nullable=False, index=True)
+    good_qty = Column(Float, nullable=False)
+    defect_qty = Column(Float, nullable=False, default=0.0)
+    operator_name = Column(String(50), nullable=True)
+    note = Column(Text, nullable=True)
+    created_by = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    work_order = relationship("ProductionWorkOrder", back_populates="performances")
