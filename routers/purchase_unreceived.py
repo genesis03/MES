@@ -1,6 +1,8 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -10,6 +12,17 @@ from models.subcontract import SubcontractOrderItem, SubcontractOrderMaster
 from models.subcontract_outbound import SubcontractOutboundMaster
 
 router = APIRouter(prefix="/api/purchase", tags=["Purchase Unreceived"])
+page_router = APIRouter(tags=["Purchase Unreceived Page"])
+templates = Jinja2Templates(directory="templates")
+
+
+@page_router.get("/purchase/unreceived", response_class=HTMLResponse)
+def unreceived_page(request: Request, current_user=Depends(get_current_user)):
+    return templates.TemplateResponse(
+        request=request,
+        name="purchase_unreceived.html",
+        context={"request": request, "user": current_user},
+    )
 
 
 @router.get("/unreceived")
