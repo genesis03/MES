@@ -1,4 +1,4 @@
-"""Add optional purchase entry columns to existing SQLite databases."""
+"""Add optional purchase entry columns to existing SQLite/PostgreSQL databases."""
 
 from sqlalchemy import inspect, text
 
@@ -10,6 +10,8 @@ def ensure_purchase_entry_columns(engine):
         "purchase_order_masters": {"manager_name": "VARCHAR(50)"},
         "purchase_order_items": {
             "delivery_date": "VARCHAR(10)",
+            "warehouse_code": "VARCHAR(20)",
+            "storage_location": "VARCHAR(20)",
             "note": "TEXT",
         },
         "purchase_inbound_masters": {
@@ -26,4 +28,3 @@ def ensure_purchase_entry_columns(engine):
                 if name not in existing:
                     clause = "ADD COLUMN IF NOT EXISTS" if engine.dialect.name == "postgresql" else "ADD COLUMN"
                     connection.execute(text(f"ALTER TABLE {table} {clause} {name} {data_type}"))
-
