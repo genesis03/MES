@@ -28,6 +28,10 @@ ORDER_STATUS_NAMES = {
     "COMPLETED": "입고완료",
     "CANCELLED": "취소",
 }
+INBOUND_STATUS_NAMES = {
+    "DRAFT": "임시저장",
+    "CONFIRMED": "입고확정",
+}
 
 
 @router.get("/orders")
@@ -124,10 +128,7 @@ def delete_selected_orders(
             blocked.append(master.po_no)
 
     if blocked:
-        raise HTTPException(
-            409,
-            "입고 이력이 있는 발주는 삭제할 수 없습니다: " + ", ".join(blocked),
-        )
+        raise HTTPException(409, "입고 이력이 있는 발주는 삭제할 수 없습니다: " + ", ".join(blocked))
 
     for master in masters:
         db.delete(master)
@@ -144,6 +145,7 @@ def inquiry_inbounds(
     partner_name: Optional[str] = Query(None, max_length=100),
     part_no: Optional[str] = Query(None, max_length=50),
     lot: Optional[str] = Query(None, max_length=100),
+    status: Optional[str] = Query(None, max_length=20),
     offset: int = Query(0, ge=0),
     limit: int = Query(500, ge=1, le=1000),
     db: Session = Depends(get_db),
@@ -155,7 +157,6 @@ def inquiry_inbounds(
         .outerjoin(PurchaseOrderItem, PurchaseOrderItem.id == PurchaseInboundItem.po_item_id)
         .outerjoin(PurchaseOrderMaster, PurchaseOrderMaster.id == PurchaseOrderItem.po_id)
         .join(ItemMasterModel, ItemMasterModel.part_no == PurchaseInboundItem.part_no)
-        .filter(PurchaseInboundMaster.status == "CONFIRMED")
     )
     if start_date:
         query = query.filter(PurchaseInboundMaster.inbound_date >= start_date)
@@ -175,6 +176,10 @@ def inquiry_inbounds(
             PurchaseInboundItem.supplier_lot_no.contains(keyword, autoescape=True),
             PurchaseInboundItem.internal_lot_no.contains(keyword, autoescape=True),
         ))
+    if status:
+        if status not in INBOUND_STATUS_NAMES:
+            raise HTTPException(422, "지원하지 않는 구매 상태입니다.")
+        query = query.filter(PurchaseInboundMaster.status == status)
 
     total = query.count()
     rows = (
@@ -205,6 +210,7 @@ def inquiry_inbounds(
                 "inspection_status": item.inspection_status,
                 "note": item.note or master.note or "",
                 "status": master.status,
+                "status_name": INBOUND_STATUS_NAMES.get(master.status, master.status),
             }
             for master, item, linked_po_no, product in rows
         ],
@@ -226,10 +232,7 @@ def delete_selected_inbounds(
 
     blocked = [row.inbound_no for row in masters if row.status != "DRAFT"]
     if blocked:
-        raise HTTPException(
-            409,
-            "확정된 입고는 LOT/재고 이력 보호를 위해 삭제할 수 없습니다: " + ", ".join(blocked),
-        )
+        raise HTTPException(409, "확정된 입고는 LOT/재고 이력 보호를 위해 삭제할 수 없습니다: " + ", ".join(blocked))
 
     for master in masters:
         db.delete(master)
