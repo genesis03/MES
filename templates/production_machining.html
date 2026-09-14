@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}가공 실적 등록{% endblock %}
+
+{% block extra_head %}
+<style>
+    .page-head{display:flex;justify-content:space-between;align-items:end;margin-bottom:16px}
+    .page-head h1{font-size:23px;margin-bottom:4px}.page-head p{font-size:12.5px;color:#64748b}
+    .panel{background:#fff;border:1px solid #dbe3ec;border-radius:5px;margin-bottom:14px}
+    .panel-title{padding:10px 14px 8px;font-size:13px;font-weight:700;border-bottom:1px solid #6495ed;color:#334155}
+    .panel-body{padding:14px}
+    .form-grid{display:grid;grid-template-columns:180px minmax(280px,1.5fr) 180px 180px;gap:10px 12px;align-items:end}
+    label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px}
+    input,select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:3px;padding:0 8px;background:#fff;font-size:13px}
+    input[readonly]{background:#f8fafc;color:#475569}
+    .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+    .summary div{background:#f8fafc;border:1px solid #e2e8f0;padding:8px 10px;font-size:12px}
+    .summary b{display:block;font-size:15px;color:#1e293b;margin-top:2px}
+    .actions{display:flex;justify-content:flex-end;gap:7px;margin-top:12px}.btn{border:0;border-radius:4px;padding:8px 14px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#334155}
+    .msg{font-size:12px;margin-top:9px}.ok{color:#15803d}.err{color:#b91c1c}
+    table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left}th{background:#f8fafc;color:#475569;font-weight:700}.num{text-align:right}.empty{text-align:center;color:#94a3b8;padding:18px}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div><h1>가공 실적 등록</h1><p>작업지시를 선택해 가공 실적을 등록합니다. 첫 실적 저장 시 작업지시는 자동으로 생산중 상태가 됩니다.</p></div>
+</div>
+
+<div class="panel">
+    <div class="panel-title">생산실적 입력</div>
+    <div class="panel-body">
+        <div class="form-grid">
+            <div><label>생산일자 *</label><input type="date" id="performanceDate"></div>
+            <div><label>작업지시 *</label><select id="workOrderId"><option value="">작업지시 선택</option></select></div>
+            <div><label>공정 *</label><select id="processCode"><option value="">공정 선택</option></select></div>
+            <div><label>작업자</label><input type="text" id="operatorName" maxlength="50"></div>
+            <div><label>양품수량 *</label><input type="number" id="goodQty" min="0.001" step="0.001"></div>
+            <div><label>불량수량</label><input type="number" id="defectQty" min="0" step="0.001" value="0"></div>
+            <div style="grid-column:3/5"><label>비고</label><input type="text" id="note" maxlength="1000"></div>
+        </div>
+        <div class="summary">
+            <div>품번<b id="sumPartNo">-</b></div>
+            <div>지시수량<b id="sumOrderQty">0</b></div>
+            <div>누적 생산수량<b id="sumProductionQty">0</b></div>
+            <div>현재 상태<b id="sumStatus">-</b></div>
+        </div>
+        <div class="actions"><button class="btn secondary" onclick="resetForm()">초기화</button><button class="btn primary" onclick="savePerformance()">실적 저장</button></div>
+        <div id="msg" class="msg"></div>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-title">생산실적 조회</div>
+    <div class="panel-body">
+        <div class="form-grid" style="grid-template-columns:160px 160px 220px 220px auto;">
+            <div><label>시작일</label><input type="date" id="startDate"></div>
+            <div><label>종료일</label><input type="date" id="endDate"></div>
+            <div><label>작업지시번호</label><input type="text" id="searchWorkOrder"></div>
+            <div><label>품번</label><input type="text" id="searchPartNo"></div>
+            <div><button class="btn primary" onclick="loadPerformances()">조회</button></div>
+        </div>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-body" style="padding:0;overflow-x:auto">
+        <table>
+            <thead><tr><th>No.</th><th>생산일자</th><th>작업지시번호</th><th>품번</th><th>품명</th><th>공정</th><th class="num">양품</th><th class="num">불량</th><th>작업자</th><th>비고</th></tr></thead>
+            <tbody id="performanceBody"><tr><td colspan="10" class="empty">조회된 생산실적이 없습니다.</td></tr></tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+let orders=[];let processes=[];const today=new Date().toISOString().slice(0,10);
+document.addEventListener('DOMContentLoaded',async()=>{performanceDate.value=today;await Promise.all([loadOrders(),loadProcesses()]);await loadPerformances();});
+async function loadOrders(){const r=await fetch('/api/production/performance/orders');orders=await r.json();workOrderId.innerHTML='<option value="">작업지시 선택</option>'+orders.map(x=>`<option value="${x.id}">${x.work_order_no} | ${x.part_no} | ${x.status_name}</option>`).join('');renderOrderSummary();}
+async function loadProcesses(){const r=await fetch('/api/production/processes');processes=await r.json();processCode.innerHTML='<option value="">공정 선택</option>'+processes.map(x=>`<option value="${x.process_code}">${x.process_code} | ${x.process_name}</option>`).join('');}
+workOrderId.addEventListener('change',renderOrderSummary);
+function renderOrderSummary(){const x=orders.find(o=>String(o.id)===workOrderId.value);sumPartNo.textContent=x?x.part_no:'-';sumOrderQty.textContent=x?Number(x.order_qty).toLocaleString():'0';sumProductionQty.textContent=x?Number(x.production_qty).toLocaleString():'0';sumStatus.textContent=x?x.status_name:'-';}
+function setMsg(t,ok=false){msg.textContent=t;msg.className='msg '+(ok?'ok':'err');}
+function resetForm(){performanceDate.value=today;workOrderId.value='';processCode.value='';operatorName.value='';goodQty.value='';defectQty.value='0';note.value='';renderOrderSummary();setMsg('');}
+async function savePerformance(){const payload={work_order_id:Number(workOrderId.value),performance_date:performanceDate.value,process_code:processCode.value,good_qty:Number(goodQty.value),defect_qty:Number(defectQty.value||0),operator_name:operatorName.value,note:note.value};if(!payload.work_order_id||!payload.performance_date||!payload.process_code||!payload.good_qty){setMsg('생산일자, 작업지시, 공정, 양품수량을 입력해 주세요.');return;}const r=await fetch('/api/production/performances',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){setMsg(d.detail||'생산실적 저장에 실패했습니다.');return;}setMsg(d.message,true);const keepDate=performanceDate.value;resetForm();performanceDate.value=keepDate;await loadOrders();await loadPerformances();}
+async function loadPerformances(){const q=new URLSearchParams();if(startDate.value)q.set('start_date',startDate.value);if(endDate.value)q.set('end_date',endDate.value);if(searchWorkOrder.value.trim())q.set('work_order_no',searchWorkOrder.value.trim());if(searchPartNo.value.trim())q.set('part_no',searchPartNo.value.trim());const r=await fetch('/api/production/performances?'+q.toString());const rows=await r.json();if(!rows.length){performanceBody.innerHTML='<tr><td colspan="10" class="empty">조회된 생산실적이 없습니다.</td></tr>';return;}performanceBody.innerHTML=rows.map((x,i)=>`<tr><td>${i+1}</td><td>${x.performance_date}</td><td>${x.work_order_no}</td><td>${x.part_no}</td><td>${x.part_name}</td><td>${x.process_code} ${x.process_name||''}</td><td class="num">${Number(x.good_qty).toLocaleString()}</td><td class="num">${Number(x.defect_qty).toLocaleString()}</td><td>${x.operator_name||''}</td><td>${x.note||''}</td></tr>`).join('');}
+</script>
+{% endblock %}
