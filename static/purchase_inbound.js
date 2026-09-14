@@ -143,7 +143,7 @@
         if (!groups.has(row.po_id)) groups.set(row.po_id, []);
         groups.get(row.po_id).push(row);
       });
-      groups.forEach((groupRows, poId) => {
+      groups.forEach(groupRows => {
         const row = groupRows[0];
         box.append(button(`${row.po_no} · ${row.partner_name} · 미입고 품목 ${groupRows.length}행`, () => displayPO(groupRows)));
       });
@@ -255,6 +255,7 @@
   }
 
   function init() {
+    const editId = Number(new URLSearchParams(location.search).get('edit'));
     $('pi-load-po').addEventListener('click', () => {
       $('pi-po-list').hidden = !$('pi-po-list').hidden;
       if (!$('pi-po-list').hidden) loadOpenOrders();
@@ -264,7 +265,6 @@
     $('pi-confirm').addEventListener('click', confirm);
     ['pi-date', 'pi-invoice', 'pi-note'].forEach(id => $(id).addEventListener('input', markDirty));
     reset();
-    const editId = Number(new URLSearchParams(location.search).get('edit'));
     if (Number.isInteger(editId) && editId > 0) loadInbound(editId);
   }
 
