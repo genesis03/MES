@@ -284,6 +284,10 @@ def update_order_status(
     status = payload.status.strip().upper()
     if status not in STATUS_NAMES:
         raise HTTPException(status_code=400, detail="사용할 수 없는 작업지시 상태입니다.")
+    if status == "IN_PROGRESS" and order.status != "IN_PROGRESS":
+        raise HTTPException(status_code=400, detail="생산중 상태는 첫 생산실적 등록 시 자동으로 변경됩니다.")
+    if status == "WAITING" and order.status != "WAITING":
+        raise HTTPException(status_code=400, detail="생산이 시작된 작업지시는 대기 상태로 되돌릴 수 없습니다.")
     if status == "CANCELLED" and order.production_qty > 0:
         raise HTTPException(status_code=400, detail="생산실적이 존재하는 작업지시는 취소할 수 없습니다.")
     order.status = status
