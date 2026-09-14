@@ -28,6 +28,7 @@ class StartRunPayload(BaseModel):
     operator_id: int = Field(gt=0)
     equipment_id: int = Field(gt=0)
     shift_type: str
+    performance_type: str = "MACHINING"
 
 
 class DefectQtyInput(BaseModel):
@@ -170,6 +171,8 @@ def _serialize_run(run: ProductionRun):
         "work_order_id": run.work_order_id,
         "work_order_no": run.work_order.work_order_no if getattr(run, "work_order", None) else "",
         "part_no": run.work_order.part_no if getattr(run, "work_order", None) else "",
+        "performance_type": run.performance_type or "MACHINING",
+        "performance_type_name": "조립" if run.performance_type == "ASSEMBLY" else "가공",
         "performance_date": run.performance_date,
         "process_code": run.process_code,
         "operator_id": run.operator_id,
@@ -232,7 +235,14 @@ def defect_types(db: Session = Depends(get_db), current_user=Depends(get_current
 
 
 @router.get("/runs")
-def list_runs(status: Optional[str] = Query("IN_PROGRESS"), process_code: Optional[str] = Query(None), equipment_id: Optional[int] = Query(None), db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+def list_runs(
+    status: Optional[str] = Query("IN_PROGRESS"),
+    process_code: Optional[str] = Query(None),
+    equipment_id: Optional[int] = Query(None),
+    performance_type: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     query = db.query(ProductionRun)
     if status:
         query = query.filter(ProductionRun.status == status)
@@ -240,6 +250,11 @@ def list_runs(status: Optional[str] = Query("IN_PROGRESS"), process_code: Option
         query = query.filter(ProductionRun.process_code == process_code.strip())
     if equipment_id:
         query = query.filter(ProductionRun.equipment_id == equipment_id)
+    if performance_type:
+        run_type = performance_type.strip().upper()
+        if run_type not in {"MACHINING", "ASSEMBLY"}:
+            raise HTTPException(400, "지원하지 않는 생산실적 구분입니다.")
+        query = query.filter(ProductionRun.performance_type == run_type)
     rows = query.order_by(ProductionRun.created_at.desc()).limit(200).all()
     for row in rows:
         row.work_order = db.get(ProductionWorkOrder, row.work_order_id)
@@ -251,6 +266,9 @@ def start_run(payload: StartRunPayload, db: Session = Depends(get_db), current_u
     order = db.get(ProductionWorkOrder, payload.work_order_id)
     if not order or order.status not in {"WAITING", "IN_PROGRESS"}:
         raise HTTPException(400, "선택할 수 없는 작업지시입니다.")
+    run_type = payload.performance_type.strip().upper()
+    if run_type not in {"MACHINING", "ASSEMBLY"}:
+        raise HTTPException(400, "가공 또는 조립 실적 구분이 올바르지 않습니다.")
     process = db.query(ProcessModel).filter(ProcessModel.process_code == payload.process_code.strip(), ProcessModel.is_active == "Y").first()
     if not process:
         raise HTTPException(400, "사용 가능한 공정을 선택하세요.")
@@ -275,6 +293,7 @@ def start_run(payload: StartRunPayload, db: Session = Depends(get_db), current_u
     now_text = datetime.now().strftime("%Y-%m-%d %H:%M")
     run = ProductionRun(
         work_order_id=order.id,
+        performance_type=run_type,
         performance_date=payload.performance_date,
         process_code=process.process_code,
         operator_id=worker.id,
@@ -443,7 +462,7 @@ def complete_run(run_id: int, db: Session = Depends(get_db), current_user=Depend
         raise HTTPException(400, "양품수량을 입력하세요.")
     process_qty = float(run.good_qty or 0) + float(run.defect_qty or 0) + float(run.setup_qty or 0)
     if process_qty <= 0:
-        raise HTTPException(400, "가공수량이 없습니다.")
+        raise HTTPException(400, "처리수량이 없습니다.")
 
     incomplete = []
     for material in run.materials:
@@ -461,7 +480,7 @@ def complete_run(run_id: int, db: Session = Depends(get_db), current_user=Depend
     total_consumed = sum(float(a.allocated_qty or 0) for m in run.materials for a in m.allocations)
     perf = ProductionPerformance(
         work_order_id=order.id,
-        performance_type="MACHINING",
+        performance_type=run.performance_type or "MACHINING",
         performance_date=run.performance_date,
         process_code=run.process_code,
         shift_type=run.shift_type,
