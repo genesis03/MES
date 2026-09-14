@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}작업지시 입력{% endblock %}
+
+{% block extra_head %}
+<style>
+    .page-head{display:flex;justify-content:space-between;align-items:end;margin-bottom:18px}
+    .page-head h1{font-size:24px;margin-bottom:5px}.page-head p{font-size:13px;color:#64748b}
+    .card{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:18px;margin-bottom:16px}
+    .grid{display:grid;grid-template-columns:160px 160px minmax(240px,1fr) 160px;gap:12px 14px;align-items:end}
+    label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:5px}
+    input,select{width:100%;height:36px;border:1px solid #cbd5e1;border-radius:5px;padding:0 9px;background:#fff}
+    .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}.btn{border:0;border-radius:5px;padding:9px 15px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#334155}.danger{background:#dc2626;color:#fff}
+    table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{border-bottom:1px solid #e2e8f0;padding:9px;text-align:left}th{background:#f8fafc;color:#475569}.num{text-align:right}.msg{font-size:12px;margin-top:10px}.ok{color:#15803d}.err{color:#b91c1c}.status{font-weight:700}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head"><div><h1>작업지시 입력</h1><p>품번별 작업지시를 등록합니다. 작업지시가 있어야 생산실적을 등록할 수 있습니다.</p></div></div>
+
+<div class="card">
+    <div class="grid">
+        <div><label>지시일자 *</label><input type="date" id="orderDate"></div>
+        <div><label>생산예정일</label><input type="date" id="scheduledDate"></div>
+        <div><label>품번 *</label><select id="partNo"><option value="">선택</option></select></div>
+        <div><label>지시수량 *</label><input type="number" id="orderQty" min="0.001" step="0.001"></div>
+        <div style="grid-column:1/3"><label>생산계획 연결 (선택)</label><select id="planId"><option value="">연결 안 함</option></select></div>
+        <div style="grid-column:3/5"><label>비고</label><input type="text" id="note" maxlength="1000"></div>
+    </div>
+    <div class="actions"><button class="btn secondary" onclick="resetForm()">초기화</button><button class="btn primary" onclick="saveOrder()">작업지시 등록</button></div>
+    <div id="msg" class="msg"></div>
+</div>
+
+<div class="card">
+    <div class="grid" style="grid-template-columns:160px 160px minmax(200px,1fr) 160px auto;">
+        <div><label>시작일</label><input type="date" id="startDate"></div>
+        <div><label>종료일</label><input type="date" id="endDate"></div>
+        <div><label>품번</label><input type="text" id="searchPartNo" placeholder="품번 일부 입력"></div>
+        <div><label>상태</label><select id="searchStatus"><option value="">전체</option><option value="WAITING">대기</option><option value="IN_PROGRESS">생산중</option><option value="COMPLETED">완료</option><option value="CANCELLED">취소</option></select></div>
+        <div><button class="btn primary" onclick="loadOrders()">조회</button></div>
+    </div>
+</div>
+
+<div class="card">
+    <table>
+        <thead><tr><th>No.</th><th>작업지시번호</th><th>지시일자</th><th>생산예정일</th><th>품번</th><th>품명</th><th class="num">지시수량</th><th class="num">생산수량</th><th class="num">진행률</th><th>상태</th><th>비고</th><th>처리</th></tr></thead>
+        <tbody id="orderBody"><tr><td colspan="12">조회된 데이터가 없습니다.</td></tr></tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+let items=[];let plans=[];const today=new Date().toISOString().slice(0,10);
+document.addEventListener('DOMContentLoaded',async()=>{orderDate.value=today;await loadItems();await loadPlans();await loadOrders();});
+async function loadItems(){const r=await fetch('/api/production/items');items=await r.json();partNo.innerHTML='<option value="">선택</option>'+items.map(x=>`<option value="${x.part_no}">${x.part_no} | ${x.part_name}</option>`).join('');}
+async function loadPlans(){const r=await fetch('/api/production/plans');plans=await r.json();renderPlanOptions();}
+function renderPlanOptions(){const p=partNo.value;const filtered=p?plans.filter(x=>x.part_no===p):plans;planId.innerHTML='<option value="">연결 안 함</option>'+filtered.map(x=>`<option value="${x.id}">${x.plan_date} | ${x.part_no} | ${Number(x.plan_qty).toLocaleString()}</option>`).join('');}
+partNo.addEventListener('change',renderPlanOptions);
+function setMsg(t,ok=false){msg.textContent=t;msg.className='msg '+(ok?'ok':'err');}
+function resetForm(){orderDate.value=today;scheduledDate.value='';partNo.value='';orderQty.value='';planId.value='';note.value='';renderPlanOptions();setMsg('');}
+async function saveOrder(){const payload={order_date:orderDate.value,scheduled_date:scheduledDate.value||null,part_no:partNo.value,order_qty:Number(orderQty.value),plan_id:planId.value?Number(planId.value):null,note:note.value};if(!payload.order_date||!payload.part_no||!payload.order_qty){setMsg('지시일자, 품번, 지시수량을 입력해 주세요.');return;}const r=await fetch('/api/production/orders',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){setMsg(d.detail||'등록에 실패했습니다.');return;}setMsg(`${d.message} (${d.work_order_no})`,true);resetForm();await loadOrders();}
+async function loadOrders(){const q=new URLSearchParams();if(startDate.value)q.set('start_date',startDate.value);if(endDate.value)q.set('end_date',endDate.value);if(searchPartNo.value.trim())q.set('part_no',searchPartNo.value.trim());if(searchStatus.value)q.set('status',searchStatus.value);const r=await fetch('/api/production/orders?'+q.toString());const rows=await r.json();const b=orderBody;if(!rows.length){b.innerHTML='<tr><td colspan="12">조회된 데이터가 없습니다.</td></tr>';return;}b.innerHTML=rows.map((x,i)=>`<tr><td>${i+1}</td><td>${x.work_order_no}</td><td>${x.order_date}</td><td>${x.scheduled_date||''}</td><td>${x.part_no}</td><td>${x.part_name}</td><td class="num">${Number(x.order_qty).toLocaleString()}</td><td class="num">${Number(x.production_qty).toLocaleString()}</td><td class="num">${x.progress_rate}%</td><td><select onchange="changeStatus(${x.id},this.value)" ${x.production_qty>0&&x.status==='COMPLETED'?'disabled':''}><option value="WAITING" ${x.status==='WAITING'?'selected':''}>대기</option><option value="IN_PROGRESS" ${x.status==='IN_PROGRESS'?'selected':''}>생산중</option><option value="COMPLETED" ${x.status==='COMPLETED'?'selected':''}>완료</option><option value="CANCELLED" ${x.status==='CANCELLED'?'selected':''}>취소</option></select></td><td>${x.note||''}</td><td><button class="btn danger" style="padding:5px 9px" onclick="deleteOrder(${x.id})">삭제</button></td></tr>`).join('');}
+async function changeStatus(id,status){const r=await fetch(`/api/production/orders/${id}/status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});const d=await r.json();if(!r.ok){alert(d.detail||'상태 변경에 실패했습니다.');await loadOrders();return;}await loadOrders();}
+async function deleteOrder(id){if(!confirm('작업지시를 삭제하시겠습니까?'))return;const r=await fetch('/api/production/orders/'+id,{method:'DELETE'});const d=await r.json();if(!r.ok){alert(d.detail||'삭제에 실패했습니다.');return;}await loadOrders();}
+</script>
+{% endblock %}
