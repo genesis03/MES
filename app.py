@@ -6,7 +6,7 @@ import models  # 기존 테이블 자동 생성 트리거
 import models.partner  # 신규 거래처 테이블 자동 생성 트리거
 from core.security import init_default_accounts
 
-from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, auth, purchase, purchase_pages, purchase_inquiry, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, purchase_unreceived, quality_pages, quality, production_pages, production, production_run
+from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, auth, purchase, purchase_pages, purchase_inquiry, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, purchase_unreceived, quality_pages, quality, production_pages, production, production_run, production_extra
 
 # 초기 계정 데이터 생성 트리거
 init_default_accounts()
@@ -47,6 +47,7 @@ app.include_router(quality.router)
 app.include_router(production_pages.router)
 app.include_router(production.router)
 app.include_router(production_run.router)
+app.include_router(production_extra.router)
 
 if __name__ == "__main__":
     import uvicorn
