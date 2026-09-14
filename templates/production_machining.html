@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}가공 실적 등록{% endblock %}
+{% block title %}{{ page_title }}{% endblock %}
 
 {% block extra_head %}
 <style>
@@ -19,7 +19,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
 {% endblock %}
 
 {% block content %}
-<div class="page-head"><h1>가공 실적 등록</h1><p>공정·작업자·생산호기 선택 후 가동내역을 시작하고, BOM 자재 LOT 배정을 완료한 뒤 종료합니다.</p></div>
+<div class="page-head"><h1>{{ page_title }}</h1><p>공정·작업자·생산호기 선택 후 {{ action_label }}을 시작하고, BOM 자재 LOT 배정을 완료한 뒤 종료합니다.</p></div>
 
 <div class="panel">
   <div class="panel-title">가동 조건</div>
@@ -30,16 +30,14 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
       <div><label>작업자 *</label><select id="operatorId" disabled><option value="">공정을 먼저 선택하세요</option></select></div>
       <div><label>생산호기 *</label><select id="equipmentId" disabled><option value="">공정을 먼저 선택하세요</option></select></div>
     </div>
-    <div class="actions"><button class="btn primary" onclick="openOrderModal()">가공내역 추가</button></div>
+    <div class="actions"><button class="btn primary" onclick="openOrderModal()">{{ action_label }} 추가</button></div>
     <div id="topMsg" class="msg"></div>
   </div>
 </div>
 
 <div class="panel">
   <div class="panel-title">생산중 가동내역</div>
-  <div class="panel-body">
-    <div id="activeRunList"></div>
-  </div>
+  <div class="panel-body"><div id="activeRunList"></div></div>
 </div>
 
 <div class="panel" id="runEditorPanel" style="display:none">
@@ -52,7 +50,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
       <div><label>양품수량 *</label><input type="number" id="goodQty" min="0" step="0.001"></div>
       <div><label>SET-UP 수량</label><input type="number" id="setupQty" min="0" step="0.001" value="0"></div>
       <div><label>불량수량</label><input type="number" id="defectQty" readonly value="0"></div>
-      <div><label>가공수량(양품+불량+SET-UP)</label><input type="text" id="processQty" readonly value="0"></div>
+      <div><label>처리수량(양품+불량+SET-UP)</label><input type="text" id="processQty" readonly value="0"></div>
       <div style="grid-column:span 2"><label>비고</label><input type="text" id="runNote" maxlength="1000"></div>
     </div>
     <div class="actions"><button class="btn danger" onclick="openDefectModal()">불량 유형 설정</button><button class="btn secondary" onclick="saveDetails(true)">수량/시간 저장</button></div>
@@ -88,6 +86,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
 
 {% block extra_script %}
 <script>
+const PERFORMANCE_TYPE='{{ performance_type }}';
 const n=v=>Number(v||0);const today=new Date().toISOString().slice(0,10);let currentRun=null;let defects=[];let defectTypes=[];let selectedOrderId=null;
 document.addEventListener('DOMContentLoaded',async()=>{performanceDate.value=today;await loadProcesses();await loadDefectTypes();await loadActiveRuns();['goodQty','setupQty'].forEach(id=>document.getElementById(id).addEventListener('input',updateProcessQty));scanLotInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scanLot();}});});
 async function jf(url,opt){const r=await fetch(url,opt);const d=await r.json();if(!r.ok)throw new Error(d.detail||'처리 실패');return d;}
@@ -96,8 +95,8 @@ function closeModal(id){document.getElementById(id).classList.remove('show');}
 async function loadProcesses(){const rows=await jf('/api/production/processes');processCode.innerHTML='<option value="">공정 선택</option>'+rows.map(x=>`<option value="${x.process_code}">${x.process_name}</option>`).join('');}
 processCode.addEventListener('change',async()=>{operatorId.disabled=equipmentId.disabled=true;operatorId.innerHTML='<option value="">작업자 선택</option>';equipmentId.innerHTML='<option value="">생산호기 선택</option>';if(!processCode.value)return;const [workers,equip]=await Promise.all([jf('/api/production/workers?process_code='+encodeURIComponent(processCode.value)),jf('/api/production/equipments?process_code='+encodeURIComponent(processCode.value))]);operatorId.disabled=false;operatorId.innerHTML='<option value="">작업자 선택</option>'+workers.map(x=>`<option value="${x.id}">${x.worker_code} | ${x.worker_name}</option>`).join('');equipmentId.disabled=false;equipmentId.innerHTML='<option value="">생산호기 선택</option>'+equip.map(x=>`<option value="${x.id}">${x.machine_no}호기 | ${x.equipment_name}</option>`).join('');});
 async function openOrderModal(){if(!performanceDate.value||!processCode.value||!operatorId.value||!equipmentId.value){msg(topMsg,'생산일자, 제조공정, 작업자, 생산호기를 먼저 선택해 주세요.');return;}selectedOrderId=null;shiftType.value='';const rows=await jf('/api/production-run/orders?process_code='+encodeURIComponent(processCode.value));orderBody.innerHTML=rows.length?rows.map(x=>`<tr><td><input type="radio" name="wo" value="${x.id}" onchange="selectedOrderId=${x.id}"></td><td>${x.work_order_no}</td><td>${x.part_no}</td><td>${x.part_name||''}</td><td class="num">${n(x.order_qty).toLocaleString()}</td><td class="num">${n(x.production_qty).toLocaleString()}</td><td class="num">${n(x.remaining_qty).toLocaleString()}</td><td>${x.status}</td></tr>`).join(''):'<tr><td colspan="8" class="empty">해당 공정의 작업지시가 없습니다.</td></tr>';orderModal.classList.add('show');}
-async function startSelectedRun(){if(!shiftType.value){alert('주/야를 선택해 주세요.');return;}if(!selectedOrderId){alert('작업지시를 선택해 주세요.');return;}try{const run=await jf('/api/production-run/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({work_order_id:selectedOrderId,performance_date:performanceDate.value,process_code:processCode.value,operator_id:n(operatorId.value),equipment_id:n(equipmentId.value),shift_type:shiftType.value})});closeModal('orderModal');await loadActiveRuns();await selectRun(run.id);msg(topMsg,'가동내역이 생산중으로 등록되었습니다.',true);}catch(e){alert(e.message);}}
-async function loadActiveRuns(){const rows=await jf('/api/production-run/runs?status=IN_PROGRESS');activeRunList.innerHTML=rows.length?`<table><thead><tr><th>선택</th><th>작업지시</th><th>품번</th><th>공정</th><th>작업자</th><th>설비</th><th>주/야</th><th>시작시간</th></tr></thead><tbody>${rows.map(x=>`<tr><td><button class="btn secondary" onclick="selectRun(${x.id})">열기</button></td><td>${x.work_order_no}</td><td>${x.part_no}</td><td>${x.process_code}</td><td>${x.operator_name}</td><td>${x.equipment_name}</td><td>${x.shift_name}</td><td>${x.start_time}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">현재 생산중 가동내역이 없습니다.</div>';}
+async function startSelectedRun(){if(!shiftType.value){alert('주/야를 선택해 주세요.');return;}if(!selectedOrderId){alert('작업지시를 선택해 주세요.');return;}try{const run=await jf('/api/production-run/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({work_order_id:selectedOrderId,performance_date:performanceDate.value,process_code:processCode.value,operator_id:n(operatorId.value),equipment_id:n(equipmentId.value),shift_type:shiftType.value,performance_type:PERFORMANCE_TYPE})});closeModal('orderModal');await loadActiveRuns();await selectRun(run.id);msg(topMsg,'가동내역이 생산중으로 등록되었습니다.',true);}catch(e){alert(e.message);}}
+async function loadActiveRuns(){const rows=await jf('/api/production-run/runs?status=IN_PROGRESS&performance_type='+encodeURIComponent(PERFORMANCE_TYPE));activeRunList.innerHTML=rows.length?`<table><thead><tr><th>선택</th><th>작업지시</th><th>품번</th><th>공정</th><th>작업자</th><th>설비</th><th>주/야</th><th>시작시간</th></tr></thead><tbody>${rows.map(x=>`<tr><td><button class="btn secondary" onclick="selectRun(${x.id})">열기</button></td><td>${x.work_order_no}</td><td>${x.part_no}</td><td>${x.process_code}</td><td>${x.operator_name}</td><td>${x.equipment_name}</td><td>${x.shift_name}</td><td>${x.start_time}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">현재 생산중 가동내역이 없습니다.</div>';}
 function dtLocal(v){return (v||'').replace(' ','T');}
 async function selectRun(id){currentRun=await jf('/api/production-run/'+id);defects=(currentRun.defects||[]).map(x=>({code:x.code,qty:n(x.qty)}));runEditorPanel.style.display='block';runOrderBadge.textContent='작업지시 '+currentRun.work_order_no;runPartBadge.textContent='품번 '+currentRun.part_no;runShiftBadge.textContent=currentRun.shift_name;runEquipmentBadge.textContent=currentRun.equipment_name;startTime.value=dtLocal(currentRun.start_time);endTime.value=dtLocal(currentRun.end_time);goodQty.value=n(currentRun.good_qty)||'';setupQty.value=n(currentRun.setup_qty);defectQty.value=n(currentRun.defect_qty);runNote.value=currentRun.note||'';updateProcessQty();renderMaterials();msg(runMsg,'');setTimeout(()=>scanLotInput.focus(),50);}
 function updateProcessQty(){processQty.value=(n(goodQty.value)+n(defectQty.value)+n(setupQty.value)).toLocaleString();}
