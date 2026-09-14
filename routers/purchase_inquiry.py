@@ -247,6 +247,7 @@ def inquiry_subcontract_inbounds(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    from models.quality import QualityInboundResult
     from models.subcontract_inbound import SubcontractInboundMaster, SubcontractInboundItem, SubcontractInboundLot
 
     # 먼저 검색조건에 맞는 입고번호를 찾고, 화면에는 입고번호 1건당 1행만 반환합니다.
@@ -298,6 +299,28 @@ def inquiry_subcontract_inbounds(
     items = []
     for master in masters:
         inbound_items = list(master.items)
+        inbound_item_ids = [inbound_item.id for inbound_item in inbound_items]
+        quality_rows = []
+        if inbound_item_ids:
+            quality_rows = (
+                db.query(QualityInboundResult)
+                .filter(
+                    QualityInboundResult.source_type == "SUBCONTRACT",
+                    QualityInboundResult.inbound_item_id.in_(inbound_item_ids),
+                )
+                .all()
+            )
+        completed_ids = {
+            row.inbound_item_id for row in quality_rows
+            if row.inspection_status == "COMPLETED"
+        }
+        if inbound_item_ids and len(completed_ids) == len(inbound_item_ids):
+            inspection_status = "검사완료"
+        elif completed_ids:
+            inspection_status = "일부완료"
+        else:
+            inspection_status = "검사대기"
+
         lots = [lot_row for inbound_item in inbound_items for lot_row in inbound_item.lots]
         is_received = master.status == "RECEIVED"
         part_nos = [inbound_item.part_no for inbound_item in inbound_items]
@@ -328,7 +351,7 @@ def inquiry_subcontract_inbounds(
             "internal_lot_no": _summary_text(internal_lots),
             "warehouse_code": "",
             "storage_location": master.storage_location,
-            "inspection_status": "",
+            "inspection_status": inspection_status,
             "note": master.note or _summary_text(notes),
             "status": "CONFIRMED" if is_received else "CANCELLED",
             "status_name": "입고확정" if is_received else "입고취소",
