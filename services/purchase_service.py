@@ -155,7 +155,11 @@ def linked_order_item(db, item, master):
 
 
 def validate_inbound_storage(db, items):
-    validate_storage_master(db, items)
+    location_codes = {item.storage_location for item in items}
+    locations = set(db.scalars(select(StorageLocationModel.location_code).where(
+        StorageLocationModel.location_code.in_(location_codes), StorageLocationModel.is_active == "Y")))
+    if locations != location_codes:
+        raise HTTPException(422, "등록된 활성 저장위치를 선택하세요.")
 
 
 def refresh_order_status(order):
@@ -291,7 +295,8 @@ def update_inbound(db, inbound_id, payload, allow_confirmed=True):
                 affected[po_item.order.id] = po_item.order
                 row.inbound_qty = item.inbound_qty
                 row.supplier_lot_no = item.supplier_lot_no
-                row.warehouse_code = item.warehouse_code
+                if item.warehouse_code is not None:
+                    row.warehouse_code = item.warehouse_code
                 row.storage_location = item.storage_location
                 row.note = item.note
             for order in affected.values():
