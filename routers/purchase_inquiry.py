@@ -220,6 +220,19 @@ def inquiry_inbounds(
     }
 
 
+def _summary_text(values):
+    unique = []
+    for value in values:
+        text = str(value or "").strip()
+        if text and text not in unique:
+            unique.append(text)
+    if not unique:
+        return ""
+    if len(unique) == 1:
+        return unique[0]
+    return f"{unique[0]} 외 {len(unique) - 1}건"
+
+
 @router.get("/subcontract-inbounds")
 def inquiry_subcontract_inbounds(
     start_date: Optional[str] = Query(None, max_length=10),
@@ -236,71 +249,92 @@ def inquiry_subcontract_inbounds(
 ):
     from models.subcontract_inbound import SubcontractInboundMaster, SubcontractInboundItem, SubcontractInboundLot
 
-    query = (
-        db.query(SubcontractInboundMaster, SubcontractInboundItem, SubcontractInboundLot)
+    # 먼저 검색조건에 맞는 입고번호를 찾고, 화면에는 입고번호 1건당 1행만 반환합니다.
+    match_query = (
+        db.query(SubcontractInboundMaster.id)
         .join(SubcontractInboundItem, SubcontractInboundItem.inbound_id == SubcontractInboundMaster.id)
         .join(SubcontractInboundLot, SubcontractInboundLot.inbound_item_id == SubcontractInboundItem.id)
     )
     if start_date:
-        query = query.filter(SubcontractInboundMaster.inbound_date >= start_date)
+        match_query = match_query.filter(SubcontractInboundMaster.inbound_date >= start_date)
     if end_date:
-        query = query.filter(SubcontractInboundMaster.inbound_date <= end_date)
+        match_query = match_query.filter(SubcontractInboundMaster.inbound_date <= end_date)
     if inbound_no:
-        query = query.filter(SubcontractInboundMaster.inbound_no.contains(inbound_no.strip(), autoescape=True))
+        match_query = match_query.filter(SubcontractInboundMaster.inbound_no.contains(inbound_no.strip(), autoescape=True))
     if po_no:
-        query = query.filter(SubcontractInboundMaster.order_no.contains(po_no.strip(), autoescape=True))
+        match_query = match_query.filter(SubcontractInboundMaster.order_no.contains(po_no.strip(), autoescape=True))
     if partner_name:
-        query = query.filter(SubcontractInboundMaster.partner_name.contains(partner_name.strip(), autoescape=True))
+        match_query = match_query.filter(SubcontractInboundMaster.partner_name.contains(partner_name.strip(), autoescape=True))
     if part_no:
-        query = query.filter(SubcontractInboundItem.part_no.contains(part_no.strip(), autoescape=True))
+        match_query = match_query.filter(SubcontractInboundItem.part_no.contains(part_no.strip(), autoescape=True))
     if lot:
         keyword = lot.strip()
-        query = query.filter(or_(
+        match_query = match_query.filter(or_(
             SubcontractInboundLot.source_lot_no.contains(keyword, autoescape=True),
             SubcontractInboundLot.supplier_lot_no.contains(keyword, autoescape=True),
             SubcontractInboundLot.child_lot_no.contains(keyword, autoescape=True),
         ))
     if status:
         if status == "CONFIRMED":
-            query = query.filter(SubcontractInboundMaster.status == "RECEIVED")
+            match_query = match_query.filter(SubcontractInboundMaster.status == "RECEIVED")
         elif status == "DRAFT":
             return {"total": 0, "items": []}
         elif status == "CANCELLED":
-            query = query.filter(SubcontractInboundMaster.status == "CANCELLED")
+            match_query = match_query.filter(SubcontractInboundMaster.status == "CANCELLED")
         else:
             raise HTTPException(422, "지원하지 않는 외주입고 상태입니다.")
 
-    rows = (
-        query.order_by(SubcontractInboundMaster.inbound_date.desc(), SubcontractInboundMaster.id.desc(), SubcontractInboundItem.id, SubcontractInboundLot.id)
-        .limit(limit)
+    matched_ids = [row[0] for row in match_query.distinct().limit(limit).all()]
+    if not matched_ids:
+        return {"total": 0, "items": []}
+
+    masters = (
+        db.query(SubcontractInboundMaster)
+        .filter(SubcontractInboundMaster.id.in_(matched_ids))
+        .order_by(SubcontractInboundMaster.inbound_date.desc(), SubcontractInboundMaster.id.desc())
         .all()
     )
+
     items = []
-    for master, item, lot_row in rows:
+    for master in masters:
+        inbound_items = list(master.items)
+        lots = [lot_row for inbound_item in inbound_items for lot_row in inbound_item.lots]
         is_received = master.status == "RECEIVED"
+        part_nos = [inbound_item.part_no for inbound_item in inbound_items]
+        part_names = [inbound_item.part_name for inbound_item in inbound_items]
+        specs = [inbound_item.spec for inbound_item in inbound_items]
+        units = [inbound_item.unit for inbound_item in inbound_items]
+        supplier_lots = [lot_row.supplier_lot_no for lot_row in lots]
+        internal_lots = [lot_row.child_lot_no or lot_row.source_lot_no for lot_row in lots]
+        source_lots = [lot_row.source_lot_no for lot_row in lots]
+        notes = [inbound_item.note for inbound_item in inbound_items if inbound_item.note]
+        total_good_qty = sum(float(inbound_item.good_qty or 0) for inbound_item in inbound_items)
+        total_sample_qty = sum(float(lot_row.sample_qty or 0) for lot_row in lots)
+
         items.append({
             "source_type": "SUBCONTRACT",
             "inbound_id": master.id,
-            "inbound_item_id": item.id,
+            "inbound_item_id": inbound_items[0].id if inbound_items else None,
             "inbound_no": master.inbound_no,
             "inbound_date": master.inbound_date,
             "po_no": master.order_no,
             "partner_name": master.partner_name,
-            "part_no": item.part_no,
-            "part_name": item.part_name,
-            "spec": item.spec or "",
-            "inbound_qty": float(lot_row.good_qty or 0),
-            "unit": item.unit,
-            "supplier_lot_no": lot_row.supplier_lot_no or "",
-            "internal_lot_no": lot_row.child_lot_no or lot_row.source_lot_no,
+            "part_no": _summary_text(part_nos),
+            "part_name": _summary_text(part_names),
+            "spec": _summary_text(specs),
+            "inbound_qty": total_good_qty,
+            "unit": _summary_text(units),
+            "supplier_lot_no": _summary_text(supplier_lots),
+            "internal_lot_no": _summary_text(internal_lots),
             "warehouse_code": "",
             "storage_location": master.storage_location,
             "inspection_status": "",
-            "note": item.note or master.note or "",
+            "note": master.note or _summary_text(notes),
             "status": "CONFIRMED" if is_received else "CANCELLED",
             "status_name": "입고확정" if is_received else "입고취소",
-            "source_lot_no": lot_row.source_lot_no,
-            "sample_qty": float(lot_row.sample_qty or 0),
+            "source_lot_no": _summary_text(source_lots),
+            "source_lot_count": len({value for value in source_lots if value}),
+            "sample_qty": total_sample_qty,
             "processing_type_name": master.processing_type_name,
         })
     return {"total": len(items), "items": items}
