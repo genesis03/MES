@@ -194,6 +194,7 @@ def inquiry_inbounds(
         "total": total,
         "items": [
             {
+                "source_type": "GENERAL",
                 "inbound_id": master.id,
                 "inbound_item_id": item.id,
                 "inbound_no": master.inbound_no,
@@ -217,6 +218,92 @@ def inquiry_inbounds(
             for master, item, linked_po_no, product in rows
         ],
     }
+
+
+@router.get("/subcontract-inbounds")
+def inquiry_subcontract_inbounds(
+    start_date: Optional[str] = Query(None, max_length=10),
+    end_date: Optional[str] = Query(None, max_length=10),
+    inbound_no: Optional[str] = Query(None, max_length=30),
+    po_no: Optional[str] = Query(None, max_length=30),
+    partner_name: Optional[str] = Query(None, max_length=100),
+    part_no: Optional[str] = Query(None, max_length=80),
+    lot: Optional[str] = Query(None, max_length=100),
+    status: Optional[str] = Query(None, max_length=20),
+    limit: int = Query(1000, ge=1, le=2000),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    from models.subcontract_inbound import SubcontractInboundMaster, SubcontractInboundItem, SubcontractInboundLot
+
+    query = (
+        db.query(SubcontractInboundMaster, SubcontractInboundItem, SubcontractInboundLot)
+        .join(SubcontractInboundItem, SubcontractInboundItem.inbound_id == SubcontractInboundMaster.id)
+        .join(SubcontractInboundLot, SubcontractInboundLot.inbound_item_id == SubcontractInboundItem.id)
+    )
+    if start_date:
+        query = query.filter(SubcontractInboundMaster.inbound_date >= start_date)
+    if end_date:
+        query = query.filter(SubcontractInboundMaster.inbound_date <= end_date)
+    if inbound_no:
+        query = query.filter(SubcontractInboundMaster.inbound_no.contains(inbound_no.strip(), autoescape=True))
+    if po_no:
+        query = query.filter(SubcontractInboundMaster.order_no.contains(po_no.strip(), autoescape=True))
+    if partner_name:
+        query = query.filter(SubcontractInboundMaster.partner_name.contains(partner_name.strip(), autoescape=True))
+    if part_no:
+        query = query.filter(SubcontractInboundItem.part_no.contains(part_no.strip(), autoescape=True))
+    if lot:
+        keyword = lot.strip()
+        query = query.filter(or_(
+            SubcontractInboundLot.source_lot_no.contains(keyword, autoescape=True),
+            SubcontractInboundLot.supplier_lot_no.contains(keyword, autoescape=True),
+            SubcontractInboundLot.child_lot_no.contains(keyword, autoescape=True),
+        ))
+    if status:
+        if status == "CONFIRMED":
+            query = query.filter(SubcontractInboundMaster.status == "RECEIVED")
+        elif status == "DRAFT":
+            return {"total": 0, "items": []}
+        elif status == "CANCELLED":
+            query = query.filter(SubcontractInboundMaster.status == "CANCELLED")
+        else:
+            raise HTTPException(422, "지원하지 않는 외주입고 상태입니다.")
+
+    rows = (
+        query.order_by(SubcontractInboundMaster.inbound_date.desc(), SubcontractInboundMaster.id.desc(), SubcontractInboundItem.id, SubcontractInboundLot.id)
+        .limit(limit)
+        .all()
+    )
+    items = []
+    for master, item, lot_row in rows:
+        is_received = master.status == "RECEIVED"
+        items.append({
+            "source_type": "SUBCONTRACT",
+            "inbound_id": master.id,
+            "inbound_item_id": item.id,
+            "inbound_no": master.inbound_no,
+            "inbound_date": master.inbound_date,
+            "po_no": master.order_no,
+            "partner_name": master.partner_name,
+            "part_no": item.part_no,
+            "part_name": item.part_name,
+            "spec": item.spec or "",
+            "inbound_qty": float(lot_row.good_qty or 0),
+            "unit": item.unit,
+            "supplier_lot_no": lot_row.supplier_lot_no or "",
+            "internal_lot_no": lot_row.child_lot_no or lot_row.source_lot_no,
+            "warehouse_code": "",
+            "storage_location": master.storage_location,
+            "inspection_status": "",
+            "note": item.note or master.note or "",
+            "status": "CONFIRMED" if is_received else "CANCELLED",
+            "status_name": "입고확정" if is_received else "입고취소",
+            "source_lot_no": lot_row.source_lot_no,
+            "sample_qty": float(lot_row.sample_qty or 0),
+            "processing_type_name": master.processing_type_name,
+        })
+    return {"total": len(items), "items": items}
 
 
 def _recalculate_order_status(order):
