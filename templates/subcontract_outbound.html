@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}외주 가공 출고 처리{% endblock %}
+{% block extra_head %}
+<style>
+.so-out h1{font-size:20px;margin:0 0 12px}.ob-box{background:#fff;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:12px}.ob-head{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 20px;padding:16px}.ob-field{display:grid;grid-template-columns:105px minmax(0,1fr);align-items:center;gap:8px;font-size:13px}.ob-field label{font-weight:700}.ob-field input{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #cbd5e1;border-radius:4px;background:#f8fafc}.ob-field input[type=date]{background:#fff}.ob-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 0 10px}.ob-btn{border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:7px 13px;cursor:pointer;font-weight:700}.ob-btn:disabled{opacity:.45;cursor:not-allowed}.ob-primary{background:#2563eb;border-color:#2563eb;color:#fff}.ob-danger{background:#dc2626;border-color:#dc2626;color:#fff}.ob-print{background:#0f766e;border-color:#0f766e;color:#fff}.ob-table{width:100%;border-collapse:collapse;font-size:12px;min-width:1050px}.ob-table th,.ob-table td{border:1px solid #dbe2eb;padding:8px;text-align:center}.ob-table th{background:#f8fafc;white-space:nowrap}.ob-table td.left{text-align:left}.ob-msg{font-size:12px;color:#475569}.ob-modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:9999}.ob-modal-bg[hidden]{display:none}.ob-modal{width:min(900px,94vw);max-height:82vh;background:#fff;border-radius:8px;display:flex;flex-direction:column}.ob-modal-head,.ob-modal-foot{padding:12px 14px;border-bottom:1px solid #e2e8f0;display:flex;gap:8px;align-items:center}.ob-modal-foot{border-top:1px solid #e2e8f0;border-bottom:0;justify-content:flex-end}.ob-modal-body{padding:12px 14px;overflow:auto}.ob-search{display:flex;gap:8px;margin-bottom:10px}.ob-search input{flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:4px}.ob-order-row{cursor:pointer}.ob-order-row:hover{background:#eff6ff}.ob-order-row.selected{background:#dbeafe}.st-wait{color:#a16207;font-weight:700}.st-done{color:#15803d;font-weight:700}.st-cancel{color:#b91c1c;font-weight:700}@media(max-width:900px){.ob-head{grid-template-columns:1fr}.ob-field{grid-template-columns:100px 1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="container so-out">
+  <h1>외주 가공 출고 처리</h1>
+  <div class="ob-actions">
+    <button id="ob-load" class="ob-btn" type="button">발주 불러오기</button>
+    <button id="ob-confirm" class="ob-btn ob-primary" type="button" disabled>출고</button>
+    <button id="ob-cancel" class="ob-btn ob-danger" type="button" disabled>출고 취소</button>
+    <button id="ob-slip" class="ob-btn ob-print" type="button" disabled>출고전표 출력</button>
+    <button id="ob-label" class="ob-btn ob-print" type="button" disabled>출고 라벨 출력</button>
+    <span id="ob-message" class="ob-msg"></span>
+  </div>
+  <div class="ob-box ob-head">
+    <div class="ob-field"><label>출고번호</label><input id="ob-number" value="출고 시 자동 발번" readonly></div>
+    <div class="ob-field"><label>출고일자</label><input id="ob-date" type="date"></div>
+    <div class="ob-field"><label>출고상태</label><input id="ob-status" value="발주를 불러오세요" readonly></div>
+    <div class="ob-field"><label>외주발주번호</label><input id="ob-order-no" readonly></div>
+    <div class="ob-field"><label>발주처</label><input id="ob-partner" readonly></div>
+    <div class="ob-field"><label>가공유형</label><input id="ob-process" readonly></div>
+    <div class="ob-field"><label>외주 저장위치</label><input id="ob-location" readonly></div>
+    <div class="ob-field"><label>담당자</label><input id="ob-manager" readonly></div>
+    <div class="ob-field"><label>발주일자</label><input id="ob-order-date" readonly></div>
+  </div>
+  <div class="ob-box" style="overflow:auto">
+    <table class="ob-table"><thead><tr><th>No.</th><th>발주 품번</th><th>발주 품명</th><th>이전 품번</th><th>규격</th><th>단위</th><th>출고수량</th><th>LOT 건수</th><th>LOT 합계수량</th><th>비고</th></tr></thead><tbody id="ob-items"><tr><td colspan="10">외주가공 발주를 불러오세요.</td></tr></tbody></table>
+  </div>
+</div>
+
+<div id="ob-modal" class="ob-modal-bg" hidden>
+  <div class="ob-modal">
+    <div class="ob-modal-head"><strong>외주가공 발주 불러오기</strong><span style="margin-left:auto;font-size:12px;color:#64748b">발주완료 건만 표시됩니다.</span></div>
+    <div class="ob-modal-body">
+      <div class="ob-search"><input id="ob-search" placeholder="발주번호 또는 발주처"><button id="ob-search-btn" class="ob-btn" type="button">조회</button></div>
+      <table class="ob-table"><thead><tr><th>No.</th><th>발주번호</th><th>발주일자</th><th>발주처</th><th>가공유형</th><th>품목수</th><th>총수량</th><th>출고상태</th></tr></thead><tbody id="ob-orders"><tr><td colspan="8">조회 중...</td></tr></tbody></table>
+    </div>
+    <div class="ob-modal-foot"><button id="ob-modal-close" class="ob-btn" type="button">닫기</button><button id="ob-modal-apply" class="ob-btn ob-primary" type="button" disabled>선택</button></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_script %}<script src="/static/subcontract_outbound.js?v=20260914-1"></script>{% endblock %}
