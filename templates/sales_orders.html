@@ -2,7 +2,7 @@
 {% block title %}수주 입력{% endblock %}
 {% block extra_head %}
 <style>
-.card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:18px;margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}.field input,.field select,.field textarea{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:6px}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer}.btn-primary{background:#2563eb;color:#fff}.btn-danger{background:#dc2626;color:#fff}.btn-light{background:#e2e8f0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:center}th{background:#f1f5f9}.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}@media(max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:18px;margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}.field input,.field select,.field textarea{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:6px}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer}.btn-primary{background:#2563eb;color:#fff}.btn-danger{background:#dc2626;color:#fff}.btn-light{background:#e2e8f0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:center}th{background:#f1f5f9}.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}.part-picker{position:relative}.part-input{width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:4px}.suggestions{position:absolute;z-index:100;left:0;right:0;top:36px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;box-shadow:0 6px 18px rgba(15,23,42,.15);max-height:240px;overflow:auto;display:none;text-align:left}.suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9}.suggestion:hover,.suggestion.active{background:#eff6ff}.suggestion .pn{font-weight:800;color:#1e3a8a}.suggestion .name{margin-left:8px;color:#64748b}.hint{font-size:11px;color:#64748b;margin-top:6px}@media(max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 {% endblock %}
 {% block content %}
@@ -11,14 +11,15 @@
   <div class="grid">
     <div class="field"><label>수주일자</label><input type="date" id="orderDate"></div>
     <div class="field"><label>납기예정일</label><input type="date" id="deliveryDueDate"></div>
-    <div class="field"><label>고객사</label><select id="customerId"><option value="">선택</option></select></div>
+    <div class="field"><label>판매처</label><select id="customerId"><option value="">선택</option></select></div>
     <div class="field"><label>담당자</label><input id="managerName" maxlength="50"></div>
   </div>
   <div class="field" style="margin-top:12px"><label>비고</label><textarea id="note" rows="2"></textarea></div>
 </div>
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><strong>수주 품목</strong><button class="btn btn-light" id="addRowBtn">+ 품목 추가</button></div>
-  <table>
+  <div class="hint">완제품/반제품만 검색됩니다. 품번을 입력한 뒤 검색 결과에서 실제 등록 품번을 선택하세요.</div>
+  <table style="margin-top:8px">
     <thead><tr><th style="width:34%">품번</th><th>품명</th><th style="width:13%">수주수량</th><th style="width:12%">단위</th><th style="width:15%">납기일</th><th style="width:70px">삭제</th></tr></thead>
     <tbody id="itemBody"></tbody>
   </table>
