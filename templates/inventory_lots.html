@@ -5,7 +5,8 @@
 <style>
 .page-head{margin-bottom:14px}.page-head h1{font-size:23px;margin:0 0 4px}.page-head p{font-size:12.5px;color:#64748b}
 .panel{background:#fff;border:1px solid #dbe3ec;border-radius:6px}.panel-title{padding:10px 14px;border-bottom:1px solid #6495ed;font-weight:800;font-size:13px}.panel-body{padding:14px}
-.search-row{display:grid;grid-template-columns:120px minmax(260px,520px) 100px 1fr;gap:8px;align-items:center}.search-row input{height:36px;border:1px solid #cbd5e1;border-radius:4px;padding:0 10px;font-size:13px}.btn{height:36px;border:0;border-radius:4px;background:#2563eb;color:#fff;font-weight:800;cursor:pointer}.summary{font-size:12px;color:#64748b;text-align:right}
+.search-row{display:grid;grid-template-columns:80px minmax(420px,760px) 100px 1fr;gap:8px;align-items:center}.btn{height:36px;border:0;border-radius:4px;background:#2563eb;color:#fff;font-weight:800;cursor:pointer}.summary{font-size:12px;color:#64748b;text-align:right}
+.part-picker{position:relative}.picker-box{min-height:38px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 8px}.picker-box:focus-within{border-color:#2563eb;box-shadow:0 0 0 1px #2563eb}.picker-box input{border:0;outline:0;height:28px;min-width:150px;flex:1;font-size:13px}.chip{display:inline-flex;align-items:center;gap:6px;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:14px;padding:4px 8px;font-size:12px;font-weight:700}.chip button{border:0;background:transparent;color:#64748b;cursor:pointer;font-size:14px;line-height:1;padding:0}.suggestions{position:absolute;z-index:50;left:0;right:0;top:42px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;box-shadow:0 6px 18px rgba(15,23,42,.12);max-height:260px;overflow:auto;display:none}.suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12.5px}.suggestion:hover,.suggestion.active{background:#eff6ff}.suggestion .pn{font-weight:800;color:#1e3a8a}.suggestion .name{margin-left:10px;color:#64748b}.hint{font-size:11px;color:#94a3b8;margin-top:5px}
 table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{border:1px solid #e2e8f0;padding:8px 9px}th{background:#f8fafc;color:#475569}.num{text-align:right}.lot{font-family:Consolas,monospace;font-weight:700}.empty{text-align:center;color:#94a3b8;padding:28px}.good{color:#15803d;font-weight:700}
 </style>
 {% endblock %}
@@ -13,14 +14,21 @@ table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{b
 {% block content %}
 <div class="page-head">
   <h1>LOT 재고 현황</h1>
-  <p>품번으로 구매입고 LOT와 생산 LOT를 함께 조회합니다. LOT 수량, 사용 수량, 잔여 수량을 확인할 수 있습니다.</p>
+  <p>품번을 하나 이상 선택해 구매입고 LOT와 생산 LOT를 함께 조회합니다.</p>
 </div>
 <div class="panel">
   <div class="panel-title">품번별 LOT 조회</div>
   <div class="panel-body">
     <div class="search-row">
       <strong>품번</strong>
-      <input id="partNo" placeholder="품번 전체 또는 일부 입력" autocomplete="off">
+      <div class="part-picker">
+        <div class="picker-box" id="pickerBox">
+          <div id="chips" style="display:contents"></div>
+          <input id="partSearch" placeholder="품번 입력" autocomplete="off">
+        </div>
+        <div id="suggestions" class="suggestions"></div>
+        <div class="hint">검색 결과에서 품번을 선택하세요. 여러 품번을 연속으로 추가할 수 있습니다.</div>
+      </div>
       <button class="btn" onclick="loadLots()">조회</button>
       <div id="summary" class="summary">총 0건</div>
     </div>
@@ -35,10 +43,10 @@ table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{b
           <th style="width:110px">LOT 수량</th>
           <th style="width:110px">사용 수량</th>
           <th style="width:110px">잔여 수량</th>
-          <th style="width:130px">저장위치</th>
+          <th style="width:150px">저장위치</th>
         </tr>
       </thead>
-      <tbody id="lotBody"><tr><td colspan="9" class="empty">품번을 입력하고 조회해 주세요.</td></tr></tbody>
+      <tbody id="lotBody"><tr><td colspan="9" class="empty">품번을 선택하고 조회해 주세요.</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -46,27 +54,79 @@ table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{b
 
 {% block extra_script %}
 <script>
+const selectedParts=[];
+let candidateRows=[];
+let activeIndex=-1;
+let searchTimer=null;
 const n=v=>Number(v||0);
 function fmt(v){return n(v).toLocaleString(undefined,{maximumFractionDigits:3});}
+function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+
+function renderChips(){
+  const chips=document.getElementById('chips');
+  chips.innerHTML=selectedParts.map((x,i)=>`<span class="chip" title="${esc(x.part_name)}">${esc(x.part_no)}<button type="button" onclick="removePart(${i})">×</button></span>`).join('');
+}
+function removePart(index){selectedParts.splice(index,1);renderChips();document.getElementById('partSearch').focus();}
+function addPart(row){
+  if(!row||!row.part_no)return;
+  if(!selectedParts.some(x=>x.part_no===row.part_no)) selectedParts.push(row);
+  renderChips();
+  partSearch.value='';
+  hideSuggestions();
+  partSearch.focus();
+}
+function hideSuggestions(){suggestions.style.display='none';suggestions.innerHTML='';candidateRows=[];activeIndex=-1;}
+function renderSuggestions(){
+  if(!candidateRows.length){suggestions.innerHTML='<div class="suggestion" style="color:#94a3b8">일치하는 품번이 없습니다.</div>';suggestions.style.display='block';return;}
+  suggestions.innerHTML=candidateRows.map((x,i)=>`<div class="suggestion${i===activeIndex?' active':''}" onmousedown="event.preventDefault();addPart(candidateRows[${i}])"><span class="pn">${esc(x.part_no)}</span><span class="name">${esc(x.part_name||'')}</span></div>`).join('');
+  suggestions.style.display='block';
+}
+async function searchCandidates(){
+  const q=partSearch.value.trim();
+  if(!q){hideSuggestions();return;}
+  try{
+    const r=await fetch('/api/inventory/items?q='+encodeURIComponent(q));
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'품번 검색 실패');
+    candidateRows=(d||[]).filter(x=>!selectedParts.some(s=>s.part_no===x.part_no));
+    activeIndex=-1;
+    renderSuggestions();
+  }catch(e){suggestions.innerHTML=`<div class="suggestion" style="color:#b91c1c">${esc(e.message)}</div>`;suggestions.style.display='block';}
+}
+
 async function loadLots(){
-  const partNo=document.getElementById('partNo').value.trim();
-  if(!partNo){alert('품번을 입력해 주세요.');return;}
+  if(!selectedParts.length){alert('조회할 품번을 하나 이상 선택해 주세요.');partSearch.focus();return;}
   const body=document.getElementById('lotBody');
   body.innerHTML='<tr><td colspan="9" class="empty">조회 중...</td></tr>';
+  const q=new URLSearchParams();
+  selectedParts.forEach(x=>q.append('part_no',x.part_no));
   try{
-    const r=await fetch('/api/inventory/lots?part_no='+encodeURIComponent(partNo));
+    const r=await fetch('/api/inventory/lots?'+q.toString());
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||'조회 실패');
-    document.getElementById('summary').textContent=`총 ${d.total||0}건`;
+    document.getElementById('summary').textContent=`품번 ${selectedParts.length}개 · LOT ${d.total||0}건`;
     const rows=d.items||[];
     body.innerHTML=rows.length?rows.map(x=>`<tr>
-      <td>${x.source}</td><td>${x.part_no}</td><td>${x.part_name||''}</td>
-      <td class="lot">${x.lot_no}</td><td>${x.created_at||''}</td>
+      <td>${esc(x.source)}</td><td>${esc(x.part_no)}</td><td>${esc(x.part_name||'')}</td>
+      <td class="lot">${esc(x.lot_no)}</td><td>${esc(x.created_at||'')}</td>
       <td class="num">${fmt(x.lot_qty)}</td><td class="num">${fmt(x.used_qty)}</td>
-      <td class="num good">${fmt(x.remaining_qty)}</td><td>${x.storage_location||''}</td>
-    </tr>`).join(''):'<tr><td colspan="9" class="empty">조회된 LOT가 없습니다.</td></tr>';
-  }catch(e){body.innerHTML=`<tr><td colspan="9" class="empty">${e.message}</td></tr>`;}
+      <td class="num good">${fmt(x.remaining_qty)}</td><td>${esc(x.storage_location||'')}</td>
+    </tr>`).join(''):'<tr><td colspan="9" class="empty">선택한 품번의 LOT가 없습니다.</td></tr>';
+  }catch(e){body.innerHTML=`<tr><td colspan="9" class="empty" style="color:#b91c1c">${esc(e.message)}</td></tr>`;}
 }
-document.getElementById('partNo').addEventListener('keydown',e=>{if(e.key==='Enter')loadLots();});
+
+partSearch.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(searchCandidates,180);});
+partSearch.addEventListener('keydown',e=>{
+  if(e.key==='ArrowDown'&&candidateRows.length){e.preventDefault();activeIndex=Math.min(activeIndex+1,candidateRows.length-1);renderSuggestions();}
+  else if(e.key==='ArrowUp'&&candidateRows.length){e.preventDefault();activeIndex=Math.max(activeIndex-1,0);renderSuggestions();}
+  else if(e.key==='Enter'){
+    e.preventDefault();
+    if(candidateRows.length){addPart(candidateRows[activeIndex>=0?activeIndex:0]);}
+    else if(selectedParts.length){loadLots();}
+  }else if(e.key==='Backspace'&&!partSearch.value&&selectedParts.length){selectedParts.pop();renderChips();}
+  else if(e.key==='Escape'){hideSuggestions();}
+});
+partSearch.addEventListener('focus',()=>{if(partSearch.value.trim())searchCandidates();});
+document.addEventListener('click',e=>{if(!e.target.closest('.part-picker'))hideSuggestions();});
 </script>
 {% endblock %}
