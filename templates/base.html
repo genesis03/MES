@@ -240,6 +240,7 @@
                 </div>
                 <ul class="submenu">
                     <li class="submenu-item"><a href="/sales/shipping" id="nav-sales-shipping">출고 입력</a></li>
+                    <li class="submenu-item"><a href="/shipping/inquiry" id="nav-shipping-inquiry">출고 내역 조회</a></li>
                     <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
                     {% if user.role == "ADMIN" or user.perms.shipping.menus.history != "NONE" %}<li class="submenu-item"><a href="/shipping/history" id="nav-history">출고 내역 및 LOT 계산</a></li>{% endif %}
                     {% if user.role == "ADMIN" or user.perms.shipping.menus.print != "NONE" %}<li class="submenu-item"><a href="/shipping/print" id="nav-print">바코드 출력 (파일 일괄)</a></li>{% endif %}
@@ -287,6 +288,7 @@
                 "/": "nav-history",
                 "/shipping": "nav-history",
                 "/shipping/history": "nav-history",
+                "/shipping/inquiry": "nav-shipping-inquiry",
                 "/shipping/print": "nav-print",
                 "/print": "nav-print",
                 "/shipping/manual": "nav-manual",
