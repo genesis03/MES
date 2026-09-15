@@ -1,6 +1,7 @@
 const $ = (id) => document.getElementById(id);
 
 let orders = [];
+let selectedOrderIds = [];
 let currentOrder = null;
 let currentItemId = null;
 let viewingShipment = null;
@@ -24,18 +25,75 @@ function allocationFor(itemId){
   return allocations.get(itemId);
 }
 
-async function loadOrders(preserveOrderId=null){
+function buildOrderBundle(orderIds){
+  const selected = orderIds.map(id => orders.find(o => o.id === id)).filter(Boolean);
+  if(!selected.length) return null;
+  const customerId = selected[0].customer_id;
+  if(selected.some(o => o.customer_id !== customerId)){
+    throw new Error('서로 다른 판매처의 수주는 한 건의 출고전표로 묶을 수 없습니다.');
+  }
+
+  const items = selected.flatMap(order => (order.items || []).map(item => ({
+    ...item,
+    order_id: order.id,
+    order_no: order.order_no,
+  })));
+  const dueDates = selected.map(o => o.delivery_due_date).filter(Boolean).sort();
+  const managers = [...new Set(selected.map(o => o.manager_name).filter(Boolean))];
+  const statuses = [...new Set(selected.map(o => o.status).filter(Boolean))];
+  return {
+    id: selected[0].id,
+    order_ids: selected.map(o => o.id),
+    order_no: selected.map(o => o.order_no).join(', '),
+    order_nos: selected.map(o => o.order_no),
+    customer_id: customerId,
+    customer_name: selected[0].customer_name,
+    delivery_due_date: dueDates[0] || '',
+    manager_name: managers.join(', '),
+    status: selected.length === 1 ? (selected[0].status || '') : `${selected.length}건`,
+    statuses,
+    items,
+  };
+}
+
+function applySelectedOrders(orderIds){
+  if(viewMode) return;
+  const uniqueIds = [...new Set((orderIds || []).map(Number).filter(Boolean))];
+  const bundle = buildOrderBundle(uniqueIds);
+  allocations.clear();
+  currentItemId = null;
+  viewingShipment = null;
+  if(!bundle){
+    clearOrder();
+    return;
+  }
+  selectedOrderIds = uniqueIds;
+  currentOrder = bundle;
+  $('shipmentNo').value = '';
+  $('customerName').value = currentOrder.customer_name || '';
+  $('deliveryDueDate').value = currentOrder.delivery_due_date || '';
+  $('managerName').value = currentOrder.manager_name || '';
+  $('orderStatus').value = currentOrder.status || '';
+  $('shipmentStatus').value = 'LOT 배정 대기';
+  $('shipmentNote').value = '';
+  renderItems();
+  updateSummary();
+}
+
+async function loadOrders(preserveOrderIds=null){
   orders = await getJson('/api/sales/shipping-entry/open-orders');
   const select = $('orderSelect');
-  select.disabled = viewMode;
-  select.innerHTML = '<option value="">미출고 수주 선택</option>' + orders.map(o =>
-    `<option value="${o.id}">${esc(o.order_no)} | ${esc(o.customer_name)} | ${o.items.length}품목</option>`
-  ).join('');
+  if(select){
+    select.disabled = viewMode;
+    select.innerHTML = '<option value="">미출고 수주 선택</option>' + orders.map(o =>
+      `<option value="${o.id}">${esc(o.order_no)} | ${esc(o.customer_name)} | ${o.items.length}품목</option>`
+    ).join('');
+  }
 
   if(viewMode) return;
-  if(preserveOrderId && orders.some(o => o.id === preserveOrderId)){
-    select.value = String(preserveOrderId);
-    selectOrder();
+  const ids = Array.isArray(preserveOrderIds) ? preserveOrderIds : (preserveOrderIds ? [preserveOrderIds] : []);
+  if(ids.length && ids.every(id => orders.some(o => o.id === id))){
+    applySelectedOrders(ids);
   }else{
     clearOrder();
   }
@@ -43,18 +101,19 @@ async function loadOrders(preserveOrderId=null){
 
 function setEntryMode(isView){
   viewMode = isView;
-  $('orderSelect').disabled = isView;
+  if($('orderSelect')) $('orderSelect').disabled = isView;
   $('shipmentDate').disabled = isView;
   $('shipmentNote').readOnly = isView;
   $('reloadBtn').disabled = isView;
   $('confirmBtn').disabled = true;
   $('shippingHelp').innerHTML = isView
     ? '※ 기존 출고건 조회 상태입니다. 이 화면에서는 출고내용을 확인만 할 수 있으며 수정/삭제는 출고 내역 조회 메뉴에서 처리합니다.'
-    : '※ 품번별 출고대기 LOT를 스캔합니다. 뒤 LOT를 스캔해도 실제 배정은 선입 LOT부터 필요한 완전 BOX 수량만큼 자동 배정됩니다.<br>※ 포장 BOX 단위로 출고하며, 수주 잔량보다 큰 BOX는 부분 수량으로 쪼개서 출고하지 않습니다.';
+    : '※ 동일 판매처의 여러 수주를 한 출고전표로 묶을 수 있습니다.<br>※ 품번별 출고대기 LOT를 스캔합니다. 뒤 LOT를 스캔해도 실제 배정은 선입 LOT부터 필요한 완전 BOX 수량만큼 자동 배정됩니다.<br>※ 포장 BOX 단위로 출고하며, 수주 잔량보다 큰 BOX는 부분 수량으로 쪼개서 출고하지 않습니다.';
 }
 
 function clearOrder(){
   currentOrder = null;
+  selectedOrderIds = [];
   currentItemId = null;
   viewingShipment = null;
   allocations.clear();
@@ -70,8 +129,9 @@ function clearOrder(){
   $('sumShippedQty').textContent = '0';
   $('sumRemainingQty').textContent = '0';
   $('sumAllocatedQty').textContent = '0';
-  $('itemBody').innerHTML = '<tr><td colspan="12" class="empty">미출고 수주를 선택해 주세요.</td></tr>';
+  $('itemBody').innerHTML = '<tr><td colspan="13" class="empty">미출고 수주를 선택해 주세요.</td></tr>';
   $('confirmBtn').disabled = true;
+  if($('orderNoInput')) $('orderNoInput').value = '';
 }
 
 async function newEntry(){
@@ -83,23 +143,10 @@ async function newEntry(){
 }
 
 function selectOrder(){
-  if(viewMode) return;
+  if(viewMode || !$('orderSelect')) return;
   const id = Number($('orderSelect').value || 0);
-  currentOrder = orders.find(o => o.id === id) || null;
-  allocations.clear();
-  currentItemId = null;
-
-  if(!currentOrder){ clearOrder(); return; }
-
-  $('shipmentNo').value = '';
-  $('customerName').value = currentOrder.customer_name || '';
-  $('deliveryDueDate').value = currentOrder.delivery_due_date || '';
-  $('managerName').value = currentOrder.manager_name || '';
-  $('orderStatus').value = currentOrder.status || '';
-  $('shipmentStatus').value = 'LOT 배정 대기';
-  $('shipmentNote').value = '';
-  renderItems();
-  updateSummary();
+  if(!id){ clearOrder(); return; }
+  applySelectedOrders([id]);
 }
 
 function itemAllocatedQty(itemId){
@@ -109,7 +156,7 @@ function itemAllocatedQty(itemId){
 function renderItems(){
   const body = $('itemBody');
   if(!currentOrder || !currentOrder.items.length){
-    body.innerHTML = '<tr><td colspan="12" class="empty">출고 가능한 수주 품목이 없습니다.</td></tr>';
+    body.innerHTML = '<tr><td colspan="13" class="empty">출고 가능한 수주 품목이 없습니다.</td></tr>';
     return;
   }
 
@@ -122,6 +169,7 @@ function renderItems(){
     const actionClass = viewMode ? 'btn-light' : 'btn-primary';
     return `<tr data-item-id="${item.id}" class="${currentItemId === item.id ? 'row-selected' : ''}">
       <td><span class="status-badge ${done ? 'status-done' : 'status-wait'}">${statusText}</span></td>
+      <td>${esc(item.order_no || '')}</td>
       <td>${esc(item.part_no)}</td>
       <td class="left">${esc(item.part_name || '')}</td>
       <td>${fmt(item.moq)}</td>
@@ -168,7 +216,7 @@ function openLotModal(itemId){
   const item = currentOrder?.items.find(x => x.id === itemId);
   if(!item) return;
   currentItemId = itemId;
-  $('modalPartNo').textContent = item.part_no;
+  $('modalPartNo').textContent = `${item.part_no}${item.order_no ? ` / ${item.order_no}` : ''}`;
   $('modalPartName').textContent = item.part_name || '';
   $('modalMoq').textContent = fmt(item.moq);
   $('modalOrderQty').textContent = fmt(item.order_qty);
@@ -184,7 +232,7 @@ function openLotModal(itemId){
   $('lotModalTitle').textContent = viewMode ? '출고 LOT 상세' : 'LOT No 스캔 / 배정';
   $('modalHelp').innerHTML = viewMode
     ? '※ 확정된 출고건에 실제 사용된 출고대기 LOT입니다.'
-    : '※ 뒤 LOT를 스캔해도 선입 LOT부터 필요한 수량만큼 자동 배정합니다.<br>※ 출고 확정 시 서버에서 FIFO를 다시 검증합니다.';
+    : '※ 같은 품번이 여러 수주에 있어도 이번 출고전표 전체 기준으로 선입 LOT부터 자동 배정합니다.<br>※ 출고 확정 시 서버에서 FIFO를 다시 검증합니다.';
   renderAllocatedLots();
   renderItems();
   $('lotModal').classList.add('show');
@@ -212,6 +260,16 @@ function renderAllocatedLots(){
   $('allocatedQty').textContent = fmt(rows.reduce((s,x)=>s+num(x.box_qty),0));
 }
 
+function reservedBoxIdsForItem(item){
+  if(!currentOrder || !item) return [];
+  const ids = [];
+  currentOrder.items.forEach(other => {
+    if(other.id === item.id || other.part_no !== item.part_no) return;
+    allocationFor(other.id).forEach(row => ids.push(row.id));
+  });
+  return [...new Set(ids)];
+}
+
 async function scanLot(){
   if(viewMode) return;
   const item = currentItem();
@@ -227,7 +285,12 @@ async function scanLot(){
   try{
     const data = await getJson('/api/sales/shipping-entry/scan', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({sales_order_item_id:item.id, lot_no:lotNo, selected_box_ids:rows.map(x=>x.id)})
+      body:JSON.stringify({
+        sales_order_item_id:item.id,
+        lot_no:lotNo,
+        selected_box_ids:rows.map(x=>x.id),
+        reserved_box_ids:reservedBoxIdsForItem(item)
+      })
     });
     allocations.set(item.id, Array.isArray(data.allocations) ? data.allocations : []);
     const autoCount = Number(data.auto_added_count || 0);
@@ -251,7 +314,7 @@ function resetCurrentAllocation(){
   const item = currentItem();
   if(!item) return;
   allocations.set(item.id, []);
-  $('scanMessage').textContent = '현재 품번의 LOT 배정을 초기화했습니다.';
+  $('scanMessage').textContent = '현재 수주 품목의 LOT 배정을 초기화했습니다.';
   $('scanMessage').className = 'scan-msg';
   renderAllocatedLots();
   renderItems();
@@ -266,15 +329,16 @@ async function confirmShipment(){
     .map(item => ({sales_order_item_id:item.id, packing_box_ids:allocationFor(item.id).map(x=>x.id)}))
     .filter(row => row.packing_box_ids.length > 0);
   if(!items.length) return alert('출고할 LOT를 먼저 배정해 주세요.');
-  if(!confirm(`선택한 ${items.length}개 품목을 출고 처리하시겠습니까?`)) return;
+  const orderCount = currentOrder.order_ids?.length || 1;
+  if(!confirm(`수주 ${orderCount}건 / 품목 ${items.length}개를 1건의 출고전표로 처리하시겠습니까?`)) return;
 
   $('confirmBtn').disabled = true;
   try{
     const data = await getJson('/api/sales/shipping-entry/confirm', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({shipment_date:$('shipmentDate').value, sales_order_id:currentOrder.id, items, note:$('shipmentNote').value.trim() || null})
+      body:JSON.stringify({shipment_date:$('shipmentDate').value, items, note:$('shipmentNote').value.trim() || null})
     });
-    alert(`${data.message}\n출고번호: ${data.shipment_no}\n품목수: ${data.item_count}\n출고수량: ${fmt(data.total_qty)}`);
+    alert(`${data.message}\n출고번호: ${data.shipment_no}\n수주건수: ${data.order_count || orderCount}\n품목수: ${data.item_count}\n출고수량: ${fmt(data.total_qty)}`);
     await loadShipmentByNo(data.shipment_no);
   }catch(e){
     alert(e.message);
@@ -295,7 +359,7 @@ async function searchShipmentLookup(autoLoadSingle=false){
   }
   const body = $('shipmentLookupBody');
   body.innerHTML = rows.length ? rows.map(row => `<tr>
-    <td>${esc(row.shipment_no)}</td><td>${esc(row.shipment_date)}</td><td>${esc(row.order_no)}</td>
+    <td>${esc(row.shipment_no)}</td><td>${esc(row.shipment_date)}</td><td>${esc((row.order_nos || [row.order_no]).join(', '))}</td>
     <td class="left">${esc(row.customer_name)}</td><td>${esc((row.part_nos || []).join(', '))}</td>
     <td>${fmt(row.total_qty)}</td><td><button class="btn btn-primary choose-shipment" data-id="${row.id}">선택</button></td>
   </tr>`).join('') : '<tr><td colspan="7" class="empty">조회된 출고건이 없습니다.</td></tr>';
@@ -324,19 +388,12 @@ async function loadShipmentByNo(shipmentNo){
 }
 
 async function loadShipmentDetail(shipmentId){
-  const [detail, allOrders] = await Promise.all([
-    getJson(`/api/shipping/inquiry/${shipmentId}`),
-    getJson('/api/sales/orders')
-  ]);
-  const orderMeta = (allOrders || []).find(x => x.id === detail.sales_order_id) || null;
-  const orderItemMap = new Map((orderMeta?.items || []).map(x => [x.id, x]));
-
+  const detail = await getJson(`/api/shipping/inquiry/${shipmentId}`);
   allocations.clear();
   viewingShipment = detail;
   setEntryMode(true);
 
   const items = (detail.items || []).map(row => {
-    const orderItem = orderItemMap.get(row.sales_order_item_id);
     const boxes = (row.boxes || []).map(box => ({
       id: box.packing_box_id,
       package_lot_no: box.waiting_lot_no,
@@ -346,27 +403,35 @@ async function loadShipmentDetail(shipmentId){
     allocations.set(row.sales_order_item_id, boxes);
     return {
       id: row.sales_order_item_id,
+      order_id: row.sales_order_id,
+      order_no: row.order_no || '',
       part_no: row.part_no,
       part_name: row.part_name || '',
       moq: 0,
       unit: row.unit || 'EA',
-      order_qty: orderItem ? num(orderItem.order_qty) : num(row.order_qty),
-      shipped_qty: orderItem ? num(orderItem.shipped_qty) : num(row.shipped_qty),
-      remaining_qty: orderItem ? num(orderItem.remaining_qty) : Math.max(num(row.order_qty) - num(row.shipped_qty), 0),
+      order_qty: num(row.order_qty),
+      shipped_qty: num(row.shipped_qty),
+      remaining_qty: Math.max(num(row.order_qty) - num(row.shipped_qty), 0),
       waiting_qty: 0,
       waiting_box_count: 0
     };
   });
 
+  const dueDates = (detail.items || []).map(x => x.delivery_due_date).filter(Boolean).sort();
+  const managers = [...new Set((detail.items || []).map(x => x.manager_name).filter(Boolean))];
+  const statuses = [...new Set((detail.items || []).map(x => x.order_status).filter(Boolean))];
   currentOrder = {
     id: detail.sales_order_id,
-    order_no: detail.order_no,
+    order_ids: detail.sales_order_ids || [],
+    order_no: (detail.order_nos || []).join(', '),
+    order_nos: detail.order_nos || [],
     customer_name: detail.customer_name,
-    delivery_due_date: orderMeta?.delivery_due_date || '',
-    manager_name: orderMeta?.manager_name || '',
-    status: orderMeta?.status || '',
+    delivery_due_date: dueDates[0] || '',
+    manager_name: managers.join(', '),
+    status: (detail.order_count || 0) > 1 ? `${detail.order_count}건` : (statuses[0] || ''),
     items
   };
+  selectedOrderIds = [...(detail.sales_order_ids || [])];
 
   $('shipmentNo').value = detail.shipment_no;
   $('shipmentDate').value = detail.shipment_date || '';
@@ -376,7 +441,7 @@ async function loadShipmentDetail(shipmentId){
   $('shipmentStatus').value = detail.status || 'CONFIRMED';
   $('orderStatus').value = currentOrder.status || '';
   $('shipmentNote').value = detail.note || '';
-  $('orderSelect').innerHTML = `<option value="${detail.sales_order_id}" selected>${esc(detail.order_no)} | ${esc(detail.customer_name)}</option>`;
+  if($('orderNoInput')) $('orderNoInput').value = currentOrder.order_no;
   currentItemId = null;
   renderItems();
   updateSummary();
@@ -384,8 +449,8 @@ async function loadShipmentDetail(shipmentId){
 
 document.addEventListener('DOMContentLoaded',()=>{
   $('shipmentDate').value = today();
-  $('orderSelect').addEventListener('change', selectOrder);
-  $('reloadBtn').addEventListener('click',()=>loadOrders(currentOrder?.id || null).catch(e=>alert(e.message)));
+  if($('orderSelect')) $('orderSelect').addEventListener('change', selectOrder);
+  $('reloadBtn').addEventListener('click',()=>loadOrders(selectedOrderIds).catch(e=>alert(e.message)));
   $('confirmBtn').addEventListener('click', confirmShipment);
   $('scanBtn').addEventListener('click', scanLot);
   $('lotScanInput').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); scanLot(); } });
