@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}미판매 현황{% endblock %}
+{% block extra_head %}
+<style>
+.page-head{display:flex;align-items:end;justify-content:space-between;margin-bottom:14px}.page-head h2{margin:0}.page-head .summary{font-size:12px;color:#64748b}.panel{background:#fff;border:1px solid #cbd5e1;border-radius:7px;margin-bottom:14px}.panel-title{padding:10px 14px;border-bottom:1px solid #dbe3ec;font-size:13px;font-weight:800}.panel-body{padding:12px 14px}.filter-grid{display:grid;grid-template-columns:120px 160px 160px 220px 220px 1fr;gap:8px;align-items:end}.field label{display:block;font-size:11px;font-weight:800;color:#475569;margin-bottom:4px}.field input,.field select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px;font-size:12px}.btn{height:34px;border:0;border-radius:4px;padding:0 14px;font-weight:800;cursor:pointer}.btn-primary{background:#2563eb;color:#fff}.btn-light{background:#e2e8f0;color:#334155}.group-box{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:12px}.group-box strong{color:#334155}.group-box label{display:inline-flex;align-items:center;gap:5px;cursor:pointer}.table-wrap{overflow:auto;max-height:690px;border:1px solid #cbd5e1}table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}th,td{border:1px solid #e2e8f0;padding:7px 8px}th{position:sticky;top:0;z-index:2;background:#f1f5f9;color:#334155;text-align:center;cursor:pointer;user-select:none}.num{text-align:right}.center{text-align:center}.sort-mark{font-size:10px;color:#2563eb;margin-left:4px}.group-head td{background:#eff6ff;color:#1e3a8a;font-weight:800}.subtotal td{background:#f8fafc;font-weight:800;border-top:2px solid #94a3b8}.grand-total td{background:#e2e8f0;font-weight:900;border-top:2px solid #475569}.empty{text-align:center;color:#94a3b8;padding:30px}.muted{color:#64748b}.badge{display:inline-block;padding:2px 7px;border-radius:10px;background:#fee2e2;color:#b91c1c;font-weight:800}.help{font-size:11px;color:#64748b;margin-left:auto}@media(max-width:1200px){.filter-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h2>미판매 현황</h2><div class="muted" style="font-size:12px;margin-top:4px">수주수량에서 확정 출고수량을 제외한 미판매 수량을 조회합니다.</div></div>
+  <div id="resultSummary" class="summary">총 0건</div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">조회 조건</div>
+  <div class="panel-body">
+    <div class="filter-grid">
+      <div class="field"><label>수주일자 From</label><input type="date" id="dateFrom"></div>
+      <div class="field"><label>수주일자 To</label><input type="date" id="dateTo"></div>
+      <div class="field"><label>판매처</label><select id="customerFilter"><option value="">전체</option></select></div>
+      <div class="field"><label>품번</label><input id="partFilter" placeholder="품번 일부 입력"></div>
+      <div class="field"><label>품명/적요</label><input id="textFilter" placeholder="부분 검색"></div>
+      <div style="display:flex;gap:6px"><button class="btn btn-primary" id="searchBtn">조회</button><button class="btn btn-light" id="resetBtn">초기화</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-title" style="display:flex;align-items:center;gap:12px">
+    <span>부분합 기준</span>
+    <div class="group-box">
+      <label><input type="checkbox" class="group-field" value="customer_name"> 판매처</label>
+      <label><input type="checkbox" class="group-field" value="order_date"> 수주일자</label>
+      <label><input type="checkbox" class="group-field" value="part_no"> 품번</label>
+      <label><input type="checkbox" class="group-field" value="delivery_date"> 납기일</label>
+    </div>
+    <span class="help">여러 항목을 동시에 선택하면 선택 항목 조합별 부분합을 표시합니다. 항목명을 클릭하면 오름/내림차순 정렬됩니다.</span>
+  </div>
+  <div class="panel-body" style="padding:0">
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th data-key="order_date">수주일자<span class="sort-mark"></span></th>
+          <th data-key="order_no">수주번호<span class="sort-mark"></span></th>
+          <th data-key="customer_name">판매처명<span class="sort-mark"></span></th>
+          <th data-key="part_no">품번<span class="sort-mark"></span></th>
+          <th data-key="part_name">품명<span class="sort-mark"></span></th>
+          <th data-key="order_qty">수주수량<span class="sort-mark"></span></th>
+          <th data-key="shipped_qty">판매수량<span class="sort-mark"></span></th>
+          <th data-key="unsold_qty">미판매수량<span class="sort-mark"></span></th>
+          <th data-key="unit">단위<span class="sort-mark"></span></th>
+          <th data-key="delivery_date">품목납기일<span class="sort-mark"></span></th>
+          <th data-key="note">적요<span class="sort-mark"></span></th>
+        </tr></thead>
+        <tbody id="unsoldBody"><tr><td colspan="11" class="empty">조회 중...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+let sourceRows=[];
+let sortKey='order_date';
+let sortDir='asc';
+const numberKeys=new Set(['order_qty','shipped_qty','unsold_qty']);
+const groupLabels={customer_name:'판매처',order_date:'수주일자',part_no:'품번',delivery_date:'납기일'};
+const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const num=v=>Number(v||0);
+const fmt=v=>num(v).toLocaleString(undefined,{maximumFractionDigits:3});
+
+async function getJson(url){const r=await fetch(url);const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.detail||'조회 실패');return d;}
+
+async function init(){
+  try{
+    const [data,customers]=await Promise.all([getJson('/api/sales/unsold'),getJson('/api/sales/customers')]);
+    sourceRows=data.items||[];
+    customerFilter.innerHTML='<option value="">전체</option>'+customers.map(x=>`<option value="${x.id}">${esc(x.partner_name)}</option>`).join('');
+    render();
+  }catch(e){unsoldBody.innerHTML=`<tr><td colspan="11" class="empty" style="color:#b91c1c">${esc(e.message)}</td></tr>`;}
+}
+
+function filteredRows(){
+  const from=dateFrom.value;
+  const to=dateTo.value;
+  const customer=customerFilter.value;
+  const part=partFilter.value.trim().toLowerCase();
+  const text=textFilter.value.trim().toLowerCase();
+  return sourceRows.filter(x=>{
+    if(from&&String(x.order_date||'')<from)return false;
+    if(to&&String(x.order_date||'')>to)return false;
+    if(customer&&String(x.customer_id)!==customer)return false;
+    if(part&&!String(x.part_no||'').toLowerCase().includes(part))return false;
+    if(text&&!(`${x.part_name||''} ${x.note||''}`).toLowerCase().includes(text))return false;
+    return true;
+  });
+}
+
+function compare(a,b,key){
+  let av=a[key]??'',bv=b[key]??'';
+  if(numberKeys.has(key)){av=num(av);bv=num(bv);return av===bv?0:(av<bv?-1:1);}
+  return String(av).localeCompare(String(bv),'ko',{numeric:true,sensitivity:'base'});
+}
+
+function groupFields(){return [...document.querySelectorAll('.group-field:checked')].map(x=>x.value);}
+function groupKey(row,fields){return fields.map(k=>String(row[k]??'')).join('\u001f');}
+function groupTitle(row,fields){return fields.map(k=>`${groupLabels[k]}: ${row[k]||'-'}`).join(' / ');}
+function totals(rows){return rows.reduce((a,x)=>{a.order_qty+=num(x.order_qty);a.shipped_qty+=num(x.shipped_qty);a.unsold_qty+=num(x.unsold_qty);return a;},{order_qty:0,shipped_qty:0,unsold_qty:0});}
+function rowHtml(x){return `<tr><td class="center">${esc(x.order_date)}</td><td>${esc(x.order_no)}</td><td>${esc(x.customer_name)}</td><td>${esc(x.part_no)}</td><td>${esc(x.part_name)}</td><td class="num">${fmt(x.order_qty)}</td><td class="num">${fmt(x.shipped_qty)}</td><td class="num"><span class="badge">${fmt(x.unsold_qty)}</span></td><td class="center">${esc(x.unit)}</td><td class="center">${esc(x.delivery_date||'')}</td><td>${esc(x.note||'')}</td></tr>`;}
+function subtotalHtml(label,t){return `<tr class="subtotal"><td colspan="5">${esc(label)} 부분합</td><td class="num">${fmt(t.order_qty)}</td><td class="num">${fmt(t.shipped_qty)}</td><td class="num">${fmt(t.unsold_qty)}</td><td colspan="3"></td></tr>`;}
+
+function render(){
+  const fields=groupFields();
+  const rows=filteredRows().slice();
+  rows.sort((a,b)=>{
+    for(const key of fields){const c=compare(a,b,key);if(c)return c;}
+    const c=compare(a,b,sortKey);return sortDir==='asc'?c:-c;
+  });
+  document.querySelectorAll('th[data-key]').forEach(th=>{th.querySelector('.sort-mark').textContent=th.dataset.key===sortKey?(sortDir==='asc'?'▲':'▼'):'';});
+  const grand=totals(rows);
+  resultSummary.textContent=`총 ${rows.length.toLocaleString()}건 · 미판매 ${fmt(grand.unsold_qty)}`;
+  if(!rows.length){unsoldBody.innerHTML='<tr><td colspan="11" class="empty">조건에 해당하는 미판매 수주가 없습니다.</td></tr>';return;}
+
+  let html='';
+  if(fields.length){
+    let currentKey=null,bucket=[];
+    const flush=()=>{if(!bucket.length)return;html+=subtotalHtml(groupTitle(bucket[0],fields),totals(bucket));bucket=[];};
+    rows.forEach(row=>{
+      const key=groupKey(row,fields);
+      if(key!==currentKey){flush();currentKey=key;html+=`<tr class="group-head"><td colspan="11">${esc(groupTitle(row,fields))}</td></tr>`;}
+      bucket.push(row);html+=rowHtml(row);
+    });
+    flush();
+  }else{
+    html=rows.map(rowHtml).join('');
+  }
+  html+=`<tr class="grand-total"><td colspan="5">전체 합계</td><td class="num">${fmt(grand.order_qty)}</td><td class="num">${fmt(grand.shipped_qty)}</td><td class="num">${fmt(grand.unsold_qty)}</td><td colspan="3"></td></tr>`;
+  unsoldBody.innerHTML=html;
+}
+
+document.querySelectorAll('th[data-key]').forEach(th=>th.addEventListener('click',()=>{const key=th.dataset.key;if(sortKey===key)sortDir=sortDir==='asc'?'desc':'asc';else{sortKey=key;sortDir='asc';}render();}));
+document.querySelectorAll('.group-field').forEach(x=>x.addEventListener('change',render));
+searchBtn.addEventListener('click',render);
+resetBtn.addEventListener('click',()=>{dateFrom.value='';dateTo.value='';customerFilter.value='';partFilter.value='';textFilter.value='';document.querySelectorAll('.group-field').forEach(x=>x.checked=false);sortKey='order_date';sortDir='asc';render();});
+[partFilter,textFilter].forEach(x=>x.addEventListener('keydown',e=>{if(e.key==='Enter')render();}));
+document.addEventListener('DOMContentLoaded',init);
+</script>
+{% endblock %}
