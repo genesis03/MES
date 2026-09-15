@@ -8,7 +8,7 @@ from core.security import init_default_accounts
 from services.purchase_lot_format import install_purchase_lot_format
 from services.production_lot_service import ensure_production_output_lots
 
-from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, purchase_unreceived, quality_pages, quality, production_pages, production, production_complete, production_run, production_extra, inventory
+from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, purchase_unreceived, quality_pages, quality, production_pages, production, production_complete, production_run, production_extra, inventory
 
 # 초기 계정 데이터 생성 트리거
 init_default_accounts()
@@ -43,6 +43,8 @@ app.include_router(purchase.api_router)
 app.include_router(subcontract_pages.router)
 app.include_router(purchase_unreceived.page_router)
 app.include_router(purchase_pages.router)
+# 기존 입고 삭제 경로보다 먼저 등록해 사용된 LOT 삭제를 차단합니다.
+app.include_router(purchase_delete_guard.router)
 app.include_router(purchase_inquiry.router)
 app.include_router(purchase_edit.router)
 app.include_router(purchase_unreceived.router)
