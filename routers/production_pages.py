@@ -104,7 +104,11 @@ def production_rework_page(request: Request, current_user=Depends(get_current_us
 
 @router.get("/production/packing", response_class=HTMLResponse)
 def production_packing_page(request: Request, current_user=Depends(get_current_user)):
-    return _render_production_ready(request, current_user, "/production/packing")
+    return templates.TemplateResponse(
+        request=request,
+        name="production_packing.html",
+        context={"request": request, "user": current_user},
+    )
 
 
 @router.get("/production/performance/status", response_class=HTMLResponse)
