@@ -209,7 +209,7 @@
         <select id="searchType" style="width: 100px;">
             <option value="">전체</option>
             <option value="VENDOR">구매처</option>
-            <option value="CUSTOMER">고객사</option>
+            <option value="CUSTOMER">판매처</option>
             <option value="BOTH">공통</option>
         </select>
 
@@ -288,7 +288,7 @@
                             <td>
                                 <select id="partner_type" required>
                                     <option value="VENDOR">구매처</option>
-                                    <option value="CUSTOMER">고객사</option>
+                                    <option value="CUSTOMER">판매처</option>
                                     <option value="BOTH">공통</option>
                                 </select>
                             </td>
@@ -434,7 +434,7 @@ function renderPartnerTable(data) {
         return;
     }
 
-    const typeLabels = { "VENDOR": "구매처", "CUSTOMER": "고객사", "BOTH": "공통" };
+    const typeLabels = { "VENDOR": "구매처", "CUSTOMER": "판매처", "BOTH": "공통" };
 
     data.forEach((item, index) => {
         const tr = document.createElement("tr");
