@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}외주가공 입고 수정{% endblock %}
+{% block extra_head %}
+<style>
+.wrap h1{font-size:22px;margin:0 0 14px}.card{background:#fff;border:1px solid #dbe3ec;border-radius:6px;margin-bottom:14px}.head{padding:14px;border-bottom:1px solid #dbeafe;font-weight:800}.body{padding:14px}.grid{display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:12px 18px}.field label{display:block;font-size:12px;font-weight:800;margin-bottom:5px;color:#475569}.field input,.field select,.field textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;padding:8px;background:#fff}.field input[readonly]{background:#f8fafc}.field textarea{min-height:70px}.msg{font-size:12px;color:#475569;margin-left:10px}.warn{color:#b91c1c;font-weight:700}.actions{display:flex;gap:8px;align-items:center}.btn{border:0;border-radius:4px;padding:9px 15px;font-weight:800;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#334155}.btn:disabled{opacity:.45;cursor:not-allowed}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #e2e8f0;padding:8px}th{background:#f8fafc;color:#475569}td input{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:3px;padding:6px}.num{text-align:right}.lot{font-family:Consolas,monospace;font-weight:700}@media(max-width:1000px){.grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="wrap">
+  <h1>외주가공 입고 수정</h1>
+  <div class="card"><div class="head">입고 정보</div><div class="body">
+    <div class="grid">
+      <div class="field"><label>입고번호</label><input id="inboundNo" readonly></div>
+      <div class="field"><label>입고일자</label><input id="inboundDate" type="date"></div>
+      <div class="field"><label>외주출고번호</label><input id="outboundNo" readonly></div>
+      <div class="field"><label>외주발주번호</label><input id="orderNo" readonly></div>
+      <div class="field"><label>발주처</label><input id="partnerName" readonly></div>
+      <div class="field"><label>가공유형</label><input id="processName" readonly></div>
+      <div class="field"><label>입고 저장위치</label><select id="storageLocation"><option value="">선택</option>{% for row in storage_locations %}<option value="{{ row.location_code }}">{{ row.location_name or row.location_code }}</option>{% endfor %}</select></div>
+      <div class="field"><label>담당자</label><input id="managerName" readonly></div>
+      <div class="field" style="grid-column:1/-1"><label>비고</label><textarea id="note"></textarea></div>
+    </div>
+  </div></div>
+
+  <div class="card"><div class="head">LOT별 입고 내역</div><div class="body" style="overflow:auto">
+    <table><thead><tr><th>품번</th><th>품명</th><th>원 LOT</th><th>생성 LOT</th><th>출고수량</th><th>외주업체 LOT</th><th>입고수량</th><th>샘플수량</th></tr></thead><tbody id="lotBody"><tr><td colspan="8">조회 중...</td></tr></tbody></table>
+  </div></div>
+
+  <div class="actions">
+    <button class="btn secondary" type="button" onclick="history.back()">뒤로</button>
+    <button id="saveBtn" class="btn primary" type="button" onclick="saveEdit()" disabled>수정 저장</button>
+    <span id="message" class="msg"></span>
+  </div>
+</div>
+{% endblock %}
+{% block extra_script %}
+<script>
+const inboundId={{ inbound_id }};
+let loaded=null;
+const n=v=>Number(v||0);
+async function api(url,opt={}){const r=await fetch(url,{headers:{'Content-Type':'application/json',...(opt.headers||{})},...opt});let d={};try{d=await r.json();}catch(_){ }if(!r.ok)throw new Error(d.detail||'처리 실패');return d;}
+function esc(v){const e=document.createElement('span');e.textContent=v??'';return e.innerHTML;}
+async function loadEdit(){
+  try{
+    loaded=await api(`/api/subcontract/inbound-edit/${inboundId}`);
+    inboundNo.value=loaded.inbound_no;inboundDate.value=loaded.inbound_date;outboundNo.value=loaded.outbound_no;orderNo.value=loaded.order_no;partnerName.value=loaded.partner_name;processName.value=loaded.processing_type_name;storageLocation.value=loaded.storage_location;managerName.value=loaded.manager_name||'';note.value=loaded.note||'';
+    const rows=[];
+    (loaded.items||[]).forEach(item=>(item.lots||[]).forEach(lot=>rows.push(`<tr data-id="${lot.id}"><td>${esc(item.part_no)}</td><td>${esc(item.part_name)}</td><td class="lot">${esc(lot.source_lot_no)}</td><td class="lot">${esc(lot.child_lot_no)}</td><td class="num">${n(lot.source_qty).toLocaleString()}</td><td><input class="supplier" maxlength="100" value="${esc(lot.supplier_lot_no||'')}"></td><td><input class="qty" type="number" step="0.001" min="0.001" value="${lot.inbound_qty}" ${lot.can_change_qty?'':'readonly'}></td><td><input class="sample" type="number" step="0.001" min="0" value="${lot.sample_qty}"></td></tr>`)));
+    lotBody.innerHTML=rows.join('')||'<tr><td colspan="8">LOT 내역이 없습니다.</td></tr>';
+    if(loaded.editable){saveBtn.disabled=false;message.textContent='수정 가능합니다. 전량입고로 원 LOT를 유지한 건은 입고수량 변경 없이 기타 정보만 수정할 수 있습니다.';}
+    else{saveBtn.disabled=true;message.className='msg warn';message.textContent=loaded.blocked_lots?.length?`후공정 사용 LOT가 있어 수정할 수 없습니다: ${loaded.blocked_lots.join(', ')}`:'취소된 입고는 수정할 수 없습니다.';}
+  }catch(e){message.className='msg warn';message.textContent=e.message;lotBody.innerHTML='<tr><td colspan="8">불러오기 실패</td></tr>';}
+}
+async function saveEdit(){
+  const lots=[...document.querySelectorAll('#lotBody tr[data-id]')].map(tr=>({id:Number(tr.dataset.id),supplier_lot_no:tr.querySelector('.supplier').value.trim()||null,inbound_qty:Number(tr.querySelector('.qty').value||0),sample_qty:Number(tr.querySelector('.sample').value||0)}));
+  if(!inboundDate.value||!storageLocation.value){alert('입고일자와 저장위치를 확인하세요.');return;}
+  if(lots.some(x=>x.inbound_qty<=0||x.sample_qty<0||x.sample_qty>x.inbound_qty)){alert('LOT별 입고수량/샘플수량을 확인하세요.');return;}
+  if(!confirm(`${loaded.inbound_no} 외주가공 입고를 수정하시겠습니까?`))return;
+  saveBtn.disabled=true;
+  try{const d=await api(`/api/subcontract/inbound-edit/${inboundId}`,{method:'PUT',body:JSON.stringify({inbound_date:inboundDate.value,storage_location:storageLocation.value,note:note.value.trim()||null,lots})});alert(d.message||'수정했습니다.');location.href='/purchase/inquiry/inbounds';}catch(e){message.className='msg warn';message.textContent=e.message;saveBtn.disabled=false;}
+}
+document.addEventListener('DOMContentLoaded',loadEdit);
+</script>
+{% endblock %}
