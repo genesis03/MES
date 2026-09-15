@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -91,6 +90,11 @@ def sales_order_inquiry_page(request: Request, current_user=Depends(get_current_
     return templates.TemplateResponse(request=request, name="sales_orders_inquiry.html", context={"request": request, "user": current_user})
 
 
+@router.get("/sales/unsold", response_class=HTMLResponse)
+def sales_unsold_page(request: Request, current_user=Depends(get_current_user)):
+    return templates.TemplateResponse(request=request, name="sales_unsold.html", context={"request": request, "user": current_user})
+
+
 @router.get("/sales/shipping", response_class=HTMLResponse)
 def shipping_entry_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(request=request, name="sales_shipping.html", context={"request": request, "user": current_user})
@@ -108,13 +112,29 @@ def sales_customers(db: Session = Depends(get_db), current_user=Depends(get_curr
 
 
 @router.get("/api/sales/items")
-def sales_items(q: Optional[str] = Query(None, max_length=80), db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    query = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == "Y")
-    if q and q.strip():
-        term = q.strip()
-        query = query.filter((ItemMasterModel.part_no.contains(term, autoescape=True)) | (ItemMasterModel.part_name.contains(term, autoescape=True)))
-    rows = query.order_by(ItemMasterModel.part_no.asc()).limit(100).all()
-    return [{"part_no": x.part_no, "part_name": x.part_name, "unit": x.unit or "EA"} for x in rows]
+def sales_items(
+    q: Optional[str] = Query(None, max_length=80),
+    limit: int = Query(30, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    keyword = (q or "").strip()
+    query = db.query(ItemMasterModel).filter(
+        ItemMasterModel.is_active == "Y",
+        ItemMasterModel.material_type.in_(["SEMI", "FINISHED"]),
+    )
+    if keyword:
+        query = query.filter(ItemMasterModel.part_no.contains(keyword, autoescape=True))
+    rows = query.order_by(ItemMasterModel.part_no.asc()).limit(limit).all()
+    return [
+        {
+            "part_no": x.part_no,
+            "part_name": x.part_name,
+            "unit": x.unit or "EA",
+            "material_type": x.material_type,
+        }
+        for x in rows
+    ]
 
 
 @router.post("/api/sales/orders")
@@ -125,16 +145,21 @@ def create_sales_order(payload: SalesOrderCreateInput, db: Session = Depends(get
         Partner.partner_type.in_(["CUSTOMER", "BOTH"]),
     ).first()
     if not customer:
-        raise HTTPException(404, "사용 가능한 고객사를 찾을 수 없습니다.")
+        raise HTTPException(404, "사용 가능한 판매처를 찾을 수 없습니다.")
 
     part_nos = [x.part_no.strip() for x in payload.items]
     if len(set(part_nos)) != len(part_nos):
         raise HTTPException(409, "동일 품번은 수주 한 건에 중복 입력할 수 없습니다.")
-    item_rows = db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_(part_nos), ItemMasterModel.is_active == "Y").all()
+
+    item_rows = db.query(ItemMasterModel).filter(
+        ItemMasterModel.part_no.in_(part_nos),
+        ItemMasterModel.is_active == "Y",
+        ItemMasterModel.material_type.in_(["SEMI", "FINISHED"]),
+    ).all()
     item_map = {x.part_no: x for x in item_rows}
     missing = [x for x in part_nos if x not in item_map]
     if missing:
-        raise HTTPException(404, f"사용 가능한 품목을 찾을 수 없습니다: {', '.join(missing)}")
+        raise HTTPException(404, f"수주 가능한 완제품/반제품을 찾을 수 없습니다: {', '.join(missing)}")
 
     order = SalesOrderMaster(
         order_no=_next_no(db, SalesOrderMaster, SalesOrderMaster.order_no, "SO", payload.order_date),
@@ -203,6 +228,57 @@ def sales_orders(
             "status": i.status,
         } for i in x.items],
     } for x in rows]
+
+
+@router.get("/api/sales/unsold")
+def sales_unsold(
+    customer_id: Optional[int] = None,
+    part_no: Optional[str] = Query(None, max_length=50),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    query = (
+        db.query(SalesOrderItem, SalesOrderMaster)
+        .join(SalesOrderMaster, SalesOrderMaster.id == SalesOrderItem.order_id)
+        .filter(
+            SalesOrderMaster.status.in_(["ORDERED", "PARTIAL"]),
+            SalesOrderItem.shipped_qty < SalesOrderItem.order_qty,
+        )
+    )
+    if customer_id:
+        query = query.filter(SalesOrderMaster.customer_id == customer_id)
+    if part_no and part_no.strip():
+        query = query.filter(SalesOrderItem.part_no.contains(part_no.strip(), autoescape=True))
+
+    rows = query.order_by(
+        SalesOrderMaster.order_date.asc(),
+        SalesOrderMaster.customer_name.asc(),
+        SalesOrderItem.part_no.asc(),
+        SalesOrderItem.id.asc(),
+    ).all()
+
+    result = []
+    for item, order in rows:
+        order_qty = float(item.order_qty or 0)
+        shipped_qty = float(item.shipped_qty or 0)
+        unsold_qty = max(order_qty - shipped_qty, 0.0)
+        if unsold_qty <= 1e-9:
+            continue
+        result.append({
+            "order_no": order.order_no,
+            "order_date": order.order_date,
+            "customer_id": order.customer_id,
+            "customer_name": order.customer_name,
+            "part_no": item.part_no,
+            "part_name": item.part_name,
+            "order_qty": order_qty,
+            "shipped_qty": shipped_qty,
+            "unsold_qty": unsold_qty,
+            "unit": item.unit,
+            "delivery_date": item.delivery_date or order.delivery_due_date,
+            "note": item.note or order.note or "",
+        })
+    return {"items": result, "total": len(result)}
 
 
 @router.get("/api/sales/shipping/open-items")
