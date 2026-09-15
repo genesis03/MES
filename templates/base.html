@@ -161,15 +161,16 @@
 
             <!-- 2. 영업관리 -->
             {% if user.role == "ADMIN" or (user.perms and user.perms.sales and user.perms.sales.enabled) %}
-            <li class="menu-item" id="salesMenu">
+            <li class="menu-item{% if request.url.path.startswith('/sales/') %} open{% endif %}" id="salesMenu">
                 <div class="menu-title" onclick="toggleAccordion('salesMenu')">
                     <span>영업관리</span>
                     <span class="arrow-icon">▼</span>
                 </div>
                 <ul class="submenu">
-                    <li class="submenu-item">
-                        <a href="javascript:void(0);" style="color: #64748b; cursor: default;">준비 중</a>
-                    </li>
+                    <li class="submenu-item"><a href="/sales/orders" id="nav-sales-orders">수주 입력</a></li>
+                    <li class="submenu-item"><a href="/sales/orders/inquiry" id="nav-sales-orders-inquiry">수주 조회</a></li>
+                    <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
+                    <li class="submenu-item"><a href="/sales/shipping" id="nav-sales-shipping">출고 입력</a></li>
                 </ul>
             </li>
             {% endif %}
@@ -299,6 +300,9 @@
                 "/basic-info/partners": "nav-partners",
                 "/basic-info/equipment": "nav-equipment",
                 "/basic-info/workers": "nav-workers",
+                "/sales/orders": "nav-sales-orders",
+                "/sales/orders/inquiry": "nav-sales-orders-inquiry",
+                "/sales/shipping": "nav-sales-shipping",
                 "/purchase/orders": "nav-purchase-orders",
                 "/purchase/inbound": "nav-purchase-inbound",
                 "/purchase": "nav-purchase-inbound",
