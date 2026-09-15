@@ -8,6 +8,7 @@ from core.security import get_current_user
 from models.lot_consumption import LotConsumptionModel
 from models.lot_relation import LotRelationModel
 from models.models import ItemMasterModel, ProcessModel
+from models.packing import PackingLotAllocation, PackingMaster
 from models.production import ProductionPerformance, ProductionWorkOrder
 from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunLotAllocation, ProductionRunMaterial
@@ -39,34 +40,17 @@ def _performance_output_lots(db: Session, performance_id: int):
 def _downstream_used_lots(db: Session, lot_nos: list[str]) -> list[str]:
     if not lot_nos:
         return []
-
     used = set()
-    used.update(
-        row[0]
-        for row in db.query(LotConsumptionModel.lot_no)
-        .filter(LotConsumptionModel.lot_no.in_(lot_nos))
-        .distinct()
-        .all()
-    )
-    used.update(
-        row[0]
-        for row in db.query(LotRelationModel.parent_lot_no)
-        .filter(LotRelationModel.parent_lot_no.in_(lot_nos))
-        .distinct()
-        .all()
-    )
+    used.update(row[0] for row in db.query(LotConsumptionModel.lot_no).filter(LotConsumptionModel.lot_no.in_(lot_nos)).distinct().all())
+    used.update(row[0] for row in db.query(LotRelationModel.parent_lot_no).filter(LotRelationModel.parent_lot_no.in_(lot_nos)).distinct().all())
     used.update(
         row[0]
         for row in (
             db.query(ProductionRunLotAllocation.lot_no)
             .join(ProductionRunMaterial, ProductionRunMaterial.id == ProductionRunLotAllocation.material_id)
             .join(ProductionRun, ProductionRun.id == ProductionRunMaterial.run_id)
-            .filter(
-                ProductionRunLotAllocation.lot_no.in_(lot_nos),
-                ProductionRun.status.in_(["IN_PROGRESS", "COMPLETED"]),
-            )
-            .distinct()
-            .all()
+            .filter(ProductionRunLotAllocation.lot_no.in_(lot_nos), ProductionRun.status.in_(["IN_PROGRESS", "COMPLETED"]))
+            .distinct().all()
         )
     )
     used.update(
@@ -75,12 +59,17 @@ def _downstream_used_lots(db: Session, lot_nos: list[str]) -> list[str]:
             db.query(SubcontractLotAllocation.lot_no)
             .join(SubcontractOrderItem, SubcontractOrderItem.id == SubcontractLotAllocation.order_item_id)
             .join(SubcontractOrderMaster, SubcontractOrderMaster.id == SubcontractOrderItem.order_id)
-            .filter(
-                SubcontractLotAllocation.lot_no.in_(lot_nos),
-                SubcontractOrderMaster.status != "CANCELLED",
-            )
-            .distinct()
-            .all()
+            .filter(SubcontractLotAllocation.lot_no.in_(lot_nos), SubcontractOrderMaster.status != "CANCELLED")
+            .distinct().all()
+        )
+    )
+    used.update(
+        row[0]
+        for row in (
+            db.query(PackingLotAllocation.source_lot_no)
+            .join(PackingMaster, PackingMaster.id == PackingLotAllocation.packing_id)
+            .filter(PackingLotAllocation.source_lot_no.in_(lot_nos), PackingMaster.status == "PACKED")
+            .distinct().all()
         )
     )
     return sorted(value for value in used if value)
@@ -91,11 +80,7 @@ def _assert_performance_deletable(db: Session, performance: ProductionPerformanc
     output_lot_nos = [row.lot_no for row in output_lots]
     used_lots = _downstream_used_lots(db, output_lot_nos)
     if used_lots:
-        raise HTTPException(
-            409,
-            "다음 공정/외주에서 이미 사용된 생산 LOT가 있어 실적을 삭제할 수 없습니다: "
-            + ", ".join(used_lots),
-        )
+        raise HTTPException(409, "다음 공정/외주/포장에서 이미 사용된 생산 LOT가 있어 실적을 삭제할 수 없습니다: " + ", ".join(used_lots))
     return output_lots
 
 
@@ -103,33 +88,19 @@ def _delete_performance(db: Session, performance: ProductionPerformance, output_
     output_lots = output_lots if output_lots is not None else _assert_performance_deletable(db, performance)
     output_lot_nos = [row.lot_no for row in output_lots]
     order = db.get(ProductionWorkOrder, performance.work_order_id)
-
-    # 이 실적이 소비했던 원자재 LOT 사용량을 먼저 되돌립니다.
-    db.query(LotConsumptionModel).filter(
-        LotConsumptionModel.performance_id == performance.id
-    ).delete(synchronize_session=False)
-
-    # 생산 LOT로 들어오는 계보가 있으면 생산실적 삭제와 함께 제거합니다.
-    # parent가 생산 LOT인 관계는 위의 downstream 검사에서 이미 차단됩니다.
+    db.query(LotConsumptionModel).filter(LotConsumptionModel.performance_id == performance.id).delete(synchronize_session=False)
     if output_lot_nos:
-        db.query(LotRelationModel).filter(
-            LotRelationModel.child_lot_no.in_(output_lot_nos)
-        ).delete(synchronize_session=False)
-
-    # 완료 가동내역과 BOM LOT 배정/불량상세를 함께 제거합니다.
+        db.query(LotRelationModel).filter(LotRelationModel.child_lot_no.in_(output_lot_nos)).delete(synchronize_session=False)
     runs = db.query(ProductionRun).filter(ProductionRun.performance_id == performance.id).all()
     for run in runs:
         run.performance_id = None
         db.delete(run)
     db.flush()
-
     for lot in output_lots:
         db.delete(lot)
-
     good_qty = float(performance.good_qty or 0)
     db.delete(performance)
     db.flush()
-
     if order:
         order.production_qty = max(float(order.production_qty or 0) - good_qty, 0.0)
         if order.production_qty >= float(order.order_qty or 0) and order.order_qty:
@@ -137,12 +108,8 @@ def _delete_performance(db: Session, performance: ProductionPerformance, output_
         elif order.production_qty > 0:
             order.status = "IN_PROGRESS"
         else:
-            active_run = db.query(ProductionRun.id).filter(
-                ProductionRun.work_order_id == order.id,
-                ProductionRun.status == "IN_PROGRESS",
-            ).first()
+            active_run = db.query(ProductionRun.id).filter(ProductionRun.work_order_id == order.id, ProductionRun.status == "IN_PROGRESS").first()
             order.status = "IN_PROGRESS" if active_run else "WAITING"
-
     return output_lot_nos
 
 
@@ -172,32 +139,21 @@ def production_performance_status(
         query = query.filter(ProductionPerformance.process_code == process_code.strip())
     if operator_name:
         query = query.filter(ProductionPerformance.operator_name.contains(operator_name.strip(), autoescape=True))
-
     rows = query.order_by(ProductionPerformance.performance_date.desc(), ProductionPerformance.id.desc()).limit(2000).all()
     if not rows:
         return []
-
     order_ids = {x.work_order_id for x in rows}
     order_map = {x.id: x for x in db.query(ProductionWorkOrder).filter(ProductionWorkOrder.id.in_(order_ids)).all()}
-
     if work_order_no:
         keyword = work_order_no.strip().lower()
         rows = [x for x in rows if x.work_order_id in order_map and keyword in order_map[x.work_order_id].work_order_no.lower()]
     if part_no:
         keyword = part_no.strip().lower()
         rows = [x for x in rows if x.work_order_id in order_map and keyword in order_map[x.work_order_id].part_no.lower()]
-
     part_nos = {order_map[x.work_order_id].part_no for x in rows if x.work_order_id in order_map}
-    item_map = {
-        x.part_no: x
-        for x in db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_(part_nos)).all()
-    } if part_nos else {}
+    item_map = {x.part_no: x for x in db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_(part_nos)).all()} if part_nos else {}
     process_codes = {x.process_code for x in rows}
-    process_map = {
-        x.process_code: x
-        for x in db.query(ProcessModel).filter(ProcessModel.process_code.in_(process_codes)).all()
-    } if process_codes else {}
-
+    process_map = {x.process_code: x for x in db.query(ProcessModel).filter(ProcessModel.process_code.in_(process_codes)).all()} if process_codes else {}
     can_delete = _is_super_admin(current_user)
     result = []
     for perf in rows:
@@ -236,68 +192,37 @@ def production_performance_status(
 
 
 @router.delete("/performances/{performance_id}")
-def delete_production_performance(
-    performance_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
+def delete_production_performance(performance_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     if not _is_super_admin(current_user):
         raise HTTPException(403, "최고관리자만 생산실적을 삭제할 수 있습니다.")
-
     performance = db.get(ProductionPerformance, performance_id)
     if not performance:
         raise HTTPException(404, "생산실적을 찾을 수 없습니다.")
-
     output_lots = _assert_performance_deletable(db, performance)
     removed_lots = _delete_performance(db, performance, output_lots)
     db.commit()
-    return {
-        "status": "success",
-        "message": "생산실적을 삭제했습니다. 투입 원자재 LOT 사용량은 복원되고 생성 생산 LOT는 제거되었습니다.",
-        "removed_output_lots": removed_lots,
-    }
+    return {"status": "success", "message": "생산실적을 삭제했습니다. 투입 원자재 LOT 사용량은 복원되고 생성 생산 LOT는 제거되었습니다.", "removed_output_lots": removed_lots}
 
 
 @router.delete("/orders/{order_id}/super-delete")
-def super_delete_completed_order(
-    order_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
+def super_delete_completed_order(order_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     if not _is_super_admin(current_user):
         raise HTTPException(403, "최고관리자만 생산실적이 있는 작업지시를 삭제할 수 있습니다.")
-
     order = db.get(ProductionWorkOrder, order_id)
     if not order:
         raise HTTPException(404, "작업지시를 찾을 수 없습니다.")
     if order.status != "COMPLETED":
         raise HTTPException(400, "이 기능은 완료된 작업지시 삭제 전용입니다.")
-
-    performances = db.query(ProductionPerformance).filter(
-        ProductionPerformance.work_order_id == order.id
-    ).order_by(ProductionPerformance.id.asc()).all()
-
-    checked = []
-    for performance in performances:
-        checked.append((performance, _assert_performance_deletable(db, performance)))
-
+    performances = db.query(ProductionPerformance).filter(ProductionPerformance.work_order_id == order.id).order_by(ProductionPerformance.id.asc()).all()
+    checked = [(performance, _assert_performance_deletable(db, performance)) for performance in performances]
     for performance, output_lots in checked:
         _delete_performance(db, performance, output_lots)
-
-    db.query(LotConsumptionModel).filter(
-        LotConsumptionModel.work_order_id == order.id
-    ).delete(synchronize_session=False)
-
+    db.query(LotConsumptionModel).filter(LotConsumptionModel.work_order_id == order.id).delete(synchronize_session=False)
     remaining_runs = db.query(ProductionRun).filter(ProductionRun.work_order_id == order.id).all()
     for run in remaining_runs:
         run.performance_id = None
         db.delete(run)
     db.flush()
-
     db.delete(order)
     db.commit()
-
-    return {
-        "status": "success",
-        "message": "완료 작업지시와 연결 생산실적을 삭제했습니다. 투입 LOT 소비수량도 복원되었습니다.",
-    }
+    return {"status": "success", "message": "완료 작업지시와 연결 생산실적을 삭제했습니다. 투입 LOT 소비수량도 복원되었습니다."}
