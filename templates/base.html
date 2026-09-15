@@ -221,13 +221,13 @@
 
             <!-- 5. 재고 관리 (구 입고관리) -->
             {% if user.role == "ADMIN" or (user.perms and user.perms.inbound and user.perms.inbound.enabled) %}
-            <li class="menu-item" id="inboundMenu">
+            <li class="menu-item{% if request.url.path.startswith('/inventory/') %} open{% endif %}" id="inboundMenu">
                 <div class="menu-title" onclick="toggleAccordion('inboundMenu')">
                     <span>재고관리</span>
                     <span class="arrow-icon">▼</span>
                 </div>
                 <ul class="submenu">
-                    <li class="submenu-item"><a href="javascript:void(0);" style="color: #64748b; cursor: default;">준비 중</a></li>
+                    <li class="submenu-item"><a href="/inventory/lots" id="nav-inventory-lots">LOT 재고 현황</a></li>
                 </ul>
             </li>
             {% endif %}
@@ -317,6 +317,7 @@
                 "/production/packing": "nav-production-packing",
                 "/production/performance/status": "nav-production-status",
                 "/production/equipment/status": "nav-production-equipment",
+                "/inventory/lots": "nav-inventory-lots",
                 "/quality/inbound-defects": "nav-quality-inbound-defects"
             };
             const activeNavId = routeMap[currentPath];
