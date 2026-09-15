@@ -172,23 +172,23 @@ def delete_shipment(
     if not shipment:
         raise HTTPException(404, "출고 내역을 찾을 수 없습니다.")
 
-    waiting_lots = [
-        box.package_lot_no
+    # 출고가 최종 공정이므로 LOT 계산/라벨 스테이징 사용 여부로 삭제를 막지 않습니다.
+    # 대신 삭제 대상 출고대기LOT가 현재 shipping_master 작업 데이터에 있으면
+    # 해당 행만 함께 제거하여 출고 내역과 기존 LOT 계산/바코드 작업 데이터가 어긋나지 않게 합니다.
+    waiting_lots = {
+        str(box.package_lot_no).strip()
         for item in shipment.items
         for box in item.boxes
         if box.package_lot_no
-    ]
-    for lot_no in waiting_lots:
-        used = (
-            db.query(ShippingMasterModel.id)
-            .filter(ShippingMasterModel.row_json.contains(lot_no, autoescape=True))
-            .first()
-        )
-        if used:
-            raise HTTPException(
-                409,
-                f"출고 내역 및 LOT 계산/라벨 데이터에서 이미 사용된 출고대기LOT가 있어 삭제할 수 없습니다: {lot_no}",
-            )
+    }
+    staging_removed = 0
+    if waiting_lots:
+        staging_rows = db.query(ShippingMasterModel).all()
+        for staging_row in staging_rows:
+            raw = str(staging_row.row_json or "")
+            if any(lot_no in raw for lot_no in waiting_lots):
+                db.delete(staging_row)
+                staging_removed += 1
 
     affected_orders = {}
     for item in shipment.items:
@@ -209,8 +209,10 @@ def delete_shipment(
     db.delete(shipment)
     db.commit()
 
+    sync_text = f" LOT 계산/라벨 작업 데이터 {staging_removed}건도 함께 정리했습니다." if staging_removed else ""
     return {
         "status": "success",
         "shipment_no": shipment_no,
-        "message": "출고 내역을 삭제했습니다. 연결된 모든 수주의 출고수량과 출고대기LOT 사용상태가 복원되었습니다.",
+        "staging_removed": staging_removed,
+        "message": f"출고 내역을 삭제했습니다. 연결된 모든 수주의 출고수량과 출고대기LOT 사용상태가 복원되었습니다.{sync_text}",
     }
