@@ -29,7 +29,7 @@ class ShipmentAllocationInput(BaseModel):
 
 class ShipmentOrderCreateInput(BaseModel):
     shipment_date: str = Field(min_length=10, max_length=10)
-    sales_order_id: int = Field(gt=0)
+    sales_order_id: Optional[int] = Field(default=None, gt=0)  # 구버전 클라이언트 호환용
     items: list[ShipmentAllocationInput] = Field(min_length=1)
     note: Optional[str] = Field(default=None, max_length=1000)
 
@@ -133,6 +133,8 @@ def open_orders(db: Session = Depends(get_db), current_user=Depends(get_current_
             remaining_qty = max(float(item.order_qty or 0) - float(item.shipped_qty or 0), 0.0)
             items.append({
                 "id": item.id,
+                "order_id": order.id,
+                "order_no": order.order_no,
                 "part_no": item.part_no,
                 "part_name": item.part_name or (master.part_name if master else ""),
                 "unit": item.unit or "EA",
@@ -246,38 +248,62 @@ def confirm_shipment(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    order = db.get(SalesOrderMaster, payload.sales_order_id)
-    if not order:
-        raise HTTPException(404, "수주를 찾을 수 없습니다.")
-    if order.status not in ("ORDERED", "PARTIAL"):
-        raise HTTPException(409, "이미 출고 완료되었거나 출고할 수 없는 수주입니다.")
-
     allocation_item_ids = [row.sales_order_item_id for row in payload.items]
     if len(set(allocation_item_ids)) != len(allocation_item_ids):
         raise HTTPException(409, "동일 수주 품목이 중복 배정되었습니다.")
 
-    validated = []
-    used_box_ids: set[int] = set()
+    sales_items: dict[int, SalesOrderItem] = {}
+    orders: dict[int, SalesOrderMaster] = {}
+    customer_id = None
+    customer_name = None
+
     for allocation in payload.items:
         sales_item = db.get(SalesOrderItem, allocation.sales_order_item_id)
-        if not sales_item or sales_item.order_id != order.id:
-            raise HTTPException(409, "수주에 속하지 않는 품목이 포함되어 있습니다.")
-        if sales_item.status not in ("WAITING", "PARTIAL"):
-            raise HTTPException(409, f"{sales_item.part_no}: 이미 출고 완료된 품목입니다.")
+        if not sales_item or not sales_item.order:
+            raise HTTPException(409, "수주 품목 또는 수주 정보를 찾을 수 없습니다.")
+        order = sales_item.order
+        if sales_item.status not in ("WAITING", "PARTIAL") or order.status not in ("ORDERED", "PARTIAL"):
+            raise HTTPException(409, f"{sales_item.part_no}: 이미 출고 완료되었거나 출고할 수 없는 수주 품목입니다.")
 
+        if customer_id is None:
+            customer_id = order.customer_id
+            customer_name = order.customer_name
+        elif order.customer_id != customer_id:
+            raise HTTPException(409, "서로 다른 판매처의 수주는 한 건의 출고전표로 묶을 수 없습니다.")
+
+        sales_items[sales_item.id] = sales_item
+        orders[order.id] = order
+
+    if not sales_items:
+        raise HTTPException(409, "출고할 수주 품목이 없습니다.")
+
+    # 같은 품번이 여러 수주에 걸쳐 있어도, 이번 출고전표 전체 기준으로 FIFO 앞쪽 LOT만 사용해야 합니다.
+    part_selected_ids: dict[str, list[int]] = {}
+    used_box_ids: set[int] = set()
+    for allocation in payload.items:
+        sales_item = sales_items[allocation.sales_order_item_id]
         box_ids = list(dict.fromkeys(allocation.packing_box_ids))
         if len(box_ids) != len(allocation.packing_box_ids):
             raise HTTPException(409, f"{sales_item.part_no}: 동일 LOT가 중복 선택되었습니다.")
         if any(box_id in used_box_ids for box_id in box_ids):
-            raise HTTPException(409, "서로 다른 품목에 동일 포장 LOT가 중복 배정되었습니다.")
+            raise HTTPException(409, "서로 다른 수주 품목에 동일 포장 LOT가 중복 배정되었습니다.")
+        used_box_ids.update(box_ids)
+        part_selected_ids.setdefault(sales_item.part_no, []).extend(box_ids)
 
-        waiting = _waiting_rows(db, sales_item.part_no)
-        waiting_ids = [box.id for box, _ in waiting]
-        expected_ids = waiting_ids[:len(box_ids)]
-        if box_ids != expected_ids:
+    waiting_by_part: dict[str, list[tuple[PackingBox, PackingMaster]]] = {}
+    for part_no, selected_ids in part_selected_ids.items():
+        waiting = _waiting_rows(db, part_no)
+        waiting_by_part[part_no] = waiting
+        expected_ids = [box.id for box, _ in waiting[:len(selected_ids)]]
+        if len(expected_ids) != len(selected_ids) or set(selected_ids) != set(expected_ids):
             first_expected = waiting[0][0].package_lot_no if waiting else "없음"
-            raise HTTPException(409, f"{sales_item.part_no}: 선입선출 위반입니다. 선입 LOT {first_expected}부터 순서대로 배정해야 합니다.")
+            raise HTTPException(409, f"{part_no}: 선입선출 위반입니다. 선입 LOT {first_expected}부터 필요한 수량만큼 배정해야 합니다.")
 
+    validated = []
+    for allocation in payload.items:
+        sales_item = sales_items[allocation.sales_order_item_id]
+        box_ids = list(dict.fromkeys(allocation.packing_box_ids))
+        waiting = waiting_by_part.get(sales_item.part_no, [])
         row_map = {box.id: (box, master) for box, master in waiting}
         selected_rows = [row_map[box_id] for box_id in box_ids if box_id in row_map]
         if len(selected_rows) != len(box_ids):
@@ -288,20 +314,21 @@ def confirm_shipment(
         if shipment_qty <= 0:
             raise HTTPException(409, f"{sales_item.part_no}: 출고수량이 0입니다.")
         if shipment_qty > remaining_qty + 1e-9:
-            raise HTTPException(409, f"{sales_item.part_no}: 수주 잔량 {remaining_qty:g}보다 출고수량 {shipment_qty:g}이 큽니다. 부분 박스 출고는 지원하지 않습니다.")
-
-        used_box_ids.update(box_ids)
+            raise HTTPException(409, f"{sales_item.order.order_no} / {sales_item.part_no}: 수주 잔량 {remaining_qty:g}보다 출고수량 {shipment_qty:g}이 큽니다. 부분 박스 출고는 지원하지 않습니다.")
         validated.append((sales_item, selected_rows, shipment_qty))
 
     if not validated:
         raise HTTPException(409, "출고할 LOT를 배정해 주세요.")
 
+    ordered_orders = sorted(orders.values(), key=lambda x: x.id)
+    primary_order = ordered_orders[0]
     shipment = ShipmentMaster(
         shipment_no=_next_no(db, ShipmentMaster, ShipmentMaster.shipment_no, "SH", payload.shipment_date),
         shipment_date=payload.shipment_date,
-        sales_order_id=order.id,
-        customer_id=order.customer_id,
-        customer_name=order.customer_name,
+        # 기존 DB/기능 호환을 위해 대표 수주 1건을 보존한다. 실제 추적은 ShipmentItem.sales_order_item_id 기준이다.
+        sales_order_id=primary_order.id,
+        customer_id=customer_id,
+        customer_name=customer_name,
         status="CONFIRMED",
         note=(payload.note or "").strip() or None,
         created_by=_username(current_user),
@@ -332,7 +359,8 @@ def confirm_shipment(
         sales_item.shipped_qty = float(sales_item.shipped_qty or 0) + shipment_qty
         total_qty += shipment_qty
 
-    _sync_order_status(order)
+    for order in orders.values():
+        _sync_order_status(order)
     db.commit()
 
     return {
@@ -341,5 +369,7 @@ def confirm_shipment(
         "shipment_date": shipment.shipment_date,
         "total_qty": total_qty,
         "item_count": len(validated),
+        "order_count": len(orders),
+        "order_nos": [row.order_no for row in ordered_orders],
         "message": "출고 처리가 완료되었습니다.",
     }
