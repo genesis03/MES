@@ -1,86 +1,207 @@
 {% extends "base.html" %}
 
-{% block title %}출고내역 관리 - 출하 관리 시스템{% endblock %}
+{% block title %}출고 내역 및 LOT 계산{% endblock %}
 
 {% block content %}
 <div class="container">
-    <h1 class="page-title">출고내역 관리</h1>
-    
-    <div class="card" style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:20px; margin-bottom:20px;">
-        <div style="font-weight:bold; margin-bottom:10px;">출고 원장 데이터 업로드 (CSV / XLSX)</div>
-        <div style="display:flex; gap:10px; align-items:center;">
-            <input type="file" id="fileInput" accept=".csv, .xlsx, .xls">
-            <button onclick="uploadData()" style="padding:8px 16px; background:#007bff; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">업로드 실행</button>
-            <button onclick="downloadExcel()" style="padding:8px 16px; background:#28a745; color:#fff; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">출고 LOT 계산 엑셀 다운로드</button>
+    <h1 class="page-title">출고 내역 및 LOT 계산</h1>
+
+    <div class="card" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:20px;margin-bottom:20px;">
+        <div style="font-weight:bold;margin-bottom:12px;">MES 출고정보 불러오기</div>
+        <div style="display:grid;grid-template-columns:160px 160px 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:12px;">
+            <label style="font-size:12px;font-weight:bold;">시작일<input type="date" id="sourceStartDate" style="width:100%;padding:7px;margin-top:4px;"></label>
+            <label style="font-size:12px;font-weight:bold;">종료일<input type="date" id="sourceEndDate" style="width:100%;padding:7px;margin-top:4px;"></label>
+            <label style="font-size:12px;font-weight:bold;">출고번호<input id="sourceShipmentNo" style="width:100%;padding:7px;margin-top:4px;" placeholder="SH260915001"></label>
+            <label style="font-size:12px;font-weight:bold;">판매처<input id="sourceCustomer" style="width:100%;padding:7px;margin-top:4px;"></label>
+            <button onclick="loadSourceShipments()" style="padding:8px 18px;background:#2563eb;color:#fff;border:0;border-radius:4px;font-weight:bold;cursor:pointer;">조회</button>
         </div>
-        <div id="uploadStatus" style="margin-top: 10px; font-weight: bold; color: #2980b9;"></div>
+
+        <div style="overflow:auto;max-height:300px;border:1px solid #cbd5e1;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:900px;">
+                <thead style="position:sticky;top:0;background:#f1f5f9;">
+                    <tr>
+                        <th style="border:1px solid #cbd5e1;padding:7px;width:45px;"><input type="checkbox" id="sourceCheckAll"></th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">출고번호</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">출고일자</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">판매처</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">품번</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">품목수</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">BOX</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">출고수량</th>
+                    </tr>
+                </thead>
+                <tbody id="sourceShipmentBody"><tr><td colspan="8" style="padding:20px;text-align:center;">조회 버튼을 눌러 주세요.</td></tr></tbody>
+            </table>
+        </div>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+            <button onclick="loadSelectedShipments()" style="padding:8px 16px;background:#0f766e;color:#fff;border:0;border-radius:4px;font-weight:bold;cursor:pointer;">선택 출고 불러오기</button>
+            <button onclick="downloadSelectedExcel()" style="padding:8px 16px;background:#16a34a;color:#fff;border:0;border-radius:4px;font-weight:bold;cursor:pointer;">선택 출고 LOT 계산 엑셀</button>
+        </div>
+        <div id="sourceStatus" style="margin-top:10px;font-weight:bold;color:#2563eb;"></div>
     </div>
 
-    <div class="card" style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:20px;">
-        <div style="font-weight:bold; margin-bottom:10px;">로드된 출고 원장 데이터</div>
-        <div id="tableContainer" style="overflow-x:auto;">데이터를 업로드해 주십시오.</div>
+    <div class="card" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:20px;margin-bottom:20px;">
+        <div style="font-weight:bold;margin-bottom:10px;">출고 원장 미리보기</div>
+        <div id="tableContainer" style="overflow-x:auto;">선택한 MES 출고정보를 불러오거나 기존 CSV/XLSX를 업로드해 주세요.</div>
     </div>
+
+    <details class="card" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:20px;">
+        <summary style="font-weight:bold;cursor:pointer;">기존 CSV / XLSX 업로드 방식 (호환용)</summary>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:14px;">
+            <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+            <button onclick="uploadData()" style="padding:8px 16px;background:#64748b;color:#fff;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">업로드 실행</button>
+            <button onclick="downloadLegacyExcel()" style="padding:8px 16px;background:#475569;color:#fff;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">업로드 데이터 LOT 계산</button>
+        </div>
+        <div id="uploadStatus" style="margin-top:10px;font-weight:bold;color:#64748b;"></div>
+    </details>
 </div>
 {% endblock %}
 
 {% block extra_script %}
 <script>
-    async function uploadData() {
-        const input = document.getElementById('fileInput');
-        if (!input.files[0]) {
-            alert("업로드할 파일을 선택하십시오.");
-            return;
-        }
-        const formData = new FormData();
-        formData.append("file", input.files[0]);
+    let currentPreviewRows = [];
 
-        const status = document.getElementById('uploadStatus');
-        status.innerText = "데이터 처리 중...";
-
-        const res = await fetch('/api/upload', { method: 'POST', body: formData });
-        const result = await res.json();
-        
-        if (result.status === "success") {
-            status.innerText = `총 ${result.count}건의 데이터가 성공적으로 로드되었습니다.`;
-            loadDataPreview();
-        } else {
-            status.innerText = "업로드 처리 중 오류가 발생했습니다.";
-        }
+    function esc(v) {
+        return String(v ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[s]));
     }
 
-    async function loadDataPreview() {
-        const res = await fetch('/api/data');
+    function selectedShipmentIds() {
+        return [...document.querySelectorAll('.source-check:checked')].map(x => Number(x.value));
+    }
+
+    function setDefaultDates() {
+        const end = new Date();
+        const start = new Date();
+        start.setDate(start.getDate() - 30);
+        document.getElementById('sourceEndDate').value = end.toISOString().slice(0, 10);
+        document.getElementById('sourceStartDate').value = start.toISOString().slice(0, 10);
+    }
+
+    async function loadSourceShipments() {
+        const params = new URLSearchParams();
+        const start = document.getElementById('sourceStartDate').value;
+        const end = document.getElementById('sourceEndDate').value;
+        const shipmentNo = document.getElementById('sourceShipmentNo').value.trim();
+        const customer = document.getElementById('sourceCustomer').value.trim();
+        if (start) params.set('start_date', start);
+        if (end) params.set('end_date', end);
+        if (shipmentNo) params.set('shipment_no', shipmentNo);
+        if (customer) params.set('customer_name', customer);
+
+        const res = await fetch('/api/shipping/source-shipments?' + params.toString());
         const result = await res.json();
-        const container = document.getElementById('tableContainer');
-        
-        if (!result.data || result.data.length === 0) {
-            container.innerHTML = "조회할 데이터가 없습니다.";
+        if (!res.ok) {
+            alert(result.detail || '출고정보 조회에 실패했습니다.');
             return;
         }
 
-        let html = "<table style='width:100%; border-collapse:collapse; font-size:13px;'><thead><tr style='background:#f1f5f9;'>";
-        Object.keys(result.data[0]).forEach(k => html += `<th style='border:1px solid #cbd5e1; padding:8px;'>${k}</th>`);
-        html += "</tr></thead><tbody>";
+        const body = document.getElementById('sourceShipmentBody');
+        body.innerHTML = result.items?.length ? result.items.map(row => `
+            <tr>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;"><input type="checkbox" class="source-check" value="${row.id}"></td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.shipment_no)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.shipment_date)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.customer_name)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;">${esc((row.part_nos || []).join(', '))}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${row.item_count}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${row.box_count}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${Number(row.total_qty || 0).toLocaleString()}</td>
+            </tr>`).join('') : '<tr><td colspan="8" style="padding:20px;text-align:center;">조회된 출고 내역이 없습니다.</td></tr>';
+        document.getElementById('sourceCheckAll').checked = false;
+        document.getElementById('sourceStatus').innerText = `출고 ${result.items?.length || 0}건 조회`;
+    }
 
-        result.data.forEach(row => {
-            html += "<tr>";
-            Object.values(row).forEach(v => html += `<td style='border:1px solid #cbd5e1; padding:6px; text-align:center;'>${v}</td>`);
-            html += "</tr>";
+    function renderPreview(rows) {
+        const container = document.getElementById('tableContainer');
+        currentPreviewRows = rows || [];
+        if (!currentPreviewRows.length) {
+            container.innerHTML = '조회할 데이터가 없습니다.';
+            return;
+        }
+        const keys = Object.keys(currentPreviewRows[0]);
+        let html = "<table style='width:100%;border-collapse:collapse;font-size:12px;min-width:1450px;'><thead><tr style='background:#f1f5f9;'>";
+        keys.forEach(k => html += `<th style='border:1px solid #cbd5e1;padding:7px;white-space:nowrap;'>${esc(k)}</th>`);
+        html += '</tr></thead><tbody>';
+        currentPreviewRows.forEach(row => {
+            html += '<tr>';
+            keys.forEach(k => html += `<td style='border:1px solid #cbd5e1;padding:6px;text-align:center;white-space:nowrap;'>${esc(row[k])}</td>`);
+            html += '</tr>';
         });
-        html += "</tbody></table>";
+        html += '</tbody></table>';
         container.innerHTML = html;
     }
 
-    async function downloadExcel() {
+    async function loadSelectedShipments() {
+        const ids = selectedShipmentIds();
+        if (!ids.length) return alert('불러올 출고 내역을 1건 이상 선택해 주세요.');
+        const res = await fetch('/api/shipping/from-shipments', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({shipment_ids: ids})
+        });
+        const result = await res.json();
+        if (!res.ok) return alert(result.detail || '출고정보 변환에 실패했습니다.');
+        renderPreview(result.data);
+        document.getElementById('sourceStatus').innerText = `선택 출고 ${ids.length}건 → 원장 ${result.count}행 변환 완료`;
+    }
+
+    async function downloadSelectedExcel() {
+        const ids = selectedShipmentIds();
+        if (!ids.length) return alert('LOT 계산할 출고 내역을 1건 이상 선택해 주세요.');
+        const res = await fetch('/api/shipping/generate-excel-from-shipments', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({shipment_ids: ids})
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            return alert(err.detail || '엑셀 생성에 실패했습니다.');
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '출고_LOT_계산.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    async function uploadData() {
+        const input = document.getElementById('fileInput');
+        if (!input.files[0]) return alert('업로드할 파일을 선택해 주세요.');
+        const formData = new FormData();
+        formData.append('file', input.files[0]);
+        const status = document.getElementById('uploadStatus');
+        status.innerText = '데이터 처리 중...';
+        const res = await fetch('/api/upload', {method:'POST', body:formData});
+        const result = await res.json();
+        if (res.ok && result.status === 'success') {
+            status.innerText = `총 ${result.count}건의 데이터가 로드되었습니다.`;
+            loadLegacyPreview();
+        } else {
+            status.innerText = result.detail || '업로드 처리 중 오류가 발생했습니다.';
+        }
+    }
+
+    async function loadLegacyPreview() {
         const res = await fetch('/api/data');
         const result = await res.json();
-        if (!result.data || result.data.length === 0) {
-            alert("다운로드할 데이터가 없습니다. 먼저 파일을 업로드해 주십시오.");
-            return;
-        }
+        renderPreview(result.data || []);
+    }
+
+    async function downloadLegacyExcel() {
+        const res = await fetch('/api/data');
+        const result = await res.json();
+        if (!result.data?.length) return alert('기존 업로드 데이터가 없습니다.');
         window.location.href = '/api/generate-excel';
     }
 
-    loadDataPreview();
+    document.getElementById('sourceCheckAll').addEventListener('change', e => {
+        document.querySelectorAll('.source-check').forEach(x => x.checked = e.target.checked);
+    });
+
+    setDefaultDates();
+    loadSourceShipments();
 </script>
 {% endblock %}
