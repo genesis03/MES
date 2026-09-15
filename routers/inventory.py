@@ -16,6 +16,7 @@ from models.models import (
     PurchaseInboundMaster,
     StorageLocationModel,
 )
+from models.packing import PackingLotAllocation, PackingMaster
 from models.production_lot import ProductionLotModel
 
 router = APIRouter(tags=["Inventory"])
@@ -44,7 +45,17 @@ def _used_qty(db: Session, lot_no: str) -> float:
         .scalar()
         or 0.0
     )
-    return float(consumed) + float(related)
+    packed = (
+        db.query(func.coalesce(func.sum(PackingLotAllocation.allocated_qty), 0.0))
+        .join(PackingMaster, PackingMaster.id == PackingLotAllocation.packing_id)
+        .filter(
+            PackingLotAllocation.source_lot_no == lot_no,
+            PackingMaster.status == "PACKED",
+        )
+        .scalar()
+        or 0.0
+    )
+    return float(consumed) + float(related) + float(packed)
 
 
 def _storage_name_map(db: Session) -> dict[str, str]:
@@ -59,7 +70,6 @@ def _storage_display(value: Optional[str], storage_map: dict[str, str]) -> str:
     raw = str(value or "").strip()
     if not raw:
         return ""
-    # DB에는 코드를 저장하되 화면에는 관리자 기준정보의 명칭을 우선 표시합니다.
     return storage_map.get(raw, raw)
 
 
@@ -76,10 +86,7 @@ def inventory_item_candidates(
         query = query.filter(ItemMasterModel.part_no.contains(keyword, autoescape=True))
     rows = query.order_by(ItemMasterModel.part_no.asc()).limit(limit).all()
     return [
-        {
-            "part_no": row.part_no,
-            "part_name": row.part_name or "",
-        }
+        {"part_no": row.part_no, "part_name": row.part_name or ""}
         for row in rows
     ]
 
@@ -131,9 +138,7 @@ def inventory_lots(
             "storage_location": _storage_display(item.storage_location, storage_map),
         })
 
-    production_query = db.query(ProductionLotModel).filter(
-        ProductionLotModel.part_no.in_(selected)
-    )
+    production_query = db.query(ProductionLotModel).filter(ProductionLotModel.part_no.in_(selected))
     for lot in production_query.order_by(ProductionLotModel.created_at.desc(), ProductionLotModel.id.desc()).all():
         lot_qty = float(lot.lot_qty or 0)
         used_qty = _used_qty(db, lot.lot_no)
