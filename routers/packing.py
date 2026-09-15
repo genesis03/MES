@@ -16,6 +16,7 @@ from models.models import ItemBomModel, ItemMasterModel, ShippingMasterModel
 from models.packing import PackingBox, PackingLotAllocation, PackingMaster
 from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunLotAllocation, ProductionRunMaterial
+from models.sales import ShipmentBox
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 
 router = APIRouter(tags=["Packing"])
@@ -366,17 +367,34 @@ def packing_records(
     if part_no and part_no.strip():
         query = query.filter(PackingMaster.part_no == part_no.strip())
     rows = query.order_by(PackingMaster.created_at.desc(), PackingMaster.id.desc()).limit(500).all()
-    return [{
-        "id": x.id,
-        "packing_no": x.packing_no,
-        "packing_date": x.packing_date,
-        "part_no": x.part_no,
-        "part_name": x.part_name or "",
-        "total_qty": float(x.total_qty or 0),
-        "box_count": x.box_count,
-        "box_qty": float(x.box_qty or 0),
-        "waiting_lots": [b.package_lot_no for b in x.boxes],
-    } for x in rows]
+
+    box_ids = [box.id for master in rows for box in master.boxes]
+    shipped_box_ids = set()
+    if box_ids:
+        shipped_box_ids = {
+            int(row[0])
+            for row in db.query(ShipmentBox.packing_box_id)
+            .filter(ShipmentBox.packing_box_id.in_(box_ids))
+            .all()
+        }
+
+    result = []
+    for master in rows:
+        waiting_boxes = [box for box in master.boxes if box.id not in shipped_box_ids]
+        if not waiting_boxes:
+            continue
+        result.append({
+            "id": master.id,
+            "packing_no": master.packing_no,
+            "packing_date": master.packing_date,
+            "part_no": master.part_no,
+            "part_name": master.part_name or "",
+            "total_qty": sum(float(box.box_qty or 0) for box in waiting_boxes),
+            "box_count": len(waiting_boxes),
+            "box_qty": float(master.box_qty or 0),
+            "waiting_lots": [box.package_lot_no for box in waiting_boxes],
+        })
+    return result
 
 
 @router.post("/api/packing/{packing_id}/cancel")
