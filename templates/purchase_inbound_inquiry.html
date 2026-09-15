@@ -31,7 +31,6 @@
     .row-no { width:30px; height:26px; border:1px solid #cbd5e1; border-radius:5px; background:#fff; color:#475569; cursor:pointer; font-weight:800; }
     .row-no:hover { border-color:#2563eb; color:#2563eb; }
     .row-no.selected { background:#2563eb; border-color:#2563eb; color:#fff; }
-    .row-no-static { display:inline-flex; width:30px; height:26px; align-items:center; justify-content:center; color:#64748b; font-weight:800; }
     .select-all { border:1px solid #cbd5e1; border-radius:4px; background:#fff; padding:3px 7px; cursor:pointer; font-size:11px; font-weight:700; }
     .type-badge { display:inline-block; border-radius:12px; padding:3px 8px; font-weight:700; }
     .type-general { background:#dbeafe; color:#1d4ed8; }
@@ -72,7 +71,7 @@
     <div class="action-row">
         <button id="editSelectedInbound" class="btn btn-primary" onclick="editSelectedInbound()" disabled>선택수정</button>
         <button id="deleteSelectedInbounds" class="btn btn-danger" onclick="deleteSelectedInbounds()" disabled>선택삭제 (0)</button>
-        <div style="font-size:12px;color:#64748b;">수정/삭제는 일반구매 입고에만 적용됩니다. 외주가공 입고 취소는 외주가공 입고 처리 화면에서 진행합니다.</div>
+        <div style="font-size:12px;color:#64748b;">일반구매는 선택 후 수정/삭제, 외주가공은 행의 순번을 눌러 수정합니다. 후공정 사용 LOT가 있으면 수정이 차단됩니다.</div>
         <div class="summary">조회 <span id="inboundCount">0</span>건</div>
     </div>
 
@@ -104,6 +103,7 @@ function updateInboundSelection(){
 function toggleInboundSelection(id){if(selectedInboundIds.has(id))selectedInboundIds.delete(id);else selectedInboundIds.add(id);updateInboundSelection();}
 function toggleAllInbounds(){const ids=[...new Set(currentInboundRows.filter(row=>row.source_type!=='SUBCONTRACT').map(row=>Number(row.inbound_id)))];const allSelected=ids.length>0&&ids.every(id=>selectedInboundIds.has(id));ids.forEach(id=>allSelected?selectedInboundIds.delete(id):selectedInboundIds.add(id));updateInboundSelection();}
 function editSelectedInbound(){if(selectedInboundIds.size!==1)return;const id=[...selectedInboundIds][0];location.href='/purchase/inbound?edit='+encodeURIComponent(id);}
+function editSubcontractInbound(id){location.href='/subcontract/inbound/edit/'+encodeURIComponent(id);}
 
 async function deleteSelectedInbounds(){
     const ids=[...selectedInboundIds];if(!ids.length)return;
@@ -127,7 +127,7 @@ function renderInboundRows(rows){
     if(!rows.length){body.innerHTML='<tr><td colspan="18" class="empty">조회된 입고 내역이 없습니다.</td></tr>';return;}
     body.innerHTML=rows.map((x,index)=>{
         const isSub=x.source_type==='SUBCONTRACT';
-        const firstCell=isSub?`<span class="row-no-static">${index+1}</span>`:`<button class="row-no" onclick="toggleInboundSelection(${Number(x.inbound_id)})">${index+1}</button>`;
+        const firstCell=isSub?`<button class="row-no" title="외주가공 입고 수정" onclick="editSubcontractInbound(${Number(x.inbound_id)})">${index+1}</button>`:`<button class="row-no" onclick="toggleInboundSelection(${Number(x.inbound_id)})">${index+1}</button>`;
         const rowAttr=isSub?'':` data-inbound-id="${Number(x.inbound_id)}"`;
         const typeBadge=isSub?'<span class="type-badge type-subcontract">외주가공</span>':'<span class="type-badge type-general">일반구매</span>';
         const inspection=x.inspection_status||'';
@@ -150,7 +150,7 @@ async function loadInboundInquiry(){
         document.getElementById('inboundCount').textContent=rows.length.toLocaleString();
         renderInboundRows(rows);
         updateInboundSelection();
-        if(inboundType==='SUBCONTRACT')notice.textContent='외주가공 입고는 LOT별 실입고 이력 기준으로 표시됩니다.';
+        if(inboundType==='SUBCONTRACT')notice.textContent='외주가공 입고는 입고번호 1건당 1행으로 표시됩니다. 순번을 누르면 수정 화면으로 이동합니다.';
         else if(inboundType==='ALL')notice.textContent='일반구매와 외주가공 입고 이력을 통합 표시합니다.';
     }catch(e){body.innerHTML=`<tr><td colspan="18" class="empty" style="color:#dc2626;">${escInbound(e.message)}</td></tr>`;}
 }
