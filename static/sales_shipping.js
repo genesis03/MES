@@ -39,7 +39,17 @@ async function loadBoxes(){
   boxes = await getJson(`/api/sales/shipping/waiting-boxes?sales_order_item_id=${id}`);
   const body = $('boxBody');
   body.innerHTML = boxes.length ? boxes.map(x => `<tr><td><input type="checkbox" class="box-check" value="${x.id}" data-qty="${x.box_qty}"></td><td>${x.package_lot_no}</td><td>${x.packing_date}</td><td>${x.box_qty}</td><td>${x.part_no}</td><td>${x.part_name || ''}</td></tr>`).join('') : '<tr><td colspan="6">출고 가능한 출고대기 LOT가 없습니다.</td></tr>';
-  body.querySelectorAll('.box-check').forEach(el => el.addEventListener('change', updateSelectedQty));
+  body.querySelectorAll('.box-check').forEach((el, index) => el.addEventListener('change', () => applyFifoSelection(index, el.checked)));
+  updateSelectedQty();
+}
+
+function applyFifoSelection(index, checked){
+  const checks = [...document.querySelectorAll('.box-check')];
+  if(checked){
+    for(let i=0; i<=index; i++) checks[i].checked = true;
+  }else{
+    for(let i=index; i<checks.length; i++) checks[i].checked = false;
+  }
   updateSelectedQty();
 }
 
