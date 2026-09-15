@@ -7,7 +7,7 @@
     <h1 class="page-title">출고 내역 및 LOT 계산</h1>
 
     <div class="card" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:20px;margin-bottom:20px;">
-        <div style="font-weight:bold;margin-bottom:12px;">MES 출고정보 불러오기</div>
+        <div style="font-weight:bold;margin-bottom:12px;">1. MES 출고정보 불러오기</div>
         <div style="display:grid;grid-template-columns:160px 160px 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:12px;">
             <label style="font-size:12px;font-weight:bold;">시작일<input type="date" id="sourceStartDate" style="width:100%;padding:7px;margin-top:4px;"></label>
             <label style="font-size:12px;font-weight:bold;">종료일<input type="date" id="sourceEndDate" style="width:100%;padding:7px;margin-top:4px;"></label>
@@ -41,13 +41,8 @@
         <div id="sourceStatus" style="margin-top:10px;font-weight:bold;color:#2563eb;"></div>
     </div>
 
-    <div class="card" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:20px;margin-bottom:20px;">
-        <div style="font-weight:bold;margin-bottom:10px;">출고 원장 미리보기</div>
-        <div id="tableContainer" style="overflow-x:auto;">선택한 MES 출고정보를 불러오거나 기존 CSV/XLSX를 업로드해 주세요.</div>
-    </div>
-
-    <details class="card" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:20px;">
-        <summary style="font-weight:bold;cursor:pointer;">기존 CSV / XLSX 업로드 방식 (호환용)</summary>
+    <details class="card" open style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:20px;margin-bottom:20px;">
+        <summary style="font-weight:bold;cursor:pointer;">2. 기존 CSV / XLSX 업로드 방식 (호환용)</summary>
         <div style="display:flex;gap:10px;align-items:center;margin-top:14px;">
             <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
             <button onclick="uploadData()" style="padding:8px 16px;background:#64748b;color:#fff;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">업로드 실행</button>
@@ -55,6 +50,14 @@
         </div>
         <div id="uploadStatus" style="margin-top:10px;font-weight:bold;color:#64748b;"></div>
     </details>
+
+    <div class="card" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:20px;margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:10px;">
+            <div style="font-weight:bold;">3. 출고 원장 미리보기</div>
+            <div id="persistStatus" style="font-size:12px;font-weight:bold;color:#0f766e;">저장된 공용 출고 원장을 불러오는 중...</div>
+        </div>
+        <div id="tableContainer" style="overflow-x:auto;">저장된 출고 원장을 불러오는 중입니다.</div>
+    </div>
 </div>
 {% endblock %}
 
@@ -143,6 +146,7 @@
         if (!res.ok) return alert(result.detail || '출고정보 변환에 실패했습니다.');
         renderPreview(result.data);
         document.getElementById('sourceStatus').innerText = `선택 출고 ${ids.length}건 → 원장 ${result.count}행 변환 완료`;
+        document.getElementById('persistStatus').innerText = `공용 출고 원장 ${result.count}행 저장 완료 · 다른 메뉴 이동 후에도 유지`;
     }
 
     async function downloadSelectedExcel() {
@@ -178,22 +182,30 @@
         const result = await res.json();
         if (res.ok && result.status === 'success') {
             status.innerText = `총 ${result.count}건의 데이터가 로드되었습니다.`;
-            loadLegacyPreview();
+            await loadPersistedPreview();
         } else {
             status.innerText = result.detail || '업로드 처리 중 오류가 발생했습니다.';
         }
     }
 
-    async function loadLegacyPreview() {
+    async function loadPersistedPreview() {
         const res = await fetch('/api/data');
         const result = await res.json();
-        renderPreview(result.data || []);
+        if (!res.ok) {
+            document.getElementById('persistStatus').innerText = '공용 출고 원장 조회 실패';
+            return;
+        }
+        const rows = result.data || [];
+        renderPreview(rows);
+        document.getElementById('persistStatus').innerText = rows.length
+            ? `공용 출고 원장 ${rows.length}행 유지 중`
+            : '현재 저장된 공용 출고 원장이 없습니다.';
     }
 
     async function downloadLegacyExcel() {
         const res = await fetch('/api/data');
         const result = await res.json();
-        if (!result.data?.length) return alert('기존 업로드 데이터가 없습니다.');
+        if (!result.data?.length) return alert('저장된 출고 원장 데이터가 없습니다.');
         window.location.href = '/api/generate-excel';
     }
 
@@ -202,6 +214,6 @@
     });
 
     setDefaultDates();
-    loadSourceShipments();
+    Promise.all([loadSourceShipments(), loadPersistedPreview()]);
 </script>
 {% endblock %}
