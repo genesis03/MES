@@ -15,6 +15,7 @@ class ShipmentScanAutoInput(BaseModel):
     lot_no: str = Field(min_length=1, max_length=60)
     selected_box_ids: list[int] = Field(default_factory=list)
     reserved_box_ids: list[int] = Field(default_factory=list)
+    requested_qty: float | None = Field(default=None, gt=0)
 
 
 @router.post("/api/sales/shipping-entry/scan")
@@ -64,10 +65,17 @@ def scan_waiting_lot_auto(
     selected_set = set(selected_ids)
     start_index = len(occupied_ids)
     remaining_qty = max(float(item.order_qty or 0) - float(item.shipped_qty or 0), 0.0)
+    target_qty = float(payload.requested_qty) if payload.requested_qty is not None else remaining_qty
+    if target_qty <= 0:
+        raise HTTPException(409, "금회 출고수량을 0보다 크게 입력해 주세요.")
+    if target_qty > remaining_qty + 1e-9:
+        raise HTTPException(409, f"금회 출고수량 {target_qty:g}은 미출고 잔량 {remaining_qty:g}보다 클 수 없습니다.")
 
     # 현재 품목에 이미 배정된 LOT는 그대로 유지하고, 스캔 LOT까지를 상한으로 추가 자동배정한다.
     selected_rows = [(box, master) for box, master in waiting if box.id in selected_set]
     allocated_qty = sum(float(box.box_qty or 0) for box, _ in selected_rows)
+    if allocated_qty > target_qty + 1e-9:
+        raise HTTPException(409, "현재 LOT 배정수량이 변경한 금회 출고수량보다 큽니다. LOT 배정을 초기화해 주세요.")
 
     if scanned_index >= start_index:
         for index in range(start_index, scanned_index + 1):
@@ -77,16 +85,16 @@ def scan_waiting_lot_auto(
             box_qty = float(box.box_qty or 0)
             if box_qty <= 0:
                 continue
-            if allocated_qty + box_qty > remaining_qty + 1e-9:
+            if allocated_qty + box_qty > target_qty + 1e-9:
                 break
             selected_rows.append((box, master))
             selected_set.add(box.id)
             allocated_qty += box_qty
-            if allocated_qty >= remaining_qty - 1e-9:
+            if allocated_qty >= target_qty - 1e-9:
                 break
 
     if not selected_rows:
-        raise HTTPException(409, "수주 잔량에 배정 가능한 완전 박스가 없습니다. 부분 박스 출고는 지원하지 않습니다.")
+        raise HTTPException(409, "금회 출고수량에 배정 가능한 완전 박스가 없습니다. 부분 박스 출고는 지원하지 않습니다.")
 
     # 실제 FIFO 순서대로 반환
     selected_rows.sort(key=lambda row: waiting_ids.index(row[0].id))
@@ -108,7 +116,8 @@ def scan_waiting_lot_auto(
         "scanned_lot_no": payload.lot_no.strip(),
         "allocations": allocations,
         "allocated_qty": allocated_qty,
+        "requested_qty": target_qty,
         "remaining_qty": remaining_qty,
         "auto_added_count": max(len(allocations) - len(selected_ids), 0),
-        "is_full_allocated": allocated_qty >= remaining_qty - 1e-9,
+        "is_full_allocated": abs(allocated_qty - target_qty) <= 1e-9,
     }
