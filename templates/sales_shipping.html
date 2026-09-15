@@ -2,7 +2,7 @@
 {% block title %}출고 입력{% endblock %}
 {% block extra_head %}
 <style>
-.ship-card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:16px;margin-bottom:14px}.ship-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px 14px;align-items:end}.ship-field{grid-column:span 2;min-width:0}.ship-field.span-8{grid-column:span 8}.ship-field label{display:block;font-size:12px;font-weight:800;margin-bottom:5px;color:#334155}.ship-field input,.ship-field select,.ship-field textarea{box-sizing:border-box;width:100%;height:38px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;font-size:13px}.ship-field textarea{resize:vertical;min-height:38px;line-height:20px}.ship-field input[readonly]{background:#f8fafc;color:#475569}.lookup-line{display:grid;grid-template-columns:minmax(0,1fr) 52px 52px;gap:6px}.lookup-line input{min-width:0}.lookup-line .btn{padding:9px 6px}.ship-summary{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin-top:12px}.ship-summary div{border:1px solid #dbe3ec;background:#f8fafc;border-radius:6px;padding:10px 12px}.ship-summary span{display:block;font-size:11px;color:#64748b;font-weight:700}.ship-summary strong{display:block;font-size:18px;margin-top:3px}.ship-actions{display:flex;gap:8px;justify-content:flex-end}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:800;cursor:pointer}.btn-primary{background:#2563eb;color:#fff}.btn-success{background:#16a34a;color:#fff}.btn-light{background:#e2e8f0;color:#334155}.btn-danger{background:#dc2626;color:#fff}.btn-new{background:#22c55e;color:#fff}.btn:disabled{opacity:.45;cursor:not-allowed}.ship-table-wrap{overflow:auto}.ship-table{width:100%;border-collapse:collapse;min-width:1060px}.ship-table th,.ship-table td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:center}.ship-table th{background:#f1f5f9;font-weight:800}.ship-table td.left{text-align:left}.status-badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800}.status-wait{background:#fff7ed;color:#c2410c}.status-done{background:#ecfdf5;color:#15803d}.row-selected{background:#eff6ff}.help{font-size:12px;color:#2563eb;line-height:1.6;margin-top:10px}.modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000}.modal-backdrop.show{display:flex}.lot-modal{width:min(1120px,94vw);height:min(760px,90vh);background:#fff;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}.lookup-modal{width:min(920px,92vw);max-height:80vh;background:#fff;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}.modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #cbd5e1}.modal-head h3{font-size:18px}.modal-body{display:grid;grid-template-columns:340px 1fr;gap:16px;padding:16px;min-height:0;flex:1}.lookup-body{padding:16px;overflow:auto}.lot-info{border:1px solid #cbd5e1;border-radius:8px;padding:14px;overflow:auto}.lot-info dl{display:grid;grid-template-columns:100px 1fr;gap:8px 10px;font-size:13px}.lot-info dt{font-weight:800;color:#475569}.lot-info dd{margin:0}.scan-panel{display:flex;flex-direction:column;min-height:0}.scan-line{display:flex;gap:8px;align-items:center;margin-bottom:10px}.scan-line label{font-size:13px;font-weight:800;white-space:nowrap}.scan-line input{flex:1;padding:10px;border:1px solid #94a3b8;border-radius:6px;font-size:14px}.scan-msg{min-height:22px;font-size:12px;font-weight:700;margin-bottom:8px}.scan-msg.error{color:#dc2626}.scan-msg.ok{color:#15803d}.lot-table-wrap{overflow:auto;flex:1;border:1px solid #cbd5e1}.lot-table{width:100%;border-collapse:collapse}.lot-table th,.lot-table td{border:1px solid #dbe3ec;padding:8px;font-size:12px;text-align:center}.lot-table th{position:sticky;top:0;background:#f8fafc}.lot-footer{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px}.lot-totals{font-size:13px}.modal-actions{display:flex;gap:8px}.empty{padding:24px;color:#64748b;text-align:center}@media(max-width:1200px){.ship-grid{grid-template-columns:repeat(6,minmax(0,1fr))}.ship-field{grid-column:span 2}.ship-field.span-8{grid-column:span 4}.ship-summary{grid-template-columns:repeat(2,1fr)}}
+.ship-card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:16px;margin-bottom:14px}.ship-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px 14px;align-items:end}.ship-field{grid-column:span 2;min-width:0}.ship-field.span-8{grid-column:span 8}.ship-field label{display:block;font-size:12px;font-weight:800;margin-bottom:5px;color:#334155}.ship-field input,.ship-field select,.ship-field textarea{box-sizing:border-box;width:100%;height:38px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;font-size:13px}.ship-field textarea{resize:vertical;min-height:38px;line-height:20px}.ship-field input[readonly]{background:#f8fafc;color:#475569}.lookup-line{display:grid;grid-template-columns:minmax(0,1fr) 52px 52px;gap:6px}.lookup-line.lookup-two{grid-template-columns:minmax(0,1fr) 52px}.lookup-line input{min-width:0}.lookup-line .btn{padding:9px 6px}.ship-summary{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin-top:12px}.ship-summary div{border:1px solid #dbe3ec;background:#f8fafc;border-radius:6px;padding:10px 12px}.ship-summary span{display:block;font-size:11px;color:#64748b;font-weight:700}.ship-summary strong{display:block;font-size:18px;margin-top:3px}.ship-actions{display:flex;gap:8px;justify-content:flex-end}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:800;cursor:pointer}.btn-primary{background:#2563eb;color:#fff}.btn-success{background:#16a34a;color:#fff}.btn-light{background:#e2e8f0;color:#334155}.btn-danger{background:#dc2626;color:#fff}.btn-new{background:#22c55e;color:#fff}.btn:disabled{opacity:.45;cursor:not-allowed}.ship-table-wrap{overflow:auto}.ship-table{width:100%;border-collapse:collapse;min-width:1060px}.ship-table th,.ship-table td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:center}.ship-table th{background:#f1f5f9;font-weight:800}.ship-table td.left{text-align:left}.status-badge{display:inline-block;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:800}.status-wait{background:#fff7ed;color:#c2410c}.status-done{background:#ecfdf5;color:#15803d}.row-selected{background:#eff6ff}.help{font-size:12px;color:#2563eb;line-height:1.6;margin-top:10px}.modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000}.modal-backdrop.show{display:flex}.lot-modal{width:min(1120px,94vw);height:min(760px,90vh);background:#fff;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}.lookup-modal{width:min(920px,92vw);max-height:84vh;background:#fff;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.25);display:flex;flex-direction:column;overflow:hidden}.modal-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #cbd5e1}.modal-head h3{font-size:18px}.modal-body{display:grid;grid-template-columns:340px 1fr;gap:16px;padding:16px;min-height:0;flex:1}.lookup-body{padding:16px;overflow:auto}.lookup-filters{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:12px}.lookup-filter label{display:block;font-size:12px;font-weight:800;color:#334155;margin-bottom:5px}.lookup-filter input{box-sizing:border-box;width:100%;height:36px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:5px}.lookup-result-row{cursor:pointer}.lookup-result-row:hover{background:#f8fafc}.lookup-foot{display:flex;justify-content:space-between;align-items:center;margin-top:10px}.lot-info{border:1px solid #cbd5e1;border-radius:8px;padding:14px;overflow:auto}.lot-info dl{display:grid;grid-template-columns:100px 1fr;gap:8px 10px;font-size:13px}.lot-info dt{font-weight:800;color:#475569}.lot-info dd{margin:0}.scan-panel{display:flex;flex-direction:column;min-height:0}.scan-line{display:flex;gap:8px;align-items:center;margin-bottom:10px}.scan-line label{font-size:13px;font-weight:800;white-space:nowrap}.scan-line input{flex:1;padding:10px;border:1px solid #94a3b8;border-radius:6px;font-size:14px}.scan-msg{min-height:22px;font-size:12px;font-weight:700;margin-bottom:8px}.scan-msg.error{color:#dc2626}.scan-msg.ok{color:#15803d}.lot-table-wrap{overflow:auto;flex:1;border:1px solid #cbd5e1}.lot-table{width:100%;border-collapse:collapse}.lot-table th,.lot-table td{border:1px solid #dbe3ec;padding:8px;font-size:12px;text-align:center}.lot-table th{position:sticky;top:0;background:#f8fafc}.lot-footer{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px}.lot-totals{font-size:13px}.modal-actions{display:flex;gap:8px}.empty{padding:24px;color:#64748b;text-align:center}@media(max-width:1200px){.ship-grid{grid-template-columns:repeat(6,minmax(0,1fr))}.ship-field{grid-column:span 2}.ship-field.span-8{grid-column:span 4}.ship-summary{grid-template-columns:repeat(2,1fr)}.lookup-filters{grid-template-columns:1fr 1fr}}
 </style>
 {% endblock %}
 
@@ -14,13 +14,20 @@
     <div class="ship-field">
       <label>출고번호</label>
       <div class="lookup-line">
-        <input id="shipmentNo" placeholder="출고확정 시 자동발번 / 기존번호 조회">
+        <input id="shipmentNo" placeholder="기존 출고번호 조회">
         <button class="btn btn-light" id="shipmentLookupBtn" title="출고번호 조회">조회</button>
         <button class="btn btn-new" id="newEntryBtn">신규</button>
       </div>
     </div>
     <div class="ship-field"><label>출고일자</label><input type="date" id="shipmentDate"></div>
-    <div class="ship-field"><label>수주번호</label><select id="orderSelect"><option value="">미출고 수주 선택</option></select></div>
+    <div class="ship-field">
+      <label>수주번호</label>
+      <div class="lookup-line lookup-two">
+        <input id="orderNoInput" placeholder="수주번호 검색" autocomplete="off">
+        <button class="btn btn-light" id="orderLookupBtn" title="수주번호 조회">조회</button>
+      </div>
+      <select id="orderSelect" aria-hidden="true" tabindex="-1"><option value="">미출고 수주 선택</option></select>
+    </div>
     <div class="ship-field"><label>판매처</label><input id="customerName" readonly></div>
     <div class="ship-field"><label>출고요청일</label><input id="deliveryDueDate" readonly></div>
     <div class="ship-field"><label>담당자</label><input id="managerName" readonly></div>
@@ -48,88 +55,41 @@
   </div>
   <div class="ship-table-wrap">
     <table class="ship-table">
-      <thead>
-        <tr>
-          <th>LOT 배정</th><th>품번</th><th>품명</th><th>MOQ</th><th>단위</th><th>수주수량</th><th>기출고</th><th>미출고잔량</th><th>금회출고</th><th>BOX 수</th><th>출고대기 재고</th><th>처리</th>
-        </tr>
-      </thead>
+      <thead><tr><th>LOT 배정</th><th>품번</th><th>품명</th><th>MOQ</th><th>단위</th><th>수주수량</th><th>기출고</th><th>미출고잔량</th><th>금회출고</th><th>BOX 수</th><th>출고대기 재고</th><th>처리</th></tr></thead>
       <tbody id="itemBody"><tr><td colspan="12" class="empty">미출고 수주를 선택해 주세요.</td></tr></tbody>
     </table>
   </div>
-  <div class="help" id="shippingHelp">
-    ※ 품번별 출고대기 LOT를 스캔합니다. 뒤 LOT를 스캔해도 실제 배정은 선입 LOT부터 필요한 완전 BOX 수량만큼 자동 배정됩니다.<br>
-    ※ 포장 BOX 단위로 출고하며, 수주 잔량보다 큰 BOX는 부분 수량으로 쪼개서 출고하지 않습니다.
-  </div>
+  <div class="help" id="shippingHelp">※ 품번별 출고대기 LOT를 스캔합니다. 뒤 LOT를 스캔해도 실제 배정은 선입 LOT부터 필요한 완전 BOX 수량만큼 자동 배정됩니다.<br>※ 포장 BOX 단위로 출고하며, 수주 잔량보다 큰 BOX는 부분 수량으로 쪼개서 출고하지 않습니다.</div>
 </div>
 
-<div class="modal-backdrop" id="lotModal">
-  <div class="lot-modal">
-    <div class="modal-head">
-      <h3 id="lotModalTitle">LOT No 스캔 / 배정</h3>
-      <button class="btn btn-light" id="modalCloseX">닫기</button>
-    </div>
-    <div class="modal-body">
-      <div class="lot-info">
-        <dl>
-          <dt>출고 품번</dt><dd id="modalPartNo">-</dd>
-          <dt>출고 품명</dt><dd id="modalPartName">-</dd>
-          <dt>MOQ</dt><dd id="modalMoq">0</dd>
-          <dt>수주 수량</dt><dd id="modalOrderQty">0</dd>
-          <dt>기출고</dt><dd id="modalShippedQty">0</dd>
-          <dt>미출고 잔량</dt><dd id="modalRemainingQty">0</dd>
-          <dt>출고대기 BOX</dt><dd id="modalWaitingBoxes">0</dd>
-          <dt>출고대기 수량</dt><dd id="modalWaitingQty">0</dd>
-        </dl>
-        <div class="help" id="modalHelp" style="margin-top:18px">
-          ※ 뒤 LOT를 스캔해도 선입 LOT부터 필요한 수량만큼 자동 배정합니다.<br>
-          ※ 출고 확정 시 서버에서 FIFO를 다시 검증합니다.
-        </div>
-      </div>
-      <div class="scan-panel">
-        <div class="scan-line" id="scanLine">
-          <label>LOT No</label>
-          <input id="lotScanInput" autocomplete="off" placeholder="출고대기 LOT 스캔 후 Enter">
-          <button class="btn btn-primary" id="scanBtn">스캔</button>
-        </div>
-        <div id="scanMessage" class="scan-msg"></div>
-        <div class="lot-table-wrap">
-          <table class="lot-table">
-            <thead><tr><th>순번</th><th>LOT NO</th><th>포장일자</th><th>LOT 수량</th><th>배정 수량</th></tr></thead>
-            <tbody id="allocatedLotBody"><tr><td colspan="5" class="empty">스캔된 LOT가 없습니다.</td></tr></tbody>
-          </table>
-        </div>
-        <div class="lot-footer">
-          <div class="lot-totals">배정 BOX <strong id="allocatedBoxCount">0</strong> / 배정수량 <strong id="allocatedQty">0</strong></div>
-          <div class="modal-actions">
-            <button class="btn btn-danger" id="resetAllocationBtn">배정 초기화</button>
-            <button class="btn btn-primary" id="allocationDoneBtn">확인</button>
-          </div>
-        </div>
-      </div>
-    </div>
+<div class="modal-backdrop" id="lotModal"><div class="lot-modal">
+  <div class="modal-head"><h3 id="lotModalTitle">LOT No 스캔 / 배정</h3><button class="btn btn-light" id="modalCloseX">닫기</button></div>
+  <div class="modal-body">
+    <div class="lot-info"><dl><dt>출고 품번</dt><dd id="modalPartNo">-</dd><dt>출고 품명</dt><dd id="modalPartName">-</dd><dt>MOQ</dt><dd id="modalMoq">0</dd><dt>수주 수량</dt><dd id="modalOrderQty">0</dd><dt>기출고</dt><dd id="modalShippedQty">0</dd><dt>미출고 잔량</dt><dd id="modalRemainingQty">0</dd><dt>출고대기 BOX</dt><dd id="modalWaitingBoxes">0</dd><dt>출고대기 수량</dt><dd id="modalWaitingQty">0</dd></dl><div class="help" id="modalHelp" style="margin-top:18px">※ 뒤 LOT를 스캔해도 선입 LOT부터 필요한 수량만큼 자동 배정합니다.<br>※ 출고 확정 시 서버에서 FIFO를 다시 검증합니다.</div></div>
+    <div class="scan-panel"><div class="scan-line" id="scanLine"><label>LOT No</label><input id="lotScanInput" autocomplete="off" placeholder="출고대기 LOT 스캔 후 Enter"><button class="btn btn-primary" id="scanBtn">스캔</button></div><div id="scanMessage" class="scan-msg"></div><div class="lot-table-wrap"><table class="lot-table"><thead><tr><th>순번</th><th>LOT NO</th><th>포장일자</th><th>LOT 수량</th><th>배정 수량</th></tr></thead><tbody id="allocatedLotBody"><tr><td colspan="5" class="empty">스캔된 LOT가 없습니다.</td></tr></tbody></table></div><div class="lot-footer"><div class="lot-totals">배정 BOX <strong id="allocatedBoxCount">0</strong> / 배정수량 <strong id="allocatedQty">0</strong></div><div class="modal-actions"><button class="btn btn-danger" id="resetAllocationBtn">배정 초기화</button><button class="btn btn-primary" id="allocationDoneBtn">확인</button></div></div></div>
   </div>
-</div>
+</div></div>
 
-<div class="modal-backdrop" id="shipmentLookupModal">
-  <div class="lookup-modal">
-    <div class="modal-head">
-      <h3>출고번호 조회</h3>
-      <button class="btn btn-light" id="shipmentLookupClose">닫기</button>
+<div class="modal-backdrop" id="shipmentLookupModal"><div class="lookup-modal">
+  <div class="modal-head"><h3>출고번호 조회</h3><button class="btn btn-light" id="shipmentLookupClose">닫기</button></div>
+  <div class="lookup-body"><div class="lookup-line" style="margin-bottom:10px;"><input id="shipmentLookupKeyword" placeholder="출고번호 일부 또는 전체" style="padding:9px;border:1px solid #cbd5e1;border-radius:6px;flex:1;"><button class="btn btn-primary" id="shipmentLookupSearchBtn">조회</button></div><div style="overflow:auto;max-height:520px;"><table class="ship-table" style="min-width:760px;"><thead><tr><th>출고번호</th><th>출고일자</th><th>수주번호</th><th>판매처</th><th>품번</th><th>수량</th><th>선택</th></tr></thead><tbody id="shipmentLookupBody"><tr><td colspan="7" class="empty">조회해 주세요.</td></tr></tbody></table></div></div>
+</div></div>
+
+<div class="modal-backdrop" id="orderLookupModal"><div class="lookup-modal">
+  <div class="modal-head"><h3>수주번호 조회</h3><button class="btn btn-light" id="orderLookupClose">닫기</button></div>
+  <div class="lookup-body">
+    <div class="lookup-filters">
+      <div class="lookup-filter"><label>수주번호</label><input id="orderLookupNo"></div>
+      <div class="lookup-filter"><label>품번</label><input id="orderLookupPart"></div>
+      <div class="lookup-filter"><label>수주처</label><input id="orderLookupCustomer"></div>
+      <div class="lookup-filter"><label>수주일자</label><div style="display:flex;gap:5px"><input type="date" id="orderLookupStart"><input type="date" id="orderLookupEnd"></div></div>
+      <button class="btn btn-primary" id="orderLookupSearch">조회</button>
     </div>
-    <div class="lookup-body">
-      <div class="lookup-line" style="margin-bottom:10px;">
-        <input id="shipmentLookupKeyword" placeholder="출고번호 일부 또는 전체" style="padding:9px;border:1px solid #cbd5e1;border-radius:6px;flex:1;">
-        <button class="btn btn-primary" id="shipmentLookupSearchBtn">조회</button>
-      </div>
-      <div style="overflow:auto;max-height:520px;">
-        <table class="ship-table" style="min-width:760px;">
-          <thead><tr><th>출고번호</th><th>출고일자</th><th>수주번호</th><th>판매처</th><th>품번</th><th>수량</th><th>선택</th></tr></thead>
-          <tbody id="shipmentLookupBody"><tr><td colspan="7" class="empty">조회해 주세요.</td></tr></tbody>
-        </table>
-      </div>
-    </div>
+    <div style="overflow:auto;max-height:470px;border:1px solid #cbd5e1;"><table class="ship-table" style="min-width:850px"><thead><tr><th>수주번호</th><th>수주처</th><th>수주일자</th><th>납기일</th><th>상태</th><th>품번</th><th>미출고수량</th></tr></thead><tbody id="orderLookupBody"><tr><td colspan="7" class="empty">조회해 주세요.</td></tr></tbody></table></div>
+    <div class="lookup-foot"><span id="orderLookupCount">건수 : 0</span><div class="ship-actions"><button class="btn btn-primary" id="orderLookupChoose">선택</button><button class="btn btn-light" onclick="document.getElementById('orderLookupModal').classList.remove('show')">닫기</button></div></div>
   </div>
-</div>
+</div></div>
 
 <script src="/static/sales_shipping.js?v=20260915-5"></script>
+<script src="/static/sales_shipping_lookup.js?v=20260915-1"></script>
 {% endblock %}
