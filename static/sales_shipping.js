@@ -191,8 +191,11 @@ async function scanLot(){
         selected_box_ids:rows.map(x=>x.id)
       })
     });
-    rows.push(data);
-    $('scanMessage').textContent = `배정 완료: ${data.package_lot_no} / ${fmt(data.box_qty)} ${item.unit}`;
+
+    allocations.set(item.id, Array.isArray(data.allocations) ? data.allocations : []);
+    const autoCount = Number(data.auto_added_count || 0);
+    const fullText = data.is_full_allocated ? ' / 필요수량 배정 완료' : '';
+    $('scanMessage').textContent = `FIFO 자동배정: ${autoCount} BOX 추가 / 누계 ${fmt(data.allocated_qty)} ${item.unit}${fullText}`;
     $('scanMessage').className = 'scan-msg ok';
     $('lotScanInput').value = '';
     renderAllocatedLots();
