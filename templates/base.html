@@ -161,7 +161,7 @@
 
             <!-- 2. 영업관리 -->
             {% if user.role == "ADMIN" or (user.perms and user.perms.sales and user.perms.sales.enabled) %}
-            <li class="menu-item{% if request.url.path.startswith('/sales/') %} open{% endif %}" id="salesMenu">
+            <li class="menu-item{% if request.url.path.startswith('/sales/orders') or request.url.path.startswith('/sales/unsold') %} open{% endif %}" id="salesMenu">
                 <div class="menu-title" onclick="toggleAccordion('salesMenu')">
                     <span>영업관리</span>
                     <span class="arrow-icon">▼</span>
@@ -169,8 +169,7 @@
                 <ul class="submenu">
                     <li class="submenu-item"><a href="/sales/orders" id="nav-sales-orders">수주 입력</a></li>
                     <li class="submenu-item"><a href="/sales/orders/inquiry" id="nav-sales-orders-inquiry">수주 조회</a></li>
-                    <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
-                    <li class="submenu-item"><a href="/sales/shipping" id="nav-sales-shipping">출고 입력</a></li>
+                    <li class="submenu-item"><a href="/sales/unsold" id="nav-sales-unsold">미판매 현황</a></li>
                 </ul>
             </li>
             {% endif %}
@@ -233,13 +232,15 @@
             </li>
             {% endif %}
 
-            <!-- 6. 출고관리 (기존 유지) -->
+            <!-- 6. 출고관리 -->
             {% if user.role == "ADMIN" or (user.perms and user.perms.shipping and user.perms.shipping.enabled) %}
-            <li class="menu-item open" id="shippingMenu">
+            <li class="menu-item{% if request.url.path.startswith('/shipping') or request.url.path == '/sales/shipping' %} open{% endif %}" id="shippingMenu">
                 <div class="menu-title" onclick="toggleAccordion('shippingMenu')">
                     <span>출고관리</span><span class="arrow-icon">▼</span>
                 </div>
                 <ul class="submenu">
+                    <li class="submenu-item"><a href="/sales/shipping" id="nav-sales-shipping">출고 입력</a></li>
+                    <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
                     {% if user.role == "ADMIN" or user.perms.shipping.menus.history != "NONE" %}<li class="submenu-item"><a href="/shipping/history" id="nav-history">출고 내역 및 LOT 계산</a></li>{% endif %}
                     {% if user.role == "ADMIN" or user.perms.shipping.menus.print != "NONE" %}<li class="submenu-item"><a href="/shipping/print" id="nav-print">바코드 출력 (파일 일괄)</a></li>{% endif %}
                     {% if user.role == "ADMIN" or user.perms.shipping.menus.manual != "NONE" %}<li class="submenu-item"><a href="/shipping/manual" id="nav-manual">바코드 출력 (수기 개별)</a></li>{% endif %}
@@ -302,6 +303,7 @@
                 "/basic-info/workers": "nav-workers",
                 "/sales/orders": "nav-sales-orders",
                 "/sales/orders/inquiry": "nav-sales-orders-inquiry",
+                "/sales/unsold": "nav-sales-unsold",
                 "/sales/shipping": "nav-sales-shipping",
                 "/purchase/orders": "nav-purchase-orders",
                 "/purchase/inbound": "nav-purchase-inbound",
