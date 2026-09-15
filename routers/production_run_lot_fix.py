@@ -25,7 +25,7 @@ class ScanLotPayload(BaseModel):
 def _lot_rows(db: Session, part_no: str):
     rows = []
     purchases = (
-        db.query(PurchaseInboundItem)
+        db.query(PurchaseInboundItem, PurchaseInboundMaster)
         .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
         .filter(
             PurchaseInboundMaster.status == "CONFIRMED",
@@ -35,13 +35,14 @@ def _lot_rows(db: Session, part_no: str):
         )
         .all()
     )
-    for row in purchases:
+    for row, master in purchases:
         rows.append({
             "lot_no": row.internal_lot_no,
             "part_no": row.part_no,
             "base_qty": float(row.inbound_qty or 0),
             "storage_location": row.storage_location or "",
             "source_type": "PURCHASE",
+            "fifo_at": master.created_at,
         })
 
     productions = (
@@ -56,9 +57,12 @@ def _lot_rows(db: Session, part_no: str):
             "base_qty": float(row.lot_qty or 0),
             "storage_location": row.storage_location or "",
             "source_type": "PRODUCTION",
+            "fifo_at": row.created_at,
         })
 
-    rows.sort(key=lambda x: x["lot_no"])
+    # LOT 번호 문자열이 아니라 실제 생성시각을 우선해 FIFO 순서를 정합니다.
+    # 동일시각인 경우에만 LOT 번호를 보조 정렬키로 사용합니다.
+    rows.sort(key=lambda x: (x["fifo_at"], str(x["lot_no"])))
     return rows
 
 
@@ -174,17 +178,20 @@ def scan_lot(
         raise HTTPException(400, "LOT 번호를 입력하세요.")
 
     matched_material = None
-    matched_lot = None
+    matched_rows = None
+    scanned_index = None
     for material in run.materials:
-        for lot in _lot_rows(db, material.material_part_no):
+        rows = _lot_rows(db, material.material_part_no)
+        for index, lot in enumerate(rows):
             if str(lot["lot_no"]).upper() == scanned.upper():
                 matched_material = material
-                matched_lot = lot
+                matched_rows = rows
+                scanned_index = index
                 break
         if matched_material:
             break
 
-    if not matched_material or not matched_lot:
+    if matched_material is None or matched_rows is None or scanned_index is None:
         raise HTTPException(404, "이 작업의 BOM 자재에 해당하는 LOT가 아닙니다.")
 
     required = float(matched_material.required_qty or 0)
@@ -193,33 +200,71 @@ def scan_lot(
     if remaining <= 1e-9:
         raise HTTPException(409, f"{matched_material.material_part_no}는 이미 필요수량이 모두 배정되었습니다.")
 
-    fifo_lot = None
-    fifo_available = 0.0
-    for lot in _lot_rows(db, matched_material.material_part_no):
-        if any(x.lot_no == lot["lot_no"] for x in matched_material.allocations):
-            continue
-        available = _available_qty(db, lot["lot_no"], lot["base_qty"], current_run_id=run.id)
-        if available > 1e-9:
-            fifo_lot = lot
-            fifo_available = available
+    # 사용자가 스캔한 LOT를 상한선으로 삼아, 그 LOT까지의 선입 LOT들을 순서대로
+    # 훑으면서 남은 필요수량을 여러 LOT에 걸쳐 자동 배정합니다.
+    allocation_map = {x.lot_no: x for x in matched_material.allocations}
+    assigned_details = []
+
+    for lot in matched_rows[: scanned_index + 1]:
+        if remaining <= 1e-9:
             break
 
-    if not fifo_lot:
-        raise HTTPException(409, "선입선출 기준으로 배정 가능한 LOT 재고가 없습니다.")
-
-    assign_qty = min(remaining, fifo_available)
-    matched_material.allocations.append(
-        ProductionRunLotAllocation(
-            lot_no=fifo_lot["lot_no"],
-            allocated_qty=assign_qty,
-            source_type=fifo_lot["source_type"],
-            storage_location=fifo_lot["storage_location"],
+        existing = allocation_map.get(lot["lot_no"])
+        already_allocated = float(existing.allocated_qty or 0) if existing else 0.0
+        available_total = _available_qty(
+            db,
+            lot["lot_no"],
+            lot["base_qty"],
+            current_run_id=run.id,
         )
-    )
+        available_for_this_run = max(available_total - already_allocated, 0.0)
+        if available_for_this_run <= 1e-9:
+            continue
+
+        assign_qty = min(remaining, available_for_this_run)
+        if assign_qty <= 1e-9:
+            continue
+
+        if existing:
+            existing.allocated_qty = already_allocated + assign_qty
+        else:
+            existing = ProductionRunLotAllocation(
+                lot_no=lot["lot_no"],
+                allocated_qty=assign_qty,
+                source_type=lot["source_type"],
+                storage_location=lot["storage_location"],
+            )
+            matched_material.allocations.append(existing)
+            allocation_map[lot["lot_no"]] = existing
+
+        assigned_details.append((lot["lot_no"], assign_qty))
+        remaining -= assign_qty
+
+    if not assigned_details:
+        raise HTTPException(
+            409,
+            "스캔한 LOT까지 선입선출 기준으로 배정 가능한 LOT 재고가 없습니다.",
+        )
+
     db.commit()
 
-    message = f"{fifo_lot['lot_no']}에 {assign_qty:g} 배정했습니다."
-    if str(fifo_lot["lot_no"]).upper() != scanned.upper():
-        message = f"스캔 LOT {scanned}보다 선입 LOT {fifo_lot['lot_no']}를 우선 배정했습니다. ({assign_qty:g})"
+    assigned_total = sum(qty for _, qty in assigned_details)
+    detail_text = " / ".join(f"{lot_no}: {qty:g}" for lot_no, qty in assigned_details)
+    if remaining <= 1e-9:
+        message = f"FIFO 자동 배정 완료 - {detail_text} / 총 배정 {assigned_total:g}"
+    else:
+        message = (
+            f"FIFO 자동 배정 - {detail_text} / 총 배정 {assigned_total:g} / "
+            f"미배정 {remaining:g}. 더 후 LOT를 스캔하세요."
+        )
 
-    return {"message": message, "material": _serialize_material(matched_material)}
+    return {
+        "message": message,
+        "assigned_total": assigned_total,
+        "remaining_qty": max(remaining, 0.0),
+        "allocations": [
+            {"lot_no": lot_no, "allocated_qty": qty}
+            for lot_no, qty in assigned_details
+        ],
+        "material": _serialize_material(matched_material),
+    }
