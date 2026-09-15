@@ -8,7 +8,7 @@ from core.security import init_default_accounts
 from services.purchase_lot_format import install_purchase_lot_format
 from services.production_lot_service import ensure_production_output_lots
 
-from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, subcontract_inbound_edit, purchase_unreceived, quality_pages, quality, production_pages, production, production_complete, production_run, production_run_delete, production_run_lot_fix, production_extra, inventory, packing, sales
+from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, subcontract_inbound_edit, purchase_unreceived, quality_pages, quality, production_pages, production, production_complete, production_run, production_run_delete, production_run_lot_fix, production_extra, inventory, packing, sales, sales_order_delete
 
 # 초기 계정 데이터 생성 트리거
 init_default_accounts()
@@ -67,6 +67,7 @@ app.include_router(production_extra.router)
 app.include_router(inventory.router)
 app.include_router(packing.router)
 app.include_router(sales.router)
+app.include_router(sales_order_delete.router)
 
 if __name__ == "__main__":
     import uvicorn
