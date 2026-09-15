@@ -328,7 +328,13 @@ def shipping_waiting_boxes(
             PackingMaster.status == "PACKED",
             ShipmentBox.id.is_(None),
         )
-        .order_by(PackingMaster.packing_date.asc(), PackingBox.id.asc())
+        # 출고대기LOT는 YYMMDD+01+순번이므로, 포장일자 안에서는 LOT 번호 자체를
+        # 선입순 기준으로 사용합니다. id는 동일 LOT 정렬의 마지막 안전키입니다.
+        .order_by(
+            PackingMaster.packing_date.asc(),
+            PackingBox.package_lot_no.asc(),
+            PackingBox.id.asc(),
+        )
         .all()
     )
     return [{
