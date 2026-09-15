@@ -65,14 +65,16 @@ def validate_master_data(db, payload):
 
 
 def validate_storage_master(db, items):
-    warehouse_codes = {item.warehouse_code for item in items}
+    warehouse_codes = {item.warehouse_code for item in items if item.warehouse_code}
     location_codes = {item.storage_location for item in items}
-    warehouses = set(db.scalars(select(WarehouseMasterModel.warehouse_code).where(
-        WarehouseMasterModel.warehouse_code.in_(warehouse_codes), WarehouseMasterModel.is_active == "Y")))
+    warehouses = set()
+    if warehouse_codes:
+        warehouses = set(db.scalars(select(WarehouseMasterModel.warehouse_code).where(
+            WarehouseMasterModel.warehouse_code.in_(warehouse_codes), WarehouseMasterModel.is_active == "Y")))
     locations = set(db.scalars(select(StorageLocationModel.location_code).where(
         StorageLocationModel.location_code.in_(location_codes), StorageLocationModel.is_active == "Y")))
     if warehouses != warehouse_codes:
-        raise HTTPException(422, "등록된 활성 입고창고를 선택하세요.")
+        raise HTTPException(422, "선택한 입고창고가 등록된 활성 창고가 아닙니다.")
     if locations != location_codes:
         raise HTTPException(422, "등록된 활성 저장위치를 선택하세요.")
 
