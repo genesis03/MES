@@ -55,14 +55,38 @@
     if(count) count.textContent = `선택 : ${ids.length}건`;
   }
 
+  function existingRequestedQty(item){
+    const current = currentOrder?.items?.find(x => x.id === item.id);
+    if(current && current.requested_qty !== undefined && current.requested_qty !== null){
+      return Number(current.requested_qty || 0);
+    }
+    return Number(item.remaining_qty || 0);
+  }
+
+  function quantityEditor(order){
+    return (order.items || []).map(item => {
+      const remain = Number(item.remaining_qty || 0);
+      const value = existingRequestedQty(item);
+      return `<div style="display:grid;grid-template-columns:minmax(90px,1fr) 90px auto;gap:6px;align-items:center;margin:2px 0;">
+        <span style="text-align:left;white-space:nowrap;">${escLookup(item.part_no)}</span>
+        <input type="number" class="order-lookup-qty" data-order-id="${order.id}" data-item-id="${item.id}" data-remaining="${remain}" min="0" max="${remain}" step="any" value="${value}" style="width:90px;height:30px;padding:4px 6px;text-align:right;border:1px solid #94a3b8;border-radius:4px;">
+        <span style="white-space:nowrap;color:#64748b;">/ ${fmtLookup(remain)}</span>
+      </div>`;
+    }).join('');
+  }
+
   function renderOrderLookup(){
     const body = byId('orderLookupBody');
     if(!body) return;
     const rows = (typeof orders !== 'undefined' ? orders : []).filter(orderMatches);
     const existing = new Set(typeof selectedOrderIds !== 'undefined' ? selectedOrderIds : []);
+
+    const table = body.closest('table');
+    const lastHead = table?.querySelector('thead tr th:last-child');
+    if(lastHead) lastHead.textContent = '금회출고 / 미출고';
+
     body.innerHTML = rows.length ? rows.map(row => {
       const partNos = (row.items || []).map(x => x.part_no).join(', ');
-      const remain = (row.items || []).reduce((s,x) => s + Number(x.remaining_qty || 0), 0);
       return `<tr class="lookup-result-row" data-id="${row.id}">
         <td><input type="checkbox" class="order-lookup-check" value="${row.id}" data-customer-id="${row.customer_id}" ${existing.has(row.id) ? 'checked' : ''}></td>
         <td>${escLookup(row.order_no)}</td>
@@ -71,7 +95,7 @@
         <td>${escLookup(row.delivery_due_date || '')}</td>
         <td>${escLookup(row.status || '')}</td>
         <td class="left">${escLookup(partNos)}</td>
-        <td>${fmtLookup(remain)}</td>
+        <td>${quantityEditor(row)}</td>
       </tr>`;
     }).join('') : '<tr><td colspan="8" class="empty">조회된 미출고 수주가 없습니다.</td></tr>';
 
@@ -90,8 +114,37 @@
         updateSelectedCount();
       });
     });
+    body.querySelectorAll('.order-lookup-qty').forEach(input => {
+      input.addEventListener('focus', () => input.select());
+      input.addEventListener('change', () => {
+        let value = Number(input.value);
+        const remain = Number(input.dataset.remaining || 0);
+        if(!Number.isFinite(value)) value = 0;
+        if(value < 0 || value > remain + 1e-9){
+          alert(`금회 출고수량은 0 이상, 미출고 잔량 ${fmtLookup(remain)} 이하로 입력해 주세요.`);
+          input.value = remain;
+        }
+      });
+    });
     byId('orderLookupCount').textContent = `조회 : ${rows.length}건`;
     updateSelectedCount();
+  }
+
+  function collectRequestedQty(selectedIds){
+    const selectedSet = new Set(selectedIds);
+    const result = new Map();
+    for(const input of document.querySelectorAll('.order-lookup-qty')){
+      const orderId = Number(input.dataset.orderId || 0);
+      if(!selectedSet.has(orderId)) continue;
+      const itemId = Number(input.dataset.itemId || 0);
+      const remain = Number(input.dataset.remaining || 0);
+      const value = Number(input.value);
+      if(!Number.isFinite(value) || value < 0 || value > remain + 1e-9){
+        throw new Error(`금회 출고수량은 0 이상, 미출고 잔량 ${fmtLookup(remain)} 이하로 입력해 주세요.`);
+      }
+      result.set(itemId, value);
+    }
+    return result;
   }
 
   function applyCheckedOrders(){
@@ -101,9 +154,12 @@
       return;
     }
     try{
+      const qtyMap = collectRequestedQty(ids);
       if(typeof applySelectedOrders !== 'function') throw new Error('수주 선택 기능을 불러오지 못했습니다.');
       applySelectedOrders(ids);
-      (currentOrder?.items || []).forEach(item => { item.requested_qty = Number(item.remaining_qty || 0); });
+      (currentOrder?.items || []).forEach(item => {
+        item.requested_qty = qtyMap.has(item.id) ? Number(qtyMap.get(item.id) || 0) : 0;
+      });
       syncVisibleOrderNo();
       renderItems();
       updateSummary();
@@ -133,34 +189,12 @@
     return Number(item.requested_qty || 0);
   }
 
-  function setRequestedQty(itemId, rawValue){
-    if(typeof viewMode !== 'undefined' && viewMode) return;
-    const item = currentOrder?.items?.find(x => x.id === itemId);
-    if(!item) return;
-    const previous = requestedQty(item);
-    let value = Number(rawValue);
-    if(!Number.isFinite(value)) value = 0;
-    if(value < 0 || value > Number(item.remaining_qty || 0) + 1e-9){
-      alert(`금회 출고수량은 0 이상, 미출고 잔량 ${fmt(item.remaining_qty)} 이하로 입력해 주세요.`);
-      item.requested_qty = previous;
-      renderItems();
-      return;
-    }
-    if(Math.abs(value - previous) <= 1e-9) return;
-    if(allocationFor(item.id).length){
-      allocations.set(item.id, []);
-      alert('금회 출고수량이 변경되어 해당 품목의 LOT 배정을 초기화했습니다. 다시 LOT를 배정해 주세요.');
-    }
-    item.requested_qty = value;
-    renderItems();
-    updateSummary();
-  }
-
-  // 출고 입력 그리드의 금회출고 수량을 편집 가능하게 확장한다.
+  // 금회 출고수량은 수주번호 조회/선택 팝업에서 지정한다.
+  // 출고 입력 본문에서는 지정된 수량을 확인만 하고 LOT를 배정한다.
   renderItems = function(){
     const body = byId('itemBody');
     if(!currentOrder || !currentOrder.items.length){
-      body.innerHTML = '<tr><td colspan="13" class="empty">출고 가능한 수주 품목이 없습니다.</td></tr>';
+      body.innerHTML = '<tr><td colspan="13" class="empty">미출고 수주를 선택해 주세요.</td></tr>';
       return;
     }
 
@@ -170,12 +204,10 @@
       const target = requestedQty(item);
       const exact = target > 0 && Math.abs(allocated - target) <= 1e-9;
       const done = viewMode ? lots.length > 0 : exact;
-      const statusText = viewMode ? '출고완료' : (exact ? '배정완료' : (allocated > 0 ? '배정중' : '배정대기'));
+      const statusText = viewMode ? '출고완료' : (target <= 0 ? '출고제외' : (exact ? '배정완료' : (allocated > 0 ? '배정중' : '배정대기')));
       const actionText = viewMode ? 'LOT 상세' : 'LOT 스캔';
       const actionClass = viewMode ? 'btn-light' : 'btn-primary';
-      const shipQtyCell = viewMode
-        ? `<strong>${fmt(allocated)}</strong>`
-        : `<input type="number" class="requested-qty-input" data-item-id="${item.id}" min="0" max="${Number(item.remaining_qty || 0)}" step="any" value="${target}" style="width:92px;text-align:right;padding:6px;border:1px solid #94a3b8;border-radius:4px;">`;
+      const shipQtyCell = viewMode ? fmt(allocated) : fmt(target);
       return `<tr data-item-id="${item.id}" class="${currentItemId === item.id ? 'row-selected' : ''}">
         <td><span class="status-badge ${done ? 'status-done' : 'status-wait'}">${statusText}</span></td>
         <td>${esc(item.order_no || '')}</td>
@@ -186,7 +218,7 @@
         <td>${fmt(item.order_qty)}</td>
         <td>${fmt(item.shipped_qty)}</td>
         <td>${fmt(item.remaining_qty)}</td>
-        <td>${shipQtyCell}</td>
+        <td><strong>${shipQtyCell}</strong></td>
         <td>${lots.length} / ${fmt(allocated)}</td>
         <td>${viewMode ? '-' : `${fmt(item.waiting_qty)} / ${item.waiting_box_count} BOX`}</td>
         <td><button class="btn ${actionClass} lot-scan-btn" data-item-id="${item.id}" ${!viewMode && target <= 0 ? 'disabled' : ''}>${actionText}</button></td>
@@ -195,9 +227,6 @@
 
     body.querySelectorAll('.lot-scan-btn').forEach(btn => {
       btn.addEventListener('click', () => openLotModal(Number(btn.dataset.itemId)));
-    });
-    body.querySelectorAll('.requested-qty-input').forEach(input => {
-      input.addEventListener('change', () => setRequestedQty(Number(input.dataset.itemId), input.value));
     });
   };
 
@@ -227,7 +256,7 @@
   openLotModal = function(itemId){
     const item = currentOrder?.items?.find(x => x.id === itemId);
     if(!viewMode && item && requestedQty(item) <= 0){
-      alert('금회 출고수량을 먼저 입력해 주세요.');
+      alert('수주번호 조회에서 금회 출고수량을 먼저 입력해 주세요.');
       return;
     }
     baseOpenLotModal(itemId);
@@ -242,7 +271,7 @@
     if(!item) return;
     const target = requestedQty(item);
     if(target <= 0){
-      byId('scanMessage').textContent = '금회 출고수량을 먼저 입력해 주세요.';
+      byId('scanMessage').textContent = '수주번호 조회에서 금회 출고수량을 먼저 입력해 주세요.';
       byId('scanMessage').className = 'scan-msg error';
       return;
     }
@@ -288,7 +317,7 @@
     if(viewMode) return;
     if(!currentOrder) return alert('미출고 수주를 선택해 주세요.');
     const targetItems = currentOrder.items.filter(item => requestedQty(item) > 0);
-    if(!targetItems.length) return alert('금회 출고수량을 1개 품목 이상 입력해 주세요.');
+    if(!targetItems.length) return alert('수주번호 조회에서 금회 출고수량을 1개 품목 이상 입력해 주세요.');
 
     const notReady = targetItems.find(item => Math.abs(itemAllocatedQty(item.id) - requestedQty(item)) > 1e-9);
     if(notReady){
