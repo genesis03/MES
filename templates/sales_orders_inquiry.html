@@ -10,13 +10,13 @@
 <div class="card">
   <div class="filters">
     <div class="field"><label>상태</label><select id="statusFilter"><option value="">전체</option><option value="ORDERED">수주</option><option value="PARTIAL">부분출고</option><option value="COMPLETED">출고완료</option><option value="CANCELLED">취소</option></select></div>
-    <div class="field"><label>고객사</label><select id="customerFilter"><option value="">전체</option></select></div>
+    <div class="field"><label>판매처</label><select id="customerFilter"><option value="">전체</option></select></div>
     <button class="btn" id="searchBtn">조회</button>
   </div>
 </div>
 <div class="card">
   <table>
-    <thead><tr><th>수주번호</th><th>수주일자</th><th>고객사</th><th>납기예정일</th><th>상태</th><th>담당자</th><th>품목수</th><th>상세</th></tr></thead>
+    <thead><tr><th>수주번호</th><th>수주일자</th><th>판매처</th><th>납기예정일</th><th>상태</th><th>담당자</th><th>품목수</th><th>상세</th></tr></thead>
     <tbody id="orderBody"></tbody>
   </table>
 </div>
