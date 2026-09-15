@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}출고 입력{% endblock %}
+{% block extra_head %}
+<style>
+.card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:16px;margin-bottom:16px}.grid{display:grid;grid-template-columns:180px 1fr 1fr 1fr;gap:12px}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}.field input,.field select,.field textarea{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:6px}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer}.btn-primary{background:#2563eb;color:#fff}.btn-light{background:#e2e8f0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:center}th{background:#f1f5f9}.summary{display:flex;gap:18px;font-size:13px;margin:10px 0}.summary strong{font-size:16px}.toolbar{display:flex;justify-content:flex-end;margin-top:12px}@media(max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+{% endblock %}
+{% block content %}
+<h2 style="margin-bottom:16px">출고 입력</h2>
+<div class="card">
+  <div class="grid">
+    <div class="field"><label>출고일자</label><input type="date" id="shipmentDate"></div>
+    <div class="field"><label>미출고 수주품목</label><select id="orderItemSelect"><option value="">선택</option></select></div>
+    <div class="field"><label>고객사</label><input id="customerName" readonly></div>
+    <div class="field"><label>품번 / 품명</label><input id="partInfo" readonly></div>
+  </div>
+  <div class="summary"><span>수주수량 <strong id="orderQty">0</strong></span><span>기출고 <strong id="shippedQty">0</strong></span><span>잔량 <strong id="remainingQty">0</strong></span><span>선택출고 <strong id="selectedQty">0</strong></span></div>
+  <div class="field"><label>비고</label><textarea id="shipmentNote" rows="2"></textarea></div>
+</div>
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><strong>출고대기 LOT</strong><button class="btn btn-light" id="reloadBoxesBtn">새로고침</button></div>
+  <table>
+    <thead><tr><th style="width:55px">선택</th><th>출고대기 LOT</th><th>포장일자</th><th>수량</th><th>품번</th><th>품명</th></tr></thead>
+    <tbody id="boxBody"></tbody>
+  </table>
+  <div class="toolbar"><button class="btn btn-primary" id="shipBtn">출고 처리</button></div>
+</div>
+<div class="card">
+  <strong>최근 출고 내역</strong>
+  <table style="margin-top:10px"><thead><tr><th>출고번호</th><th>출고일자</th><th>수주번호</th><th>고객사</th><th>품번</th><th>출고수량</th><th>출고대기 LOT</th></tr></thead><tbody id="historyBody"></tbody></table>
+</div>
+<script src="/static/sales_shipping.js"></script>
+{% endblock %}
