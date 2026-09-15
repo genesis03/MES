@@ -24,7 +24,7 @@ class OrderItemCreate(Input):
     part_no: Text50
     order_qty: PositiveQty
     delivery_date: str | None = None
-    warehouse_code: Text20
+    warehouse_code: Text20 | None = None
     storage_location: Text20
     note: str | None = Field(default=None, max_length=500)
     unit_price: Money = 0.0
