@@ -54,6 +54,8 @@ function choosePart(tr, row) {
   tr.querySelector('.part-input').value = row.part_no;
   tr.querySelector('.part-name').textContent = row.part_name || '';
   tr.querySelector('.unit').textContent = row.unit || 'EA';
+  const delivery = tr.querySelector('.delivery-date');
+  if (!delivery.value && $('deliveryDueDate').value) delivery.value = $('deliveryDueDate').value;
   closeSuggestions(tr);
 }
 
@@ -88,7 +90,7 @@ function addRow() {
     <td class="part-name"></td>
     <td><input class="order-qty" type="number" min="0.000001" step="any" style="width:100%;padding:7px"></td>
     <td class="unit">EA</td>
-    <td><input class="delivery-date" type="date" style="width:100%;padding:7px"></td>
+    <td><input class="delivery-date" type="date" style="width:100%;padding:7px" value="${esc($('deliveryDueDate').value || '')}"></td>
     <td><button type="button" class="btn btn-danger delete-row">삭제</button></td>`;
 
   const input = tr.querySelector('.part-input');
@@ -118,8 +120,25 @@ function addRow() {
     }
   });
 
-  tr.querySelector('.delete-row').addEventListener('click', () => tr.remove());
+  tr.querySelector('.delete-row').addEventListener('click', () => {
+    tr.remove();
+    if (!$('itemBody').querySelector('tr')) addRow();
+  });
   $('itemBody').appendChild(tr);
+}
+
+function validateOrder(items) {
+  const orderDate = $('orderDate').value;
+  const dueDate = $('deliveryDueDate').value;
+  if (!orderDate || !$('customerId').value) return '수주일자와 판매처를 입력해 주세요.';
+  if (dueDate && dueDate < orderDate) return '납기예정일은 수주일자보다 빠를 수 없습니다.';
+  if (!items.length) return '수주 품목을 입력해 주세요.';
+  if (items.some(x => !x.part_no || x.part_no !== x.typed_part_no || x.order_qty <= 0)) return '품번은 검색 결과에서 등록된 완제품/반제품을 선택하고 수량을 입력해 주세요.';
+
+  const partNos = items.map(x => x.part_no);
+  if (new Set(partNos).size !== partNos.length) return '동일 품번은 한 수주에 중복 입력할 수 없습니다.';
+  if (items.some(x => x.delivery_date && x.delivery_date < orderDate)) return '품목 납기일은 수주일자보다 빠를 수 없습니다.';
+  return '';
 }
 
 async function saveOrder() {
@@ -131,9 +150,8 @@ async function saveOrder() {
     delivery_date: tr.querySelector('.delivery-date').value || null
   })).filter(x => x.typed_part_no || x.order_qty);
 
-  if (!$('orderDate').value || !$('customerId').value) return alert('수주일자와 판매처를 입력해 주세요.');
-  if (!items.length) return alert('수주 품목을 입력해 주세요.');
-  if (items.some(x => !x.part_no || x.part_no !== x.typed_part_no || x.order_qty <= 0)) return alert('품번은 검색 결과에서 등록된 완제품/반제품을 선택하고 수량을 입력해 주세요.');
+  const error = validateOrder(items);
+  if (error) return alert(error);
 
   try {
     const data = await getJson('/api/sales/orders', {
@@ -165,5 +183,10 @@ document.addEventListener('DOMContentLoaded', () => {
   $('orderDate').value = today();
   $('addRowBtn').addEventListener('click', addRow);
   $('saveBtn').addEventListener('click', saveOrder);
+  $('deliveryDueDate').addEventListener('change', () => {
+    document.querySelectorAll('#itemBody .delivery-date').forEach(el => {
+      if (!el.value) el.value = $('deliveryDueDate').value;
+    });
+  });
   loadMasters().catch(e => alert(e.message));
 });
