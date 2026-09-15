@@ -103,7 +103,10 @@
     try{
       if(typeof applySelectedOrders !== 'function') throw new Error('수주 선택 기능을 불러오지 못했습니다.');
       applySelectedOrders(ids);
+      (currentOrder?.items || []).forEach(item => { item.requested_qty = Number(item.remaining_qty || 0); });
       syncVisibleOrderNo();
+      renderItems();
+      updateSummary();
       closeOrderLookup();
     }catch(e){
       alert(e.message || '수주 적용에 실패했습니다.');
@@ -121,6 +124,199 @@
   function closeOrderLookup(){
     byId('orderLookupModal').classList.remove('show');
   }
+
+  function requestedQty(item){
+    if(!item) return 0;
+    if(item.requested_qty === undefined || item.requested_qty === null){
+      item.requested_qty = Number(item.remaining_qty || 0);
+    }
+    return Number(item.requested_qty || 0);
+  }
+
+  function setRequestedQty(itemId, rawValue){
+    if(typeof viewMode !== 'undefined' && viewMode) return;
+    const item = currentOrder?.items?.find(x => x.id === itemId);
+    if(!item) return;
+    const previous = requestedQty(item);
+    let value = Number(rawValue);
+    if(!Number.isFinite(value)) value = 0;
+    if(value < 0 || value > Number(item.remaining_qty || 0) + 1e-9){
+      alert(`금회 출고수량은 0 이상, 미출고 잔량 ${fmt(item.remaining_qty)} 이하로 입력해 주세요.`);
+      item.requested_qty = previous;
+      renderItems();
+      return;
+    }
+    if(Math.abs(value - previous) <= 1e-9) return;
+    if(allocationFor(item.id).length){
+      allocations.set(item.id, []);
+      alert('금회 출고수량이 변경되어 해당 품목의 LOT 배정을 초기화했습니다. 다시 LOT를 배정해 주세요.');
+    }
+    item.requested_qty = value;
+    renderItems();
+    updateSummary();
+  }
+
+  // 출고 입력 그리드의 금회출고 수량을 편집 가능하게 확장한다.
+  renderItems = function(){
+    const body = byId('itemBody');
+    if(!currentOrder || !currentOrder.items.length){
+      body.innerHTML = '<tr><td colspan="13" class="empty">출고 가능한 수주 품목이 없습니다.</td></tr>';
+      return;
+    }
+
+    body.innerHTML = currentOrder.items.map(item => {
+      const lots = allocationFor(item.id);
+      const allocated = itemAllocatedQty(item.id);
+      const target = requestedQty(item);
+      const exact = target > 0 && Math.abs(allocated - target) <= 1e-9;
+      const done = viewMode ? lots.length > 0 : exact;
+      const statusText = viewMode ? '출고완료' : (exact ? '배정완료' : (allocated > 0 ? '배정중' : '배정대기'));
+      const actionText = viewMode ? 'LOT 상세' : 'LOT 스캔';
+      const actionClass = viewMode ? 'btn-light' : 'btn-primary';
+      const shipQtyCell = viewMode
+        ? `<strong>${fmt(allocated)}</strong>`
+        : `<input type="number" class="requested-qty-input" data-item-id="${item.id}" min="0" max="${Number(item.remaining_qty || 0)}" step="any" value="${target}" style="width:92px;text-align:right;padding:6px;border:1px solid #94a3b8;border-radius:4px;">`;
+      return `<tr data-item-id="${item.id}" class="${currentItemId === item.id ? 'row-selected' : ''}">
+        <td><span class="status-badge ${done ? 'status-done' : 'status-wait'}">${statusText}</span></td>
+        <td>${esc(item.order_no || '')}</td>
+        <td>${esc(item.part_no)}</td>
+        <td class="left">${esc(item.part_name || '')}</td>
+        <td>${fmt(item.moq)}</td>
+        <td>${esc(item.unit || 'EA')}</td>
+        <td>${fmt(item.order_qty)}</td>
+        <td>${fmt(item.shipped_qty)}</td>
+        <td>${fmt(item.remaining_qty)}</td>
+        <td>${shipQtyCell}</td>
+        <td>${lots.length} / ${fmt(allocated)}</td>
+        <td>${viewMode ? '-' : `${fmt(item.waiting_qty)} / ${item.waiting_box_count} BOX`}</td>
+        <td><button class="btn ${actionClass} lot-scan-btn" data-item-id="${item.id}" ${!viewMode && target <= 0 ? 'disabled' : ''}>${actionText}</button></td>
+      </tr>`;
+    }).join('');
+
+    body.querySelectorAll('.lot-scan-btn').forEach(btn => {
+      btn.addEventListener('click', () => openLotModal(Number(btn.dataset.itemId)));
+    });
+    body.querySelectorAll('.requested-qty-input').forEach(input => {
+      input.addEventListener('change', () => setRequestedQty(Number(input.dataset.itemId), input.value));
+    });
+  };
+
+  updateSummary = function(){
+    if(!currentOrder) return;
+    const orderQty = currentOrder.items.reduce((s,x)=>s+num(x.order_qty),0);
+    const shippedQty = currentOrder.items.reduce((s,x)=>s+num(x.shipped_qty),0);
+    const remainingQty = currentOrder.items.reduce((s,x)=>s+num(x.remaining_qty),0);
+    const requestedTotal = currentOrder.items.reduce((s,x)=>s+requestedQty(x),0);
+    const allocatedTotal = currentOrder.items.reduce((s,x)=>s+itemAllocatedQty(x.id),0);
+    byId('sumOrderQty').textContent = fmt(orderQty);
+    byId('sumShippedQty').textContent = fmt(shippedQty);
+    byId('sumRemainingQty').textContent = fmt(remainingQty);
+    byId('sumAllocatedQty').textContent = fmt(viewMode ? allocatedTotal : requestedTotal);
+    if(viewMode){
+      byId('shipmentStatus').value = viewingShipment?.status || 'CONFIRMED';
+      byId('confirmBtn').disabled = true;
+      return;
+    }
+    const targetItems = currentOrder.items.filter(item => requestedQty(item) > 0);
+    const ready = targetItems.length > 0 && targetItems.every(item => Math.abs(itemAllocatedQty(item.id) - requestedQty(item)) <= 1e-9);
+    byId('shipmentStatus').value = ready ? '출고 가능' : (allocatedTotal > 0 ? 'LOT 배정중' : 'LOT 배정 대기');
+    byId('confirmBtn').disabled = !ready;
+  };
+
+  const baseOpenLotModal = openLotModal;
+  openLotModal = function(itemId){
+    const item = currentOrder?.items?.find(x => x.id === itemId);
+    if(!viewMode && item && requestedQty(item) <= 0){
+      alert('금회 출고수량을 먼저 입력해 주세요.');
+      return;
+    }
+    baseOpenLotModal(itemId);
+    if(item && !viewMode){
+      byId('modalHelp').innerHTML = `※ 금회 출고 지정수량: <strong>${fmt(requestedQty(item))} ${esc(item.unit || 'EA')}</strong><br>※ 뒤 LOT를 스캔해도 선입 LOT부터 지정수량까지 완전 BOX 기준으로 자동 배정합니다.<br>※ 지정수량과 LOT 배정수량이 정확히 일치해야 출고 처리할 수 있습니다.`;
+    }
+  };
+
+  scanLot = async function(){
+    if(viewMode) return;
+    const item = currentItem();
+    if(!item) return;
+    const target = requestedQty(item);
+    if(target <= 0){
+      byId('scanMessage').textContent = '금회 출고수량을 먼저 입력해 주세요.';
+      byId('scanMessage').className = 'scan-msg error';
+      return;
+    }
+    const lotNo = byId('lotScanInput').value.trim();
+    if(!lotNo){
+      byId('scanMessage').textContent = 'LOT 번호를 스캔해 주세요.';
+      byId('scanMessage').className = 'scan-msg error';
+      return;
+    }
+
+    const rows = allocationFor(item.id);
+    try{
+      const data = await getJson('/api/sales/shipping-entry/scan', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          sales_order_item_id:item.id,
+          lot_no:lotNo,
+          selected_box_ids:rows.map(x=>x.id),
+          reserved_box_ids:reservedBoxIdsForItem(item),
+          requested_qty:target
+        })
+      });
+      allocations.set(item.id, Array.isArray(data.allocations) ? data.allocations : []);
+      const autoCount = Number(data.auto_added_count || 0);
+      const exact = data.is_full_allocated === true;
+      byId('scanMessage').textContent = exact
+        ? `FIFO 자동배정 완료: ${autoCount} BOX 추가 / ${fmt(data.allocated_qty)} ${item.unit}`
+        : `FIFO 자동배정: ${autoCount} BOX 추가 / ${fmt(data.allocated_qty)} / 지정 ${fmt(target)} ${item.unit}`;
+      byId('scanMessage').className = exact ? 'scan-msg ok' : 'scan-msg';
+      byId('lotScanInput').value = '';
+      renderAllocatedLots();
+      renderItems();
+      updateSummary();
+    }catch(e){
+      byId('scanMessage').textContent = e.message;
+      byId('scanMessage').className = 'scan-msg error';
+      byId('lotScanInput').select();
+    }
+    byId('lotScanInput').focus();
+  };
+
+  confirmShipment = async function(){
+    if(viewMode) return;
+    if(!currentOrder) return alert('미출고 수주를 선택해 주세요.');
+    const targetItems = currentOrder.items.filter(item => requestedQty(item) > 0);
+    if(!targetItems.length) return alert('금회 출고수량을 1개 품목 이상 입력해 주세요.');
+
+    const notReady = targetItems.find(item => Math.abs(itemAllocatedQty(item.id) - requestedQty(item)) > 1e-9);
+    if(notReady){
+      return alert(`${notReady.order_no || ''} / ${notReady.part_no}: 금회 출고수량 ${fmt(requestedQty(notReady))}과 LOT 배정수량 ${fmt(itemAllocatedQty(notReady.id))}이 일치하지 않습니다.`);
+    }
+
+    const items = targetItems.map(item => ({
+      sales_order_item_id:item.id,
+      packing_box_ids:allocationFor(item.id).map(x=>x.id),
+      requested_qty:requestedQty(item)
+    }));
+    const orderCount = currentOrder.order_ids?.length || 1;
+    const totalRequested = targetItems.reduce((s,item)=>s+requestedQty(item),0);
+    if(!confirm(`수주 ${orderCount}건 / 품목 ${items.length}개 / 총 ${fmt(totalRequested)}을 1건의 출고전표로 처리하시겠습니까?`)) return;
+
+    byId('confirmBtn').disabled = true;
+    try{
+      const data = await getJson('/api/sales/shipping-entry/confirm', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({shipment_date:byId('shipmentDate').value, items, note:byId('shipmentNote').value.trim() || null})
+      });
+      alert(`${data.message}\n출고번호: ${data.shipment_no}\n수주건수: ${data.order_count || orderCount}\n품목수: ${data.item_count}\n출고수량: ${fmt(data.total_qty)}`);
+      await loadShipmentByNo(data.shipment_no);
+    }catch(e){
+      alert(e.message);
+      updateSummary();
+    }
+  };
 
   document.addEventListener('DOMContentLoaded', () => {
     const hiddenSelect = byId('orderSelect');
@@ -146,12 +342,22 @@
       if(e.target === byId('orderLookupModal')) closeOrderLookup();
     });
 
-    hiddenSelect?.addEventListener('change', () => setTimeout(syncVisibleOrderNo, 0));
+    hiddenSelect?.addEventListener('change', () => setTimeout(() => {
+      if(currentOrder?.items) currentOrder.items.forEach(item => { if(item.requested_qty == null) item.requested_qty = Number(item.remaining_qty || 0); });
+      syncVisibleOrderNo();
+      renderItems();
+      updateSummary();
+    }, 0));
     byId('newEntryBtn')?.addEventListener('click', () => setTimeout(syncVisibleOrderNo, 0));
     byId('shipmentLookupModal')?.addEventListener('click', e => {
       if(e.target.closest('.choose-shipment')) setTimeout(syncVisibleOrderNo, 100);
     });
 
-    setTimeout(syncVisibleOrderNo, 300);
+    setTimeout(() => {
+      syncVisibleOrderNo();
+      if(currentOrder?.items) currentOrder.items.forEach(item => { if(item.requested_qty == null) item.requested_qty = Number(item.remaining_qty || 0); });
+      renderItems();
+      updateSummary();
+    }, 300);
   });
 })();
