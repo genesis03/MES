@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}LOT 재고 현황{% endblock %}
+
+{% block extra_head %}
+<style>
+.page-head{margin-bottom:14px}.page-head h1{font-size:23px;margin:0 0 4px}.page-head p{font-size:12.5px;color:#64748b}
+.panel{background:#fff;border:1px solid #dbe3ec;border-radius:6px}.panel-title{padding:10px 14px;border-bottom:1px solid #6495ed;font-weight:800;font-size:13px}.panel-body{padding:14px}
+.search-row{display:grid;grid-template-columns:120px minmax(260px,520px) 100px 1fr;gap:8px;align-items:center}.search-row input{height:36px;border:1px solid #cbd5e1;border-radius:4px;padding:0 10px;font-size:13px}.btn{height:36px;border:0;border-radius:4px;background:#2563eb;color:#fff;font-weight:800;cursor:pointer}.summary{font-size:12px;color:#64748b;text-align:right}
+table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{border:1px solid #e2e8f0;padding:8px 9px}th{background:#f8fafc;color:#475569}.num{text-align:right}.lot{font-family:Consolas,monospace;font-weight:700}.empty{text-align:center;color:#94a3b8;padding:28px}.good{color:#15803d;font-weight:700}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>LOT 재고 현황</h1>
+  <p>품번으로 구매입고 LOT와 생산 LOT를 함께 조회합니다. LOT 수량, 사용 수량, 잔여 수량을 확인할 수 있습니다.</p>
+</div>
+<div class="panel">
+  <div class="panel-title">품번별 LOT 조회</div>
+  <div class="panel-body">
+    <div class="search-row">
+      <strong>품번</strong>
+      <input id="partNo" placeholder="품번 전체 또는 일부 입력" autocomplete="off">
+      <button class="btn" onclick="loadLots()">조회</button>
+      <div id="summary" class="summary">총 0건</div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:90px">구분</th>
+          <th style="width:150px">품번</th>
+          <th>품명</th>
+          <th style="width:210px">LOT</th>
+          <th style="width:150px">생성시간</th>
+          <th style="width:110px">LOT 수량</th>
+          <th style="width:110px">사용 수량</th>
+          <th style="width:110px">잔여 수량</th>
+          <th style="width:130px">저장위치</th>
+        </tr>
+      </thead>
+      <tbody id="lotBody"><tr><td colspan="9" class="empty">품번을 입력하고 조회해 주세요.</td></tr></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+const n=v=>Number(v||0);
+function fmt(v){return n(v).toLocaleString(undefined,{maximumFractionDigits:3});}
+async function loadLots(){
+  const partNo=document.getElementById('partNo').value.trim();
+  if(!partNo){alert('품번을 입력해 주세요.');return;}
+  const body=document.getElementById('lotBody');
+  body.innerHTML='<tr><td colspan="9" class="empty">조회 중...</td></tr>';
+  try{
+    const r=await fetch('/api/inventory/lots?part_no='+encodeURIComponent(partNo));
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'조회 실패');
+    document.getElementById('summary').textContent=`총 ${d.total||0}건`;
+    const rows=d.items||[];
+    body.innerHTML=rows.length?rows.map(x=>`<tr>
+      <td>${x.source}</td><td>${x.part_no}</td><td>${x.part_name||''}</td>
+      <td class="lot">${x.lot_no}</td><td>${x.created_at||''}</td>
+      <td class="num">${fmt(x.lot_qty)}</td><td class="num">${fmt(x.used_qty)}</td>
+      <td class="num good">${fmt(x.remaining_qty)}</td><td>${x.storage_location||''}</td>
+    </tr>`).join(''):'<tr><td colspan="9" class="empty">조회된 LOT가 없습니다.</td></tr>';
+  }catch(e){body.innerHTML=`<tr><td colspan="9" class="empty">${e.message}</td></tr>`;}
+}
+document.getElementById('partNo').addEventListener('keydown',e=>{if(e.key==='Enter')loadLots();});
+</script>
+{% endblock %}
