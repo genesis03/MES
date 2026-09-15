@@ -5,11 +5,17 @@ from core.config import BASE_DIR
 import models  # 기존 테이블 자동 생성 트리거
 import models.partner  # 신규 거래처 테이블 자동 생성 트리거
 from core.security import init_default_accounts
+from services.purchase_lot_format import install_purchase_lot_format
+from services.production_lot_service import ensure_production_output_lots
 
-from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, purchase_unreceived, quality_pages, quality, production_pages, production, production_run, production_extra
+from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, purchase_unreceived, quality_pages, quality, production_pages, production, production_complete, production_run, production_extra, inventory
 
 # 초기 계정 데이터 생성 트리거
 init_default_accounts()
+# 구매입고 내부 LOT은 LR+YYMMDD+99+1자리 순번 규칙으로 발번합니다.
+install_purchase_lot_format()
+# 기존 생산실적까지 포함해 생산 LOT가 빠진 건을 보강합니다.
+ensure_production_output_lots()
 
 app = FastAPI(title="출하 바코드 관리 시스템")
 
@@ -48,8 +54,11 @@ app.include_router(quality_pages.router)
 app.include_router(quality.router)
 app.include_router(production_pages.router)
 app.include_router(production.router)
+# 동일 complete 경로 중 생산 LOT 생성 버전을 먼저 등록합니다.
+app.include_router(production_complete.router)
 app.include_router(production_run.router)
 app.include_router(production_extra.router)
+app.include_router(inventory.router)
 
 if __name__ == "__main__":
     import uvicorn
