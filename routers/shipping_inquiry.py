@@ -175,7 +175,7 @@ def delete_shipment(
                 f"출고 내역 및 LOT 계산/라벨 데이터에서 이미 사용된 출고대기LOT가 있어 삭제할 수 없습니다: {lot_no}",
             )
 
-    affected_orders = set()
+    affected_orders = {}
     for item in shipment.items:
         sales_item = item.sales_order_item
         if not sales_item:
@@ -185,9 +185,9 @@ def delete_shipment(
             0.0,
         )
         if sales_item.order:
-            affected_orders.add(sales_item.order)
+            affected_orders[sales_item.order.id] = sales_item.order
 
-    for order in affected_orders:
+    for order in affected_orders.values():
         _sync_order_status(order)
 
     shipment_no = shipment.shipment_no
