@@ -357,21 +357,48 @@ def update_run_details(run_id: int, payload: UpdateRunPayload, db: Session = Dep
     run.setup_qty = float(payload.setup_qty or 0)
     run.note = (payload.note or "").strip() or None
 
-    run.defects.clear()
-    defect_total = 0.0
-    codes = [x.defect_type_code.strip() for x in payload.defects if x.defect_qty > 0]
-    code_map = {}
-    if codes:
-        code_map = {x.code: x for x in db.query(CommonCodeModel).filter(CommonCodeModel.group_code == "DEFECT_TYPE", CommonCodeModel.code.in_(codes), CommonCodeModel.is_active == "Y").all()}
+    # 기존 상세를 명시적으로 삭제/flush한 뒤 다시 넣어 UNIQUE(run_id, defect_type_code)
+    # 충돌을 방지합니다. 같은 불량코드가 payload에 중복되면 수량을 합산합니다.
+    db.query(ProductionRunDefect).filter(ProductionRunDefect.run_id == run.id).delete(synchronize_session=False)
+    db.flush()
+
+    defect_qty_by_code = {}
     for row in payload.defects:
         if row.defect_qty <= 0:
             continue
         code = row.defect_type_code.strip()
+        if not code:
+            continue
+        defect_qty_by_code[code] = defect_qty_by_code.get(code, 0.0) + float(row.defect_qty)
+
+    defect_total = 0.0
+    code_map = {}
+    if defect_qty_by_code:
+        codes = list(defect_qty_by_code.keys())
+        code_map = {
+            x.code: x
+            for x in db.query(CommonCodeModel)
+            .filter(
+                CommonCodeModel.group_code == "DEFECT_TYPE",
+                CommonCodeModel.code.in_(codes),
+                CommonCodeModel.is_active == "Y",
+            )
+            .all()
+        }
+
+    for code, defect_qty in defect_qty_by_code.items():
         master = code_map.get(code)
         if not master:
             raise HTTPException(400, f"사용할 수 없는 불량유형입니다: {code}")
-        run.defects.append(ProductionRunDefect(defect_type_code=code, defect_type_name=master.code_name, defect_qty=row.defect_qty))
-        defect_total += float(row.defect_qty)
+        db.add(
+            ProductionRunDefect(
+                run_id=run.id,
+                defect_type_code=code,
+                defect_type_name=master.code_name,
+                defect_qty=defect_qty,
+            )
+        )
+        defect_total += defect_qty
     run.defect_qty = defect_total
 
     process_qty = run.good_qty + run.defect_qty + run.setup_qty
@@ -381,6 +408,7 @@ def update_run_details(run_id: int, payload: UpdateRunPayload, db: Session = Dep
         if allocated > material.required_qty + 1e-9:
             raise HTTPException(409, f"{material.material_part_no}의 기존 LOT 배정량이 새 필요수량보다 큽니다. LOT 배정을 초기화한 뒤 다시 진행하세요.")
     db.commit()
+    run = _get_run(db, run.id)
     run.work_order = db.get(ProductionWorkOrder, run.work_order_id)
     return _serialize_run(run)
 
