@@ -11,7 +11,7 @@
   <div class="grid">
     <div class="field"><label>출고일자</label><input type="date" id="shipmentDate"></div>
     <div class="field"><label>미출고 수주품목</label><select id="orderItemSelect"><option value="">선택</option></select></div>
-    <div class="field"><label>고객사</label><input id="customerName" readonly></div>
+    <div class="field"><label>판매처</label><input id="customerName" readonly></div>
     <div class="field"><label>품번 / 품명</label><input id="partInfo" readonly></div>
   </div>
   <div class="summary"><span>수주수량 <strong id="orderQty">0</strong></span><span>기출고 <strong id="shippedQty">0</strong></span><span>잔량 <strong id="remainingQty">0</strong></span><span>선택출고 <strong id="selectedQty">0</strong></span></div>
@@ -27,7 +27,7 @@
 </div>
 <div class="card">
   <strong>최근 출고 내역</strong>
-  <table style="margin-top:10px"><thead><tr><th>출고번호</th><th>출고일자</th><th>수주번호</th><th>고객사</th><th>품번</th><th>출고수량</th><th>출고대기 LOT</th></tr></thead><tbody id="historyBody"></tbody></table>
+  <table style="margin-top:10px"><thead><tr><th>출고번호</th><th>출고일자</th><th>수주번호</th><th>판매처</th><th>품번</th><th>출고수량</th><th>출고대기 LOT</th></tr></thead><tbody id="historyBody"></tbody></table>
 </div>
 <script src="/static/sales_shipping.js"></script>
 {% endblock %}
