@@ -40,6 +40,8 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
     total_qty = 0.0
     total_boxes = 0
     part_nos = []
+    order_ids = []
+    order_nos = []
 
     for item in row.items:
         qty = float(item.shipped_qty or 0)
@@ -50,6 +52,13 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
             part_nos.append(item.part_no)
 
         sales_item = item.sales_order_item
+        sales_order = sales_item.order if sales_item else None
+        if sales_order:
+            if sales_order.id not in order_ids:
+                order_ids.append(sales_order.id)
+            if sales_order.order_no not in order_nos:
+                order_nos.append(sales_order.order_no)
+
         item_data = {
             "id": item.id,
             "part_no": item.part_no,
@@ -58,6 +67,11 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
             "unit": item.unit or "EA",
             "order_qty": float(sales_item.order_qty or 0) if sales_item else 0.0,
             "sales_order_item_id": item.sales_order_item_id,
+            "sales_order_id": sales_order.id if sales_order else None,
+            "order_no": sales_order.order_no if sales_order else "",
+            "order_status": sales_order.status if sales_order else "",
+            "delivery_due_date": sales_order.delivery_due_date if sales_order else "",
+            "manager_name": sales_order.manager_name if sales_order else "",
             "box_count": len(boxes),
         }
         if detail:
@@ -72,16 +86,17 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
             ]
         items.append(item_data)
 
-    order_no = ""
-    if row.items and row.items[0].sales_order_item and row.items[0].sales_order_item.order:
-        order_no = row.items[0].sales_order_item.order.order_no
+    order_no = ", ".join(order_nos)
 
     return {
         "id": row.id,
         "shipment_no": row.shipment_no,
         "shipment_date": row.shipment_date,
         "sales_order_id": row.sales_order_id,
+        "sales_order_ids": order_ids,
         "order_no": order_no,
+        "order_nos": order_nos,
+        "order_count": len(order_nos),
         "customer_id": row.customer_id,
         "customer_name": row.customer_name,
         "status": row.status,
@@ -197,5 +212,5 @@ def delete_shipment(
     return {
         "status": "success",
         "shipment_no": shipment_no,
-        "message": "출고 내역을 삭제했습니다. 수주 출고수량과 출고대기LOT 사용상태가 복원되었습니다.",
+        "message": "출고 내역을 삭제했습니다. 연결된 모든 수주의 출고수량과 출고대기LOT 사용상태가 복원되었습니다.",
     }
