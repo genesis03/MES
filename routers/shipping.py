@@ -31,6 +31,29 @@ def get_shipping_records_from_db(db: Session) -> List[dict]:
     return [json.loads(r.row_json) for r in records]
 
 
+def replace_shipping_records(db: Session, rows_data: list[dict]) -> None:
+    """공용 출고 원장 스테이징을 교체합니다.
+
+    기존 CSV 업로드와 MES 출고 선택이 동일한 shipping_master를 사용하므로
+    바코드 출력/검증 등 하위 기존 기능은 변경하지 않고 같은 데이터를 계속 읽습니다.
+    """
+    if DATABASE_URL:
+        db.execute(text("TRUNCATE TABLE shipping_master RESTART IDENTITY;"))
+    else:
+        db.execute(text("DELETE FROM shipping_master;"))
+        try:
+            db.execute(text("DELETE FROM sqlite_sequence WHERE name='shipping_master';"))
+        except Exception:
+            pass
+
+    new_objects = [
+        ShippingMasterModel(row_order=idx, row_json=json.dumps(row, ensure_ascii=False))
+        for idx, row in enumerate(rows_data)
+    ]
+    if new_objects:
+        db.bulk_save_objects(new_objects)
+
+
 @router.post("/upload")
 async def upload_file(
     file: UploadFile = File(...),
@@ -52,21 +75,7 @@ async def upload_file(
     rows_data = df.to_dict(orient="records")
 
     try:
-        if DATABASE_URL:
-            db.execute(text("TRUNCATE TABLE shipping_master RESTART IDENTITY;"))
-        else:
-            db.execute(text("DELETE FROM shipping_master;"))
-            try:
-                db.execute(text("DELETE FROM sqlite_sequence WHERE name='shipping_master';"))
-            except Exception:
-                pass
-        db.commit()
-
-        new_objects = [
-            ShippingMasterModel(row_order=idx, row_json=json.dumps(row, ensure_ascii=False))
-            for idx, row in enumerate(rows_data)
-        ]
-        db.bulk_save_objects(new_objects)
+        replace_shipping_records(db, rows_data)
         db.commit()
         return {"status": "success", "count": len(rows_data)}
     except Exception as e:
@@ -125,12 +134,25 @@ def source_shipments(
 def shipping_rows_from_shipments(
     payload: ShipmentSelectionInput,
     db: Session = Depends(get_db),
-    current_user: UserModel = Depends(require_permission("shipping", "history", "READ")),
+    current_user: UserModel = Depends(require_permission("shipping", "history", "WRITE")),
 ):
     data = build_shipping_analysis_rows(db, payload.shipment_ids)
     if not data:
         raise HTTPException(404, "선택한 출고건에서 변환할 출고 LOT 데이터가 없습니다.")
-    return {"columns": LEGACY_COLUMNS, "data": data, "count": len(data)}
+
+    try:
+        replace_shipping_records(db, data)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"출고 원장 저장 실패: {str(e)}")
+
+    return {
+        "columns": LEGACY_COLUMNS,
+        "data": data,
+        "count": len(data),
+        "persisted": True,
+    }
 
 
 @router.post("/shipping/generate-excel-from-shipments")
