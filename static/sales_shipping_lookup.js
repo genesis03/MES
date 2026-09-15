@@ -3,10 +3,18 @@
   const escLookup = (v) => String(v ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[s]));
   const fmtLookup = (v) => Number(v || 0).toLocaleString('ko-KR', {maximumFractionDigits: 3});
 
+  function visibleOrderText(){
+    if(typeof currentOrder === 'undefined' || !currentOrder) return '';
+    const nos = currentOrder.order_nos || (currentOrder.order_no ? [currentOrder.order_no] : []);
+    if(nos.length <= 2) return nos.join(', ');
+    return `${nos[0]} 외 ${nos.length - 1}건`;
+  }
+
   function syncVisibleOrderNo(){
     const input = byId('orderNoInput');
     if(!input) return;
-    input.value = (typeof currentOrder !== 'undefined' && currentOrder?.order_no) ? currentOrder.order_no : '';
+    input.value = visibleOrderText();
+    input.title = (typeof currentOrder !== 'undefined' && currentOrder?.order_no) ? currentOrder.order_no : '';
     input.readOnly = (typeof viewMode !== 'undefined' && viewMode);
   }
 
@@ -25,14 +33,38 @@
     return true;
   }
 
+  function checkedOrderIds(){
+    return [...document.querySelectorAll('.order-lookup-check:checked')].map(x => Number(x.value));
+  }
+
+  function validateSameCustomer(changed){
+    if(!changed.checked) return true;
+    const checked = [...document.querySelectorAll('.order-lookup-check:checked')];
+    const customerIds = [...new Set(checked.map(x => x.dataset.customerId))];
+    if(customerIds.length > 1){
+      changed.checked = false;
+      alert('같은 판매처의 수주만 한 건의 출고전표로 묶을 수 있습니다.');
+      return false;
+    }
+    return true;
+  }
+
+  function updateSelectedCount(){
+    const ids = checkedOrderIds();
+    const count = byId('orderLookupSelectedCount');
+    if(count) count.textContent = `선택 : ${ids.length}건`;
+  }
+
   function renderOrderLookup(){
     const body = byId('orderLookupBody');
     if(!body) return;
     const rows = (typeof orders !== 'undefined' ? orders : []).filter(orderMatches);
+    const existing = new Set(typeof selectedOrderIds !== 'undefined' ? selectedOrderIds : []);
     body.innerHTML = rows.length ? rows.map(row => {
       const partNos = (row.items || []).map(x => x.part_no).join(', ');
       const remain = (row.items || []).reduce((s,x) => s + Number(x.remaining_qty || 0), 0);
       return `<tr class="lookup-result-row" data-id="${row.id}">
+        <td><input type="checkbox" class="order-lookup-check" value="${row.id}" data-customer-id="${row.customer_id}" ${existing.has(row.id) ? 'checked' : ''}></td>
         <td>${escLookup(row.order_no)}</td>
         <td class="left">${escLookup(row.customer_name)}</td>
         <td>${escLookup(row.order_date || '')}</td>
@@ -41,31 +73,46 @@
         <td class="left">${escLookup(partNos)}</td>
         <td>${fmtLookup(remain)}</td>
       </tr>`;
-    }).join('') : '<tr><td colspan="7" class="empty">조회된 미출고 수주가 없습니다.</td></tr>';
+    }).join('') : '<tr><td colspan="8" class="empty">조회된 미출고 수주가 없습니다.</td></tr>';
 
-    body.querySelectorAll('.lookup-result-row').forEach(tr => {
-      tr.addEventListener('dblclick', () => chooseOrder(Number(tr.dataset.id)));
-      tr.addEventListener('click', () => {
-        body.querySelectorAll('.lookup-result-row').forEach(x => x.classList.remove('row-selected'));
-        tr.classList.add('row-selected');
-        byId('orderLookupChoose').dataset.id = tr.dataset.id;
+    body.querySelectorAll('.order-lookup-check').forEach(check => {
+      check.addEventListener('change', () => {
+        validateSameCustomer(check);
+        updateSelectedCount();
       });
     });
-    byId('orderLookupCount').textContent = `건수 : ${rows.length}`;
+    body.querySelectorAll('.lookup-result-row').forEach(tr => {
+      tr.addEventListener('dblclick', e => {
+        if(e.target.closest('input')) return;
+        const check = tr.querySelector('.order-lookup-check');
+        check.checked = !check.checked;
+        validateSameCustomer(check);
+        updateSelectedCount();
+      });
+    });
+    byId('orderLookupCount').textContent = `조회 : ${rows.length}건`;
+    updateSelectedCount();
   }
 
-  function chooseOrder(id){
-    const select = byId('orderSelect');
-    if(!select || !id) return;
-    select.value = String(id);
-    select.dispatchEvent(new Event('change', {bubbles:true}));
-    syncVisibleOrderNo();
-    closeOrderLookup();
+  function applyCheckedOrders(){
+    const ids = checkedOrderIds();
+    if(!ids.length){
+      alert('출고할 수주를 1건 이상 선택해 주세요.');
+      return;
+    }
+    try{
+      if(typeof applySelectedOrders !== 'function') throw new Error('수주 선택 기능을 불러오지 못했습니다.');
+      applySelectedOrders(ids);
+      syncVisibleOrderNo();
+      closeOrderLookup();
+    }catch(e){
+      alert(e.message || '수주 적용에 실패했습니다.');
+    }
   }
 
   function openOrderLookup(){
     if(typeof viewMode !== 'undefined' && viewMode) return;
-    byId('orderLookupNo').value = byId('orderNoInput').value.trim();
+    byId('orderLookupNo').value = '';
     byId('orderLookupModal').classList.add('show');
     renderOrderLookup();
     byId('orderLookupNo').focus();
@@ -88,7 +135,7 @@
     });
     byId('orderLookupSearch')?.addEventListener('click', renderOrderLookup);
     byId('orderLookupClose')?.addEventListener('click', closeOrderLookup);
-    byId('orderLookupChoose')?.addEventListener('click', e => chooseOrder(Number(e.currentTarget.dataset.id || 0)));
+    byId('orderLookupChoose')?.addEventListener('click', applyCheckedOrders);
     ['orderLookupNo','orderLookupPart','orderLookupCustomer'].forEach(id => byId(id)?.addEventListener('keydown', e => {
       if(e.key === 'Enter'){
         e.preventDefault();
