@@ -24,13 +24,13 @@
     return node;
   };
 
-  const selectFromTemplate = (templateId, label, value = '') => {
+  const selectFromTemplate = (templateId, label, value = '', autoSelect = true) => {
     const source = $(templateId);
     const node = document.createElement('select');
     node.setAttribute('aria-label', label);
     [...source.options].forEach(option => node.append(option.cloneNode(true)));
     node.value = value || '';
-    if (!node.value && node.options.length === 2) node.selectedIndex = 1;
+    if (autoSelect && !node.value && node.options.length === 2) node.selectedIndex = 1;
     return node;
   };
 
@@ -153,7 +153,7 @@
     const spec = input('text', '규격'); spec.readOnly = true; cell(tr).append(spec);
     const unit = input('text', '단위'); unit.readOnly = true; cell(tr).append(unit);
     const qty = input('number', '발주수량'); qty.min = '0.000001'; qty.step = 'any'; cell(tr).append(qty);
-    const warehouse = selectFromTemplate('po-warehouse-template', '입고창고', item?.warehouse_code || ''); cell(tr).append(warehouse);
+    const warehouse = selectFromTemplate('po-warehouse-template', '입고창고', item?.warehouse_code || '', false); cell(tr).append(warehouse);
     const location = selectFromTemplate('po-location-template', '저장위치', item?.storage_location || ''); cell(tr).append(location);
     const date = input('date', '품목 납기일'); cell(tr).append(date);
     const note = input('text', '품목 비고'); note.maxLength = 500; cell(tr).append(note);
@@ -246,7 +246,6 @@
       if (!row.part) throw new Error(`${row.seq.textContent}행의 품목을 검색 결과에서 선택하세요.`);
       if (!row.qty.value || !Number.isFinite(Number(row.qty.value)) || Number(row.qty.value) <= 0)
         throw new Error(`${row.seq.textContent}행의 발주수량을 입력하세요.`);
-      if (!row.warehouse.value) throw new Error(`${row.seq.textContent}행의 입고창고를 선택하세요.`);
       if (!row.location.value) throw new Error(`${row.seq.textContent}행의 저장위치를 선택하세요.`);
     }
   }
@@ -270,7 +269,7 @@
         items: used.map(row => ({
           part_no: row.part.part_no,
           order_qty: Number(row.qty.value),
-          warehouse_code: row.warehouse.value,
+          warehouse_code: row.warehouse.value || null,
           storage_location: row.location.value,
           delivery_date: row.date.value || null,
           note: row.note.value.trim() || null
