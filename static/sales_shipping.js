@@ -18,7 +18,7 @@ async function loadOpenItems(){
 
 function clearSelection(){
   $('customerName').value=''; $('partInfo').value=''; $('orderQty').textContent='0'; $('shippedQty').textContent='0'; $('remainingQty').textContent='0'; $('selectedQty').textContent='0';
-  $('boxBody').innerHTML='<tr><td colspan="6">수주 품목을 선택해 주세요.</td></tr>';
+  $('boxBody').innerHTML='<tr><td colspan="7">수주 품목을 선택해 주세요.</td></tr>';
 }
 
 async function selectOrderItem(){
@@ -38,8 +38,19 @@ async function loadBoxes(){
   if(!id) return clearSelection();
   boxes = await getJson(`/api/sales/shipping/waiting-boxes?sales_order_item_id=${id}`);
   const body = $('boxBody');
-  body.innerHTML = boxes.length ? boxes.map(x => `<tr><td><input type="checkbox" class="box-check" value="${x.id}" data-qty="${x.box_qty}"></td><td>${x.package_lot_no}</td><td>${x.packing_date}</td><td>${x.box_qty}</td><td>${x.part_no}</td><td>${x.part_name || ''}</td></tr>`).join('') : '<tr><td colspan="6">출고 가능한 출고대기 LOT가 없습니다.</td></tr>';
-  body.querySelectorAll('.box-check').forEach(el => el.addEventListener('change', updateSelectedQty));
+  body.innerHTML = boxes.length ? boxes.map((x,index) => `<tr><td><input type="checkbox" class="box-check" value="${x.id}" data-qty="${x.box_qty}" data-index="${index}"></td><td>${x.fifo_order || index+1}</td><td>${x.package_lot_no}</td><td>${x.packing_date}</td><td>${x.box_qty}</td><td>${x.part_no}</td><td>${x.part_name || ''}</td></tr>`).join('') : '<tr><td colspan="7">출고 가능한 출고대기 LOT가 없습니다.</td></tr>';
+  body.querySelectorAll('.box-check').forEach(el => el.addEventListener('change', handleFifoSelection));
+  updateSelectedQty();
+}
+
+function handleFifoSelection(e){
+  const checks = [...document.querySelectorAll('.box-check')];
+  const idx = Number(e.target.dataset.index || 0);
+  if(e.target.checked){
+    checks.forEach((check,i)=>{ if(i <= idx) check.checked = true; });
+  } else {
+    checks.forEach((check,i)=>{ if(i >= idx) check.checked = false; });
+  }
   updateSelectedQty();
 }
 
