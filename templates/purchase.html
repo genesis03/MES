@@ -67,7 +67,7 @@
     </div>
     <div class="po-grid-wrap"><table class="po-grid">
       <colgroup><col style="width:36px"><col style="width:160px"><col style="width:170px"><col style="width:120px"><col style="width:60px"><col style="width:90px"><col style="width:120px"><col style="width:120px"><col style="width:135px"><col style="width:160px"><col style="width:42px"></colgroup>
-      <thead><tr><th>No.</th><th>품번 / 품명 검색</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>입고창고</th><th>저장위치</th><th>납기일</th><th>비고</th><th></th></tr></thead>
+      <thead><tr><th>No.</th><th>품번 / 품명 검색</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>입고창고(선택)</th><th>저장위치</th><th>납기일</th><th>비고</th><th></th></tr></thead>
       <tbody id="po-lines"></tbody>
     </table></div>
     <select id="po-warehouse-template" hidden><option value="">선택</option>{% for warehouse in warehouse_masters %}<option value="{{ warehouse.warehouse_code }}">{{ warehouse.warehouse_code }} · {{ warehouse.warehouse_name }}</option>{% endfor %}</select>
@@ -76,4 +76,4 @@
   </form>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/purchase_orders.js?v=20260914-4"></script>{% endblock %}
+{% block extra_script %}<script src="/static/purchase_orders.js?v=20260915-1"></script>{% endblock %}
