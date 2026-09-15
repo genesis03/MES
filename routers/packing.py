@@ -47,6 +47,7 @@ def _username(user) -> str:
 
 
 def _next_packing_no(db: Session, packing_date: str) -> str:
+    """내부 포장 묶음 식별자. 사용자 화면에는 노출하지 않습니다."""
     yymmdd = packing_date.replace("-", "")[2:]
     prefix = f"PK{yymmdd}"
     latest = (
@@ -62,6 +63,24 @@ def _next_packing_no(db: Session, packing_date: str) -> str:
         except (TypeError, ValueError):
             seq = 1
     return f"{prefix}{seq:03d}"
+
+
+def _next_waiting_lot_seq(db: Session, packing_date: str) -> int:
+    """출고대기LOT 발번: YYMMDD + 금형번호 01(고정) + 3자리 순번."""
+    yymmdd = packing_date.replace("-", "")[2:]
+    prefix = f"{yymmdd}01"
+    latest = (
+        db.query(PackingBox.package_lot_no)
+        .filter(PackingBox.package_lot_no.like(prefix + "%"))
+        .order_by(PackingBox.package_lot_no.desc())
+        .first()
+    )
+    if not latest:
+        return 1
+    try:
+        return int(str(latest[0])[-3:]) + 1
+    except (TypeError, ValueError):
+        return 1
 
 
 def _packed_qty(db: Session, lot_no: str) -> float:
@@ -138,8 +157,6 @@ def _packing_source_parts(db: Session, finished_part_no: str) -> list[str]:
         if has_production_lot:
             result.append(child)
 
-    # BOM은 있으나 현재 하위 생산 LOT가 하나도 없다면 하위 품번 기준을 유지합니다.
-    # 그래야 완제품 품번의 LOT를 잘못 포장하는 대신 '잔여 LOT 없음'으로 보입니다.
     if result:
         return result
 
@@ -189,7 +206,6 @@ def _preview(db: Session, finished_part_no: str, scanned_lot_no: str, target_qty
     if scanned_row is None:
         raise HTTPException(404, "선택 완제품의 하위 품번에 해당하는 사용 가능한 생산 LOT가 아닙니다.")
 
-    # 하위 품번이 여러 개인 경우 서로 다른 품번의 LOT를 섞지 않습니다.
     source_part_no = scanned_row["source_part_no"]
     source_rows = [x for x in rows if x["source_part_no"] == source_part_no]
     scan_index = next(
@@ -310,6 +326,7 @@ def create_packing(payload: PackingCreateInput, db: Session = Depends(get_db), c
     )
     db.add(master)
     db.flush()
+
     lot_map = {x["lot"].lot_no: x["lot"] for x in _lots(db, item.part_no)}
     for row in expected:
         lot = lot_map.get(row["lot_no"])
@@ -318,14 +335,25 @@ def create_packing(payload: PackingCreateInput, db: Session = Depends(get_db), c
             allocated_qty=row["qty"],
             storage_location=lot.storage_location if lot else None,
         ))
+
+    waiting_seq = _next_waiting_lot_seq(db, payload.packing_date)
+    yymmdd = payload.packing_date.replace("-", "")[2:]
     for box_no in range(1, payload.box_count + 1):
+        waiting_lot_no = f"{yymmdd}01{waiting_seq:03d}"
         master.boxes.append(PackingBox(
             box_no=box_no,
-            package_lot_no=f"{packing_no}-{box_no:02d}",
+            package_lot_no=waiting_lot_no,
             box_qty=float(payload.box_qty),
         ))
+        waiting_seq += 1
+
     db.commit()
-    return {"id": master.id, "packing_no": master.packing_no, "message": "포장 처리가 완료되었습니다."}
+    return {
+        "id": master.id,
+        "packing_no": master.packing_no,
+        "waiting_lots": [box.package_lot_no for box in master.boxes],
+        "message": "포장 처리가 완료되었습니다.",
+    }
 
 
 @router.get("/api/packing/records")
@@ -347,7 +375,7 @@ def packing_records(
         "total_qty": float(x.total_qty or 0),
         "box_count": x.box_count,
         "box_qty": float(x.box_qty or 0),
-        "package_lots": [b.package_lot_no for b in x.boxes],
+        "waiting_lots": [b.package_lot_no for b in x.boxes],
     } for x in rows]
 
 
@@ -358,10 +386,12 @@ def cancel_packing(packing_id: int, db: Session = Depends(get_db), current_user=
         raise HTTPException(404, "포장 내역을 찾을 수 없습니다.")
     if master.status == "CANCELLED":
         return {"message": "이미 취소된 포장입니다."}
-    package_lots = [x.package_lot_no for x in master.boxes if x.package_lot_no]
-    for package_lot in package_lots:
-        if db.query(ShippingMasterModel.id).filter(ShippingMasterModel.row_json.contains(package_lot, autoescape=True)).first():
-            raise HTTPException(409, f"출고 이력에서 사용된 포장 LOT가 있어 취소할 수 없습니다: {package_lot}")
+
+    waiting_lots = [x.package_lot_no for x in master.boxes if x.package_lot_no]
+    for waiting_lot in waiting_lots:
+        if db.query(ShippingMasterModel.id).filter(ShippingMasterModel.row_json.contains(waiting_lot, autoescape=True)).first():
+            raise HTTPException(409, f"출고 이력에서 사용된 출고대기LOT가 있어 취소할 수 없습니다: {waiting_lot}")
+
     master.status = "CANCELLED"
     master.cancelled_by = _username(current_user)
     master.cancelled_at = datetime.now()
