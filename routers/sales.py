@@ -80,6 +80,21 @@ def _sync_order_status(order: SalesOrderMaster):
             item.status = "WAITING"
 
 
+def _waiting_boxes(db: Session, part_no: str):
+    return (
+        db.query(PackingBox, PackingMaster)
+        .join(PackingMaster, PackingMaster.id == PackingBox.packing_id)
+        .outerjoin(ShipmentBox, ShipmentBox.packing_box_id == PackingBox.id)
+        .filter(
+            PackingMaster.part_no == part_no,
+            PackingMaster.status == "PACKED",
+            ShipmentBox.id.is_(None),
+        )
+        .order_by(PackingMaster.packing_date.asc(), PackingBox.id.asc())
+        .all()
+    )
+
+
 @router.get("/sales/orders", response_class=HTMLResponse)
 def sales_order_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(request=request, name="sales_orders.html", context={"request": request, "user": current_user})
@@ -319,18 +334,7 @@ def shipping_waiting_boxes(
     if not item:
         raise HTTPException(404, "수주 품목을 찾을 수 없습니다.")
 
-    rows = (
-        db.query(PackingBox, PackingMaster)
-        .join(PackingMaster, PackingMaster.id == PackingBox.packing_id)
-        .outerjoin(ShipmentBox, ShipmentBox.packing_box_id == PackingBox.id)
-        .filter(
-            PackingMaster.part_no == item.part_no,
-            PackingMaster.status == "PACKED",
-            ShipmentBox.id.is_(None),
-        )
-        .order_by(PackingMaster.packing_date.asc(), PackingBox.id.asc())
-        .all()
-    )
+    rows = _waiting_boxes(db, item.part_no)
     return [{
         "id": box.id,
         "package_lot_no": box.package_lot_no,
@@ -338,7 +342,8 @@ def shipping_waiting_boxes(
         "packing_date": master.packing_date,
         "part_no": master.part_no,
         "part_name": master.part_name,
-    } for box, master in rows]
+        "fifo_order": index + 1,
+    } for index, (box, master) in enumerate(rows)]
 
 
 @router.post("/api/sales/shipping")
@@ -353,13 +358,22 @@ def create_shipment(payload: ShipmentCreateInput, db: Session = Depends(get_db),
     if len(box_ids) != len(payload.packing_box_ids):
         raise HTTPException(409, "동일 출고대기LOT가 중복 선택되었습니다.")
 
-    rows = (
-        db.query(PackingBox, PackingMaster)
-        .join(PackingMaster, PackingMaster.id == PackingBox.packing_id)
-        .outerjoin(ShipmentBox, ShipmentBox.packing_box_id == PackingBox.id)
-        .filter(PackingBox.id.in_(box_ids), ShipmentBox.id.is_(None))
-        .all()
-    )
+    # 현재 출고 가능한 박스를 포장일자 + 박스 생성순서 기준으로 정렬한 뒤,
+    # 선택 건수가 N건이면 반드시 선입 N건만 허용합니다.
+    # 화면 조작/직접 API 호출로 후 LOT만 골라도 서버에서 차단합니다.
+    waiting_rows = _waiting_boxes(db, order_item.part_no)
+    waiting_ids = [box.id for box, _ in waiting_rows]
+    expected_ids = waiting_ids[:len(box_ids)]
+    if box_ids != expected_ids and set(box_ids) != set(expected_ids):
+        expected_lots = [box.package_lot_no for box, _ in waiting_rows[:len(box_ids)]]
+        raise HTTPException(
+            409,
+            "선입선출 기준에 맞지 않는 출고대기LOT가 선택되었습니다. 먼저 출고해야 할 LOT: "
+            + ", ".join(expected_lots),
+        )
+
+    selected_id_set = set(box_ids)
+    rows = [(box, master) for box, master in waiting_rows if box.id in selected_id_set]
     if len(rows) != len(box_ids):
         raise HTTPException(409, "이미 출고된 LOT가 포함되어 있습니다. 목록을 새로고침해 주세요.")
     if any(master.part_no != order_item.part_no or master.status != "PACKED" for _, master in rows):
