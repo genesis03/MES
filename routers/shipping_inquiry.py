@@ -49,10 +49,16 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
         qty = float(item.shipped_qty or 0)
         boxes = list(item.boxes)
         direct_lots = list(getattr(item, "direct_lots", []) or [])
+        direct_outbound_lots = []
+        for direct in direct_lots:
+            outbound_lot_no = str(getattr(direct, "outbound_lot_no", None) or "").strip()
+            if outbound_lot_no and outbound_lot_no not in direct_outbound_lots:
+                direct_outbound_lots.append(outbound_lot_no)
         if direct_lots:
             has_direct = True
         total_qty += qty
-        total_boxes += len(boxes)
+        # 박스수 컬럼은 실제 출고 LOT 수를 의미한다. 직출고도 발번된 02 출고 LOT를 1건으로 센다.
+        total_boxes += len(boxes) if boxes else (len(direct_outbound_lots) or (1 if direct_lots else 0))
         if item.part_no and item.part_no not in part_nos:
             part_nos.append(item.part_no)
 
@@ -80,7 +86,7 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
             "delivery_due_date": sales_order.delivery_due_date if sales_order else "",
             "manager_name": sales_order.manager_name if sales_order else "",
             "box_count": len(boxes),
-            "direct_lot_count": len(direct_lots),
+            "direct_lot_count": len(direct_outbound_lots) or (1 if direct_lots else 0),
             "shipment_mode": "DIRECT" if direct_lots else "PACKED",
         }
         if detail:
@@ -97,7 +103,9 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
                 {
                     "id": direct.id,
                     "production_lot_id": direct.production_lot_id,
+                    "outbound_lot_no": getattr(direct, "outbound_lot_no", None) or "",
                     "lot_no": direct.source_lot_no,
+                    "source_lot_no": direct.source_lot_no,
                     "source_part_no": direct.source_part_no,
                     "shipped_qty": float(direct.shipped_qty or 0),
                 }
@@ -201,15 +209,31 @@ def delete_shipment(shipment_id: int, db: Session = Depends(get_db), current_use
                 db.delete(staging_row)
                 staging_removed += 1
 
-    # 샘플/개발 직출고는 생산 LOT 사용량을 LotRelation 원장에도 기록하므로
-    # 출고 삭제 시 해당 소비 이력을 함께 지워 생산 LOT 가용수량을 복원합니다.
+    # 신규 직출고는 생산 LOT -> 02 출고 LOT 계보로 기록한다.
+    # 과거 직출고(SHIP:출고번호:...) 형식도 함께 정리해 이전 데이터 삭제 호환성을 유지한다.
+    outbound_lots = {
+        str(getattr(direct, "outbound_lot_no", None) or "").strip()
+        for item in shipment.items
+        for direct in getattr(item, "direct_lots", [])
+        if str(getattr(direct, "outbound_lot_no", None) or "").strip()
+    }
     direct_relations = (
         db.query(LotRelationModel)
         .filter(LotRelationModel.child_lot_no.like(f"SHIP:{shipment.shipment_no}:%"))
         .all()
     )
-    direct_relation_removed = len(direct_relations)
-    for relation in direct_relations:
+    if outbound_lots:
+        direct_relations.extend(
+            db.query(LotRelationModel)
+            .filter(
+                LotRelationModel.process_code == "SHIP_DIRECT",
+                LotRelationModel.child_lot_no.in_(outbound_lots),
+            )
+            .all()
+        )
+    unique_relations = {relation.id: relation for relation in direct_relations}
+    direct_relation_removed = len(unique_relations)
+    for relation in unique_relations.values():
         db.delete(relation)
 
     affected_orders = {}
