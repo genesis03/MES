@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}검사항목 MASTER - 품질관리{% endblock %}
+{% block extra_head %}
+<style>
+.qm-wrap h1{font-size:24px;margin:0 0 5px}.qm-sub{font-size:13px;color:#64748b;margin-bottom:14px}.qm-grid{display:grid;grid-template-columns:360px 1fr;gap:14px}.qm-card{background:#fff;border:1px solid #cbd5e1;border-radius:7px;padding:14px}.qm-card h2{font-size:16px;margin:0 0 12px}.qm-field{display:flex;flex-direction:column;gap:4px;margin-bottom:9px}.qm-field label{font-size:11px;font-weight:700;color:#64748b}.qm-field input,.qm-field select,.qm-field textarea{border:1px solid #cbd5e1;border-radius:4px;padding:8px}.qm-field input,.qm-field select{height:34px}.qm-field textarea{min-height:70px;resize:vertical}.qm-actions{display:flex;gap:7px}.qm-btn{height:34px;border:0;border-radius:4px;padding:0 13px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.light{background:#e2e8f0;color:#334155}.danger{background:#dc2626;color:#fff}.qm-search{display:flex;gap:8px;margin-bottom:10px}.qm-search input{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px;min-width:240px}.qm-table{width:100%;border-collapse:collapse;font-size:12px}.qm-table th{background:#f1f5f9;padding:8px;border-bottom:2px solid #cbd5e1}.qm-table td{padding:8px;border-bottom:1px solid #e2e8f0;text-align:center}.qm-table tr{cursor:pointer}.qm-table tr:hover{background:#f8fafc}.qm-msg{margin-top:9px;font-size:12px;min-height:18px;color:#64748b}.ok{color:#15803d}.error{color:#dc2626}.badge{padding:3px 7px;border-radius:10px;font-weight:700}.on{background:#dcfce7;color:#15803d}.off{background:#e2e8f0;color:#64748b}@media(max-width:1000px){.qm-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="qm-wrap">
+  <h1>검사항목 MASTER</h1>
+  <div class="qm-sub">품번과 무관한 공통 검사항목을 관리합니다. 품번별 규격과 샘플수는 입고검사 기준서에서 설정합니다.</div>
+  <div class="qm-grid">
+    <div class="qm-card">
+      <h2 id="form-title">검사항목 등록</h2>
+      <input type="hidden" id="row-id">
+      <div class="qm-field"><label>항목코드 *</label><input id="item-code" maxlength="30" placeholder="예: DIM_OD"></div>
+      <div class="qm-field"><label>검사항목명 *</label><input id="item-name" maxlength="100" placeholder="예: 외경"></div>
+      <div class="qm-field"><label>검사방법</label><input id="inspection-method" maxlength="100" placeholder="예: 마이크로미터"></div>
+      <div class="qm-field"><label>기본단위</label><input id="default-unit" maxlength="20" placeholder="예: mm"></div>
+      <div class="qm-field"><label>데이터유형</label><select id="data-type"><option value="NUMBER">수치</option><option value="TEXT">문자</option><option value="PASSFAIL">합/부</option></select></div>
+      <div class="qm-field"><label>정렬순서</label><input id="sort-order" type="number" min="1" value="1"></div>
+      <div class="qm-field"><label>사용여부</label><select id="is-active"><option value="Y">사용</option><option value="N">사용중지</option></select></div>
+      <div class="qm-field"><label>비고</label><textarea id="note"></textarea></div>
+      <div class="qm-actions"><button class="qm-btn primary" id="save-btn">저장</button><button class="qm-btn light" id="new-btn">신규</button><button class="qm-btn danger" id="delete-btn" disabled>삭제</button></div>
+      <div id="msg" class="qm-msg"></div>
+    </div>
+    <div class="qm-card">
+      <div class="qm-search"><input id="keyword" placeholder="코드 / 검사항목 / 검사방법"><button class="qm-btn primary" id="search-btn">조회</button></div>
+      <table class="qm-table"><thead><tr><th>순서</th><th>코드</th><th>검사항목</th><th>검사방법</th><th>단위</th><th>유형</th><th>사용</th></tr></thead><tbody id="body"></tbody></table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_script %}
+<script>
+(()=>{
+const $=id=>document.getElementById(id);let rows=[];
+const esc=v=>{const s=document.createElement('span');s.textContent=v??'';return s.innerHTML};
+function msg(t,c=''){ $('msg').className='qm-msg '+c;$('msg').textContent=t||''; }
+function clearForm(){['row-id','item-code','item-name','inspection-method','default-unit','note'].forEach(id=>$(id).value='');$('data-type').value='NUMBER';$('sort-order').value='1';$('is-active').value='Y';$('form-title').textContent='검사항목 등록';$('delete-btn').disabled=true;msg('');}
+function fill(x){$('row-id').value=x.id;$('item-code').value=x.item_code;$('item-name').value=x.item_name;$('inspection-method').value=x.inspection_method||'';$('default-unit').value=x.default_unit||'';$('data-type').value=x.data_type;$('sort-order').value=x.sort_order;$('is-active').value=x.is_active;$('note').value=x.note||'';$('form-title').textContent='검사항목 수정';$('delete-btn').disabled=false;}
+async function load(){const p=new URLSearchParams();if($('keyword').value.trim())p.set('keyword',$('keyword').value.trim());const r=await fetch('/api/quality/inspection-items?'+p);const d=await r.json();if(!r.ok)throw new Error(d.detail||'조회 실패');rows=d;$('body').innerHTML=d.length?d.map(x=>`<tr data-id="${x.id}"><td>${x.sort_order}</td><td>${esc(x.item_code)}</td><td>${esc(x.item_name)}</td><td>${esc(x.inspection_method)}</td><td>${esc(x.default_unit)}</td><td>${esc(x.data_type)}</td><td><span class="badge ${x.is_active==='Y'?'on':'off'}">${x.is_active==='Y'?'사용':'중지'}</span></td></tr>`).join(''):'<tr><td colspan="7">등록된 검사항목이 없습니다.</td></tr>';}
+function payload(){return{item_code:$('item-code').value.trim(),item_name:$('item-name').value.trim(),inspection_method:$('inspection-method').value.trim()||null,default_unit:$('default-unit').value.trim()||null,data_type:$('data-type').value,sort_order:Number($('sort-order').value||1),is_active:$('is-active').value,note:$('note').value.trim()||null};}
+$('save-btn').onclick=async()=>{try{const id=$('row-id').value;const r=await fetch(id?`/api/quality/inspection-items/${id}`:'/api/quality/inspection-items',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())});const d=await r.json();if(!r.ok)throw new Error(d.detail||'저장 실패');fill(d);msg('저장했습니다.','ok');await load();}catch(e){msg(e.message,'error')}};
+$('delete-btn').onclick=async()=>{const id=$('row-id').value;if(!id||!confirm('이 검사항목을 삭제하시겠습니까?'))return;try{const r=await fetch(`/api/quality/inspection-items/${id}`,{method:'DELETE'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'삭제 실패');clearForm();msg(d.message,'ok');await load();}catch(e){msg(e.message,'error')}};
+$('new-btn').onclick=clearForm;$('search-btn').onclick=()=>load().catch(e=>msg(e.message,'error'));
+$('body').onclick=e=>{const tr=e.target.closest('tr[data-id]');if(!tr)return;const x=rows.find(v=>String(v.id)===tr.dataset.id);if(x)fill(x)};
+load().catch(e=>msg(e.message,'error'));
+})();
+</script>
+{% endblock %}
