@@ -255,7 +255,12 @@
             {% if user.role == "ADMIN" or (user.perms and user.perms.quality and user.perms.quality.enabled) %}
             <li class="menu-item{% if request.url.path.startswith('/quality/') %} open{% endif %}" id="qualityMenu">
                 <div class="menu-title" onclick="toggleAccordion('qualityMenu')"><span>품질관리</span><span class="arrow-icon">▼</span></div>
-                <ul class="submenu"><li class="submenu-item"><a href="/quality/inbound-defects" id="nav-quality-inbound-defects">입고 품목 불량 처리</a></li></ul>
+                <ul class="submenu">
+                    <li class="submenu-item"><a href="/quality/inspection-items" id="nav-quality-inspection-items">검사항목 MASTER</a></li>
+                    <li class="submenu-item"><a href="/quality/inbound-standards" id="nav-quality-inbound-standards">품번별 입고검사 기준서</a></li>
+                    <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
+                    <li class="submenu-item"><a href="/quality/inbound-defects" id="nav-quality-inbound-defects">입고 품목 불량 처리</a></li>
+                </ul>
             </li>
             {% endif %}
 
@@ -328,6 +333,8 @@
                 "/production/equipment/status": "nav-production-equipment",
                 "/inventory/lots": "nav-inventory-lots",
                 "/inventory/lot-trace": "nav-inventory-lot-trace",
+                "/quality/inspection-items": "nav-quality-inspection-items",
+                "/quality/inbound-standards": "nav-quality-inbound-standards",
                 "/quality/inbound-defects": "nav-quality-inbound-defects"
             };
             const activeNavId = routeMap[currentPath];
