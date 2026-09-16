@@ -70,6 +70,8 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
             "sales_order_id": sales_order.id if sales_order else None,
             "order_no": sales_order.order_no if sales_order else "",
             "order_status": sales_order.status if sales_order else "",
+            "order_type": getattr(sales_order, "order_type", None) or "NORMAL" if sales_order else "",
+            "transaction_type": getattr(sales_order, "transaction_type", None) or "PAID" if sales_order else "",
             "delivery_due_date": sales_order.delivery_due_date if sales_order else "",
             "manager_name": sales_order.manager_name if sales_order else "",
             "box_count": len(boxes),
@@ -87,6 +89,9 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
         items.append(item_data)
 
     order_no = ", ".join(order_nos)
+    part_summary = ""
+    if part_nos:
+        part_summary = part_nos[0] if len(part_nos) == 1 else f"{part_nos[0]} 외 {len(part_nos) - 1}건"
 
     return {
         "id": row.id,
@@ -100,10 +105,13 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
         "customer_id": row.customer_id,
         "customer_name": row.customer_name,
         "status": row.status,
+        "fifo_exception": (getattr(row, "fifo_exception", None) or "N") == "Y",
+        "fifo_exception_reason": getattr(row, "fifo_exception_reason", None) or "",
         "note": row.note or "",
         "created_by": row.created_by or "",
         "created_at": row.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
         "part_nos": part_nos,
+        "part_summary": part_summary,
         "total_qty": total_qty,
         "total_boxes": total_boxes,
         "items": items,
@@ -112,11 +120,7 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
 
 @router.get("/shipping/inquiry", response_class=HTMLResponse)
 def shipping_inquiry_page(request: Request, current_user=Depends(get_current_user)):
-    return templates.TemplateResponse(
-        request=request,
-        name="shipping_inquiry.html",
-        context={"request": request, "user": current_user},
-    )
+    return templates.TemplateResponse(request=request, name="shipping_inquiry.html", context={"request": request, "user": current_user})
 
 
 @router.get("/api/shipping/inquiry")
@@ -151,11 +155,7 @@ def shipping_inquiry(
 
 
 @router.get("/api/shipping/inquiry/{shipment_id}")
-def shipping_inquiry_detail(
-    shipment_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
+def shipping_inquiry_detail(shipment_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     row = db.get(ShipmentMaster, shipment_id)
     if not row:
         raise HTTPException(404, "출고 내역을 찾을 수 없습니다.")
@@ -163,18 +163,11 @@ def shipping_inquiry_detail(
 
 
 @router.delete("/api/shipping/inquiry/{shipment_id}")
-def delete_shipment(
-    shipment_id: int,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
+def delete_shipment(shipment_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     shipment = db.get(ShipmentMaster, shipment_id)
     if not shipment:
         raise HTTPException(404, "출고 내역을 찾을 수 없습니다.")
 
-    # 출고가 최종 공정이므로 LOT 계산/라벨 스테이징 사용 여부로 삭제를 막지 않습니다.
-    # 대신 삭제 대상 출고대기LOT가 현재 shipping_master 작업 데이터에 있으면
-    # 해당 행만 함께 제거하여 출고 내역과 기존 LOT 계산/바코드 작업 데이터가 어긋나지 않게 합니다.
     waiting_lots = {
         str(box.package_lot_no).strip()
         for item in shipment.items
@@ -195,10 +188,7 @@ def delete_shipment(
         sales_item = item.sales_order_item
         if not sales_item:
             continue
-        sales_item.shipped_qty = max(
-            float(sales_item.shipped_qty or 0) - float(item.shipped_qty or 0),
-            0.0,
-        )
+        sales_item.shipped_qty = max(float(sales_item.shipped_qty or 0) - float(item.shipped_qty or 0), 0.0)
         if sales_item.order:
             affected_orders[sales_item.order.id] = sales_item.order
 
