@@ -9,6 +9,7 @@ LOT_PREFIXES = {
     "COMPLEX_LATHE": "LX",
     "MACHINING": "LB",
     "SILVER_PLATING": "LZ",
+    "OUTSOURCE_CNC": "LC",
     "ASSEMBLY": "LA",
 }
 
