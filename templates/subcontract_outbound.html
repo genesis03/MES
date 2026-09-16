@@ -13,7 +13,7 @@
     <button id="ob-confirm" class="ob-btn ob-primary" type="button" disabled>출고</button>
     <button id="ob-cancel" class="ob-btn ob-danger" type="button" disabled>출고 취소</button>
     <button id="ob-slip" class="ob-btn ob-print" type="button" disabled>출고전표 출력</button>
-    <button id="ob-label" class="ob-btn ob-print" type="button" disabled>출고 라벨 출력</button>
+    <button id="ob-label" class="ob-btn ob-print" type="button" disabled>내부 LOT 라벨 출력</button>
     <span id="ob-message" class="ob-msg"></span>
   </div>
   <div class="ob-box ob-head">
@@ -43,4 +43,4 @@
   </div>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/subcontract_outbound.js?v=20260914-1"></script>{% endblock %}
+{% block extra_script %}<script src="/static/subcontract_outbound.js?v=20260914-1"></script><script src="/static/internal_label_buttons.js?v=20260916-1"></script>{% endblock %}
