@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from models.lot_relation import LotRelationModel
+from models.models import ItemMasterModel
 from models.sales import SalesOrderItem, SalesOrderMaster, ShipmentDirectLot, ShipmentItem, ShipmentMaster
 from routers.packing import _lots
 from routers.sales_shipping_entry import _next_no, _sync_order_status, _username
+from services.shipping_lot_service import next_shipping_lot_no
 
 router = APIRouter(tags=["Sales Shipping Direct"])
 
@@ -51,27 +53,29 @@ def _direct_rows(db: Session, item: SalesOrderItem):
     return rows
 
 
-def _next_direct_outbound_seq(db: Session, shipment_date: str) -> int:
-    """직출고 LOT 발번: YYMMDD + 구분 02 + 3자리 순번."""
-    yymmdd = shipment_date.replace("-", "")[2:]
-    prefix = f"{yymmdd}02"
-    latest = (
-        db.query(ShipmentDirectLot.outbound_lot_no)
-        .filter(ShipmentDirectLot.outbound_lot_no.like(prefix + "%"))
-        .order_by(ShipmentDirectLot.outbound_lot_no.desc())
-        .first()
-    )
-    if not latest or not latest[0]:
-        return 1
-    try:
-        return int(str(latest[0])[-3:]) + 1
-    except (TypeError, ValueError):
-        return 1
+def _standard_box_qty(db: Session, part_no: str, requested_qty: float) -> float:
+    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
+    if item:
+        standard = float(item.moq or 0) or float(item.snp or 0)
+        if standard > 0:
+            return standard
+    return float(requested_qty)
 
 
-def _direct_outbound_lot(shipment_date: str, seq: int) -> str:
-    yymmdd = shipment_date.replace("-", "")[2:]
-    return f"{yymmdd}02{seq:03d}"
+def _box_quantities(total_qty: float, standard_box_qty: float) -> list[float]:
+    remaining = float(total_qty)
+    box_qty = float(standard_box_qty)
+    if remaining <= 0:
+        return []
+    if box_qty <= 0:
+        return [remaining]
+
+    boxes = []
+    while remaining > 1e-9:
+        qty = min(box_qty, remaining)
+        boxes.append(qty)
+        remaining -= qty
+    return boxes
 
 
 @router.get("/api/sales/shipping-entry/direct-lots")
@@ -86,12 +90,14 @@ def direct_lots(
     if str(item.order.order_type or "NORMAL").upper() not in DIRECT_ORDER_TYPES:
         raise HTTPException(409, "양산 수주는 생산 LOT 직출고를 사용할 수 없습니다.")
 
+    standard_box_qty = _standard_box_qty(db, item.part_no, max(float(item.order_qty or 0) - float(item.shipped_qty or 0), 0.0))
     return [{
         "id": lot.id,
         "lot_no": lot.lot_no,
         "source_part_no": source_part_no,
         "source_part_name": source_part_name,
         "available_qty": available,
+        "standard_box_qty": standard_box_qty,
         "created_at": lot.created_at.strftime("%Y-%m-%d %H:%M:%S") if lot.created_at else "",
     } for lot, source_part_no, source_part_name, available in _direct_rows(db, item)]
 
@@ -107,7 +113,7 @@ def direct_scan(
         raise HTTPException(404, "수주 품목을 찾을 수 없습니다.")
     order_type = str(item.order.order_type or "NORMAL").upper()
     if order_type not in DIRECT_ORDER_TYPES:
-        raise HTTPException(409, "양산 수주는 포장 출고대기 LOT를 통해 출고해야 합니다.")
+        raise HTTPException(409, "양산 수주는 포장 LOT를 통해 출고해야 합니다.")
     if item.status not in ("WAITING", "PARTIAL") or item.order.status not in ("ORDERED", "PARTIAL"):
         raise HTTPException(409, "이미 출고 완료되었거나 출고할 수 없는 수주 품목입니다.")
 
@@ -175,11 +181,14 @@ def direct_scan(
     })
     allocated_qty += qty
 
+    standard_box_qty = _standard_box_qty(db, item.part_no, payload.requested_qty)
     return {
         "allocations": allocations,
         "allocated_qty": allocated_qty,
         "requested_qty": payload.requested_qty,
         "remaining_qty": remaining_qty,
+        "standard_box_qty": standard_box_qty,
+        "box_count": len(_box_quantities(payload.requested_qty, standard_box_qty)),
         "is_full_allocated": abs(allocated_qty - payload.requested_qty) <= 1e-9,
         "shipment_mode": "DIRECT",
     }
@@ -195,7 +204,6 @@ def direct_confirm(
     if len(set(item_ids)) != len(item_ids):
         raise HTTPException(409, "동일 수주 품목이 중복 배정되었습니다.")
 
-    sales_items: dict[int, SalesOrderItem] = {}
     orders: dict[int, SalesOrderMaster] = {}
     customer_id = None
     customer_name = None
@@ -241,15 +249,16 @@ def direct_confirm(
             if direct.qty > effective_available + 1e-9:
                 raise HTTPException(409, f"{lot.lot_no}: 이번 출고전표 내 다른 품목 배정까지 포함한 가용수량 {effective_available:g}보다 출고수량 {direct.qty:g}이 큽니다.")
             planned_by_lot[lot.id] = already_planned + float(direct.qty)
-            selected.append((lot, source_part_no, float(direct.qty)))
+            selected.append([lot, source_part_no, float(direct.qty)])
             total += float(direct.qty)
 
         if abs(total - allocation.requested_qty) > 1e-9:
             raise HTTPException(409, f"{order.order_no} / {item.part_no}: 금회 출고수량과 생산 LOT 배정수량이 일치하지 않습니다.")
 
-        sales_items[item.id] = item
+        standard_box_qty = _standard_box_qty(db, item.part_no, total)
+        box_quantities = _box_quantities(total, standard_box_qty)
         orders[order.id] = order
-        validated.append((item, selected, total))
+        validated.append((item, selected, total, box_quantities))
 
     ordered_orders = sorted(orders.values(), key=lambda x: x.id)
     primary_order = ordered_orders[0]
@@ -269,9 +278,10 @@ def direct_confirm(
     db.flush()
 
     total_qty = 0.0
-    outbound_lots = []
-    outbound_seq = _next_direct_outbound_seq(db, payload.shipment_date)
-    for item, selected, shipment_qty in validated:
+    outbound_lots: list[str] = []
+    reserved_by_part: dict[str, set[str]] = {}
+
+    for item, selected, shipment_qty, box_quantities in validated:
         shipment_item = ShipmentItem(
             shipment_id=shipment.id,
             sales_order_item_id=item.id,
@@ -282,27 +292,49 @@ def direct_confirm(
         db.add(shipment_item)
         db.flush()
 
-        # 품목별 직출고 1건에 출고 LOT 1개를 발번한다. 여러 생산 LOT가 합쳐져도 동일 출고 LOT로 계보를 묶는다.
-        outbound_lot_no = _direct_outbound_lot(payload.shipment_date, outbound_seq)
-        outbound_seq += 1
-        outbound_lots.append(outbound_lot_no)
+        reserved = reserved_by_part.setdefault(item.part_no, set())
+        source_index = 0
+        source_remaining = float(selected[0][2]) if selected else 0.0
 
-        for lot, source_part_no, qty in selected:
-            db.add(ShipmentDirectLot(
-                shipment_item_id=shipment_item.id,
-                production_lot_id=lot.id,
-                outbound_lot_no=outbound_lot_no,
-                source_lot_no=lot.lot_no,
-                source_part_no=source_part_no,
-                shipped_qty=qty,
-            ))
-            # 생산 LOT -> 직출고 LOT 계보를 남기고, 이 소비량은 포장/후속공정 가용수량에서 자동 차감된다.
-            db.add(LotRelationModel(
-                parent_lot_no=lot.lot_no,
-                child_lot_no=outbound_lot_no,
-                process_code="SHIP_DIRECT",
-                consumed_qty=qty,
-            ))
+        for box_no, box_qty in enumerate(box_quantities, 1):
+            outbound_lot_no = next_shipping_lot_no(db, item.part_no, payload.shipment_date, reserved)
+            reserved.add(outbound_lot_no)
+            outbound_lots.append(outbound_lot_no)
+
+            box_remaining = float(box_qty)
+            while box_remaining > 1e-9:
+                if source_index >= len(selected):
+                    raise HTTPException(409, f"{item.part_no}: BOX 배정 중 생산 LOT 수량이 부족합니다.")
+                lot, source_part_no, _ = selected[source_index]
+                use_qty = min(box_remaining, source_remaining)
+                if use_qty <= 1e-9:
+                    source_index += 1
+                    if source_index < len(selected):
+                        source_remaining = float(selected[source_index][2])
+                    continue
+
+                db.add(ShipmentDirectLot(
+                    shipment_item_id=shipment_item.id,
+                    production_lot_id=lot.id,
+                    box_no=box_no,
+                    outbound_lot_no=outbound_lot_no,
+                    source_lot_no=lot.lot_no,
+                    source_part_no=source_part_no,
+                    shipped_qty=use_qty,
+                ))
+                db.add(LotRelationModel(
+                    parent_lot_no=lot.lot_no,
+                    child_lot_no=outbound_lot_no,
+                    process_code="SHIP_DIRECT",
+                    consumed_qty=use_qty,
+                ))
+
+                box_remaining -= use_qty
+                source_remaining -= use_qty
+                if source_remaining <= 1e-9:
+                    source_index += 1
+                    if source_index < len(selected):
+                        source_remaining = float(selected[source_index][2])
 
         item.shipped_qty = float(item.shipped_qty or 0) + shipment_qty
         total_qty += shipment_qty
@@ -320,6 +352,7 @@ def direct_confirm(
         "order_count": len(orders),
         "order_nos": [row.order_no for row in ordered_orders],
         "outbound_lots": outbound_lots,
+        "box_count": len(outbound_lots),
         "shipment_mode": "DIRECT",
-        "message": "샘플/개발 직출고 처리가 완료되고 출고 LOT가 발번되었습니다.",
+        "message": "샘플/개발 직출고 처리가 완료되고 BOX별 포장(출고) LOT가 발번되었습니다.",
     }
