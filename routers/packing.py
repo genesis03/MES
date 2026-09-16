@@ -18,6 +18,7 @@ from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunLotAllocation, ProductionRunMaterial
 from models.sales import ShipmentBox
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
+from services.shipping_lot_service import next_shipping_lot_no
 
 router = APIRouter(tags=["Packing"])
 templates = Jinja2Templates(directory="templates")
@@ -64,24 +65,6 @@ def _next_packing_no(db: Session, packing_date: str) -> str:
         except (TypeError, ValueError):
             seq = 1
     return f"{prefix}{seq:03d}"
-
-
-def _next_waiting_lot_seq(db: Session, packing_date: str) -> int:
-    """출고대기LOT 발번: YYMMDD + 금형번호 01(고정) + 3자리 순번."""
-    yymmdd = packing_date.replace("-", "")[2:]
-    prefix = f"{yymmdd}01"
-    latest = (
-        db.query(PackingBox.package_lot_no)
-        .filter(PackingBox.package_lot_no.like(prefix + "%"))
-        .order_by(PackingBox.package_lot_no.desc())
-        .first()
-    )
-    if not latest:
-        return 1
-    try:
-        return int(str(latest[0])[-3:]) + 1
-    except (TypeError, ValueError):
-        return 1
 
 
 def _packed_qty(db: Session, lot_no: str) -> float:
@@ -337,16 +320,15 @@ def create_packing(payload: PackingCreateInput, db: Session = Depends(get_db), c
             storage_location=lot.storage_location if lot else None,
         ))
 
-    waiting_seq = _next_waiting_lot_seq(db, payload.packing_date)
-    yymmdd = payload.packing_date.replace("-", "")[2:]
+    reserved_shipping_lots: set[str] = set()
     for box_no in range(1, payload.box_count + 1):
-        waiting_lot_no = f"{yymmdd}01{waiting_seq:03d}"
+        package_lot_no = next_shipping_lot_no(db, item.part_no, payload.packing_date, reserved_shipping_lots)
+        reserved_shipping_lots.add(package_lot_no)
         master.boxes.append(PackingBox(
             box_no=box_no,
-            package_lot_no=waiting_lot_no,
+            package_lot_no=package_lot_no,
             box_qty=float(payload.box_qty),
         ))
-        waiting_seq += 1
 
     db.commit()
     return {
@@ -359,59 +341,25 @@ def create_packing(payload: PackingCreateInput, db: Session = Depends(get_db), c
 
 @router.get("/api/packing/records")
 def packing_records(
-    part_no: Optional[str] = Query(None, max_length=50),
+    part_no: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    query = db.query(PackingMaster).filter(PackingMaster.status == "PACKED")
+    query = db.query(PackingMaster)
     if part_no and part_no.strip():
         query = query.filter(PackingMaster.part_no == part_no.strip())
-    rows = query.order_by(PackingMaster.created_at.desc(), PackingMaster.id.desc()).limit(500).all()
-
-    box_ids = [box.id for master in rows for box in master.boxes]
-    shipped_box_ids = set()
-    if box_ids:
-        shipped_box_ids = {
-            int(row[0])
-            for row in db.query(ShipmentBox.packing_box_id)
-            .filter(ShipmentBox.packing_box_id.in_(box_ids))
-            .all()
-        }
-
-    result = []
-    for master in rows:
-        waiting_boxes = [box for box in master.boxes if box.id not in shipped_box_ids]
-        if not waiting_boxes:
-            continue
-        result.append({
-            "id": master.id,
-            "packing_no": master.packing_no,
-            "packing_date": master.packing_date,
-            "part_no": master.part_no,
-            "part_name": master.part_name or "",
-            "total_qty": sum(float(box.box_qty or 0) for box in waiting_boxes),
-            "box_count": len(waiting_boxes),
-            "box_qty": float(master.box_qty or 0),
-            "waiting_lots": [box.package_lot_no for box in waiting_boxes],
-        })
-    return result
-
-
-@router.post("/api/packing/{packing_id}/cancel")
-def cancel_packing(packing_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    master = db.get(PackingMaster, packing_id)
-    if not master:
-        raise HTTPException(404, "포장 내역을 찾을 수 없습니다.")
-    if master.status == "CANCELLED":
-        return {"message": "이미 취소된 포장입니다."}
-
-    waiting_lots = [x.package_lot_no for x in master.boxes if x.package_lot_no]
-    for waiting_lot in waiting_lots:
-        if db.query(ShippingMasterModel.id).filter(ShippingMasterModel.row_json.contains(waiting_lot, autoescape=True)).first():
-            raise HTTPException(409, f"출고 이력에서 사용된 출고대기LOT가 있어 취소할 수 없습니다: {waiting_lot}")
-
-    master.status = "CANCELLED"
-    master.cancelled_by = _username(current_user)
-    master.cancelled_at = datetime.now()
-    db.commit()
-    return {"message": "포장을 취소했습니다. 원 생산 LOT 잔량이 복원됩니다."}
+    rows = query.order_by(PackingMaster.id.desc()).limit(300).all()
+    return [{
+        "id": row.id,
+        "packing_no": row.packing_no,
+        "packing_date": row.packing_date,
+        "part_no": row.part_no,
+        "part_name": row.part_name,
+        "box_count": row.box_count,
+        "box_qty": row.box_qty,
+        "total_qty": row.total_qty,
+        "status": row.status,
+        "waiting_lots": [box.package_lot_no for box in row.boxes],
+        "created_by": row.created_by,
+        "created_at": row.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
+    } for row in rows]
