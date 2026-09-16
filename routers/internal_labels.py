@@ -26,9 +26,7 @@ def _storage_text(db: Session, code: str | None) -> str:
     if not raw:
         return ""
     row = db.query(StorageLocationModel).filter(StorageLocationModel.location_code == raw).first()
-    if row and row.location_name:
-        return f"{raw} · {row.location_name}"
-    return raw
+    return str(row.location_name or "").strip() if row else ""
 
 
 def _process_text(db: Session, code: str | None, fallback: str = "") -> str:
@@ -36,8 +34,8 @@ def _process_text(db: Session, code: str | None, fallback: str = "") -> str:
     if raw:
         row = db.query(ProcessModel).filter(ProcessModel.process_code == raw).first()
         if row and row.process_name:
-            return row.process_name
-    return fallback or raw
+            return str(row.process_name).strip()
+    return str(fallback or "").strip()
 
 
 def _label(
