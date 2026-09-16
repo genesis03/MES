@@ -92,6 +92,17 @@ async def get_data(
     return {"data": get_shipping_records_from_db(db)}
 
 
+def _shipment_item_box_count(item) -> int:
+    if item.boxes:
+        return len(item.boxes)
+    direct_lots = {
+        str(getattr(row, "outbound_lot_no", None) or "").strip()
+        for row in getattr(item, "direct_lots", []) or []
+        if str(getattr(row, "outbound_lot_no", None) or "").strip()
+    }
+    return len(direct_lots)
+
+
 @router.get("/shipping/source-shipments")
 def source_shipments(
     shipment_no: str | None = None,
@@ -121,7 +132,7 @@ def source_shipments(
                 "customer_name": row.customer_name,
                 "status": row.status,
                 "item_count": len(row.items),
-                "box_count": sum(len(item.boxes) for item in row.items),
+                "box_count": sum(_shipment_item_box_count(item) for item in row.items),
                 "total_qty": sum(float(item.shipped_qty or 0) for item in row.items),
                 "part_nos": [item.part_no for item in row.items],
             }
