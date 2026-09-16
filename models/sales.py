@@ -99,14 +99,18 @@ class ShipmentBox(Base):
 
 
 class ShipmentDirectLot(Base):
-    """샘플/개발 수주의 포장 생략 생산 LOT 직출고 추적."""
+    """샘플/개발 수주의 포장 생략 생산 LOT 직출고 추적.
+
+    포장 공정을 생략하더라도 출고 시 BOX 단위를 만들고, BOX마다 포장 LOT(=출고 LOT)를 부여합니다.
+    """
 
     __tablename__ = "shipment_direct_lots"
 
     id = Column(Integer, primary_key=True)
     shipment_item_id = Column(Integer, ForeignKey("shipment_items.id"), nullable=False, index=True)
     production_lot_id = Column(Integer, ForeignKey("production_lots.id"), nullable=False, index=True)
-    # 직출고도 외부 출고 기준 LOT를 갖는다. 01은 포장 출고대기 LOT, 02는 직출고 LOT로 구분한다.
+    box_no = Column(Integer, nullable=True, index=True)
+    # 포장 LOT와 출고 LOT는 같은 번호를 의미한다. 형식은 YYMMDD + 01 + 3자리 순번이다.
     outbound_lot_no = Column(String(60), nullable=True, index=True)
     source_lot_no = Column(String(100), nullable=False, index=True)
     source_part_no = Column(String(50), nullable=False, index=True)
