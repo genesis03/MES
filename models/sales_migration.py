@@ -29,3 +29,8 @@ def ensure_sales_policy_columns(engine) -> None:
         for name, column_sql in additions.items():
             if name not in columns:
                 _add_column(engine, "shipment_masters", column_sql)
+
+    if "shipment_direct_lots" in tables:
+        columns = {col["name"] for col in inspect(engine).get_columns("shipment_direct_lots")}
+        if "outbound_lot_no" not in columns:
+            _add_column(engine, "shipment_direct_lots", "outbound_lot_no VARCHAR(60)")
