@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}품번별 입고검사 기준서 - 품질관리{% endblock %}
+{% block extra_head %}
+<style>
+.qs-wrap h1{font-size:24px;margin:0 0 5px}.qs-sub{font-size:13px;color:#64748b;margin-bottom:14px}.qs-grid{display:grid;grid-template-columns:360px 1fr;gap:14px}.qs-card{background:#fff;border:1px solid #cbd5e1;border-radius:7px;padding:14px}.qs-card h2{font-size:16px;margin:0 0 12px}.qs-field{display:flex;flex-direction:column;gap:4px;margin-bottom:9px}.qs-field label{font-size:11px;font-weight:700;color:#64748b}.qs-field input,.qs-field select,.qs-field textarea{border:1px solid #cbd5e1;border-radius:4px;padding:8px}.qs-field input,.qs-field select{height:34px}.qs-field textarea{min-height:60px;resize:vertical}.qs-actions{display:flex;gap:7px;flex-wrap:wrap}.qs-btn{height:34px;border:0;border-radius:4px;padding:0 13px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.light{background:#e2e8f0;color:#334155}.danger{background:#dc2626;color:#fff}.add{background:#0f766e;color:#fff}.qs-tablebox{overflow:auto}.qs-table{width:100%;border-collapse:collapse;font-size:12px;min-width:1100px}.qs-table th{background:#f1f5f9;padding:8px;border-bottom:2px solid #cbd5e1;white-space:nowrap}.qs-table td{padding:6px;border-bottom:1px solid #e2e8f0;text-align:center}.qs-table input,.qs-table select{height:30px;border:1px solid #cbd5e1;border-radius:4px;padding:0 6px;max-width:140px}.qs-list{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px}.qs-list th{background:#f8fafc;padding:7px;border-bottom:1px solid #cbd5e1}.qs-list td{padding:7px;border-bottom:1px solid #e2e8f0;text-align:center;cursor:pointer}.qs-msg{margin-top:9px;font-size:12px;min-height:18px}.ok{color:#15803d}.error{color:#dc2626}.badge{padding:3px 7px;border-radius:10px;font-weight:700}.on{background:#dcfce7;color:#15803d}.off{background:#e2e8f0;color:#64748b}@media(max-width:1100px){.qs-grid{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="qs-wrap">
+  <h1>품번별 입고검사 기준서</h1>
+  <div class="qs-sub">검사항목 MASTER를 불러와 품번별 규격, 샘플수, 사용 REV를 설정합니다. 업체별 별도 기준은 두지 않습니다.</div>
+  <div class="qs-grid">
+    <div class="qs-card">
+      <h2 id="form-title">기준서 등록</h2><input type="hidden" id="standard-id">
+      <div class="qs-field"><label>품번 *</label><select id="part-no"></select></div>
+      <div class="qs-field"><label>REV *</label><input id="revision" value="Rev.00" maxlength="20"></div>
+      <div class="qs-field"><label>적용일</label><input id="effective-date" type="date"></div>
+      <div class="qs-field"><label>사용여부</label><select id="is-active"><option value="Y">사용</option><option value="N">사용중지</option></select></div>
+      <div class="qs-field"><label>비고</label><textarea id="note"></textarea></div>
+      <div class="qs-actions"><button class="qs-btn primary" id="save-btn">저장</button><button class="qs-btn light" id="new-btn">신규</button><button class="qs-btn danger" id="delete-btn" disabled>삭제</button></div>
+      <div id="msg" class="qs-msg"></div>
+      <hr style="border:0;border-top:1px solid #e2e8f0;margin:15px 0">
+      <h2>등록 기준서</h2>
+      <table class="qs-list"><thead><tr><th>품번</th><th>REV</th><th>사용</th></tr></thead><tbody id="list-body"></tbody></table>
+    </div>
+    <div class="qs-card">
+      <div class="qs-actions" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">검사항목 / 규격</h2><button class="qs-btn add" id="add-item-btn">검사항목 추가</button></div>
+      <div class="qs-tablebox"><table class="qs-table"><thead><tr><th>순서</th><th>검사항목</th><th>규격유형</th><th>규격문구</th><th>기준값</th><th>하한</th><th>상한</th><th>단위</th><th>샘플수</th><th>필수</th><th>삭제</th></tr></thead><tbody id="item-body"></tbody></table></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_script %}
+<script>
+(()=>{
+const $=id=>document.getElementById(id);let options={products:[],inspection_items:[]};let standards=[];
+const esc=v=>{const s=document.createElement('span');s.textContent=v??'';return s.innerHTML};
+function msg(t,c=''){ $('msg').className='qs-msg '+c;$('msg').textContent=t||''; }
+function productOptions(selected=''){return '<option value="">품번 선택</option>'+options.products.map(x=>`<option value="${esc(x.part_no)}" ${x.part_no===selected?'selected':''}>${esc(x.part_no)} | ${esc(x.part_name)}</option>`).join('')}
+function inspectionOptions(selected=''){return '<option value="">선택</option>'+options.inspection_items.map(x=>`<option value="${x.id}" ${String(x.id)===String(selected)?'selected':''}>${esc(x.item_code)} | ${esc(x.item_name)}</option>`).join('')}
+function rowHtml(x={},idx=0){return `<tr><td><input class="sort" type="number" min="1" value="${x.sort_order||idx+1}"></td><td><select class="inspection-item">${inspectionOptions(x.inspection_item_id||'')}</select></td><td><select class="spec-type"><option value="TEXT" ${x.spec_type==='TEXT'?'selected':''}>문자</option><option value="RANGE" ${x.spec_type==='RANGE'?'selected':''}>범위</option><option value="MIN" ${x.spec_type==='MIN'?'selected':''}>최소</option><option value="MAX" ${x.spec_type==='MAX'?'selected':''}>최대</option><option value="TARGET" ${x.spec_type==='TARGET'?'selected':''}>기준값</option><option value="PASSFAIL" ${x.spec_type==='PASSFAIL'?'selected':''}>합/부</option></select></td><td><input class="spec-text" value="${esc(x.spec_text||'')}"></td><td><input class="nominal" type="number" step="any" value="${x.nominal_value??''}"></td><td><input class="lower" type="number" step="any" value="${x.lower_limit??''}"></td><td><input class="upper" type="number" step="any" value="${x.upper_limit??''}"></td><td><input class="unit" value="${esc(x.unit||'')}"></td><td><input class="sample" type="number" min="1" value="${x.sample_qty||1}"></td><td><select class="required"><option value="Y" ${x.required_yn!=='N'?'selected':''}>Y</option><option value="N" ${x.required_yn==='N'?'selected':''}>N</option></select></td><td><button class="qs-btn danger remove-row" type="button">삭제</button></td></tr>`}
+function clearForm(){$('standard-id').value='';$('part-no').value='';$('revision').value='Rev.00';$('effective-date').value='';$('is-active').value='Y';$('note').value='';$('item-body').innerHTML='';$('form-title').textContent='기준서 등록';$('delete-btn').disabled=true;msg('')}
+function collectItems(){return [...$('item-body').querySelectorAll('tr')].map(tr=>{const val=c=>tr.querySelector(c).value;const num=c=>{const v=val(c);return v===''?null:Number(v)};return{inspection_item_id:Number(val('.inspection-item')),spec_type:val('.spec-type'),spec_text:val('.spec-text').trim()||null,nominal_value:num('.nominal'),lower_limit:num('.lower'),upper_limit:num('.upper'),unit:val('.unit').trim()||null,sample_qty:Number(val('.sample')||1),required_yn:val('.required'),sort_order:Number(val('.sort')||1),note:null}})}
+function payload(){return{part_no:$('part-no').value,revision:$('revision').value.trim(),effective_date:$('effective-date').value||null,is_active:$('is-active').value,note:$('note').value.trim()||null,items:collectItems()}}
+async function loadOptions(){const r=await fetch('/api/quality/inbound-standards/options');const d=await r.json();if(!r.ok)throw new Error(d.detail||'기준정보 조회 실패');options=d;$('part-no').innerHTML=productOptions()}
+async function loadList(){const r=await fetch('/api/quality/inbound-standards');const d=await r.json();if(!r.ok)throw new Error(d.detail||'기준서 조회 실패');standards=d;$('list-body').innerHTML=d.length?d.map(x=>`<tr data-id="${x.id}"><td>${esc(x.part_no)}</td><td>${esc(x.revision)}</td><td><span class="badge ${x.is_active==='Y'?'on':'off'}">${x.is_active==='Y'?'사용':'중지'}</span></td></tr>`).join(''):'<tr><td colspan="3">등록된 기준서가 없습니다.</td></tr>'}
+async function openStandard(id){const r=await fetch(`/api/quality/inbound-standards/${id}`);const d=await r.json();if(!r.ok)throw new Error(d.detail||'기준서 조회 실패');$('standard-id').value=d.id;$('part-no').value=d.part_no;$('revision').value=d.revision;$('effective-date').value=d.effective_date||'';$('is-active').value=d.is_active;$('note').value=d.note||'';$('item-body').innerHTML=(d.items||[]).map((x,i)=>rowHtml(x,i)).join('');$('form-title').textContent='기준서 수정';$('delete-btn').disabled=false}
+$('add-item-btn').onclick=()=>{$('item-body').insertAdjacentHTML('beforeend',rowHtml({},$('item-body').children.length))};
+$('item-body').onclick=e=>{if(e.target.closest('.remove-row'))e.target.closest('tr').remove()};
+$('save-btn').onclick=async()=>{try{const id=$('standard-id').value;const p=payload();if(!p.part_no)throw new Error('품번을 선택해 주십시오.');if(!p.items.length)throw new Error('검사항목을 1개 이상 등록해 주십시오.');if(p.items.some(x=>!x.inspection_item_id))throw new Error('검사항목을 선택해 주십시오.');const r=await fetch(id?`/api/quality/inbound-standards/${id}`:'/api/quality/inbound-standards',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});const d=await r.json();if(!r.ok)throw new Error(d.detail||'저장 실패');await loadList();await openStandard(d.id);msg('저장했습니다.','ok')}catch(e){msg(e.message,'error')}};
+$('delete-btn').onclick=async()=>{const id=$('standard-id').value;if(!id||!confirm('이 기준서를 삭제하시겠습니까?'))return;try{const r=await fetch(`/api/quality/inbound-standards/${id}`,{method:'DELETE'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'삭제 실패');clearForm();await loadList();msg(d.message,'ok')}catch(e){msg(e.message,'error')}};
+$('new-btn').onclick=clearForm;$('list-body').onclick=e=>{const tr=e.target.closest('tr[data-id]');if(tr)openStandard(tr.dataset.id).catch(x=>msg(x.message,'error'))};
+(async()=>{try{await loadOptions();await loadList()}catch(e){msg(e.message,'error')}})();
+})();
+</script>
+{% endblock %}
