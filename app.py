@@ -8,7 +8,7 @@ from core.security import init_default_accounts
 from services.purchase_lot_format import install_purchase_lot_format
 from services.production_lot_service import ensure_production_output_lots
 
-from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, subcontract_inbound_lot_policy, subcontract_inbound_edit, purchase_unreceived, quality_pages, quality, production_pages, production, production_complete, production_run, production_run_delete, production_run_lot_fix, production_extra, inventory, inventory_lot_trace, internal_labels, packing, sales, sales_order_policy, sales_shipping_direct, sales_shipping_direct_page, sales_shipping_fifo_auto, sales_shipping_partial_confirm, sales_shipping_entry, sales_order_delete, shipping_inquiry
+from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, subcontract_inbound_lot_policy, subcontract_inbound_edit, purchase_unreceived, quality_pages, quality, quality_standard, production_pages, production, production_complete, production_run, production_run_delete, production_run_lot_fix, production_extra, inventory, inventory_lot_trace, internal_labels, packing, sales, sales_order_policy, sales_shipping_direct, sales_shipping_direct_page, sales_shipping_fifo_auto, sales_shipping_partial_confirm, sales_shipping_entry, sales_order_delete, shipping_inquiry
 
 # 초기 계정 데이터 생성 트리거
 init_default_accounts()
@@ -57,6 +57,7 @@ app.include_router(subcontract_inbound.router)
 app.include_router(subcontract_inbound_edit.router)
 app.include_router(quality_pages.router)
 app.include_router(quality.router)
+app.include_router(quality_standard.router)
 app.include_router(production_pages.router)
 app.include_router(production.router)
 # 동일 complete 경로 중 생산 LOT 생성 버전을 먼저 등록합니다.
