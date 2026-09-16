@@ -25,7 +25,7 @@ from models.quality import QualityInboundResult
 from models.partner import Partner, PartnerContact
 from models.purchase import PurchaseMaster, PurchaseItem
 from models.packing import PackingMaster, PackingLotAllocation, PackingBox
-from models.sales import SalesOrderMaster, SalesOrderItem, ShipmentMaster, ShipmentItem, ShipmentBox
+from models.sales import SalesOrderMaster, SalesOrderItem, ShipmentMaster, ShipmentItem, ShipmentBox, ShipmentDirectLot
 
 
 # 테이블 일괄 자동 생성 트리거
@@ -55,7 +55,7 @@ __all__ = [
     "SubcontractOutboundMaster", "SubcontractOutboundItem", "SubcontractOutboundLot",
     "SubcontractInboundMaster", "SubcontractInboundItem", "SubcontractInboundLot",
     "PackingMaster", "PackingLotAllocation", "PackingBox",
-    "SalesOrderMaster", "SalesOrderItem", "ShipmentMaster", "ShipmentItem", "ShipmentBox",
+    "SalesOrderMaster", "SalesOrderItem", "ShipmentMaster", "ShipmentItem", "ShipmentBox", "ShipmentDirectLot",
     "QualityInboundResult",
     "Base",
     "engine",
