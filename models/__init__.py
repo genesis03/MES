@@ -26,6 +26,7 @@ from models.partner import Partner, PartnerContact
 from models.purchase import PurchaseMaster, PurchaseItem
 from models.packing import PackingMaster, PackingLotAllocation, PackingBox
 from models.sales import SalesOrderMaster, SalesOrderItem, ShipmentMaster, ShipmentItem, ShipmentBox, ShipmentDirectLot
+from models.shipping_lot import ShippingLotRegistry
 
 
 # 테이블 일괄 자동 생성 트리거
@@ -37,6 +38,7 @@ from models.production_migration import ensure_production_order_columns
 from models.process_reference_migration import ensure_process_code_references
 from models.sales_migration import ensure_sales_policy_columns
 from models.packing_migration import ensure_packing_lot_scope
+from models.shipping_lot_migration import ensure_shipping_lot_registry
 ensure_purchase_entry_columns(engine)
 ensure_subcontract_inbound_columns(engine)
 ensure_quality_master_data(engine)
@@ -44,6 +46,7 @@ ensure_production_order_columns(engine)
 ensure_process_code_references(engine)
 ensure_sales_policy_columns(engine)
 ensure_packing_lot_scope(engine)
+ensure_shipping_lot_registry(engine)
 
 __all__ = [
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
@@ -58,6 +61,7 @@ __all__ = [
     "SubcontractInboundMaster", "SubcontractInboundItem", "SubcontractInboundLot",
     "PackingMaster", "PackingLotAllocation", "PackingBox",
     "SalesOrderMaster", "SalesOrderItem", "ShipmentMaster", "ShipmentItem", "ShipmentBox", "ShipmentDirectLot",
+    "ShippingLotRegistry",
     "QualityInboundResult",
     "Base",
     "engine",
