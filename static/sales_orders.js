@@ -131,6 +131,8 @@ function validateOrder(items) {
   const orderDate = $('orderDate').value;
   const dueDate = $('deliveryDueDate').value;
   if (!orderDate || !$('customerId').value) return '수주일자와 판매처를 입력해 주세요.';
+  if (!['NORMAL','SAMPLE','DEVELOPMENT'].includes($('orderType').value)) return '수주구분을 선택해 주세요.';
+  if (!['PAID','FREE'].includes($('transactionType').value)) return '거래구분을 선택해 주세요.';
   if (dueDate && dueDate < orderDate) return '납기예정일은 수주일자보다 빠를 수 없습니다.';
   if (!items.length) return '수주 품목을 입력해 주세요.';
   if (items.some(x => !x.part_no || x.part_no !== x.typed_part_no || x.order_qty <= 0)) return '품번은 검색 결과에서 등록된 완제품/반제품을 선택하고 수량을 입력해 주세요.';
@@ -161,6 +163,8 @@ async function saveOrder() {
         order_date: $('orderDate').value,
         delivery_due_date: $('deliveryDueDate').value || null,
         customer_id: Number($('customerId').value),
+        order_type: $('orderType').value,
+        transaction_type: $('transactionType').value,
         manager_name: $('managerName').value.trim() || null,
         note: $('note').value.trim() || null,
         items: items.map(x => ({part_no: x.part_no, order_qty: x.order_qty, delivery_date: x.delivery_date}))
