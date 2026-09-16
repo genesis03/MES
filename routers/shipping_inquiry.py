@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import get_current_user
+from models.lot_relation import LotRelationModel
 from models.models import ShippingMasterModel
 from models.sales import SalesOrderMaster, ShipmentMaster
 
@@ -42,10 +43,14 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
     part_nos = []
     order_ids = []
     order_nos = []
+    has_direct = False
 
     for item in row.items:
         qty = float(item.shipped_qty or 0)
         boxes = list(item.boxes)
+        direct_lots = list(getattr(item, "direct_lots", []) or [])
+        if direct_lots:
+            has_direct = True
         total_qty += qty
         total_boxes += len(boxes)
         if item.part_no and item.part_no not in part_nos:
@@ -70,11 +75,13 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
             "sales_order_id": sales_order.id if sales_order else None,
             "order_no": sales_order.order_no if sales_order else "",
             "order_status": sales_order.status if sales_order else "",
-            "order_type": getattr(sales_order, "order_type", None) or "NORMAL" if sales_order else "",
-            "transaction_type": getattr(sales_order, "transaction_type", None) or "PAID" if sales_order else "",
+            "order_type": (getattr(sales_order, "order_type", None) or "NORMAL") if sales_order else "",
+            "transaction_type": (getattr(sales_order, "transaction_type", None) or "PAID") if sales_order else "",
             "delivery_due_date": sales_order.delivery_due_date if sales_order else "",
             "manager_name": sales_order.manager_name if sales_order else "",
             "box_count": len(boxes),
+            "direct_lot_count": len(direct_lots),
+            "shipment_mode": "DIRECT" if direct_lots else "PACKED",
         }
         if detail:
             item_data["boxes"] = [
@@ -85,6 +92,16 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
                     "shipped_qty": float(box.shipped_qty or 0),
                 }
                 for box in boxes
+            ]
+            item_data["direct_lots"] = [
+                {
+                    "id": direct.id,
+                    "production_lot_id": direct.production_lot_id,
+                    "lot_no": direct.source_lot_no,
+                    "source_part_no": direct.source_part_no,
+                    "shipped_qty": float(direct.shipped_qty or 0),
+                }
+                for direct in direct_lots
             ]
         items.append(item_data)
 
@@ -105,6 +122,7 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
         "customer_id": row.customer_id,
         "customer_name": row.customer_name,
         "status": row.status,
+        "shipment_mode": "DIRECT" if has_direct else "PACKED",
         "fifo_exception": (getattr(row, "fifo_exception", None) or "N") == "Y",
         "fifo_exception_reason": getattr(row, "fifo_exception_reason", None) or "",
         "note": row.note or "",
@@ -183,6 +201,17 @@ def delete_shipment(shipment_id: int, db: Session = Depends(get_db), current_use
                 db.delete(staging_row)
                 staging_removed += 1
 
+    # 샘플/개발 직출고는 생산 LOT 사용량을 LotRelation 원장에도 기록하므로
+    # 출고 삭제 시 해당 소비 이력을 함께 지워 생산 LOT 가용수량을 복원합니다.
+    direct_relations = (
+        db.query(LotRelationModel)
+        .filter(LotRelationModel.child_lot_no.like(f"SHIP:{shipment.shipment_no}:%"))
+        .all()
+    )
+    direct_relation_removed = len(direct_relations)
+    for relation in direct_relations:
+        db.delete(relation)
+
     affected_orders = {}
     for item in shipment.items:
         sales_item = item.sales_order_item
@@ -199,10 +228,16 @@ def delete_shipment(shipment_id: int, db: Session = Depends(get_db), current_use
     db.delete(shipment)
     db.commit()
 
-    sync_text = f" LOT 계산/라벨 작업 데이터 {staging_removed}건도 함께 정리했습니다." if staging_removed else ""
+    texts = []
+    if staging_removed:
+        texts.append(f"LOT 계산/라벨 작업 데이터 {staging_removed}건")
+    if direct_relation_removed:
+        texts.append(f"생산 LOT 직출고 사용이력 {direct_relation_removed}건")
+    sync_text = f" {' / '.join(texts)}도 함께 정리했습니다." if texts else ""
     return {
         "status": "success",
         "shipment_no": shipment_no,
         "staging_removed": staging_removed,
-        "message": f"출고 내역을 삭제했습니다. 연결된 모든 수주의 출고수량과 출고대기LOT 사용상태가 복원되었습니다.{sync_text}",
+        "direct_relation_removed": direct_relation_removed,
+        "message": f"출고 내역을 삭제했습니다. 연결된 수주의 출고수량과 LOT 사용상태가 복원되었습니다.{sync_text}",
     }
