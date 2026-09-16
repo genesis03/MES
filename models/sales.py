@@ -106,6 +106,8 @@ class ShipmentDirectLot(Base):
     id = Column(Integer, primary_key=True)
     shipment_item_id = Column(Integer, ForeignKey("shipment_items.id"), nullable=False, index=True)
     production_lot_id = Column(Integer, ForeignKey("production_lots.id"), nullable=False, index=True)
+    # 직출고도 외부 출고 기준 LOT를 갖는다. 01은 포장 출고대기 LOT, 02는 직출고 LOT로 구분한다.
+    outbound_lot_no = Column(String(60), nullable=True, index=True)
     source_lot_no = Column(String(100), nullable=False, index=True)
     source_part_no = Column(String(50), nullable=False, index=True)
     shipped_qty = Column(Float, nullable=False)
