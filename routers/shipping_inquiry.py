@@ -57,7 +57,7 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
         if direct_lots:
             has_direct = True
         total_qty += qty
-        # 박스수 컬럼은 실제 출고 LOT 수를 의미한다. 직출고도 발번된 02 출고 LOT를 1건으로 센다.
+        # BOX 수는 실제 포장 LOT(=출고 LOT) 수를 의미합니다. 샘플/개발도 BOX별 LOT를 셉니다.
         total_boxes += len(boxes) if boxes else (len(direct_outbound_lots) or (1 if direct_lots else 0))
         if item.part_no and item.part_no not in part_nos:
             part_nos.append(item.part_no)
@@ -103,6 +103,7 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
                 {
                     "id": direct.id,
                     "production_lot_id": direct.production_lot_id,
+                    "box_no": getattr(direct, "box_no", None),
                     "outbound_lot_no": getattr(direct, "outbound_lot_no", None) or "",
                     "lot_no": direct.source_lot_no,
                     "source_lot_no": direct.source_lot_no,
@@ -209,8 +210,8 @@ def delete_shipment(shipment_id: int, db: Session = Depends(get_db), current_use
                 db.delete(staging_row)
                 staging_removed += 1
 
-    # 신규 직출고는 생산 LOT -> 02 출고 LOT 계보로 기록한다.
-    # 과거 직출고(SHIP:출고번호:...) 형식도 함께 정리해 이전 데이터 삭제 호환성을 유지한다.
+    # 샘플/개발 직출고는 생산 LOT -> BOX별 포장 LOT(=출고 LOT) 계보로 기록합니다.
+    # 과거 직출고(SHIP:출고번호:...) 형식도 함께 정리해 이전 데이터 삭제 호환성을 유지합니다.
     outbound_lots = {
         str(getattr(direct, "outbound_lot_no", None) or "").strip()
         for item in shipment.items
