@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from models.lot_relation import LotRelationModel
-from models.production_lot import ProductionLotModel
 from models.sales import SalesOrderItem, SalesOrderMaster, ShipmentDirectLot, ShipmentItem, ShipmentMaster
 from routers.packing import _lots
 from routers.sales_shipping_entry import _next_no, _sync_order_status, _username
@@ -178,6 +177,7 @@ def direct_confirm(
     customer_id = None
     customer_name = None
     validated = []
+    planned_by_lot: dict[int, float] = {}
 
     for allocation in payload.items:
         item = db.get(SalesOrderItem, allocation.sales_order_item_id)
@@ -213,8 +213,11 @@ def direct_confirm(
             if not current:
                 raise HTTPException(409, f"{item.part_no}: 생산 LOT 가용수량이 변경되었습니다. 다시 배정해 주세요.")
             lot, source_part_no, available = current
-            if direct.qty > available + 1e-9:
-                raise HTTPException(409, f"{lot.lot_no}: 가용수량 {available:g}보다 출고수량 {direct.qty:g}이 큽니다.")
+            already_planned = planned_by_lot.get(lot.id, 0.0)
+            effective_available = max(available - already_planned, 0.0)
+            if direct.qty > effective_available + 1e-9:
+                raise HTTPException(409, f"{lot.lot_no}: 이번 출고전표 내 다른 품목 배정까지 포함한 가용수량 {effective_available:g}보다 출고수량 {direct.qty:g}이 큽니다.")
+            planned_by_lot[lot.id] = already_planned + float(direct.qty)
             selected.append((lot, source_part_no, float(direct.qty)))
             total += float(direct.qty)
 
