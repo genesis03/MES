@@ -51,6 +51,29 @@ def _direct_rows(db: Session, item: SalesOrderItem):
     return rows
 
 
+def _next_direct_outbound_seq(db: Session, shipment_date: str) -> int:
+    """직출고 LOT 발번: YYMMDD + 구분 02 + 3자리 순번."""
+    yymmdd = shipment_date.replace("-", "")[2:]
+    prefix = f"{yymmdd}02"
+    latest = (
+        db.query(ShipmentDirectLot.outbound_lot_no)
+        .filter(ShipmentDirectLot.outbound_lot_no.like(prefix + "%"))
+        .order_by(ShipmentDirectLot.outbound_lot_no.desc())
+        .first()
+    )
+    if not latest or not latest[0]:
+        return 1
+    try:
+        return int(str(latest[0])[-3:]) + 1
+    except (TypeError, ValueError):
+        return 1
+
+
+def _direct_outbound_lot(shipment_date: str, seq: int) -> str:
+    yymmdd = shipment_date.replace("-", "")[2:]
+    return f"{yymmdd}02{seq:03d}"
+
+
 @router.get("/api/sales/shipping-entry/direct-lots")
 def direct_lots(
     sales_order_item_id: int,
@@ -246,6 +269,8 @@ def direct_confirm(
     db.flush()
 
     total_qty = 0.0
+    outbound_lots = []
+    outbound_seq = _next_direct_outbound_seq(db, payload.shipment_date)
     for item, selected, shipment_qty in validated:
         shipment_item = ShipmentItem(
             shipment_id=shipment.id,
@@ -257,19 +282,24 @@ def direct_confirm(
         db.add(shipment_item)
         db.flush()
 
+        # 품목별 직출고 1건에 출고 LOT 1개를 발번한다. 여러 생산 LOT가 합쳐져도 동일 출고 LOT로 계보를 묶는다.
+        outbound_lot_no = _direct_outbound_lot(payload.shipment_date, outbound_seq)
+        outbound_seq += 1
+        outbound_lots.append(outbound_lot_no)
+
         for lot, source_part_no, qty in selected:
             db.add(ShipmentDirectLot(
                 shipment_item_id=shipment_item.id,
                 production_lot_id=lot.id,
+                outbound_lot_no=outbound_lot_no,
                 source_lot_no=lot.lot_no,
                 source_part_no=source_part_no,
                 shipped_qty=qty,
             ))
-            # 기존 생산 LOT 가용수량 계산이 LotRelation 소비량을 이미 차감하므로
-            # 직출고도 동일 원장에 기록하여 포장/후속공정에서 재사용되지 않게 한다.
+            # 생산 LOT -> 직출고 LOT 계보를 남기고, 이 소비량은 포장/후속공정 가용수량에서 자동 차감된다.
             db.add(LotRelationModel(
                 parent_lot_no=lot.lot_no,
-                child_lot_no=f"SHIP:{shipment.shipment_no}:{shipment_item.id}:{lot.id}",
+                child_lot_no=outbound_lot_no,
                 process_code="SHIP_DIRECT",
                 consumed_qty=qty,
             ))
@@ -289,6 +319,7 @@ def direct_confirm(
         "item_count": len(validated),
         "order_count": len(orders),
         "order_nos": [row.order_no for row in ordered_orders],
+        "outbound_lots": outbound_lots,
         "shipment_mode": "DIRECT",
-        "message": "샘플/개발 생산 LOT 직출고 처리가 완료되었습니다.",
+        "message": "샘플/개발 직출고 처리가 완료되고 출고 LOT가 발번되었습니다.",
     }
