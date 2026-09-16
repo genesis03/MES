@@ -4,11 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import check_permission, get_current_user_optional
 from models.models import ProcessModel
+from models.production import ProductionPerformance
+from models.production_run import ProductionRun
 from models.worker import WorkerMaster, WorkerProcess
 
 router = APIRouter(tags=["Worker Master"])
@@ -181,7 +184,49 @@ def update_worker(
     worker.department = (payload.department or "").strip() or None
     worker.is_active = active
     worker.note = (payload.note or "").strip() or None
-    worker.processes.clear()
-    worker.processes.extend([WorkerProcess(process_code=x) for x in process_codes])
+
+    desired_codes = set(process_codes)
+    current_codes = {row.process_code for row in worker.processes}
+    for row in list(worker.processes):
+        if row.process_code not in desired_codes:
+            worker.processes.remove(row)
+    for process_code in process_codes:
+        if process_code not in current_codes:
+            worker.processes.append(WorkerProcess(process_code=process_code))
+
     db.commit()
     return {"status": "success", "message": "작업자 정보가 수정되었습니다."}
+
+
+@router.delete("/api/basic-info/workers/{worker_id}")
+def delete_worker(
+    worker_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    user = get_current_user_optional(request, db)
+    if not _can_read(user):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+
+    worker = db.query(WorkerMaster).filter(WorkerMaster.id == worker_id).first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="작업자를 찾을 수 없습니다.")
+
+    used_in_performance = db.query(ProductionPerformance.id).filter(ProductionPerformance.operator_id == worker_id).first()
+    used_in_run = db.query(ProductionRun.id).filter(ProductionRun.operator_id == worker_id).first()
+    if used_in_performance or used_in_run:
+        raise HTTPException(
+            status_code=409,
+            detail="생산실적 또는 가동이력이 있는 작업자는 삭제할 수 없습니다. 사용여부를 '미사용'으로 변경해 주세요.",
+        )
+
+    try:
+        db.delete(worker)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="사용 이력이 있는 작업자는 삭제할 수 없습니다. 사용여부를 '미사용'으로 변경해 주세요.",
+        )
+    return {"status": "success", "message": "작업자가 삭제되었습니다."}
