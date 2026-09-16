@@ -228,6 +228,7 @@
                 </div>
                 <ul class="submenu">
                     <li class="submenu-item"><a href="/inventory/lots" id="nav-inventory-lots">LOT 재고 현황</a></li>
+                    <li class="submenu-item"><a href="/inventory/lot-trace" id="nav-inventory-lot-trace">LOT 추적</a></li>
                 </ul>
             </li>
             {% endif %}
@@ -326,6 +327,7 @@
                 "/production/performance/status": "nav-production-status",
                 "/production/equipment/status": "nav-production-equipment",
                 "/inventory/lots": "nav-inventory-lots",
+                "/inventory/lot-trace": "nav-inventory-lot-trace",
                 "/quality/inbound-defects": "nav-quality-inbound-defects"
             };
             const activeNavId = routeMap[currentPath];
