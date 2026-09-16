@@ -17,6 +17,9 @@ class SalesOrderMaster(Base):
     customer_id = Column(Integer, ForeignKey("partners.id"), nullable=False, index=True)
     customer_name = Column(String(100), nullable=False)
     status = Column(String(20), nullable=False, default="ORDERED", index=True)
+    # 수주 목적과 거래 조건은 분리한다. 샘플/개발도 유상일 수 있으므로 한 필드로 합치지 않는다.
+    order_type = Column(String(20), nullable=False, default="NORMAL", index=True)  # NORMAL/SAMPLE/DEVELOPMENT
+    transaction_type = Column(String(20), nullable=False, default="PAID", index=True)  # PAID/FREE
     manager_name = Column(String(50), nullable=True)
     note = Column(Text, nullable=True)
     created_by = Column(String(50), nullable=True)
@@ -57,6 +60,8 @@ class ShipmentMaster(Base):
     customer_id = Column(Integer, ForeignKey("partners.id"), nullable=False, index=True)
     customer_name = Column(String(100), nullable=False)
     status = Column(String(20), nullable=False, default="CONFIRMED", index=True)
+    fifo_exception = Column(String(1), nullable=False, default="N", index=True)
+    fifo_exception_reason = Column(Text, nullable=True)
     note = Column(Text, nullable=True)
     created_by = Column(String(50), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
