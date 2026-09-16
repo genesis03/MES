@@ -57,7 +57,8 @@ class PackingBox(Base):
     id = Column(Integer, primary_key=True)
     packing_id = Column(Integer, ForeignKey("packing_masters.id"), nullable=False, index=True)
     box_no = Column(Integer, nullable=False)
-    package_lot_no = Column(String(60), unique=True, nullable=False, index=True)
+    # 포장 LOT(=출고 LOT)는 품번과 함께 식별합니다. 다른 품번은 같은 LOT 번호를 사용할 수 있습니다.
+    package_lot_no = Column(String(60), nullable=False, index=True)
     box_qty = Column(Float, nullable=False)
 
     master = relationship("PackingMaster", back_populates="boxes")
