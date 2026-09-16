@@ -7,7 +7,7 @@
 .panel{background:#fff;border:1px solid #dbe3ec;border-radius:6px;margin-bottom:14px}.panel-title{padding:10px 14px;border-bottom:1px solid #6495ed;font-weight:800;font-size:13px}.panel-body{padding:14px}
 .grid{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:10px 12px;align-items:end}.grid-3{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:10px 12px;align-items:end}
 label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px}input,select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;background:#fff;font-size:13px}input[readonly]{background:#f8fafc}
-.btn{border:0;border-radius:4px;padding:8px 14px;font-weight:800;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#334155}.danger{background:#b91c1c;color:#fff}.green{background:#65a30d;color:#fff}.orange{background:#f59e0b;color:#fff}
+.btn{border:0;border-radius:4px;padding:8px 14px;font-weight:800;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#334155}.danger{background:#b91c1c;color:#fff}.green{background:#65a30d;color:#fff}.orange{background:#f59e0b;color:#fff}.btn:disabled{opacity:.45;cursor:not-allowed}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}.msg{font-size:12px;margin-top:8px}.ok{color:#15803d}.err{color:#b91c1c}
 .run-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.badge{display:inline-block;padding:4px 8px;border-radius:12px;background:#dbeafe;color:#1d4ed8;font-size:12px;font-weight:800}
 .material-card{border:1px solid #e2e8f0;border-radius:5px;padding:10px;margin-top:8px}.material-top{display:grid;grid-template-columns:1.2fr 1.5fr .7fr .8fr .8fr .8fr;gap:8px;align-items:center;font-size:12px}.material-lots{margin-top:7px;font-size:12px;color:#475569}.complete{background:#f0fdf4}.incomplete{background:#fff7ed}
@@ -30,7 +30,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
       <div><label>작업자 *</label><select id="operatorId" disabled><option value="">공정을 먼저 선택하세요</option></select></div>
       <div><label>생산호기 *</label><select id="equipmentId" disabled><option value="">공정을 먼저 선택하세요</option></select></div>
     </div>
-    <div class="actions"><button class="btn primary" onclick="openOrderModal()">{{ action_label }} 추가</button></div>
+    <div class="actions"><button class="btn secondary" id="production-label-btn" type="button" disabled>라벨 출력</button><button class="btn primary" onclick="openOrderModal()">{{ action_label }} 추가</button></div>
     <div id="topMsg" class="msg"></div>
   </div>
 </div>
@@ -111,4 +111,5 @@ async function scanLot(){if(!currentRun)return;if(!scanLotInput.value.trim()){ms
 async function clearAllocations(){if(!currentRun||!confirm('현재 LOT 배정을 모두 초기화하시겠습니까?'))return;try{const d=await jf(`/api/production-run/${currentRun.id}/allocations`,{method:'DELETE'});currentRun=await jf('/api/production-run/'+currentRun.id);renderMaterials();msg(runMsg,d.message,true);}catch(e){msg(runMsg,e.message);}}
 async function completeRun(){if(!currentRun)return;if(!endTime.value){msg(runMsg,'종료시간을 입력해 주세요.');return;}if(!(await saveDetails(false)))return;if(!confirm('가동을 종료하고 생산실적을 등록하시겠습니까?'))return;try{const d=await jf(`/api/production-run/${currentRun.id}/complete`,{method:'POST'});msg(runMsg,d.message,true);currentRun=null;runEditorPanel.style.display='none';await loadActiveRuns();}catch(e){msg(runMsg,e.message);}}
 </script>
+<script src="/static/internal_label_buttons.js?v=20260916-1"></script>
 {% endblock %}
