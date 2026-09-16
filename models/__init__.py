@@ -36,12 +36,14 @@ from models.quality_migration import ensure_quality_master_data
 from models.production_migration import ensure_production_order_columns
 from models.process_reference_migration import ensure_process_code_references
 from models.sales_migration import ensure_sales_policy_columns
+from models.packing_migration import ensure_packing_lot_scope
 ensure_purchase_entry_columns(engine)
 ensure_subcontract_inbound_columns(engine)
 ensure_quality_master_data(engine)
 ensure_production_order_columns(engine)
 ensure_process_code_references(engine)
 ensure_sales_policy_columns(engine)
+ensure_packing_lot_scope(engine)
 
 __all__ = [
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
