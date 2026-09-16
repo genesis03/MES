@@ -12,11 +12,11 @@
     <div class="field"><label>수주일자</label><input type="date" id="orderDate"></div>
     <div class="field"><label>납기예정일</label><input type="date" id="deliveryDueDate"></div>
     <div class="field"><label>판매처</label><select id="customerId"><option value="">선택</option></select></div>
-    <div class="field"><label>수주구분</label><select id="orderType"><option value="NORMAL">정상</option><option value="SAMPLE">샘플</option><option value="DEVELOPMENT">개발</option></select></div>
+    <div class="field"><label>수주구분</label><select id="orderType"><option value="NORMAL">양산</option><option value="SAMPLE">샘플</option><option value="DEVELOPMENT">개발</option></select></div>
     <div class="field"><label>거래구분</label><select id="transactionType"><option value="PAID">유상</option><option value="FREE">무상</option></select></div>
     <div class="field"><label>담당자</label><input id="managerName" maxlength="50"></div>
   </div>
-  <div class="policy-hint">※ 정상 수주는 포장 LOT 선입선출을 강제합니다. 샘플/개발 수주는 필요 시 FIFO 예외 출고가 가능하며, 유상/무상 여부와 FIFO 예외 여부는 분리하여 관리합니다.</div>
+  <div class="policy-hint">※ 양산 수주는 포장 → 출고대기 LOT → FIFO 출고를 사용합니다. 샘플/개발 수주는 포장을 생략하고 미포장 생산 LOT에서 직접 출고할 수 있습니다. 유상/무상 여부는 출고방식과 분리하여 관리합니다.</div>
   <div class="field" style="margin-top:12px"><label>비고</label><textarea id="note" rows="2"></textarea></div>
 </div>
 <div class="card">
@@ -28,5 +28,5 @@
   </table>
   <div class="toolbar"><button class="btn btn-primary" id="saveBtn">수주 저장</button></div>
 </div>
-<script src="/static/sales_orders.js?v=20260916-1"></script>
+<script src="/static/sales_orders.js?v=20260916-2"></script>
 {% endblock %}
