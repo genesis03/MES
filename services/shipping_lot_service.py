@@ -1,8 +1,10 @@
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from models.packing import PackingBox, PackingMaster
 from models.sales import ShipmentDirectLot, ShipmentItem
+from models.shipping_lot import ShippingLotRegistry
 
 
 def _shipping_prefix(shipping_date: str) -> str:
@@ -23,14 +25,19 @@ def _lot_suffix(lot_no: str | None, prefix: str) -> int | None:
 
 
 def used_shipping_sequences(db: Session, part_no: str, shipping_date: str) -> set[int]:
-    """동일 품번/동일 날짜에서 이미 사용된 포장(=출고) LOT 순번을 수집합니다.
-
-    양산 포장 BOX와 샘플/개발 직출고 BOX가 같은 YYMMDD01xxx 번호 공간을 공유합니다.
-    다른 품번은 동일 번호를 사용할 수 있습니다.
-    """
+    """동일 품번/동일 날짜에서 이미 사용된 포장(=출고) LOT 순번을 수집합니다."""
     prefix = _shipping_prefix(shipping_date)
-    used: set[int] = set()
+    used: set[int] = {
+        int(row[0])
+        for row in db.query(ShippingLotRegistry.sequence)
+        .filter(
+            ShippingLotRegistry.part_no == part_no,
+            ShippingLotRegistry.lot_date == shipping_date,
+        )
+        .all()
+    }
 
+    # 레지스트리 도입 전 데이터가 누락되어 있어도 기존 원장에서 다시 방어합니다.
     packing_rows = (
         db.query(PackingBox.package_lot_no)
         .join(PackingMaster, PackingMaster.id == PackingBox.packing_id)
@@ -67,12 +74,15 @@ def next_shipping_lot_no(
     part_no: str,
     shipping_date: str,
     reserved: set[str] | None = None,
+    source_type: str | None = None,
 ) -> str:
-    """포장 LOT = 출고 LOT 발번.
+    """포장 LOT = 출고 LOT 발번 및 예약.
 
     형식: YYMMDD + 01 + 3자리 순번
     유일성 기준: 품번 + 포장/출고 LOT
     순번 공간: 동일 품번/동일 날짜에서 양산 포장과 샘플/개발 직출고가 공유
+
+    발번 즉시 공용 레지스트리에 예약하고 flush하여 동시 요청에서도 같은 품번/LOT 중복을 DB가 차단합니다.
     """
     prefix = _shipping_prefix(shipping_date)
     used = used_shipping_sequences(db, part_no, shipping_date)
@@ -82,7 +92,24 @@ def next_shipping_lot_no(
             used.add(suffix)
 
     for seq in range(1, 1000):
-        if seq not in used:
-            return f"{prefix}{seq:03d}"
+        if seq in used:
+            continue
+        lot_no = f"{prefix}{seq:03d}"
+        registry = ShippingLotRegistry(
+            part_no=part_no,
+            lot_no=lot_no,
+            lot_date=shipping_date,
+            sequence=seq,
+            source_type=(source_type or "").strip() or None,
+        )
+        try:
+            with db.begin_nested():
+                db.add(registry)
+                db.flush()
+            return lot_no
+        except IntegrityError:
+            # 다른 동시 요청이 같은 번호를 먼저 예약했으면 다음 번호를 시도합니다.
+            used.add(seq)
+            continue
 
     raise HTTPException(409, f"{part_no} / {prefix}의 포장(출고) LOT 순번 001~999를 모두 사용했습니다.")
