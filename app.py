@@ -8,7 +8,7 @@ from core.security import init_default_accounts
 from services.purchase_lot_format import install_purchase_lot_format
 from services.production_lot_service import ensure_production_output_lots
 
-from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, subcontract_inbound_edit, purchase_unreceived, quality_pages, quality, production_pages, production, production_complete, production_run, production_run_delete, production_run_lot_fix, production_extra, inventory, packing, sales, sales_order_policy, sales_shipping_direct, sales_shipping_fifo_auto, sales_shipping_partial_confirm, sales_shipping_entry, sales_order_delete, shipping_inquiry
+from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, subcontract_inbound_edit, purchase_unreceived, quality_pages, quality, production_pages, production, production_complete, production_run, production_run_delete, production_run_lot_fix, production_extra, inventory, packing, sales, sales_order_policy, sales_shipping_direct, sales_shipping_direct_page, sales_shipping_fifo_auto, sales_shipping_partial_confirm, sales_shipping_entry, sales_order_delete, shipping_inquiry
 
 # 초기 계정 데이터 생성 트리거
 init_default_accounts()
@@ -70,6 +70,8 @@ app.include_router(packing.router)
 app.include_router(sales_order_policy.router)
 # 샘플/개발은 포장 없이 미포장 생산 LOT에서 직접 출고할 수 있습니다.
 app.include_router(sales_shipping_direct.router)
+# 출고 입력 화면은 직출고 확장 스크립트를 포함한 템플릿을 우선 사용합니다.
+app.include_router(sales_shipping_direct_page.router)
 # 양산은 뒤 LOT를 스캔해도 선입 LOT부터 지정 출고수량까지 자동 배정합니다.
 app.include_router(sales_shipping_fifo_auto.router)
 # 다중 수주 출고의 금회 출고 지정수량 검증/확정 API를 기존 출고 확정 경로보다 먼저 적용합니다.
