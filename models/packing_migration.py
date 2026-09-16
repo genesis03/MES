@@ -66,6 +66,7 @@ def ensure_packing_lot_scope(engine) -> None:
         return
 
     preparer = engine.dialect.identifier_preparer
+    constraint_names = {row.get("name") for row in target_constraints if row.get("name")}
     with engine.begin() as conn:
         for constraint in target_constraints:
             name = constraint.get("name")
@@ -74,7 +75,9 @@ def ensure_packing_lot_scope(engine) -> None:
                     f"ALTER TABLE {preparer.quote('packing_boxes')} "
                     f"DROP CONSTRAINT {preparer.quote(name)}"
                 ))
+        # DB에 따라 UNIQUE constraint와 backing index가 둘 다 inspector에 보일 수 있습니다.
+        # constraint와 같은 이름의 index는 constraint 삭제 시 함께 제거되므로 중복 DROP하지 않습니다.
         for index in unique_indexes:
             name = index.get("name")
-            if name:
+            if name and name not in constraint_names:
                 conn.execute(text(f"DROP INDEX {preparer.quote(name)}"))
