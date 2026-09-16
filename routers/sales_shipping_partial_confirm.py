@@ -21,7 +21,7 @@ class ShipmentAllocationInput(BaseModel):
 
 class ShipmentOrderCreateInput(BaseModel):
     shipment_date: str = Field(min_length=10, max_length=10)
-    sales_order_id: Optional[int] = Field(default=None, gt=0)  # 구버전 호환용
+    sales_order_id: Optional[int] = Field(default=None, gt=0)
     items: list[ShipmentAllocationInput] = Field(min_length=1)
     note: Optional[str] = Field(default=None, max_length=1000)
 
@@ -48,53 +48,33 @@ def confirm_shipment_with_requested_qty(
         order = sales_item.order
         if sales_item.status not in ("WAITING", "PARTIAL") or order.status not in ("ORDERED", "PARTIAL"):
             raise HTTPException(409, f"{sales_item.part_no}: 이미 출고 완료되었거나 출고할 수 없는 수주 품목입니다.")
-
         remaining_qty = max(float(sales_item.order_qty or 0) - float(sales_item.shipped_qty or 0), 0.0)
         if allocation.requested_qty > remaining_qty + 1e-9:
-            raise HTTPException(
-                409,
-                f"{order.order_no} / {sales_item.part_no}: 금회 출고수량 {allocation.requested_qty:g}은 미출고 잔량 {remaining_qty:g}보다 클 수 없습니다.",
-            )
-
+            raise HTTPException(409, f"{order.order_no} / {sales_item.part_no}: 금회 출고수량 {allocation.requested_qty:g}은 미출고 잔량 {remaining_qty:g}보다 클 수 없습니다.")
         if customer_id is None:
             customer_id = order.customer_id
             customer_name = order.customer_name
         elif order.customer_id != customer_id:
             raise HTTPException(409, "서로 다른 판매처의 수주는 한 건의 출고전표로 묶을 수 없습니다.")
-
         sales_items[sales_item.id] = sales_item
         orders[order.id] = order
 
-    if not sales_items:
-        raise HTTPException(409, "출고할 수주 품목이 없습니다.")
-
-    # 동일 품번이 여러 수주에 있어도 이번 출고전표 전체 기준으로 FIFO 앞쪽 LOT만 허용한다.
-    part_selected_ids: dict[str, list[int]] = {}
     used_box_ids: set[int] = set()
+    validated = []
+    fifo_exception_reasons: list[str] = []
+    waiting_cache: dict[str, list[tuple[PackingBox, PackingMaster]]] = {}
+
     for allocation in payload.items:
         sales_item = sales_items[allocation.sales_order_item_id]
+        order = sales_item.order
+        order_type = str(getattr(order, "order_type", None) or "NORMAL").upper()
         box_ids = list(dict.fromkeys(allocation.packing_box_ids))
         if len(box_ids) != len(allocation.packing_box_ids):
             raise HTTPException(409, f"{sales_item.part_no}: 동일 LOT가 중복 선택되었습니다.")
         if any(box_id in used_box_ids for box_id in box_ids):
             raise HTTPException(409, "서로 다른 수주 품목에 동일 포장 LOT가 중복 배정되었습니다.")
-        used_box_ids.update(box_ids)
-        part_selected_ids.setdefault(sales_item.part_no, []).extend(box_ids)
 
-    waiting_by_part: dict[str, list[tuple[PackingBox, PackingMaster]]] = {}
-    for part_no, selected_ids in part_selected_ids.items():
-        waiting = _waiting_rows(db, part_no)
-        waiting_by_part[part_no] = waiting
-        expected_ids = [box.id for box, _ in waiting[:len(selected_ids)]]
-        if len(expected_ids) != len(selected_ids) or set(selected_ids) != set(expected_ids):
-            first_expected = waiting[0][0].package_lot_no if waiting else "없음"
-            raise HTTPException(409, f"{part_no}: 선입선출 위반입니다. 선입 LOT {first_expected}부터 필요한 수량만큼 배정해야 합니다.")
-
-    validated = []
-    for allocation in payload.items:
-        sales_item = sales_items[allocation.sales_order_item_id]
-        box_ids = list(dict.fromkeys(allocation.packing_box_ids))
-        waiting = waiting_by_part.get(sales_item.part_no, [])
+        waiting = waiting_cache.setdefault(sales_item.part_no, _waiting_rows(db, sales_item.part_no))
         row_map = {box.id: (box, master) for box, master in waiting}
         selected_rows = [row_map[box_id] for box_id in box_ids if box_id in row_map]
         if len(selected_rows) != len(box_ids):
@@ -105,12 +85,22 @@ def confirm_shipment_with_requested_qty(
         if shipment_qty <= 0:
             raise HTTPException(409, f"{sales_item.part_no}: 출고수량이 0입니다.")
         if shipment_qty > remaining_qty + 1e-9:
-            raise HTTPException(409, f"{sales_item.order.order_no} / {sales_item.part_no}: 수주 잔량 {remaining_qty:g}보다 출고수량 {shipment_qty:g}이 큽니다.")
+            raise HTTPException(409, f"{order.order_no} / {sales_item.part_no}: 수주 잔량 {remaining_qty:g}보다 출고수량 {shipment_qty:g}이 큽니다.")
         if abs(shipment_qty - allocation.requested_qty) > 1e-9:
-            raise HTTPException(
-                409,
-                f"{sales_item.order.order_no} / {sales_item.part_no}: 금회 출고 지정수량 {allocation.requested_qty:g}과 LOT 배정수량 {shipment_qty:g}이 일치하지 않습니다. 완전 BOX 기준으로 다시 배정해 주세요.",
-            )
+            raise HTTPException(409, f"{order.order_no} / {sales_item.part_no}: 금회 출고 지정수량 {allocation.requested_qty:g}과 실제 포장 LOT 수량 합계 {shipment_qty:g}이 일치하지 않습니다.")
+
+        waiting_ids = [box.id for box, _ in waiting if box.id not in used_box_ids]
+        expected_ids = waiting_ids[:len(box_ids)]
+        is_fifo = set(box_ids) == set(expected_ids)
+        if order_type == "NORMAL" and not is_fifo:
+            first_expected = next((box.package_lot_no for box, _ in waiting if box.id not in used_box_ids), "없음")
+            raise HTTPException(409, f"{order.order_no} / {sales_item.part_no}: 정상 수주는 선입 LOT {first_expected}부터 출고해야 합니다.")
+        if order_type in ("SAMPLE", "DEVELOPMENT") and not is_fifo:
+            selected_lots = ", ".join(str(box.package_lot_no) for box, _ in selected_rows)
+            label = "샘플" if order_type == "SAMPLE" else "개발"
+            fifo_exception_reasons.append(f"{order.order_no}/{sales_item.part_no} {label} 출고: {selected_lots}")
+
+        used_box_ids.update(box_ids)
         validated.append((sales_item, selected_rows, shipment_qty))
 
     if not validated:
@@ -121,11 +111,12 @@ def confirm_shipment_with_requested_qty(
     shipment = ShipmentMaster(
         shipment_no=_next_no(db, ShipmentMaster, ShipmentMaster.shipment_no, "SH", payload.shipment_date),
         shipment_date=payload.shipment_date,
-        # 기존 데이터/조회 호환을 위해 대표 수주 1건을 유지하고 실제 추적은 ShipmentItem 기준으로 한다.
         sales_order_id=primary_order.id,
         customer_id=customer_id,
         customer_name=customer_name,
         status="CONFIRMED",
+        fifo_exception="Y" if fifo_exception_reasons else "N",
+        fifo_exception_reason=" | ".join(fifo_exception_reasons) or None,
         note=(payload.note or "").strip() or None,
         created_by=_username(current_user),
     )
@@ -143,7 +134,6 @@ def confirm_shipment_with_requested_qty(
         )
         db.add(shipment_item)
         db.flush()
-
         for box, _ in selected_rows:
             db.add(ShipmentBox(
                 shipment_item_id=shipment_item.id,
@@ -151,7 +141,6 @@ def confirm_shipment_with_requested_qty(
                 package_lot_no=box.package_lot_no,
                 shipped_qty=float(box.box_qty or 0),
             ))
-
         sales_item.shipped_qty = float(sales_item.shipped_qty or 0) + shipment_qty
         total_qty += shipment_qty
 
@@ -167,5 +156,6 @@ def confirm_shipment_with_requested_qty(
         "item_count": len(validated),
         "order_count": len(orders),
         "order_nos": [row.order_no for row in ordered_orders],
+        "fifo_exception": bool(fifo_exception_reasons),
         "message": "출고 처리가 완료되었습니다.",
     }
