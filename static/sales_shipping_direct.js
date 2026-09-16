@@ -16,7 +16,7 @@
       if(cells[10]) cells[10].textContent = `${rows.length} LOT / ${fmt(qty)}`;
       if(cells[11]) cells[11].textContent = viewMode ? '-' : '포장 생략';
       const btn = tr.querySelector('.lot-scan-btn');
-      if(btn) btn.textContent = viewMode ? '생산 LOT 상세' : '생산 LOT 스캔';
+      if(btn) btn.textContent = viewMode ? '출고 LOT 상세' : '생산 LOT 스캔';
     });
   };
 
@@ -25,19 +25,19 @@
     const item = currentOrder?.items?.find(x => x.id === itemId);
     baseOpenLotModal(itemId);
     if(!item || !directType(item)) return;
-    document.getElementById('lotModalTitle').textContent = viewMode ? '생산 LOT 직출고 상세' : '생산 LOT 직출고 / 배정';
+    document.getElementById('lotModalTitle').textContent = viewMode ? '직출고 LOT 상세' : '생산 LOT 직출고 / 배정';
     document.getElementById('lotScanInput').placeholder = '미포장 생산 LOT 스캔 후 Enter';
     if(viewMode){
       document.getElementById('modalWaitingBoxes').textContent = `${allocationFor(item.id).length} LOT`;
       document.getElementById('modalWaitingQty').textContent = fmt(itemAllocatedQty(item.id));
-      document.getElementById('modalHelp').innerHTML = '※ 샘플/개발 수주에서 포장을 생략하고 직접 출고한 원 생산 LOT입니다.';
+      document.getElementById('modalHelp').innerHTML = '※ 샘플/개발 직출고 시 발번된 02 출고 LOT입니다. 원 생산 LOT 계보는 출고 내역 조회에서 확인할 수 있습니다.';
       return;
     }
     try{
       const rows = await getJson(`/api/sales/shipping-entry/direct-lots?sales_order_item_id=${item.id}`);
       document.getElementById('modalWaitingBoxes').textContent = `${rows.length} LOT`;
       document.getElementById('modalWaitingQty').textContent = fmt(rows.reduce((s,x)=>s+Number(x.available_qty||0),0));
-      document.getElementById('modalHelp').innerHTML = `※ ${item.order_type === 'SAMPLE' ? '샘플' : '개발'} 수주는 포장 없이 미포장 생산 LOT에서 직접 출고합니다.<br>※ 금회 출고 지정수량: <strong>${fmt(targetQty(item))} ${esc(item.unit || 'EA')}</strong><br>※ 이미 포장에 배정된 수량은 직출고 가능수량에서 제외됩니다.<br>※ 생산 LOT 한 개의 일부 수량만 배정할 수 있습니다.`;
+      document.getElementById('modalHelp').innerHTML = `※ ${item.order_type === 'SAMPLE' ? '샘플' : '개발'} 수주는 포장 없이 미포장 생산 LOT에서 직접 출고합니다.<br>※ 금회 출고 지정수량: <strong>${fmt(targetQty(item))} ${esc(item.unit || 'EA')}</strong><br>※ 이미 포장에 배정된 수량은 직출고 가능수량에서 제외됩니다.<br>※ 출고 확정 시 YYMMDD+02+3자리 순번의 출고 LOT가 자동 발번됩니다.`;
     }catch(e){
       document.getElementById('scanMessage').textContent = e.message;
       document.getElementById('scanMessage').className = 'scan-msg error';
@@ -116,7 +116,8 @@
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({shipment_date:document.getElementById('shipmentDate').value, items, note:document.getElementById('shipmentNote').value.trim() || null})
       });
-      alert(`${data.message}\n출고번호: ${data.shipment_no}\n출고수량: ${fmt(data.total_qty)}`);
+      const outboundText = (data.outbound_lots || []).length ? `\n출고 LOT: ${(data.outbound_lots || []).join(', ')}` : '';
+      alert(`${data.message}\n출고번호: ${data.shipment_no}${outboundText}\n출고수량: ${fmt(data.total_qty)}`);
       await loadShipmentByNo(data.shipment_no);
     }catch(e){
       alert(e.message);
@@ -137,7 +138,8 @@
       const directLots = (row.direct_lots || []).map(lot => ({
         id: lot.production_lot_id,
         production_lot_id: lot.production_lot_id,
-        package_lot_no: lot.lot_no,
+        package_lot_no: lot.outbound_lot_no || lot.lot_no,
+        source_lot_no: lot.source_lot_no || lot.lot_no,
         box_qty: num(lot.shipped_qty),
         packing_date: '',
         direct: true
@@ -192,6 +194,6 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     const help = document.getElementById('shippingHelp');
-    if(help) help.innerHTML += '<br>※ 샘플/개발 수주는 포장 없이 미포장 생산 LOT에서 직접 출고할 수 있습니다. 이미 포장에 배정된 수량은 직출고 대상에서 제외됩니다.';
+    if(help) help.innerHTML += '<br>※ 샘플/개발 수주는 포장 없이 미포장 생산 LOT에서 직접 출고하며, 확정 시 02 구분의 출고 LOT가 자동 발번됩니다.';
   });
 })();
