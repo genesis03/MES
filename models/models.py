@@ -119,29 +119,27 @@ class WarehouseMasterModel(Base):
     note = Column(String, nullable=True)
     created_at = Column(String, nullable=False)
 
-# [테이블 8] 품목 BOM 마스터 모델 (생산·재고 자동 차감 연동 자재명세서)
+# [테이블 8] 품목 BOM 마스터 모델
 class ItemBomModel(Base):
     __tablename__ = "item_boms"
 
     id = Column(Integer, primary_key=True, index=True)
-    parent_part_no = Column(String, nullable=False, index=True)        # 모품번 (산출품, 예: 310188-A, 310188-C, 310186-1)
-    child_part_no = Column(String, nullable=False, index=True)         # 자품번 (투입자재, 예: C1100 코일/봉재, 310188-Ag)
-    bom_type = Column(String, nullable=False, default="MFG")           # BOM 구분 (MFG: 제조공정BOM, FINAL: 완제품BOM)
-    process_code = Column(String, nullable=True)                       # 투입/가공 공정 코드 (예: LT, TP, DOT, ASSY, INSP)
-    quantity = Column(Float, nullable=False, default=1.0)              # 소요량 (모품번 1개당 투입 수량/중량, 소수점 지원)
-    unit = Column(String, nullable=False, default="EA")                 # 소요 단위 (EA, kg, M 등)
-    loss_rate = Column(Float, nullable=False, default=0.0)             # 로스율 (%)
-    consumption_type = Column(String, nullable=False, default="AUTO")  # 재고 차감 방식 (AUTO: 실적 시 자동차감, MANUAL: 수동차감)
-    sort_order = Column(Integer, nullable=False, default=1)            # 정렬 순서
-    note = Column(String, nullable=True)                               # 비고
-    created_at = Column(String, nullable=False)                        # 등록일시
+    parent_part_no = Column(String, nullable=False, index=True)
+    child_part_no = Column(String, nullable=False, index=True)
+    bom_type = Column(String, nullable=False, default="MFG")
+    process_code = Column(String, nullable=True)
+    quantity = Column(Float, nullable=False, default=1.0)
+    unit = Column(String, nullable=False, default="EA")
+    loss_rate = Column(Float, nullable=False, default=0.0)
+    consumption_type = Column(String, nullable=False, default="AUTO")
+    sort_order = Column(Integer, nullable=False, default=1)
+    note = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
 
 # 구매 발주 및 입고 모델
 from datetime import datetime
-
 from sqlalchemy import CheckConstraint, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
-
 from core.database import Base
 
 
@@ -160,6 +158,7 @@ class PurchaseOrderMaster(Base):
     note = Column(Text)
     created_by = Column(String(50))
     created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
     items = relationship("PurchaseOrderItem", backref="order", cascade="all, delete-orphan", order_by="PurchaseOrderItem.id")
 
 
