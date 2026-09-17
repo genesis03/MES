@@ -171,6 +171,50 @@ def outbound_order_list(
     return {"total": len(items), "items": items}
 
 
+@router.get("/history")
+def outbound_history_list(
+    outbound_no: Optional[str] = Query(None, max_length=20),
+    order_no: Optional[str] = Query(None, max_length=30),
+    partner_name: Optional[str] = Query(None, max_length=100),
+    start_date: Optional[str] = Query(None, max_length=10),
+    end_date: Optional[str] = Query(None, max_length=10),
+    limit: int = Query(300, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(422, "시작일은 종료일 이후일 수 없습니다.")
+
+    query = db.query(SubcontractOutboundMaster).filter(SubcontractOutboundMaster.status == "OUTBOUND")
+    if outbound_no:
+        query = query.filter(SubcontractOutboundMaster.outbound_no.contains(outbound_no.strip(), autoescape=True))
+    if order_no:
+        query = query.filter(SubcontractOutboundMaster.order_no.contains(order_no.strip(), autoescape=True))
+    if partner_name:
+        query = query.filter(SubcontractOutboundMaster.partner_name.contains(partner_name.strip(), autoescape=True))
+    if start_date:
+        query = query.filter(SubcontractOutboundMaster.outbound_date >= start_date)
+    if end_date:
+        query = query.filter(SubcontractOutboundMaster.outbound_date <= end_date)
+
+    rows = query.order_by(SubcontractOutboundMaster.outbound_date.desc(), SubcontractOutboundMaster.id.desc()).limit(limit).all()
+    items = []
+    for row in rows:
+        items.append({
+            "outbound_id": row.id,
+            "outbound_no": row.outbound_no,
+            "outbound_date": row.outbound_date,
+            "order_id": row.order_id,
+            "order_no": row.order_no,
+            "partner_name": row.partner_name,
+            "processing_type_name": row.processing_type_name,
+            "item_count": len(row.items),
+            "status": row.status,
+            "status_name": "출고완료",
+        })
+    return {"total": len(items), "items": items}
+
+
 @router.get("/order/{order_id}")
 def get_outbound_source_order(
     order_id: int,
@@ -194,7 +238,10 @@ def get_outbound(
     master = db.get(SubcontractOutboundMaster, outbound_id)
     if master is None:
         raise HTTPException(404, "외주가공 출고 내역을 찾을 수 없습니다.")
-    return _serialize_outbound(master)
+    data = _serialize_outbound(master)
+    order = db.get(SubcontractOrderMaster, master.order_id)
+    data["order_date"] = order.order_date if order else ""
+    return data
 
 
 @router.post("")
