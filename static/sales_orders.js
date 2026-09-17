@@ -1,4 +1,7 @@
 const $ = (id) => document.getElementById(id);
+let customers = [];
+let customerCandidates = [];
+let customerActiveIndex = -1;
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -15,9 +18,69 @@ async function getJson(url, options = {}) {
   return data;
 }
 
+function normalizeText(v) {
+  return String(v ?? '').trim().toLowerCase();
+}
+
+function closeCustomerSuggestions() {
+  const box = $('customerSuggestions');
+  box.style.display = 'none';
+  box.innerHTML = '';
+  customerCandidates = [];
+  customerActiveIndex = -1;
+}
+
+function chooseCustomer(row) {
+  if (!row) return;
+  $('customerId').value = row.id;
+  $('customerSearch').value = row.partner_name;
+  $('selectedCustomer').textContent = `${row.partner_code} | ${row.partner_name}`;
+  closeCustomerSuggestions();
+}
+
+function renderCustomerSuggestions() {
+  const box = $('customerSuggestions');
+  if (!customerCandidates.length) {
+    box.innerHTML = '<div class="customer-suggestion" style="color:#94a3b8">일치하는 판매처가 없습니다.</div>';
+    box.style.display = 'block';
+    return;
+  }
+  box.innerHTML = customerCandidates.map((x, i) => `
+    <div class="customer-suggestion${i === customerActiveIndex ? ' active' : ''}" data-index="${i}">
+      <span class="code">${esc(x.partner_code)}</span><span class="name">${esc(x.partner_name)}</span>
+    </div>`).join('');
+  box.querySelectorAll('.customer-suggestion[data-index]').forEach(el => {
+    el.addEventListener('mousedown', e => {
+      e.preventDefault();
+      chooseCustomer(customerCandidates[Number(el.dataset.index)]);
+    });
+  });
+  box.style.display = 'block';
+}
+
+function searchCustomer() {
+  const q = normalizeText($('customerSearch').value);
+  $('customerId').value = '';
+  $('selectedCustomer').textContent = '';
+  if (!q) {
+    closeCustomerSuggestions();
+    return;
+  }
+
+  customerCandidates = customers.filter(x =>
+    normalizeText(x.partner_name).includes(q) || normalizeText(x.partner_code).includes(q)
+  );
+  customerActiveIndex = -1;
+
+  if (customerCandidates.length === 1) {
+    chooseCustomer(customerCandidates[0]);
+    return;
+  }
+  renderCustomerSuggestions();
+}
+
 async function loadMasters() {
-  const customers = await getJson('/api/sales/customers');
-  $('customerId').innerHTML = '<option value="">선택</option>' + customers.map(x => `<option value="${x.id}">${esc(x.partner_code)} | ${esc(x.partner_name)}</option>`).join('');
+  customers = await getJson('/api/sales/customers');
   addRow();
 }
 
@@ -178,6 +241,7 @@ async function saveOrder() {
 }
 
 document.addEventListener('click', e => {
+  if (!$('customerSearch').contains(e.target) && !$('customerSuggestions').contains(e.target)) closeCustomerSuggestions();
   document.querySelectorAll('#itemBody tr').forEach(tr => {
     if (!tr.contains(e.target)) closeSuggestions(tr);
   });
@@ -192,5 +256,31 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!el.value) el.value = $('deliveryDueDate').value;
     });
   });
+
+  let customerTimer = null;
+  $('customerSearch').addEventListener('input', () => {
+    clearTimeout(customerTimer);
+    customerTimer = setTimeout(searchCustomer, 120);
+  });
+  $('customerSearch').addEventListener('focus', () => {
+    if ($('customerSearch').value.trim() && !$('customerId').value) searchCustomer();
+  });
+  $('customerSearch').addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown' && customerCandidates.length > 1) {
+      e.preventDefault();
+      customerActiveIndex = Math.min(customerActiveIndex + 1, customerCandidates.length - 1);
+      renderCustomerSuggestions();
+    } else if (e.key === 'ArrowUp' && customerCandidates.length > 1) {
+      e.preventDefault();
+      customerActiveIndex = Math.max(customerActiveIndex - 1, 0);
+      renderCustomerSuggestions();
+    } else if (e.key === 'Enter' && customerCandidates.length > 1) {
+      e.preventDefault();
+      chooseCustomer(customerCandidates[customerActiveIndex >= 0 ? customerActiveIndex : 0]);
+    } else if (e.key === 'Escape') {
+      closeCustomerSuggestions();
+    }
+  });
+
   loadMasters().catch(e => alert(e.message));
 });
