@@ -5,7 +5,25 @@
 @page{size:80mm 80mm;margin:0}
 .internal-print-toolbar{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-bottom:14px}
 .internal-print-toolbar button{border:0;border-radius:4px;padding:9px 16px;font-weight:800;cursor:pointer}.ip-primary{background:#2563eb;color:#fff}.ip-light{background:#e2e8f0;color:#334155}
-.internal-label-page{width:80mm;height:80mm;margin:0 auto 14px;background:#fff;padding:2.5mm;box-sizing:border-box;page-break-after:always}.internal-label-box{width:75mm;height:75mm;border:2px solid #111;display:flex;flex-direction:column;background:#fff;overflow:hidden}.internal-label-title{text-align:center;font-size:13pt;font-weight:900;border-bottom:2px solid #111;padding:1.6mm 1mm}.internal-label-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9pt}.internal-label-table td{border-bottom:1px solid #111;border-right:1px solid #111;padding:1.1mm 1.3mm;vertical-align:middle}.internal-label-table td:last-child{border-right:0}.internal-label-table .k{width:18%;font-weight:900;text-align:center}.internal-label-table .v{font-weight:800}.internal-label-table .wide{font-size:8.5pt}.internal-extra{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #111}.internal-extra div{border-right:1px solid #111;text-align:center;padding:1mm .5mm;font-size:8.5pt}.internal-extra div:last-child{border-right:0}.internal-extra b{display:block;font-size:9.5pt;margin-top:.5mm}.internal-barcode{margin-top:auto;padding:1.4mm 2.2mm .5mm;text-align:center}.internal-barcode .barcode-svg{width:100%;height:17mm;display:block;shape-rendering:crispEdges}.internal-lot-text{font-family:Consolas,monospace;font-weight:900;font-size:8.5pt;margin-top:.5mm;letter-spacing:.2px}.internal-company{text-align:center;font-size:8.5pt;font-weight:900;padding:.5mm 0 1mm}
+.internal-label-page{width:80mm;height:80mm;margin:0 auto 14px;background:#fff;padding:2.5mm;box-sizing:border-box;page-break-after:always}
+.internal-label-box{width:75mm;height:75mm;border:2px solid #111;display:flex;flex-direction:column;background:#fff;overflow:hidden}
+.internal-label-title{text-align:center;font-size:13pt;font-weight:900;border-bottom:2px solid #111;padding:1.35mm 1mm}
+.internal-label-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9pt}
+.internal-label-table td{border-bottom:1px solid #111;border-right:1px solid #111;padding:.85mm 1mm;vertical-align:middle;height:5.4mm;box-sizing:border-box}
+.internal-label-table td:last-child{border-right:0}
+.internal-label-table .k{width:18%;font-weight:900;text-align:center;white-space:nowrap}
+.internal-label-table .v{font-weight:800}
+.internal-label-table .wide{font-size:8.5pt;overflow:hidden}
+.internal-label-table .half-k{width:16%;font-weight:900;text-align:center;white-space:nowrap}
+.internal-label-table .half-v{width:34%;font-weight:800;overflow:hidden}
+.internal-extra{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #111}
+.internal-extra div{border-right:1px solid #111;text-align:center;padding:.75mm .5mm;font-size:8pt}
+.internal-extra div:last-child{border-right:0}
+.internal-extra b{display:block;font-size:9pt;margin-top:.25mm}
+.internal-barcode{margin-top:auto;padding:1.1mm 2.2mm .35mm;text-align:center;min-height:25mm;display:flex;flex-direction:column;justify-content:flex-end}
+.internal-barcode .barcode-svg{width:100%;height:22mm;display:block;shape-rendering:crispEdges;margin:0 auto}
+.internal-lot-text{font-family:Consolas,monospace;font-weight:900;font-size:8pt;margin-top:.35mm;letter-spacing:.2px;line-height:1}
+.internal-company{text-align:center;font-size:8.5pt;font-weight:900;padding:.35mm 0 .65mm;line-height:1}
 @media print{.sidebar,.internal-print-toolbar{display:none!important}.main-content{padding:0!important}.internal-label-page{margin:0!important}.internal-label-box{box-shadow:none!important}}
 </style>
 {% endblock %}
@@ -27,13 +45,11 @@ function render(){
     return `<section class="internal-label-page"><div class="internal-label-box">
       <div class="internal-label-title">${esc(row.title)}</div>
       <table class="internal-label-table"><tbody>
-        <tr><td class="k">품번</td><td class="v">${esc(row.part_no)}</td></tr>
-        <tr><td class="k">품명</td><td class="v wide">${esc(row.part_name)}</td></tr>
-        <tr><td class="k">LOT</td><td class="v">${esc(row.lot_no)}</td></tr>
-        <tr><td class="k">수량</td><td class="v">${fmt(row.qty)} ${esc(row.unit)}</td></tr>
-        <tr><td class="k">기준일</td><td class="v">${esc(row.date)}</td></tr>
-        <tr><td class="k">공정</td><td class="v">${esc(row.process)}</td></tr>
-        <tr><td class="k">저장위치</td><td class="v wide">${esc(row.storage)}</td></tr>
+        <tr><td class="k">품번</td><td class="v" colspan="3">${esc(row.part_no)}</td></tr>
+        <tr><td class="k">품명</td><td class="v wide" colspan="3">${esc(row.part_name)}</td></tr>
+        <tr><td class="half-k">LOT</td><td class="half-v">${esc(row.lot_no)}</td><td class="half-k">수량</td><td class="half-v">${fmt(row.qty)} ${esc(row.unit)}</td></tr>
+        <tr><td class="half-k">기준일</td><td class="half-v">${esc(row.date)}</td><td class="half-k">공정</td><td class="half-v">${esc(row.process)}</td></tr>
+        <tr><td class="k">저장위치</td><td class="v wide" colspan="3">${esc(row.storage)}</td></tr>
       </tbody></table>${extra}
       <div class="internal-barcode">${Code128Engine.createSVG(String(row.lot_no||''))}<div class="internal-lot-text">${esc(row.lot_no)}</div></div>
       <div class="internal-company">(주)유니코어텍</div>
