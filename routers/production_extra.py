@@ -10,10 +10,10 @@ from models.lot_relation import LotRelationModel
 from models.models import ItemMasterModel, ProcessModel
 from models.packing import PackingLotAllocation, PackingMaster
 from models.production import ProductionPerformance, ProductionWorkOrder
-from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunLotAllocation, ProductionRunMaterial
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from models.subcontract_outbound import SubcontractOutboundItem, SubcontractOutboundLot, SubcontractOutboundMaster
+from services.production_lot_service import output_lots_for_performance
 
 router = APIRouter(prefix="/api/production", tags=["Production Extra"])
 
@@ -29,13 +29,7 @@ def _is_super_admin(user) -> bool:
 
 
 def _performance_output_lots(db: Session, performance_id: int):
-    marker = f"PERF:{performance_id}|"
-    return (
-        db.query(ProductionLotModel)
-        .filter(ProductionLotModel.note.like(marker + "%"))
-        .order_by(ProductionLotModel.id.asc())
-        .all()
-    )
+    return output_lots_for_performance(db, performance_id)
 
 
 def _downstream_used_lots(db: Session, lot_nos: list[str]) -> list[str]:
