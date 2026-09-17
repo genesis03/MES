@@ -13,6 +13,7 @@ from models.production import ProductionPerformance, ProductionWorkOrder
 from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunLotAllocation, ProductionRunMaterial
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
+from models.subcontract_outbound import SubcontractOutboundItem, SubcontractOutboundLot, SubcontractOutboundMaster
 
 router = APIRouter(prefix="/api/production", tags=["Production Extra"])
 
@@ -89,6 +90,7 @@ def _downstream_used_lots(db: Session, lot_nos: list[str]) -> list[str]:
             if lot_no in target_lots:
                 used.add(lot_no)
 
+    # 외주 발주 단계에서 배정된 LOT도 사용 이력으로 본다.
     used.update(
         row[0]
         for row in (
@@ -103,6 +105,24 @@ def _downstream_used_lots(db: Session, lot_nos: list[str]) -> list[str]:
             .all()
         )
     )
+
+    # 실제 외주 출고가 완료되면 출고 당시 LOT 스냅샷은 subcontract_outbound_lots에 남는다.
+    # 발주 상태/배정 데이터가 이후 변경되더라도 OUTBOUND 상태의 출고 이력이 있으면 원 생산실적 삭제를 막는다.
+    used.update(
+        row[0]
+        for row in (
+            db.query(SubcontractOutboundLot.lot_no)
+            .join(SubcontractOutboundItem, SubcontractOutboundItem.id == SubcontractOutboundLot.outbound_item_id)
+            .join(SubcontractOutboundMaster, SubcontractOutboundMaster.id == SubcontractOutboundItem.outbound_id)
+            .filter(
+                SubcontractOutboundLot.lot_no.in_(target_lots),
+                SubcontractOutboundMaster.status == "OUTBOUND",
+            )
+            .distinct()
+            .all()
+        )
+    )
+
     used.update(
         row[0]
         for row in (
