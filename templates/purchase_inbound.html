@@ -16,11 +16,6 @@
 .pi-confirm {background:#15803d;border-color:#15803d;color:#fff;font-weight:700}
 .pi-btn:disabled {opacity:.55;cursor:default}
 .pi-hint {color:#64748b;font-size:12px}
-.pi-results-wrap {padding:10px;margin-bottom:8px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px}
-.pi-results {max-height:210px;overflow:auto;background:#fff;border:1px solid #cbd5e1;border-radius:4px}
-.pi-results:empty {display:none}
-.pi-results button {display:block;width:100%;padding:8px;background:#fff;border:0;border-bottom:1px solid #e2e8f0;text-align:left;cursor:pointer}
-.pi-results button:hover {background:#eff6ff}
 .pi-grid-wrap {overflow-x:auto}
 .pi-grid {border-collapse:collapse;width:100%;min-width:1430px;font-size:12px}
 .pi-grid th,.pi-grid td {border:1px solid #dbe2eb;padding:4px;vertical-align:middle;white-space:nowrap}
@@ -33,7 +28,39 @@
 .pi-grid td.pi-no {text-align:center;color:#64748b}
 .pi-lot {font-family:monospace;color:#166534}
 .pi-message {font-size:13px;min-height:18px}
-@media(max-width:750px) {.pi-header {grid-template-columns:1fr}.pi-wide {grid-column:1}}
+
+.po-modal {border:0;padding:0;width:min(940px,94vw);max-width:940px;border-radius:0;box-shadow:0 18px 40px rgba(15,23,42,.28)}
+.po-modal::backdrop {background:rgba(15,23,42,.42)}
+.po-modal-shell {background:#fff;min-height:640px;display:flex;flex-direction:column}
+.po-modal-top {height:38px;border-bottom:8px solid #c7c7c7;display:flex;align-items:center;justify-content:flex-end;padding:0 16px}
+.po-modal-close-x {border:0;background:transparent;font-size:24px;line-height:1;cursor:pointer;color:#333}
+.po-modal-body {padding:28px 18px 16px;display:flex;flex-direction:column;flex:1}
+.po-modal-title {font-size:18px;font-weight:800;color:#4b97d1;padding:0 24px 8px;border-bottom:2px solid #54aac8;margin:0 0 20px}
+.po-search-grid {display:grid;grid-template-columns:80px 1fr 100px 170px 20px 170px;gap:10px 14px;align-items:center;padding:0 0 18px}
+.po-search-grid label {font-size:13px;color:#222}
+.po-search-grid input {height:36px;border:1px solid #d6d6d6;border-radius:4px;padding:0 10px;font:inherit;box-sizing:border-box;width:100%}
+.po-search-btn {height:36px;border:0;border-radius:3px;background:#2297d6;color:#fff;font-weight:700;cursor:pointer;padding:0 22px;justify-self:end}
+.po-search-grid .po-search-btn {grid-column:6;grid-row:2}
+.po-popup-table-wrap {border:1px solid #d8d8d8;min-height:365px;max-height:420px;overflow:auto;flex:1;background:#fff}
+.po-popup-table {width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
+.po-popup-table th,.po-popup-table td {border-right:1px solid #d8d8d8;border-bottom:1px solid #e6e6e6;padding:10px 8px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.po-popup-table th {background:#fafafa;color:#666;font-weight:600;position:sticky;top:0;z-index:1}
+.po-popup-table tr[data-po-id] {cursor:pointer}
+.po-popup-table tr[data-po-id]:hover {background:#f3f9fd}
+.po-popup-table tr.selected {background:#dff1fb}
+.po-popup-empty {padding:110px 0;text-align:center;color:#aaa;font-size:16px}
+.po-popup-footer {display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:10px 8px 0;color:#777;font-size:12px}
+.po-popup-count {justify-self:start}
+.po-popup-page {justify-self:center}
+.po-popup-actions {justify-self:end;display:flex;gap:8px}
+.po-popup-select {background:#2297d6;border-color:#2297d6;color:#fff;font-weight:700;min-width:86px}
+.po-popup-close {background:#f5b34e;border-color:#f5b34e;color:#fff;font-weight:700;min-width:86px}
+.po-popup-message {min-height:18px;margin:8px 0 0;color:#64748b;font-size:12px}
+@media(max-width:750px) {
+  .pi-header {grid-template-columns:1fr}.pi-wide {grid-column:1}
+  .po-search-grid {grid-template-columns:72px 1fr;}
+  .po-search-grid .po-search-btn {grid-column:2;grid-row:auto;justify-self:stretch}
+}
 </style>
 {% endblock %}
 {% block content %}
@@ -50,10 +77,37 @@
 <div class="pi-field pi-wide"><label for="pi-note">비고</label><textarea id="pi-note" rows="2" maxlength="1000"></textarea></div>
 </div>
 <div class="pi-toolbar"><button class="pi-btn" type="button" id="pi-load-po">발주 불러오기</button><span class="pi-hint">기존 구매 수정은 입고 조회에서 순번 선택 후 선택수정을 누릅니다.</span></div>
-<div id="pi-po-list" class="pi-results-wrap" hidden><div class="pi-hint" style="margin-bottom:6px">미입고 발주 목록</div><div id="pi-po-results" class="pi-results"></div><div id="pi-po-message" class="pi-hint" style="margin-top:6px"></div></div>
 <div class="pi-grid-wrap"><table class="pi-grid"><thead><tr><th>No.</th><th>발주번호</th><th>품번</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>미입고수량</th><th>입고수량</th><th>납기일</th><th>공급사 LOT</th><th>저장위치</th><th>원자재 LOT 번호</th><th>비고</th><th></th></tr></thead><tbody id="pi-lines"><tr><td colspan="15" class="pi-hint">발주 불러오기로 품목을 선택하세요.</td></tr></tbody></table></div>
 <select id="pi-location-options" hidden><option value="">선택</option>{% for location in storage_locations %}<option value="{{ location.location_code }}">{{ location.location_code }} · {{ location.location_name }}</option>{% endfor %}</select>
 <div class="pi-footer"><button class="pi-btn" type="button" id="pi-new">신규</button><button class="pi-btn pi-primary" type="submit" id="pi-save">저장</button><button class="pi-btn pi-confirm" type="button" id="pi-confirm" disabled>입고 확정</button><button class="pi-btn" type="button" id="pi-label" disabled>라벨 출력</button><span id="pi-message" class="pi-message" role="status"></span></div>
 </form></div>
+
+<dialog id="pi-po-dialog" class="po-modal" aria-labelledby="pi-po-dialog-title">
+  <div class="po-modal-shell">
+    <div class="po-modal-top"><button type="button" class="po-modal-close-x" id="pi-po-x" aria-label="닫기">×</button></div>
+    <div class="po-modal-body">
+      <h2 class="po-modal-title" id="pi-po-dialog-title">발주 조회</h2>
+      <div class="po-search-grid">
+        <label for="pi-po-search-no">발주번호</label><input id="pi-po-search-no" maxlength="30">
+        <label for="pi-po-start">발주기간</label><input id="pi-po-start" type="date"><span style="text-align:center">~</span><input id="pi-po-end" type="date">
+        <label for="pi-po-search-part">품번</label><input id="pi-po-search-part" maxlength="50">
+        <button type="button" class="po-search-btn" id="pi-po-search-btn">조회</button>
+      </div>
+      <div class="po-popup-table-wrap">
+        <table class="po-popup-table">
+          <colgroup><col style="width:18%"><col style="width:18%"><col style="width:13%"><col style="width:13%"><col style="width:18%"><col style="width:20%"></colgroup>
+          <thead><tr><th>발주번호</th><th>발주처</th><th>발주일</th><th>발주상태</th><th>관련 수주번호</th><th>최종 수정일</th></tr></thead>
+          <tbody id="pi-po-popup-body"></tbody>
+        </table>
+      </div>
+      <div id="pi-po-popup-message" class="po-popup-message"></div>
+      <div class="po-popup-footer">
+        <div id="pi-po-popup-count" class="po-popup-count">0건</div>
+        <div class="po-popup-page">Page 1 of 1</div>
+        <div class="po-popup-actions"><button type="button" class="pi-btn po-popup-select" id="pi-po-select">선택</button><button type="button" class="pi-btn po-popup-close" id="pi-po-close">닫기</button></div>
+      </div>
+    </div>
+  </div>
+</dialog>
 {% endblock %}
-{% block extra_script %}<script src="/static/purchase_inbound.js?v=20260914-5"></script><script src="/static/internal_label_buttons.js?v=20260916-1"></script>{% endblock %}
+{% block extra_script %}<script src="/static/purchase_inbound.js?v=20260917-1"></script><script src="/static/internal_label_buttons.js?v=20260916-1"></script>{% endblock %}
