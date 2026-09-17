@@ -170,6 +170,7 @@ def _serialize_run(run: ProductionRun, db: Optional[Session] = None):
     part_no = work_order.part_no if work_order else ""
     process_name = run.process_code
     part_name = ""
+    output_lot_no = ""
     if db is not None:
         process = db.query(ProcessModel).filter(ProcessModel.process_code == run.process_code).first()
         if process and process.process_name:
@@ -178,6 +179,15 @@ def _serialize_run(run: ProductionRun, db: Optional[Session] = None):
             item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
             if item:
                 part_name = item.part_name or ""
+        if run.performance_id:
+            marker = f"PERF:{run.performance_id}|"
+            output_lots = (
+                db.query(ProductionLotModel.lot_no)
+                .filter(ProductionLotModel.note.like(marker + "%"))
+                .order_by(ProductionLotModel.id.asc())
+                .all()
+            )
+            output_lot_no = ", ".join(row[0] for row in output_lots if row[0])
     status_names = {"IN_PROGRESS": "생산중", "COMPLETED": "완료", "CANCELLED": "취소"}
     return {
         "id": run.id,
@@ -186,6 +196,7 @@ def _serialize_run(run: ProductionRun, db: Optional[Session] = None):
         "part_no": part_no,
         "part_name": part_name,
         "performance_id": run.performance_id,
+        "output_lot_no": output_lot_no,
         "performance_type": run.performance_type or "MACHINING",
         "performance_type_name": "조립" if run.performance_type == "ASSEMBLY" else "가공",
         "performance_date": run.performance_date,
