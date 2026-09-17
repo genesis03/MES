@@ -18,16 +18,21 @@ function transactionTypeText(v) {
   return {PAID:'유상', FREE:'무상'}[v] || v || '';
 }
 
-async function loadCustomers() {
-  const rows = await getJson('/api/sales/customers');
-  $('customerFilter').innerHTML = '<option value="">전체</option>' + rows.map(x => `<option value="${x.id}">${x.partner_name}</option>`).join('');
+function matchesKeyword(order, keyword) {
+  if (!keyword) return true;
+  const key = keyword.toLowerCase();
+  if (String(order.order_no || '').toLowerCase().includes(key)) return true;
+  if (String(order.customer_name || '').toLowerCase().includes(key)) return true;
+  return (order.items || []).some(item => String(item.part_no || '').toLowerCase().includes(key));
 }
 
 async function searchOrders() {
   const p = new URLSearchParams();
   if ($('statusFilter').value) p.set('status', $('statusFilter').value);
-  if ($('customerFilter').value) p.set('customer_id', $('customerFilter').value);
-  orders = await getJson('/api/sales/orders?' + p.toString());
+
+  const rows = await getJson('/api/sales/orders?' + p.toString());
+  const keyword = $('keywordFilter').value.trim();
+  orders = rows.filter(order => matchesKeyword(order, keyword));
   render();
 }
 
@@ -80,5 +85,8 @@ async function deleteOrder(idx) {
 
 document.addEventListener('DOMContentLoaded', () => {
   $('searchBtn').addEventListener('click', () => searchOrders().catch(e => alert(e.message)));
-  Promise.all([loadCustomers(), searchOrders()]).catch(e => alert(e.message));
+  $('keywordFilter').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') searchOrders().catch(err => alert(err.message));
+  });
+  searchOrders().catch(e => alert(e.message));
 });
