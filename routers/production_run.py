@@ -165,16 +165,32 @@ def _serialize_material(material: ProductionRunMaterial):
     }
 
 
-def _serialize_run(run: ProductionRun):
+def _serialize_run(run: ProductionRun, db: Optional[Session] = None):
+    work_order = getattr(run, "work_order", None)
+    part_no = work_order.part_no if work_order else ""
+    process_name = run.process_code
+    part_name = ""
+    if db is not None:
+        process = db.query(ProcessModel).filter(ProcessModel.process_code == run.process_code).first()
+        if process and process.process_name:
+            process_name = process.process_name
+        if part_no:
+            item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
+            if item:
+                part_name = item.part_name or ""
+    status_names = {"IN_PROGRESS": "생산중", "COMPLETED": "완료", "CANCELLED": "취소"}
     return {
         "id": run.id,
         "work_order_id": run.work_order_id,
-        "work_order_no": run.work_order.work_order_no if getattr(run, "work_order", None) else "",
-        "part_no": run.work_order.part_no if getattr(run, "work_order", None) else "",
+        "work_order_no": work_order.work_order_no if work_order else "",
+        "part_no": part_no,
+        "part_name": part_name,
+        "performance_id": run.performance_id,
         "performance_type": run.performance_type or "MACHINING",
         "performance_type_name": "조립" if run.performance_type == "ASSEMBLY" else "가공",
         "performance_date": run.performance_date,
         "process_code": run.process_code,
+        "process_name": process_name,
         "operator_id": run.operator_id,
         "operator_name": run.operator_name,
         "equipment_id": run.equipment_id,
@@ -188,6 +204,7 @@ def _serialize_run(run: ProductionRun):
         "defect_qty": run.defect_qty,
         "setup_qty": run.setup_qty,
         "status": run.status,
+        "status_name": status_names.get(run.status, run.status),
         "note": run.note or "",
         "materials": [_serialize_material(x) for x in run.materials],
         "defects": [{"code": x.defect_type_code, "name": x.defect_type_name, "qty": x.defect_qty} for x in run.defects],
@@ -237,15 +254,25 @@ def defect_types(db: Session = Depends(get_db), current_user=Depends(get_current
 @router.get("/runs")
 def list_runs(
     status: Optional[str] = Query("IN_PROGRESS"),
+    start_date: Optional[str] = Query(None, max_length=10),
+    end_date: Optional[str] = Query(None, max_length=10),
     process_code: Optional[str] = Query(None),
     equipment_id: Optional[int] = Query(None),
     performance_type: Optional[str] = Query(None),
+    limit: int = Query(30, ge=1, le=200),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     query = db.query(ProductionRun)
     if status:
-        query = query.filter(ProductionRun.status == status)
+        run_status = status.strip().upper()
+        if run_status not in {"IN_PROGRESS", "COMPLETED", "CANCELLED"}:
+            raise HTTPException(400, "지원하지 않는 가동 상태입니다.")
+        query = query.filter(ProductionRun.status == run_status)
+    if start_date:
+        query = query.filter(ProductionRun.performance_date >= start_date)
+    if end_date:
+        query = query.filter(ProductionRun.performance_date <= end_date)
     if process_code:
         query = query.filter(ProductionRun.process_code == process_code.strip())
     if equipment_id:
@@ -255,10 +282,10 @@ def list_runs(
         if run_type not in {"MACHINING", "ASSEMBLY"}:
             raise HTTPException(400, "지원하지 않는 생산실적 구분입니다.")
         query = query.filter(ProductionRun.performance_type == run_type)
-    rows = query.order_by(ProductionRun.created_at.desc()).limit(200).all()
+    rows = query.order_by(ProductionRun.created_at.desc(), ProductionRun.id.desc()).limit(limit).all()
     for row in rows:
         row.work_order = db.get(ProductionWorkOrder, row.work_order_id)
-    return [_serialize_run(x) for x in rows]
+    return [_serialize_run(x, db) for x in rows]
 
 
 @router.post("/start")
@@ -334,14 +361,14 @@ def start_run(payload: StartRunPayload, db: Session = Depends(get_db), current_u
     db.commit()
     run = _get_run(db, run.id)
     run.work_order = order
-    return _serialize_run(run)
+    return _serialize_run(run, db)
 
 
 @router.get("/{run_id}")
 def get_run(run_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     run = _get_run(db, run_id)
     run.work_order = db.get(ProductionWorkOrder, run.work_order_id)
-    return _serialize_run(run)
+    return _serialize_run(run, db)
 
 
 @router.put("/{run_id}/details")
@@ -357,8 +384,6 @@ def update_run_details(run_id: int, payload: UpdateRunPayload, db: Session = Dep
     run.setup_qty = float(payload.setup_qty or 0)
     run.note = (payload.note or "").strip() or None
 
-    # 기존 상세를 명시적으로 삭제/flush한 뒤 다시 넣어 UNIQUE(run_id, defect_type_code)
-    # 충돌을 방지합니다. 같은 불량코드가 payload에 중복되면 수량을 합산합니다.
     db.query(ProductionRunDefect).filter(ProductionRunDefect.run_id == run.id).delete(synchronize_session=False)
     db.flush()
 
@@ -410,7 +435,7 @@ def update_run_details(run_id: int, payload: UpdateRunPayload, db: Session = Dep
     db.commit()
     run = _get_run(db, run.id)
     run.work_order = db.get(ProductionWorkOrder, run.work_order_id)
-    return _serialize_run(run)
+    return _serialize_run(run, db)
 
 
 @router.delete("/{run_id}/allocations")
