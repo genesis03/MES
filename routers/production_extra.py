@@ -40,27 +40,67 @@ def _performance_output_lots(db: Session, performance_id: int):
 def _downstream_used_lots(db: Session, lot_nos: list[str]) -> list[str]:
     if not lot_nos:
         return []
+
+    target_lots = {str(value).strip() for value in lot_nos if str(value or "").strip()}
     used = set()
-    used.update(row[0] for row in db.query(LotConsumptionModel.lot_no).filter(LotConsumptionModel.lot_no.in_(lot_nos)).distinct().all())
-    used.update(row[0] for row in db.query(LotRelationModel.parent_lot_no).filter(LotRelationModel.parent_lot_no.in_(lot_nos)).distinct().all())
+
+    used.update(
+        row[0]
+        for row in db.query(LotConsumptionModel.lot_no)
+        .filter(LotConsumptionModel.lot_no.in_(target_lots))
+        .distinct()
+        .all()
+    )
+    used.update(
+        row[0]
+        for row in db.query(LotRelationModel.parent_lot_no)
+        .filter(LotRelationModel.parent_lot_no.in_(target_lots))
+        .distinct()
+        .all()
+    )
     used.update(
         row[0]
         for row in (
             db.query(ProductionRunLotAllocation.lot_no)
             .join(ProductionRunMaterial, ProductionRunMaterial.id == ProductionRunLotAllocation.material_id)
             .join(ProductionRun, ProductionRun.id == ProductionRunMaterial.run_id)
-            .filter(ProductionRunLotAllocation.lot_no.in_(lot_nos), ProductionRun.status.in_(["IN_PROGRESS", "COMPLETED"]))
-            .distinct().all()
+            .filter(
+                ProductionRunLotAllocation.lot_no.in_(target_lots),
+                ProductionRun.status.in_(["IN_PROGRESS", "COMPLETED"]),
+            )
+            .distinct()
+            .all()
         )
     )
+
+    # 현재 가동 완료 로직은 LotConsumption을 기록하지만, 이전 실적/마이그레이션 데이터 중
+    # source_lot_no만 남아 있는 경우도 있으므로 생산실적 원본 LOT까지 이중 확인한다.
+    performance_sources = (
+        db.query(ProductionPerformance.source_lot_no)
+        .filter(
+            ProductionPerformance.source_lot_no.isnot(None),
+            ProductionPerformance.source_lot_no != "",
+        )
+        .all()
+    )
+    for (source_lot_no,) in performance_sources:
+        for value in str(source_lot_no or "").split(","):
+            lot_no = value.strip()
+            if lot_no in target_lots:
+                used.add(lot_no)
+
     used.update(
         row[0]
         for row in (
             db.query(SubcontractLotAllocation.lot_no)
             .join(SubcontractOrderItem, SubcontractOrderItem.id == SubcontractLotAllocation.order_item_id)
             .join(SubcontractOrderMaster, SubcontractOrderMaster.id == SubcontractOrderItem.order_id)
-            .filter(SubcontractLotAllocation.lot_no.in_(lot_nos), SubcontractOrderMaster.status != "CANCELLED")
-            .distinct().all()
+            .filter(
+                SubcontractLotAllocation.lot_no.in_(target_lots),
+                SubcontractOrderMaster.status != "CANCELLED",
+            )
+            .distinct()
+            .all()
         )
     )
     used.update(
@@ -68,8 +108,12 @@ def _downstream_used_lots(db: Session, lot_nos: list[str]) -> list[str]:
         for row in (
             db.query(PackingLotAllocation.source_lot_no)
             .join(PackingMaster, PackingMaster.id == PackingLotAllocation.packing_id)
-            .filter(PackingLotAllocation.source_lot_no.in_(lot_nos), PackingMaster.status == "PACKED")
-            .distinct().all()
+            .filter(
+                PackingLotAllocation.source_lot_no.in_(target_lots),
+                PackingMaster.status == "PACKED",
+            )
+            .distinct()
+            .all()
         )
     )
     return sorted(value for value in used if value)
