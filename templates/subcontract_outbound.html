@@ -2,7 +2,7 @@
 {% block title %}외주 가공 출고 처리{% endblock %}
 {% block extra_head %}
 <style>
-.so-out h1{font-size:20px;margin:0 0 12px}.ob-box{background:#fff;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:12px}.ob-head{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 20px;padding:16px}.ob-field{display:grid;grid-template-columns:105px minmax(0,1fr);align-items:center;gap:8px;font-size:13px}.ob-field label{font-weight:700}.ob-field input{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #cbd5e1;border-radius:4px;background:#f8fafc}.ob-field input[type=date]{background:#fff}.ob-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 0 10px}.ob-btn{border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:7px 13px;cursor:pointer;font-weight:700}.ob-btn:disabled{opacity:.45;cursor:not-allowed}.ob-primary{background:#2563eb;border-color:#2563eb;color:#fff}.ob-danger{background:#dc2626;border-color:#dc2626;color:#fff}.ob-print{background:#0f766e;border-color:#0f766e;color:#fff}.ob-table{width:100%;border-collapse:collapse;font-size:12px;min-width:1050px}.ob-table th,.ob-table td{border:1px solid #dbe2eb;padding:8px;text-align:center}.ob-table th{background:#f8fafc;white-space:nowrap}.ob-table td.left{text-align:left}.ob-msg{font-size:12px;color:#475569}.ob-modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:9999}.ob-modal-bg[hidden]{display:none}.ob-modal{width:min(900px,94vw);max-height:82vh;background:#fff;border-radius:8px;display:flex;flex-direction:column}.ob-modal-head,.ob-modal-foot{padding:12px 14px;border-bottom:1px solid #e2e8f0;display:flex;gap:8px;align-items:center}.ob-modal-foot{border-top:1px solid #e2e8f0;border-bottom:0;justify-content:flex-end}.ob-modal-body{padding:12px 14px;overflow:auto}.ob-search{display:flex;gap:8px;margin-bottom:10px}.ob-search input{flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:4px}.ob-order-row{cursor:pointer}.ob-order-row:hover{background:#eff6ff}.ob-order-row.selected{background:#dbeafe}.st-wait{color:#a16207;font-weight:700}.st-done{color:#15803d;font-weight:700}.st-cancel{color:#b91c1c;font-weight:700}@media(max-width:900px){.ob-head{grid-template-columns:1fr}.ob-field{grid-template-columns:100px 1fr}}
+.so-out h1{font-size:20px;margin:0 0 12px}.ob-box{background:#fff;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:12px}.ob-head{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 20px;padding:16px}.ob-field{display:grid;grid-template-columns:105px minmax(0,1fr);align-items:center;gap:8px;font-size:13px}.ob-field label{font-weight:700}.ob-field input{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #cbd5e1;border-radius:4px;background:#f8fafc}.ob-field input[type=date]{background:#fff}.ob-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:0 0 10px}.ob-btn{border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:7px 13px;cursor:pointer;font-weight:700}.ob-btn:disabled{opacity:.45;cursor:not-allowed}.ob-primary{background:#2563eb;border-color:#2563eb;color:#fff}.ob-danger{background:#dc2626;border-color:#dc2626;color:#fff}.ob-print{background:#0f766e;border-color:#0f766e;color:#fff}.ob-table{width:100%;border-collapse:collapse;font-size:12px;min-width:1050px}.ob-table th,.ob-table td{border:1px solid #dbe2eb;padding:8px;text-align:center}.ob-table th{background:#f8fafc;white-space:nowrap}.ob-table td.left{text-align:left}.ob-msg{font-size:12px;color:#475569}.ob-modal-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:9999}.ob-modal-bg[hidden]{display:none}.ob-modal{width:min(980px,95vw);max-height:86vh;background:#fff;border-radius:8px;display:flex;flex-direction:column}.ob-modal-head,.ob-modal-foot{padding:12px 14px;border-bottom:1px solid #e2e8f0;display:flex;gap:8px;align-items:center}.ob-modal-foot{border-top:1px solid #e2e8f0;border-bottom:0;justify-content:flex-end}.ob-modal-body{padding:12px 14px;overflow:auto}.ob-search{display:flex;gap:8px;margin-bottom:10px}.ob-search input{flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:4px}.ob-history-filters{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:10px}.ob-history-filter{display:grid;grid-template-columns:95px minmax(0,1fr);gap:6px;align-items:center;font-size:12px}.ob-history-filter label{font-weight:700}.ob-history-filter input{width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid #cbd5e1;border-radius:4px}.ob-period{display:flex;align-items:center;gap:6px}.ob-order-row,.ob-outbound-row{cursor:pointer}.ob-order-row:hover,.ob-outbound-row:hover{background:#eff6ff}.ob-order-row.selected,.ob-outbound-row.selected{background:#dbeafe}.st-wait{color:#a16207;font-weight:700}.st-done{color:#15803d;font-weight:700}.st-cancel{color:#b91c1c;font-weight:700}@media(max-width:900px){.ob-head{grid-template-columns:1fr}.ob-field{grid-template-columns:100px 1fr}.ob-history-filters{grid-template-columns:1fr}}
 </style>
 {% endblock %}
 {% block content %}
@@ -10,6 +10,7 @@
   <h1>외주 가공 출고 처리</h1>
   <div class="ob-actions">
     <button id="ob-load" class="ob-btn" type="button">발주 불러오기</button>
+    <button id="ob-load-outbound" class="ob-btn" type="button">출고건 불러오기</button>
     <button id="ob-confirm" class="ob-btn ob-primary" type="button" disabled>출고</button>
     <button id="ob-cancel" class="ob-btn ob-danger" type="button" disabled>출고 취소</button>
     <button id="ob-slip" class="ob-btn ob-print" type="button" disabled>출고전표 출력</button>
@@ -42,5 +43,23 @@
     <div class="ob-modal-foot"><button id="ob-modal-close" class="ob-btn" type="button">닫기</button><button id="ob-modal-apply" class="ob-btn ob-primary" type="button" disabled>선택</button></div>
   </div>
 </div>
+
+<div id="ob-history-modal" class="ob-modal-bg" hidden>
+  <div class="ob-modal">
+    <div class="ob-modal-head"><strong>외주가공 출고건 불러오기</strong><span style="margin-left:auto;font-size:12px;color:#64748b">출고완료 건만 표시됩니다.</span></div>
+    <div class="ob-modal-body">
+      <div class="ob-history-filters">
+        <div class="ob-history-filter"><label for="ob-h-outbound-no">출고번호</label><input id="ob-h-outbound-no" autocomplete="off"></div>
+        <div class="ob-history-filter"><label for="ob-h-order-no">외주발주번호</label><input id="ob-h-order-no" autocomplete="off"></div>
+        <div class="ob-history-filter"><label for="ob-h-partner">발주처</label><input id="ob-h-partner" autocomplete="off"></div>
+        <div class="ob-history-filter"><label>출고기간</label><div class="ob-period"><input id="ob-h-start" type="date"><span>~</span><input id="ob-h-end" type="date"></div></div>
+      </div>
+      <div class="ob-actions" style="justify-content:flex-end"><button id="ob-history-search" class="ob-btn" type="button">조회</button></div>
+      <table class="ob-table"><thead><tr><th>No.</th><th>출고번호</th><th>출고일자</th><th>외주발주번호</th><th>발주처</th><th>가공유형</th><th>품목수</th><th>상태</th></tr></thead><tbody id="ob-history-rows"><tr><td colspan="8">조회 중...</td></tr></tbody></table>
+      <div id="ob-history-message" class="ob-msg" style="margin-top:8px"></div>
+    </div>
+    <div class="ob-modal-foot"><button id="ob-history-close" class="ob-btn" type="button">닫기</button><button id="ob-history-apply" class="ob-btn ob-primary" type="button" disabled>선택</button></div>
+  </div>
+</div>
 {% endblock %}
-{% block extra_script %}<script src="/static/subcontract_outbound.js?v=20260914-1"></script><script src="/static/internal_label_buttons.js?v=20260916-1"></script>{% endblock %}
+{% block extra_script %}<script src="/static/subcontract_outbound.js?v=20260917-2"></script><script src="/static/internal_label_buttons.js?v=20260917-2"></script>{% endblock %}
