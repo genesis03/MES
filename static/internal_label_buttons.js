@@ -42,7 +42,11 @@
 
     if (/^\/api\/production-run\/\d+\/complete$/.test(path) && upperMethod === 'POST') {
       state.performanceId = Number(data?.performance_id || 0) || null;
-    } else if (/^\/api\/production-run\/\d+$/.test(path) && upperMethod === 'GET' && data?.status === 'IN_PROGRESS') {
+    } else if (/^\/api\/production-run\/\d+$/.test(path) && upperMethod === 'GET') {
+      state.performanceId = String(data?.status || '').toUpperCase() === 'COMPLETED'
+        ? Number(data?.performance_id || 0) || null
+        : null;
+    } else if (/^\/api\/production-run\/\d+\/cancel$/.test(path) && upperMethod === 'POST') {
       state.performanceId = null;
     }
 
