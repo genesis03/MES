@@ -3,7 +3,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -15,6 +14,7 @@ from models.subcontract_outbound import (
     SubcontractOutboundLot,
     SubcontractOutboundMaster,
 )
+from routers.subcontract import _available_lots
 
 router = APIRouter(prefix="/api/subcontract/outbound", tags=["Subcontract Outbound"])
 
@@ -133,6 +133,41 @@ def _serialize_outbound(master: SubcontractOutboundMaster | None):
             for item in master.items
         ],
     }
+
+
+def _release_source_order_reservation(db: Session, master: SubcontractOutboundMaster) -> None:
+    """출고취소 시 해당 발주의 LOT 예약을 해제한다.
+
+    출고 스냅샷은 이력으로 유지하되 allocation FK를 먼저 끊고 발주 배정을 삭제한다.
+    같은 발주에 다른 활성 출고가 있으면 예약을 건드리지 않는다.
+    """
+    other_active = (
+        db.query(SubcontractOutboundMaster.id)
+        .filter(
+            SubcontractOutboundMaster.order_id == master.order_id,
+            SubcontractOutboundMaster.status == "OUTBOUND",
+            SubcontractOutboundMaster.id != master.id,
+        )
+        .first()
+    )
+    if other_active:
+        return
+
+    order = db.get(SubcontractOrderMaster, master.order_id)
+    if order is None:
+        return
+
+    for item in master.items:
+        for lot in item.lots:
+            lot.allocation_id = None
+    db.flush()
+
+    for item in order.items:
+        item.allocations.clear()
+    if order.status != "CANCELLED":
+        order.status = "DRAFT"
+        order.updated_at = datetime.now()
+    db.flush()
 
 
 @router.get("/orders")
@@ -260,6 +295,7 @@ def create_outbound(
     if not order.items:
         raise HTTPException(422, "출고할 발주 품목이 없습니다.")
 
+    invalid_lots = []
     for item in order.items:
         if not item.allocations:
             raise HTTPException(409, f"{item.order_part_no}의 LOT 배정이 없습니다.")
@@ -268,6 +304,18 @@ def create_outbound(
             raise HTTPException(409, f"{item.order_part_no}의 LOT 배정수량이 발주수량과 일치하지 않습니다.")
         if any(abs(float(x.allocated_qty or 0) - float(x.lot_qty or 0)) >= 1e-9 for x in item.allocations):
             raise HTTPException(409, f"{item.order_part_no}의 출고 LOT는 LOT 전체수량을 사용해야 합니다.")
+
+        available = {row["lot_no"]: row for row in _available_lots(db, item.previous_part_no, item.id)}
+        for allocation in item.allocations:
+            source = available.get(allocation.lot_no)
+            if source is None or float(source["lot_qty"]) + 1e-9 < float(allocation.allocated_qty or 0):
+                invalid_lots.append(allocation.lot_no)
+
+    if invalid_lots:
+        raise HTTPException(
+            409,
+            "삭제되었거나 이미 사용되어 출고할 수 없는 LOT입니다: " + ", ".join(sorted(set(invalid_lots))),
+        )
 
     master = SubcontractOutboundMaster(
         outbound_no=_next_outbound_no(db, payload.outbound_date),
@@ -318,27 +366,29 @@ def cancel_outbound(
     master = db.get(SubcontractOutboundMaster, outbound_id)
     if master is None:
         raise HTTPException(404, "외주가공 출고 내역을 찾을 수 없습니다.")
-    if master.status == "CANCELLED":
-        return _serialize_outbound(master)
 
-    lot_nos = sorted({lot.lot_no for item in master.items for lot in item.lots if lot.lot_no})
-    if lot_nos:
-        downstream = (
-            db.query(LotRelationModel.parent_lot_no)
-            .filter(LotRelationModel.parent_lot_no.in_(lot_nos))
-            .distinct()
-            .all()
-        )
-        if downstream:
-            raise HTTPException(
-                409,
-                "후공정에서 이미 사용된 LOT가 있어 출고를 취소할 수 없습니다: "
-                + ", ".join(sorted(row[0] for row in downstream)),
+    if master.status != "CANCELLED":
+        lot_nos = sorted({lot.lot_no for item in master.items for lot in item.lots if lot.lot_no})
+        if lot_nos:
+            downstream = (
+                db.query(LotRelationModel.parent_lot_no)
+                .filter(LotRelationModel.parent_lot_no.in_(lot_nos))
+                .distinct()
+                .all()
             )
+            if downstream:
+                raise HTTPException(
+                    409,
+                    "후공정에서 이미 사용된 LOT가 있어 출고를 취소할 수 없습니다: "
+                    + ", ".join(sorted(row[0] for row in downstream)),
+                )
 
-    master.status = "CANCELLED"
-    master.cancelled_by = getattr(current_user, "username", None)
-    master.cancelled_at = datetime.now()
+        master.status = "CANCELLED"
+        master.cancelled_by = getattr(current_user, "username", None)
+        master.cancelled_at = datetime.now()
+
+    # 과거 버그로 이미 CANCELLED인데 예약만 남은 건도 이 경로를 다시 호출하면 복구한다.
+    _release_source_order_reservation(db, master)
     db.commit()
     db.refresh(master)
     return _serialize_outbound(master)
