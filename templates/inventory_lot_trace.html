@@ -3,54 +3,86 @@
 {% block title %}LOT 추적{% endblock %}
 
 {% block content %}
-<div style="max-width:1400px;margin:0 auto;">
+<div style="max-width:1500px;margin:0 auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px;">
         <div>
             <h1 style="font-size:24px;margin-bottom:6px;">LOT 추적</h1>
-            <div style="font-size:13px;color:#64748b;">입고 → 생산/가공 → 외주/조립 → 포장(=출고) LOT 계보를 조회합니다.</div>
+            <div style="font-size:13px;color:#64748b;">공정 LOT 또는 출고 LOT를 검색하고 연결된 전체 LOT 계보를 조회합니다.</div>
         </div>
         <a href="/inventory/lots" style="padding:8px 14px;border:1px solid #cbd5e1;border-radius:5px;color:#334155;text-decoration:none;background:#fff;">LOT 재고 현황</a>
     </div>
 
     <div style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;margin-bottom:16px;">
-        <div style="display:flex;gap:8px;align-items:end;">
-            <label style="flex:1;font-size:12px;font-weight:bold;">LOT 번호
-                <input id="lotNo" placeholder="예: LB202609160101 / 26091601001" style="width:100%;padding:9px;margin-top:5px;border:1px solid #cbd5e1;border-radius:4px;">
+        <div style="display:grid;grid-template-columns:180px minmax(280px,1fr) 100px;gap:10px;align-items:end;">
+            <label style="font-size:12px;font-weight:bold;">검색 구분
+                <select id="searchType" style="width:100%;padding:9px;margin-top:5px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;">
+                    <option value="PROCESS">공정 LOT</option>
+                    <option value="OUTBOUND">출고 LOT</option>
+                </select>
             </label>
-            <button id="searchBtn" style="padding:9px 18px;background:#2563eb;color:#fff;border:0;border-radius:4px;font-weight:bold;cursor:pointer;">추적</button>
+            <label style="font-size:12px;font-weight:bold;">LOT 번호
+                <input id="lotNo" placeholder="LOT 번호 전체 또는 일부 입력" style="width:100%;padding:9px;margin-top:5px;border:1px solid #cbd5e1;border-radius:4px;box-sizing:border-box;">
+            </label>
+            <button id="searchBtn" style="padding:9px 18px;background:#2563eb;color:#fff;border:0;border-radius:4px;font-weight:bold;cursor:pointer;">조회</button>
         </div>
         <div id="status" style="margin-top:10px;font-size:13px;color:#475569;"></div>
     </div>
 
-    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;margin-bottom:16px;">
-        <div style="font-weight:bold;margin-bottom:10px;">LOT 목록</div>
-        <div style="overflow:auto;">
-            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:900px;">
-                <thead><tr style="background:#f1f5f9;">
+    <div id="searchResultPanel" style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;margin-bottom:16px;display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;">
+            <div style="font-weight:bold;">검색 결과</div>
+            <div id="searchCount" style="font-size:12px;color:#64748b;"></div>
+        </div>
+        <div style="overflow:auto;max-height:320px;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:780px;">
+                <thead><tr style="background:#f1f5f9;position:sticky;top:0;z-index:1;">
                     <th style="border:1px solid #cbd5e1;padding:7px;">구분</th>
-                    <th style="border:1px solid #cbd5e1;padding:7px;">LOT</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">LOT 번호</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">생성/출고일</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">LOT 수량</th>
                     <th style="border:1px solid #cbd5e1;padding:7px;">품번</th>
-                    <th style="border:1px solid #cbd5e1;padding:7px;">수량</th>
-                    <th style="border:1px solid #cbd5e1;padding:7px;">기준일</th>
                     <th style="border:1px solid #cbd5e1;padding:7px;">참조</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;width:80px;">처리</th>
                 </tr></thead>
-                <tbody id="nodeBody"><tr><td colspan="6" style="padding:20px;text-align:center;">LOT 번호를 입력해 주세요.</td></tr></tbody>
+                <tbody id="searchBody"></tbody>
             </table>
         </div>
     </div>
 
-    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;">
-        <div style="font-weight:bold;margin-bottom:10px;">LOT 연결 관계</div>
-        <div style="overflow:auto;">
-            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:800px;">
-                <thead><tr style="background:#f1f5f9;">
-                    <th style="border:1px solid #cbd5e1;padding:7px;">이전 LOT</th>
-                    <th style="border:1px solid #cbd5e1;padding:7px;">공정</th>
-                    <th style="border:1px solid #cbd5e1;padding:7px;">다음 LOT</th>
-                    <th style="border:1px solid #cbd5e1;padding:7px;">연결수량</th>
-                </tr></thead>
-                <tbody id="edgeBody"><tr><td colspan="4" style="padding:20px;text-align:center;">조회 결과가 없습니다.</td></tr></tbody>
-            </table>
+    <div id="tracePanel" style="display:none;">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;margin-bottom:16px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;">
+                <div style="font-weight:bold;">연결된 전체 LOT</div>
+                <div id="rootLabel" style="font-size:12px;color:#2563eb;font-weight:bold;"></div>
+            </div>
+            <div style="overflow:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:950px;">
+                    <thead><tr style="background:#f1f5f9;">
+                        <th style="border:1px solid #cbd5e1;padding:7px;">구분</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">LOT</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">품번</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">수량</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">기준일</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">참조</th>
+                    </tr></thead>
+                    <tbody id="nodeBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;">
+            <div style="font-weight:bold;margin-bottom:10px;">LOT 연결 관계</div>
+            <div style="overflow:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:850px;">
+                    <thead><tr style="background:#f1f5f9;">
+                        <th style="border:1px solid #cbd5e1;padding:7px;">이전 LOT</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">공정</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">다음 LOT</th>
+                        <th style="border:1px solid #cbd5e1;padding:7px;">연결수량</th>
+                    </tr></thead>
+                    <tbody id="edgeBody"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
@@ -61,15 +93,50 @@
 const esc = v => String(v ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[s]));
 const fmt = v => Number(v || 0).toLocaleString(undefined, {maximumFractionDigits:6});
 
-async function traceLot(){
-    const lotNo = document.getElementById('lotNo').value.trim();
-    if(!lotNo) return;
+async function searchLots(){
+    const type = document.getElementById('searchType').value;
+    const keyword = document.getElementById('lotNo').value.trim();
     const status = document.getElementById('status');
-    status.textContent = '조회 중...';
+    if(!keyword){
+        status.textContent = 'LOT 번호를 입력해 주세요.';
+        return;
+    }
+    status.textContent = '검색 중...';
+    document.getElementById('tracePanel').style.display = 'none';
+    try{
+        const params = new URLSearchParams({search_type:type, q:keyword, limit:'100'});
+        const res = await fetch('/api/inventory/lot-trace/search?' + params.toString());
+        const data = await res.json();
+        if(!res.ok) throw new Error(data.detail || 'LOT 검색에 실패했습니다.');
+        const panel = document.getElementById('searchResultPanel');
+        panel.style.display = 'block';
+        document.getElementById('searchCount').textContent = `${data.total || 0}건`;
+        document.getElementById('searchBody').innerHTML = data.items?.length ? data.items.map(row => `
+            <tr>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${row.search_type === 'OUTBOUND' ? '출고 LOT' : '공정 LOT'}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;font-weight:bold;">${esc(row.lot_no)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.date)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${fmt(row.qty)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.part_no)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.reference)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;"><button type="button" onclick='traceLot(${JSON.stringify(row.lot_no)})' style="padding:5px 10px;border:1px solid #2563eb;background:#fff;color:#2563eb;border-radius:4px;cursor:pointer;font-weight:bold;">추적</button></td>
+            </tr>`).join('') : '<tr><td colspan="7" style="padding:20px;text-align:center;">검색 결과가 없습니다.</td></tr>';
+        status.textContent = data.items?.length ? '검색 결과에서 LOT를 선택해 주세요.' : '검색 결과가 없습니다.';
+        if(data.items?.length === 1) traceLot(data.items[0].lot_no);
+    }catch(e){
+        status.textContent = e.message;
+    }
+}
+
+async function traceLot(lotNo){
+    const status = document.getElementById('status');
+    status.textContent = `${lotNo} 전체 계보 조회 중...`;
     try{
         const res = await fetch('/api/inventory/lot-trace?lot_no=' + encodeURIComponent(lotNo));
         const data = await res.json();
         if(!res.ok) throw new Error(data.detail || 'LOT 추적 조회에 실패했습니다.');
+        document.getElementById('tracePanel').style.display = 'block';
+        document.getElementById('rootLabel').textContent = `기준 LOT: ${data.root_lot_no}`;
         document.getElementById('nodeBody').innerHTML = data.nodes?.length ? data.nodes.map(row => `
             <tr${row.lot_no === data.root_lot_no ? ' style="background:#eff6ff;font-weight:bold;"' : ''}>
                 <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.type)}</td>
@@ -82,17 +149,23 @@ async function traceLot(){
         document.getElementById('edgeBody').innerHTML = data.edges?.length ? data.edges.map(row => `
             <tr>
                 <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.parent_lot_no)}</td>
-                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.process_code)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.process_name || row.process_code)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.child_lot_no)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${fmt(row.qty)}</td>
             </tr>`).join('') : '<tr><td colspan="4" style="padding:20px;text-align:center;">연결 관계가 없습니다.</td></tr>';
-        status.textContent = `LOT ${data.node_count}건 / 연결 ${data.edge_count}건`;
+        status.textContent = `연결 LOT ${data.node_count}건 / 연결 관계 ${data.edge_count}건`;
+        document.getElementById('tracePanel').scrollIntoView({behavior:'smooth', block:'start'});
     }catch(e){
         status.textContent = e.message;
     }
 }
 
-document.getElementById('searchBtn').addEventListener('click', traceLot);
-document.getElementById('lotNo').addEventListener('keydown', e => { if(e.key === 'Enter') traceLot(); });
+document.getElementById('searchBtn').addEventListener('click', searchLots);
+document.getElementById('lotNo').addEventListener('keydown', e => { if(e.key === 'Enter') searchLots(); });
+document.getElementById('searchType').addEventListener('change', () => {
+    document.getElementById('searchResultPanel').style.display = 'none';
+    document.getElementById('tracePanel').style.display = 'none';
+    document.getElementById('status').textContent = '';
+});
 </script>
 {% endblock %}
