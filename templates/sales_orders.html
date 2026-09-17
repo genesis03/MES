@@ -2,7 +2,7 @@
 {% block title %}수주 입력{% endblock %}
 {% block extra_head %}
 <style>
-.card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:18px;margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}.field input,.field select,.field textarea{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:6px}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer}.btn-primary{background:#2563eb;color:#fff}.btn-danger{background:#dc2626;color:#fff}.btn-light{background:#e2e8f0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:center}th{background:#f1f5f9}.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}.part-picker{position:relative}.part-input{width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:4px}.suggestions{position:absolute;z-index:100;left:0;right:0;top:36px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;box-shadow:0 6px 18px rgba(15,23,42,.15);max-height:240px;overflow:auto;display:none;text-align:left}.suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9}.suggestion:hover,.suggestion.active{background:#eff6ff}.suggestion .pn{font-weight:800;color:#1e3a8a}.suggestion .name{margin-left:8px;color:#64748b}.hint{font-size:11px;color:#64748b;margin-top:6px}.policy-hint{font-size:11px;color:#2563eb;margin-top:10px;line-height:1.6}@media(max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:18px;margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}.field input,.field select,.field textarea{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:6px}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer}.btn-primary{background:#2563eb;color:#fff}.btn-danger{background:#dc2626;color:#fff}.btn-light{background:#e2e8f0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:center}th{background:#f1f5f9}.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}.part-picker,.customer-picker{position:relative}.part-input,.customer-input{width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:4px}.suggestions,.customer-suggestions{position:absolute;z-index:100;left:0;right:0;top:36px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;box-shadow:0 6px 18px rgba(15,23,42,.15);max-height:240px;overflow:auto;display:none;text-align:left}.suggestion,.customer-suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9}.suggestion:hover,.suggestion.active,.customer-suggestion:hover,.customer-suggestion.active{background:#eff6ff}.suggestion .pn,.customer-suggestion .code{font-weight:800;color:#1e3a8a}.suggestion .name,.customer-suggestion .name{margin-left:8px;color:#64748b}.hint{font-size:11px;color:#64748b;margin-top:6px}.policy-hint{font-size:11px;color:#2563eb;margin-top:10px;line-height:1.6}.selected-customer{font-size:11px;color:#15803d;margin-top:5px;min-height:16px}@media(max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 {% endblock %}
 {% block content %}
@@ -11,7 +11,15 @@
   <div class="grid">
     <div class="field"><label>수주일자</label><input type="date" id="orderDate"></div>
     <div class="field"><label>납기예정일</label><input type="date" id="deliveryDueDate"></div>
-    <div class="field"><label>판매처</label><select id="customerId"><option value="">선택</option></select></div>
+    <div class="field">
+      <label>판매처</label>
+      <div class="customer-picker">
+        <input type="hidden" id="customerId">
+        <input type="text" id="customerSearch" class="customer-input" autocomplete="off" placeholder="업체명 또는 업체코드 입력">
+        <div id="customerSuggestions" class="customer-suggestions"></div>
+      </div>
+      <div id="selectedCustomer" class="selected-customer"></div>
+    </div>
     <div class="field"><label>수주구분</label><select id="orderType"><option value="NORMAL">양산</option><option value="SAMPLE">샘플</option><option value="DEVELOPMENT">개발</option></select></div>
     <div class="field"><label>거래구분</label><select id="transactionType"><option value="PAID">유상</option><option value="FREE">무상</option></select></div>
     <div class="field"><label>담당자</label><input id="managerName" maxlength="50"></div>
@@ -28,5 +36,5 @@
   </table>
   <div class="toolbar"><button class="btn btn-primary" id="saveBtn">수주 저장</button></div>
 </div>
-<script src="/static/sales_orders.js?v=20260916-2"></script>
+<script src="/static/sales_orders.js?v=20260917-1"></script>
 {% endblock %}
