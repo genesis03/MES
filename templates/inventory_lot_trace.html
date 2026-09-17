@@ -3,11 +3,11 @@
 {% block title %}LOT 추적{% endblock %}
 
 {% block content %}
-<div style="max-width:1500px;margin:0 auto;">
+<div style="max-width:1650px;margin:0 auto;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px;">
         <div>
             <h1 style="font-size:24px;margin-bottom:6px;">LOT 추적</h1>
-            <div style="font-size:13px;color:#64748b;">공정 LOT 또는 출고 LOT를 검색하고 연결된 전체 LOT 계보를 조회합니다.</div>
+            <div style="font-size:13px;color:#64748b;">공정 LOT 또는 출고 LOT를 검색하고 연결된 전체 LOT 계보를 공정 흐름 기준으로 조회합니다.</div>
         </div>
         <a href="/inventory/lots" style="padding:8px 14px;border:1px solid #cbd5e1;border-radius:5px;color:#334155;text-decoration:none;background:#fff;">LOT 재고 현황</a>
     </div>
@@ -49,40 +49,26 @@
         </div>
     </div>
 
-    <div id="tracePanel" style="display:none;">
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;margin-bottom:16px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;">
-                <div style="font-weight:bold;">연결된 전체 LOT</div>
-                <div id="rootLabel" style="font-size:12px;color:#2563eb;font-weight:bold;"></div>
-            </div>
-            <div style="overflow:auto;">
-                <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:950px;">
-                    <thead><tr style="background:#f1f5f9;">
-                        <th style="border:1px solid #cbd5e1;padding:7px;">구분</th>
-                        <th style="border:1px solid #cbd5e1;padding:7px;">LOT</th>
-                        <th style="border:1px solid #cbd5e1;padding:7px;">품번</th>
-                        <th style="border:1px solid #cbd5e1;padding:7px;">수량</th>
-                        <th style="border:1px solid #cbd5e1;padding:7px;">기준일</th>
-                        <th style="border:1px solid #cbd5e1;padding:7px;">참조</th>
-                    </tr></thead>
-                    <tbody id="nodeBody"></tbody>
-                </table>
-            </div>
+    <div id="tracePanel" style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px;">
+            <div style="font-weight:bold;">LOT 추적 결과</div>
+            <div id="rootLabel" style="font-size:12px;color:#2563eb;font-weight:bold;"></div>
         </div>
-
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;">
-            <div style="font-weight:bold;margin-bottom:10px;">LOT 연결 관계</div>
-            <div style="overflow:auto;">
-                <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:850px;">
-                    <thead><tr style="background:#f1f5f9;">
-                        <th style="border:1px solid #cbd5e1;padding:7px;">이전 LOT</th>
-                        <th style="border:1px solid #cbd5e1;padding:7px;">공정</th>
-                        <th style="border:1px solid #cbd5e1;padding:7px;">다음 LOT</th>
-                        <th style="border:1px solid #cbd5e1;padding:7px;">연결수량</th>
-                    </tr></thead>
-                    <tbody id="edgeBody"></tbody>
-                </table>
-            </div>
+        <div style="overflow:auto;max-height:650px;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1450px;">
+                <thead><tr style="background:#f1f5f9;position:sticky;top:0;z-index:2;">
+                    <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">공정</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">LOT 번호</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">LOT 생성일</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">품번</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">하위 LOT 번호</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">하위 LOT 수량</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">하위 품번</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">LOT 소모량(배정수량)</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;min-width:420px;">TREE</th>
+                </tr></thead>
+                <tbody id="traceBody"></tbody>
+            </table>
         </div>
     </div>
 </div>
@@ -91,7 +77,7 @@
 {% block extra_script %}
 <script>
 const esc = v => String(v ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[s]));
-const fmt = v => Number(v || 0).toLocaleString(undefined, {maximumFractionDigits:6});
+const fmt = v => v === null || v === undefined || v === '' ? '' : Number(v || 0).toLocaleString(undefined, {maximumFractionDigits:6});
 
 async function searchLots(){
     const type = document.getElementById('searchType').value;
@@ -132,28 +118,24 @@ async function traceLot(lotNo){
     const status = document.getElementById('status');
     status.textContent = `${lotNo} 전체 계보 조회 중...`;
     try{
-        const res = await fetch('/api/inventory/lot-trace?lot_no=' + encodeURIComponent(lotNo));
+        const res = await fetch('/api/inventory/lot-trace/tree?lot_no=' + encodeURIComponent(lotNo));
         const data = await res.json();
         if(!res.ok) throw new Error(data.detail || 'LOT 추적 조회에 실패했습니다.');
         document.getElementById('tracePanel').style.display = 'block';
         document.getElementById('rootLabel').textContent = `기준 LOT: ${data.root_lot_no}`;
-        document.getElementById('nodeBody').innerHTML = data.nodes?.length ? data.nodes.map(row => `
-            <tr${row.lot_no === data.root_lot_no ? ' style="background:#eff6ff;font-weight:bold;"' : ''}>
-                <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.type)}</td>
-                <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.lot_no)}</td>
-                <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.part_no)}</td>
-                <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${fmt(row.qty)}</td>
-                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.date)}</td>
-                <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.reference)}</td>
-            </tr>`).join('') : '<tr><td colspan="6" style="padding:20px;text-align:center;">조회된 LOT가 없습니다.</td></tr>';
-        document.getElementById('edgeBody').innerHTML = data.edges?.length ? data.edges.map(row => `
-            <tr>
-                <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.parent_lot_no)}</td>
-                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.process_name || row.process_code)}</td>
-                <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.child_lot_no)}</td>
-                <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${fmt(row.qty)}</td>
-            </tr>`).join('') : '<tr><td colspan="4" style="padding:20px;text-align:center;">연결 관계가 없습니다.</td></tr>';
-        status.textContent = `연결 LOT ${data.node_count}건 / 연결 관계 ${data.edge_count}건`;
+        document.getElementById('traceBody').innerHTML = data.rows?.length ? data.rows.map((row, index) => `
+            <tr${index === 0 ? ' style="background:#eff6ff;font-weight:bold;"' : ''}>
+                <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.process)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.lot_no)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;white-space:nowrap;">${esc(row.lot_date)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.part_no)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.child_lot_no)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;white-space:nowrap;">${fmt(row.child_lot_qty)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.child_part_no)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;white-space:nowrap;">${fmt(row.consumed_qty)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.tree)}</td>
+            </tr>`).join('') : '<tr><td colspan="9" style="padding:20px;text-align:center;">연결된 LOT가 없습니다.</td></tr>';
+        status.textContent = `연결 LOT ${data.lot_count || 0}건 / 추적 행 ${data.row_count || 0}건`;
         document.getElementById('tracePanel').scrollIntoView({behavior:'smooth', block:'start'});
     }catch(e){
         status.textContent = e.message;
