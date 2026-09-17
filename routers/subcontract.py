@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import get_current_user
+from models.lot_consumption import LotConsumptionModel
 from models.lot_relation import LotRelationModel
 from models.models import (
     ItemBomModel,
@@ -17,9 +18,11 @@ from models.models import (
     StorageLocationModel,
 )
 from models.partner import Partner
+from models.production import ProductionPerformance
 from models.production_lot import ProductionLotModel
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from schemas.subcontract import LotAllocationInput, SubcontractOrderInput
+from services.production_lot_service import performance_id_from_lot_note
 
 router = APIRouter(prefix="/api/subcontract", tags=["Subcontract"])
 
@@ -97,9 +100,15 @@ def _validate_header(db: Session, payload: SubcontractOrderInput):
 
 
 def _available_qty(db: Session, lot_no: str, base_qty: float, current_item_id: int | None = None) -> float:
-    consumed = (
+    consumed_relation = (
         db.query(func.coalesce(func.sum(LotRelationModel.consumed_qty), 0.0))
         .filter(LotRelationModel.parent_lot_no == lot_no)
+        .scalar()
+        or 0.0
+    )
+    consumed_process = (
+        db.query(func.coalesce(func.sum(LotConsumptionModel.consumed_qty), 0.0))
+        .filter(LotConsumptionModel.lot_no == lot_no)
         .scalar()
         or 0.0
     )
@@ -115,7 +124,19 @@ def _available_qty(db: Session, lot_no: str, base_qty: float, current_item_id: i
     if current_item_id:
         reserved_query = reserved_query.filter(SubcontractLotAllocation.order_item_id != current_item_id)
     reserved = reserved_query.scalar() or 0.0
-    return float(Decimal(str(base_qty)) - Decimal(str(consumed)) - Decimal(str(reserved)))
+    return float(
+        Decimal(str(base_qty))
+        - Decimal(str(consumed_relation))
+        - Decimal(str(consumed_process))
+        - Decimal(str(reserved))
+    )
+
+
+def _production_lot_is_valid(db: Session, lot: ProductionLotModel) -> bool:
+    performance_id = performance_id_from_lot_note(lot.note)
+    if performance_id is None:
+        return True
+    return db.get(ProductionPerformance, performance_id) is not None
 
 
 def _available_lots(db: Session, part_no: str, current_item_id: int | None = None):
@@ -155,6 +176,8 @@ def _available_lots(db: Session, part_no: str, current_item_id: int | None = Non
         .all()
     )
     for row in production_rows:
+        if not _production_lot_is_valid(db, row):
+            continue
         available = _available_qty(db, row.lot_no, row.lot_qty, current_item_id)
         if available > 0:
             result.append({
@@ -448,6 +471,19 @@ def confirm_subcontract_order(
             incomplete.append(item.order_part_no)
         if any(abs(float(row.allocated_qty) - float(row.lot_qty)) >= 1e-9 for row in item.allocations):
             raise HTTPException(409, "외주 출고 LOT는 LOT 전체수량을 사용해야 합니다.")
+
+        available = {row["lot_no"]: row for row in _available_lots(db, item.previous_part_no, item.id)}
+        invalid = []
+        for allocation in item.allocations:
+            source = available.get(allocation.lot_no)
+            if source is None or float(source["lot_qty"]) + 1e-9 < float(allocation.allocated_qty or 0):
+                invalid.append(allocation.lot_no)
+        if invalid:
+            raise HTTPException(
+                409,
+                "삭제되었거나 이미 사용된 LOT가 포함되어 발주를 확정할 수 없습니다: " + ", ".join(sorted(set(invalid))),
+            )
+
     if incomplete:
         raise HTTPException(409, "LOT 배정수량이 발주수량과 일치해야 합니다: " + ", ".join(incomplete))
 
