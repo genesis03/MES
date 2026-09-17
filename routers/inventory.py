@@ -18,6 +18,7 @@ from models.models import (
 )
 from models.packing import PackingLotAllocation, PackingMaster
 from models.production_lot import ProductionLotModel
+from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 
 router = APIRouter(tags=["Inventory"])
 templates = Jinja2Templates(directory="templates")
@@ -55,7 +56,18 @@ def _used_qty(db: Session, lot_no: str) -> float:
         .scalar()
         or 0.0
     )
-    return float(consumed) + float(related) + float(packed)
+    subcontract_reserved = (
+        db.query(func.coalesce(func.sum(SubcontractLotAllocation.allocated_qty), 0.0))
+        .join(SubcontractOrderItem, SubcontractOrderItem.id == SubcontractLotAllocation.order_item_id)
+        .join(SubcontractOrderMaster, SubcontractOrderMaster.id == SubcontractOrderItem.order_id)
+        .filter(
+            SubcontractLotAllocation.lot_no == lot_no,
+            SubcontractOrderMaster.status.in_(["DRAFT", "LOT_ALLOCATING", "ORDERED"]),
+        )
+        .scalar()
+        or 0.0
+    )
+    return float(consumed) + float(related) + float(packed) + float(subcontract_reserved)
 
 
 def _storage_name_map(db: Session) -> dict[str, str]:
