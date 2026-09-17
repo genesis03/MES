@@ -65,7 +65,10 @@ def ensure_purchase_entry_columns(engine):
     if engine.dialect.name not in ("sqlite", "postgresql"):
         return
     columns = {
-        "purchase_order_masters": {"manager_name": "VARCHAR(50)"},
+        "purchase_order_masters": {
+            "manager_name": "VARCHAR(50)",
+            "updated_at": "DATETIME",
+        },
         "purchase_order_items": {
             "delivery_date": "VARCHAR(10)",
             "warehouse_code": "VARCHAR(20)",
@@ -86,4 +89,8 @@ def ensure_purchase_entry_columns(engine):
                 if name not in existing:
                     clause = "ADD COLUMN IF NOT EXISTS" if engine.dialect.name == "postgresql" else "ADD COLUMN"
                     connection.execute(text(f"ALTER TABLE {table} {clause} {name} {data_type}"))
+        if "purchase_order_masters" in inspector.get_table_names():
+            connection.execute(text(
+                "UPDATE purchase_order_masters SET updated_at = created_at WHERE updated_at IS NULL"
+            ))
         _make_inbound_warehouse_nullable(connection, engine.dialect.name)
