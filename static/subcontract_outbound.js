@@ -5,6 +5,8 @@
   let selectedOrderId = null;
   let currentOutbound = null;
   let orderRows = [];
+  let selectedOutboundId = null;
+  let outboundRows = [];
 
   const today = () => {
     const d = new Date();
@@ -23,7 +25,7 @@
   }
 
   function resetView() {
-    currentOrder = null; selectedOrderId = null; currentOutbound = null;
+    currentOrder = null; selectedOrderId = null; currentOutbound = null; selectedOutboundId = null;
     $('ob-number').value = '출고 시 자동 발번'; $('ob-date').value = today(); $('ob-status').value = '발주를 불러오세요';
     $('ob-order-no').value=''; $('ob-partner').value=''; $('ob-process').value=''; $('ob-location').value=''; $('ob-manager').value=''; $('ob-order-date').value='';
     $('ob-items').innerHTML='<tr><td colspan="10">외주가공 발주를 불러오세요.</td></tr>';
@@ -70,11 +72,40 @@
     }
   }
 
+  function applyHistoricalOutbound(data) {
+    currentOrder = null;
+    currentOutbound = data;
+    $('ob-number').value = data.outbound_no || '';
+    $('ob-date').value = data.outbound_date || '';
+    $('ob-status').value = data.status_name || '출고완료';
+    $('ob-order-no').value = data.order_no || '';
+    $('ob-partner').value = data.partner_name || '';
+    $('ob-process').value = data.processing_type_name || '';
+    $('ob-location').value = data.external_storage_location || '';
+    $('ob-manager').value = data.manager_name || '';
+    $('ob-order-date').value = data.order_date || '';
+    $('ob-date').disabled = true;
+    $('ob-confirm').disabled = true;
+    $('ob-cancel').disabled = data.status !== 'OUTBOUND';
+    $('ob-slip').disabled = data.status !== 'OUTBOUND';
+    $('ob-label').disabled = data.status !== 'OUTBOUND';
+    renderItems(data.items);
+  }
+
   async function loadOrder(orderId) {
     msg('발주를 불러오는 중...');
     try {
       const data = await request(`/api/subcontract/outbound/order/${orderId}`);
       applyOrder(data); msg(`${data.order_no}을 불러왔습니다.`);
+    } catch (e) { msg(e.message); }
+  }
+
+  async function loadHistoricalOutbound(outboundId) {
+    msg('출고건을 불러오는 중...');
+    try {
+      const data = await request(`/api/subcontract/outbound/${outboundId}`);
+      applyHistoricalOutbound(data);
+      msg(`${data.outbound_no} 출고건을 불러왔습니다. 라벨을 재출력할 수 있습니다.`);
     } catch (e) { msg(e.message); }
   }
 
@@ -89,8 +120,59 @@
     } catch(e){$('ob-orders').innerHTML=`<tr><td colspan="8" style="color:#dc2626">${esc(e.message)}</td></tr>`;}
   }
 
+  async function loadOutboundHistory() {
+    $('ob-history-rows').innerHTML='<tr><td colspan="8">조회 중...</td></tr>';
+    $('ob-history-message').textContent='';
+    const p = new URLSearchParams();
+    const filters = [
+      ['outbound_no','ob-h-outbound-no'],
+      ['order_no','ob-h-order-no'],
+      ['partner_name','ob-h-partner'],
+      ['start_date','ob-h-start'],
+      ['end_date','ob-h-end']
+    ];
+    filters.forEach(([key,id])=>{const value=$(id).value.trim();if(value)p.set(key,value);});
+    try {
+      const data = await request('/api/subcontract/outbound/history?' + p.toString());
+      outboundRows = data.items || [];
+      selectedOutboundId = null;
+      $('ob-history-apply').disabled = true;
+      if (!outboundRows.length) {
+        $('ob-history-rows').innerHTML='<tr><td colspan="8">조회된 출고완료 건이 없습니다.</td></tr>';
+        $('ob-history-message').textContent='조회 결과 0건';
+        return;
+      }
+      $('ob-history-rows').innerHTML = outboundRows.map((x,i)=>`<tr class="ob-outbound-row" data-id="${Number(x.outbound_id)}"><td>${i+1}</td><td>${esc(x.outbound_no)}</td><td>${esc(x.outbound_date)}</td><td>${esc(x.order_no)}</td><td class="left">${esc(x.partner_name)}</td><td>${esc(x.processing_type_name)}</td><td>${Number(x.item_count||0)}</td><td class="st-done">${esc(x.status_name)}</td></tr>`).join('');
+      document.querySelectorAll('.ob-outbound-row').forEach(tr=>{
+        tr.addEventListener('click',()=>{
+          document.querySelectorAll('.ob-outbound-row').forEach(x=>x.classList.remove('selected'));
+          tr.classList.add('selected');
+          selectedOutboundId=Number(tr.dataset.id);
+          $('ob-history-apply').disabled=false;
+        });
+        tr.addEventListener('dblclick',()=>{
+          selectedOutboundId=Number(tr.dataset.id);
+          closeHistoryModal();
+          loadHistoricalOutbound(selectedOutboundId);
+        });
+      });
+      $('ob-history-message').textContent=`조회 결과 ${outboundRows.length}건`;
+    } catch(e) {
+      $('ob-history-rows').innerHTML=`<tr><td colspan="8" style="color:#dc2626">${esc(e.message)}</td></tr>`;
+      $('ob-history-message').textContent=e.message;
+    }
+  }
+
   function openModal(){ $('ob-modal').hidden=false; $('ob-search').value=''; loadOrderList(); setTimeout(()=>$('ob-search').focus(),0); }
   function closeModal(){ $('ob-modal').hidden=true; }
+  function openHistoryModal(){
+    $('ob-history-modal').hidden=false;
+    selectedOutboundId=null;
+    $('ob-history-apply').disabled=true;
+    loadOutboundHistory();
+    setTimeout(()=>$('ob-h-outbound-no').focus(),0);
+  }
+  function closeHistoryModal(){ $('ob-history-modal').hidden=true; }
 
   async function createOutbound(){
     if(!currentOrder) return;
@@ -130,10 +212,25 @@
   }
 
   function init(){
-    const ids=['ob-load','ob-confirm','ob-cancel','ob-slip','ob-label','ob-message','ob-number','ob-date','ob-status','ob-order-no','ob-partner','ob-process','ob-location','ob-manager','ob-order-date','ob-items','ob-modal','ob-search','ob-search-btn','ob-orders','ob-modal-close','ob-modal-apply'];
+    const ids=['ob-load','ob-load-outbound','ob-confirm','ob-cancel','ob-slip','ob-label','ob-message','ob-number','ob-date','ob-status','ob-order-no','ob-partner','ob-process','ob-location','ob-manager','ob-order-date','ob-items','ob-modal','ob-search','ob-search-btn','ob-orders','ob-modal-close','ob-modal-apply','ob-history-modal','ob-h-outbound-no','ob-h-order-no','ob-h-partner','ob-h-start','ob-h-end','ob-history-search','ob-history-rows','ob-history-message','ob-history-close','ob-history-apply'];
     const missing=ids.filter(id=>!$(id)); if(missing.length){console.error('Outbound UI missing',missing);return;}
-    $('ob-load').addEventListener('click',openModal); $('ob-search-btn').addEventListener('click',loadOrderList); $('ob-search').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadOrderList();}}); $('ob-modal-close').addEventListener('click',closeModal); $('ob-modal-apply').addEventListener('click',()=>{if(!selectedOrderId)return;const id=selectedOrderId;closeModal();loadOrder(id);}); $('ob-modal').addEventListener('click',e=>{if(e.target===$('ob-modal'))closeModal();});
-    $('ob-confirm').addEventListener('click',createOutbound); $('ob-cancel').addEventListener('click',cancelOutbound); $('ob-slip').addEventListener('click',printSlip); $('ob-label').addEventListener('click',printLabels); resetView();
+    $('ob-load').addEventListener('click',openModal);
+    $('ob-load-outbound').addEventListener('click',openHistoryModal);
+    $('ob-search-btn').addEventListener('click',loadOrderList);
+    $('ob-search').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadOrderList();}});
+    $('ob-modal-close').addEventListener('click',closeModal);
+    $('ob-modal-apply').addEventListener('click',()=>{if(!selectedOrderId)return;const id=selectedOrderId;closeModal();loadOrder(id);});
+    $('ob-modal').addEventListener('click',e=>{if(e.target===$('ob-modal'))closeModal();});
+    $('ob-history-search').addEventListener('click',loadOutboundHistory);
+    ['ob-h-outbound-no','ob-h-order-no','ob-h-partner','ob-h-start','ob-h-end'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadOutboundHistory();}}));
+    $('ob-history-close').addEventListener('click',closeHistoryModal);
+    $('ob-history-apply').addEventListener('click',()=>{if(!selectedOutboundId)return;const id=selectedOutboundId;closeHistoryModal();loadHistoricalOutbound(id);});
+    $('ob-history-modal').addEventListener('click',e=>{if(e.target===$('ob-history-modal'))closeHistoryModal();});
+    $('ob-confirm').addEventListener('click',createOutbound);
+    $('ob-cancel').addEventListener('click',cancelOutbound);
+    $('ob-slip').addEventListener('click',printSlip);
+    $('ob-label').addEventListener('click',printLabels);
+    resetView();
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
