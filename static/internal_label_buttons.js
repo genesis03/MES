@@ -51,6 +51,8 @@
     } else if (/^\/api\/subcontract\/outbound\/order\/\d+$/.test(path)) {
       const outbound = data?.outbound;
       state.subcontractOutboundId = outbound && String(outbound.status || '').toUpperCase() === 'OUTBOUND' ? Number(outbound.id || 0) || null : null;
+    } else if (/^\/api\/subcontract\/outbound\/\d+$/.test(path) && upperMethod === 'GET') {
+      state.subcontractOutboundId = String(data?.status || '').toUpperCase() === 'OUTBOUND' ? Number(data.id || 0) || null : null;
     } else if (/^\/api\/subcontract\/outbound\/\d+\/cancel$/.test(path) && upperMethod === 'POST') {
       state.subcontractOutboundId = null;
     }
