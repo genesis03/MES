@@ -106,6 +106,78 @@ def purchase_inbound_inquiry_page(request: Request, current_user=Depends(get_cur
     )
 
 
+@router.get("/api/purchase/inbound/order-picker")
+def purchase_inbound_order_picker(
+    start_date: Optional[str] = Query(None, max_length=10),
+    end_date: Optional[str] = Query(None, max_length=10),
+    po_no: Optional[str] = Query(None, max_length=30),
+    part_no: Optional[str] = Query(None, max_length=50),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status_code=422, detail="시작일은 종료일 이후일 수 없습니다.")
+
+    query = (
+        db.query(PurchaseOrderMaster, PurchaseOrderItem, ItemMasterModel)
+        .join(PurchaseOrderItem, PurchaseOrderItem.po_id == PurchaseOrderMaster.id)
+        .join(ItemMasterModel, ItemMasterModel.part_no == PurchaseOrderItem.part_no)
+        .filter(
+            PurchaseOrderMaster.status.in_(["ORDERED", "PARTIAL"]),
+            PurchaseOrderItem.received_qty < PurchaseOrderItem.order_qty,
+        )
+    )
+    if start_date:
+        query = query.filter(PurchaseOrderMaster.order_date >= start_date)
+    if end_date:
+        query = query.filter(PurchaseOrderMaster.order_date <= end_date)
+    if po_no and po_no.strip():
+        query = query.filter(PurchaseOrderMaster.po_no.contains(po_no.strip(), autoescape=True))
+    if part_no and part_no.strip():
+        query = query.filter(PurchaseOrderItem.part_no.contains(part_no.strip(), autoescape=True))
+
+    rows = query.order_by(
+        PurchaseOrderMaster.order_date.desc(),
+        PurchaseOrderMaster.id.desc(),
+        PurchaseOrderItem.id.asc(),
+    ).limit(3000).all()
+
+    status_names = {"ORDERED": "발주완료", "PARTIAL": "부분입고"}
+    grouped = {}
+    for master, item, part in rows:
+        order = grouped.setdefault(master.id, {
+            "po_id": master.id,
+            "po_no": master.po_no,
+            "partner_id": master.partner_id,
+            "partner_name": master.partner_name,
+            "order_date": master.order_date,
+            "status": master.status,
+            "status_name": status_names.get(master.status, master.status),
+            "related_sales_order_no": "",
+            "updated_at": (master.updated_at or master.created_at).strftime("%Y-%m-%d %H:%M:%S") if (master.updated_at or master.created_at) else "",
+            "manager_name": master.manager_name or "",
+            "items": [],
+        })
+        order["items"].append({
+            "po_item_id": item.id,
+            "po_no": master.po_no,
+            "partner_id": master.partner_id,
+            "partner_name": master.partner_name,
+            "manager_name": master.manager_name or "",
+            "part_no": item.part_no,
+            "part_name": part.part_name,
+            "spec": part.spec or "",
+            "unit": item.unit,
+            "order_qty": item.order_qty,
+            "received_qty": item.received_qty,
+            "remaining_qty": max(float(item.order_qty or 0) - float(item.received_qty or 0), 0.0),
+            "item_delivery_date": item.delivery_date or "",
+            "storage_location": item.storage_location or "",
+            "status": item.status,
+        })
+    return {"total": len(grouped), "orders": list(grouped.values())}
+
+
 @router.get("/api/purchase/inquiry/orders")
 def purchase_order_inquiry_api(
     start_date: Optional[str] = Query(None, max_length=10),
