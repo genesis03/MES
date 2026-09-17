@@ -2,15 +2,15 @@
 {% block title %}수주 조회{% endblock %}
 {% block extra_head %}
 <style>
-.card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:16px;margin-bottom:16px}.filters{display:flex;gap:10px;align-items:end}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}.field select{min-width:180px;padding:9px;border:1px solid #cbd5e1;border-radius:6px}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer;background:#2563eb;color:#fff}.btn-delete{background:#dc2626;color:#fff;padding:5px 10px;border:0;border-radius:4px;font-weight:700;cursor:pointer}.btn-delete:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:center}th{background:#f1f5f9}.muted{color:#64748b}.status{font-weight:700}.detail-row td{background:#f8fafc;text-align:left}.detail-table td,.detail-table th{font-size:11px}
+.card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:16px;margin-bottom:16px}.filters{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}.field select,.field input{min-width:180px;padding:9px;border:1px solid #cbd5e1;border-radius:6px}.field.search-field input{min-width:360px}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer;background:#2563eb;color:#fff}.btn-delete{background:#dc2626;color:#fff;padding:5px 10px;border:0;border-radius:4px;font-weight:700;cursor:pointer}.btn-delete:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:center}th{background:#f1f5f9}.muted{color:#64748b}.status{font-weight:700}.detail-row td{background:#f8fafc;text-align:left}.detail-table td,.detail-table th{font-size:11px}
 </style>
 {% endblock %}
 {% block content %}
 <h2 style="margin-bottom:16px">수주 조회</h2>
 <div class="card">
   <div class="filters">
+    <div class="field search-field"><label>통합검색</label><input id="keywordFilter" type="text" placeholder="품번 / 업체 / 수주번호 검색" autocomplete="off"></div>
     <div class="field"><label>상태</label><select id="statusFilter"><option value="">전체</option><option value="ORDERED">수주</option><option value="PARTIAL">부분출고</option><option value="COMPLETED">출고완료</option><option value="CANCELLED">취소</option></select></div>
-    <div class="field"><label>판매처</label><select id="customerFilter"><option value="">전체</option></select></div>
     <button class="btn" id="searchBtn">조회</button>
   </div>
 </div>
@@ -20,5 +20,5 @@
     <tbody id="orderBody"></tbody>
   </table>
 </div>
-<script src="/static/sales_orders_inquiry.js?v=20260916-1"></script>
+<script src="/static/sales_orders_inquiry.js?v=20260917-1"></script>
 {% endblock %}
