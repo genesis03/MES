@@ -6,9 +6,16 @@
   let mode = 'new'; // new | draft | confirmed
   let lines = [];
   let saving = false;
+  let pickerOrders = [];
+  let selectedPickerId = null;
 
   const today = () => {
     const d = new Date();
+    return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+  };
+  const daysAgo = days => {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
     return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
   };
   const cell = (tr, value = '') => {
@@ -104,9 +111,6 @@
     $('pi-date').value = today();
     $('pi-status').value = '입력 중';
     $('pi-inbound-no').value = '저장 시 자동 발번';
-    $('pi-po-list').hidden = true;
-    $('pi-po-results').replaceChildren();
-    $('pi-po-message').textContent = '';
     $('pi-save').disabled = false; $('pi-confirm').disabled = true;
     ['pi-date', 'pi-note'].forEach(id => { $(id).disabled = false; });
     lines = []; partner = null; inboundId = null; mode = 'new';
@@ -126,29 +130,97 @@
       delivery_date: row.item_delivery_date || row.delivery_date || '',
       storage_location: row.storage_location || ''
     }, true));
-    $('pi-po-list').hidden = true;
+    closeOrderPicker();
     message(rows[0].po_no + '의 미입고 품목을 불러왔습니다. 저장위치를 확인하세요.');
   }
 
-  async function loadOpenOrders() {
-    const box = $('pi-po-results');
-    box.textContent = '조회 중…'; $('pi-po-message').textContent = '';
-    try {
-      const data = await request('/api/purchase/orders/unreceived?limit=1000');
-      box.replaceChildren();
-      const groups = new Map();
-      (data.items || []).forEach(row => {
-        if (!groups.has(row.po_id)) groups.set(row.po_id, []);
-        groups.get(row.po_id).push(row);
-      });
-      groups.forEach(groupRows => {
-        const row = groupRows[0];
-        box.append(button(`${row.po_no} · ${row.partner_name} · 미입고 품목 ${groupRows.length}행`, () => displayPO(groupRows)));
-      });
-      $('pi-po-message').textContent = groups.size ? groups.size + '건의 미입고 발주가 있습니다.' : '미입고 발주가 없습니다.';
-    } catch (error) {
-      box.replaceChildren(); $('pi-po-message').textContent = error.message;
+  function renderOrderPicker() {
+    const body = $('pi-po-popup-body');
+    body.replaceChildren();
+    selectedPickerId = null;
+    $('pi-po-select').disabled = true;
+
+    if (!pickerOrders.length) {
+      const tr = body.insertRow();
+      const td = tr.insertCell();
+      td.colSpan = 6;
+      td.className = 'po-popup-empty';
+      td.textContent = 'No data';
+      $('pi-po-popup-count').textContent = '0건';
+      return;
     }
+
+    pickerOrders.forEach(order => {
+      const tr = body.insertRow();
+      tr.dataset.poId = String(order.po_id);
+      [
+        order.po_no,
+        order.partner_name,
+        order.order_date,
+        order.status_name,
+        order.related_sales_order_no || '-',
+        order.updated_at || ''
+      ].forEach(value => cell(tr, value));
+      tr.addEventListener('click', () => {
+        body.querySelectorAll('tr.selected').forEach(row => row.classList.remove('selected'));
+        tr.classList.add('selected');
+        selectedPickerId = order.po_id;
+        $('pi-po-select').disabled = false;
+      });
+      tr.addEventListener('dblclick', () => {
+        selectedPickerId = order.po_id;
+        choosePickerOrder();
+      });
+    });
+    $('pi-po-popup-count').textContent = pickerOrders.length + '건';
+  }
+
+  async function searchOrderPicker() {
+    const params = new URLSearchParams();
+    const values = {
+      start_date: $('pi-po-start').value,
+      end_date: $('pi-po-end').value,
+      po_no: $('pi-po-search-no').value.trim(),
+      part_no: $('pi-po-search-part').value.trim(),
+    };
+    Object.entries(values).forEach(([key, value]) => { if (value) params.set(key, value); });
+    $('pi-po-popup-message').textContent = '조회 중…';
+    try {
+      const data = await request('/api/purchase/inbound/order-picker?' + params.toString());
+      pickerOrders = data.orders || [];
+      renderOrderPicker();
+      $('pi-po-popup-message').textContent = pickerOrders.length
+        ? '행을 선택한 뒤 선택 버튼을 누르거나 더블클릭하세요.'
+        : '조건에 맞는 미입고 발주가 없습니다.';
+    } catch (error) {
+      pickerOrders = [];
+      renderOrderPicker();
+      $('pi-po-popup-message').textContent = error.message;
+    }
+  }
+
+  function openOrderPicker() {
+    if (!$('pi-po-start').value) $('pi-po-start').value = daysAgo(7);
+    if (!$('pi-po-end').value) $('pi-po-end').value = today();
+    const dialog = $('pi-po-dialog');
+    if (!dialog.open) dialog.showModal();
+    searchOrderPicker();
+    setTimeout(() => $('pi-po-search-no').focus(), 0);
+  }
+
+  function closeOrderPicker() {
+    const dialog = $('pi-po-dialog');
+    if (dialog.open) dialog.close();
+  }
+
+  function choosePickerOrder() {
+    const order = pickerOrders.find(row => row.po_id === selectedPickerId);
+    if (!order) {
+      $('pi-po-popup-message').textContent = '불러올 발주를 선택하세요.';
+      return;
+    }
+    try { displayPO(order.items || []); }
+    catch (error) { $('pi-po-popup-message').textContent = error.message; }
   }
 
   function payload() {
@@ -227,8 +299,6 @@
     try {
       const data = await request('/api/purchase/inbounds/' + id);
       $('pi-form').reset();
-      $('pi-po-list').hidden = true;
-      $('pi-po-results').replaceChildren();
       lines = []; $('pi-lines').replaceChildren();
       inboundId = data.id;
       mode = data.status === 'CONFIRMED' ? 'confirmed' : 'draft';
@@ -250,18 +320,27 @@
   }
 
   function init() {
-    const required = ['pi-form','pi-date','pi-vendor','pi-manager','pi-po-no','pi-inbound-no','pi-status','pi-note','pi-load-po','pi-po-list','pi-po-results','pi-po-message','pi-lines','pi-location-options','pi-new','pi-save','pi-confirm','pi-message'];
+    const required = [
+      'pi-form','pi-date','pi-vendor','pi-manager','pi-po-no','pi-inbound-no','pi-status','pi-note',
+      'pi-load-po','pi-lines','pi-location-options','pi-new','pi-save','pi-confirm','pi-message',
+      'pi-po-dialog','pi-po-x','pi-po-search-no','pi-po-start','pi-po-end','pi-po-search-part','pi-po-search-btn',
+      'pi-po-popup-body','pi-po-popup-message','pi-po-popup-count','pi-po-select','pi-po-close'
+    ];
     const missing = required.filter(id => !$(id));
     if (missing.length) {
       console.error('Purchase inbound UI missing elements:', missing);
       return;
     }
 
-    $('pi-load-po').addEventListener('click', event => {
-      event.preventDefault();
-      $('pi-po-list').hidden = !$('pi-po-list').hidden;
-      if (!$('pi-po-list').hidden) loadOpenOrders();
-    });
+    $('pi-load-po').addEventListener('click', event => { event.preventDefault(); openOrderPicker(); });
+    $('pi-po-x').addEventListener('click', closeOrderPicker);
+    $('pi-po-close').addEventListener('click', closeOrderPicker);
+    $('pi-po-select').addEventListener('click', choosePickerOrder);
+    $('pi-po-search-btn').addEventListener('click', searchOrderPicker);
+    ['pi-po-search-no', 'pi-po-search-part'].forEach(id => $(id).addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); searchOrderPicker(); }
+    }));
+    $('pi-po-dialog').addEventListener('cancel', event => { event.preventDefault(); closeOrderPicker(); });
     $('pi-new').addEventListener('click', event => { event.preventDefault(); reset(); });
     $('pi-form').addEventListener('submit', save);
     $('pi-confirm').addEventListener('click', event => { event.preventDefault(); confirm(); });
