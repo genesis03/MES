@@ -1,42 +1,28 @@
 from core.database import SessionLocal
-from models.subcontract import SubcontractOrderMaster
+from models.subcontract import SubcontractLotAllocation, SubcontractOrderMaster
 from models.subcontract_outbound import SubcontractOutboundMaster
 
 
-def _release_order_allocations(db, order: SubcontractOrderMaster) -> int:
-    released = 0
-    for item in order.items:
-        released += len(item.allocations)
-        item.allocations.clear()
-    if order.status != "CANCELLED":
-        order.status = "DRAFT"
-    return released
-
-
 def repair_cancelled_subcontract_reservations() -> None:
-    """기존 출고취소 건에 남은 LOT 예약을 안전하게 해제한다.
+    """과거 출고취소 건에 남은 LOT 예약만 안전하게 해제한다.
 
-    출고가 취소됐고 같은 외주발주에 현재 OUTBOUND 상태 출고가 없을 때만
-    출고 스냅샷의 allocation_id 연결을 끊고 발주 LOT 배정을 해제한다.
-    출고 이력 자체는 삭제하지 않는다.
+    취소 출고 스냅샷이 아직 가리키는 allocation_id만 해제한다.
+    이후 사용자가 새로 배정한 LOT까지 건드리지 않는다.
     """
     db = SessionLocal()
     try:
-        cancelled_order_ids = {
-            row[0]
-            for row in (
-                db.query(SubcontractOutboundMaster.order_id)
-                .filter(SubcontractOutboundMaster.status == "CANCELLED")
-                .distinct()
-                .all()
-            )
-        }
+        cancelled_rows = (
+            db.query(SubcontractOutboundMaster)
+            .filter(SubcontractOutboundMaster.status == "CANCELLED")
+            .order_by(SubcontractOutboundMaster.id.asc())
+            .all()
+        )
         changed = False
-        for order_id in cancelled_order_ids:
+        for outbound in cancelled_rows:
             active = (
                 db.query(SubcontractOutboundMaster.id)
                 .filter(
-                    SubcontractOutboundMaster.order_id == order_id,
+                    SubcontractOutboundMaster.order_id == outbound.order_id,
                     SubcontractOutboundMaster.status == "OUTBOUND",
                 )
                 .first()
@@ -44,29 +30,30 @@ def repair_cancelled_subcontract_reservations() -> None:
             if active:
                 continue
 
-            order = db.get(SubcontractOrderMaster, order_id)
-            if order is None:
+            allocation_ids = {
+                lot.allocation_id
+                for item in outbound.items
+                for lot in item.lots
+                if lot.allocation_id is not None
+            }
+            if not allocation_ids:
                 continue
 
-            cancelled_rows = (
-                db.query(SubcontractOutboundMaster)
-                .filter(
-                    SubcontractOutboundMaster.order_id == order_id,
-                    SubcontractOutboundMaster.status == "CANCELLED",
-                )
-                .all()
-            )
-            for outbound in cancelled_rows:
-                for item in outbound.items:
-                    for lot in item.lots:
-                        if lot.allocation_id is not None:
-                            lot.allocation_id = None
-                            changed = True
+            for item in outbound.items:
+                for lot in item.lots:
+                    if lot.allocation_id in allocation_ids:
+                        lot.allocation_id = None
             db.flush()
 
-            if any(item.allocations for item in order.items):
-                _release_order_allocations(db, order)
-                changed = True
+            deleted = (
+                db.query(SubcontractLotAllocation)
+                .filter(SubcontractLotAllocation.id.in_(allocation_ids))
+                .delete(synchronize_session=False)
+            )
+            order = db.get(SubcontractOrderMaster, outbound.order_id)
+            if order is not None and order.status != "CANCELLED" and deleted:
+                order.status = "DRAFT"
+            changed = True
 
         if changed:
             db.commit()
