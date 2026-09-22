@@ -336,6 +336,8 @@ def create_inbound(
             inbound_item = SubcontractInboundItem(
                 outbound_item_id=source_item.id,
                 order_item_id=source_item.order_item_id,
+                previous_item_id=source_item.previous_item_id,
+                item_id=source_item.item_id,
                 previous_part_no=source_item.previous_part_no,
                 part_no=source_item.order_part_no,
                 part_name=source_item.order_part_name,
@@ -362,6 +364,7 @@ def create_inbound(
             ))
             db.add(ProductionLotModel(
                 lot_no=child_lot_no,
+                item_id=source_item.item_id,
                 part_no=source_item.order_part_no,
                 lot_qty=float(inbound_qty),
                 storage_location=payload.storage_location,
@@ -374,6 +377,7 @@ def create_inbound(
             if stock is None:
                 db.add(ProductionLotModel(
                     lot_no=child_lot_no,
+                    item_id=source_item.item_id,
                     part_no=source_item.order_part_no,
                     lot_qty=float(inbound_qty),
                     storage_location=payload.storage_location,
@@ -381,6 +385,7 @@ def create_inbound(
                     note=f"외주가공 전량입고 {inbound_no} / LOT 유지",
                 ))
             else:
+                stock.item_id = source_item.item_id
                 stock.part_no = source_item.order_part_no
                 stock.lot_qty = float(inbound_qty)
                 stock.storage_location = payload.storage_location
@@ -453,6 +458,7 @@ def cancel_inbound(
                     raise HTTPException(409, f"후공정에서 이미 사용된 LOT가 있어 취소할 수 없습니다: {lot.child_lot_no}")
                 stock = db.query(ProductionLotModel).filter(ProductionLotModel.lot_no == lot.child_lot_no).one_or_none()
                 if stock is not None:
+                    stock.item_id = item.previous_item_id
                     stock.part_no = item.previous_part_no
                     stock.lot_qty = float(lot.source_qty or 0)
                     stock.status = "ACTIVE"
