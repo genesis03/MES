@@ -44,7 +44,7 @@ from models.process_reference_migration import ensure_process_code_references
 from models.sales_migration import ensure_sales_policy_columns
 from models.packing_migration import ensure_packing_lot_scope
 from models.shipping_lot_migration import ensure_shipping_lot_registry
-from models.item_identity_migration import ensure_item_identity_columns
+from models.item_identity_migration import ensure_item_identity_columns, ensure_item_part_no_fk_removed
 ensure_purchase_entry_columns(engine)
 ensure_subcontract_inbound_columns(engine)
 ensure_quality_master_data(engine)
@@ -54,6 +54,7 @@ ensure_sales_policy_columns(engine)
 ensure_packing_lot_scope(engine)
 ensure_shipping_lot_registry(engine)
 ensure_item_identity_columns(engine)
+ensure_item_part_no_fk_removed(engine)
 
 __all__ = [
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
