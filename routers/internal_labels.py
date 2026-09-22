@@ -125,11 +125,11 @@ def _subcontract_outbound_labels(db: Session, outbound_id: int) -> list[dict]:
         raise HTTPException(409, "출고완료 상태의 외주가공 출고 건만 라벨을 출력할 수 있습니다.")
     result = []
     for item_row in master.items:
-        source_item = _item(db, item_row.previous_part_no)
+        source_item = _item_by_id(db, item_row.previous_item_id) or _item(db, item_row.previous_part_no)
         for lot in item_row.lots:
             result.append(_label(
                 title="외주 이동 LOT",
-                part_no=item_row.previous_part_no,
+                part_no=source_item.part_no if source_item else item_row.previous_part_no,
                 part_name=source_item.part_name if source_item else item_row.order_part_name,
                 lot_no=lot.lot_no,
                 qty=lot.outbound_qty,
@@ -147,14 +147,15 @@ def _subcontract_inbound_labels(db: Session, inbound_id: int) -> list[dict]:
         raise HTTPException(409, "입고완료 상태의 외주가공 입고 건만 라벨을 출력할 수 있습니다.")
     result = []
     for item_row in master.items:
+        inbound_item = _item_by_id(db, item_row.item_id) or _item(db, item_row.part_no)
         for lot in item_row.lots:
             lot_no = str(lot.child_lot_no or lot.source_lot_no or "").strip()
             if not lot_no:
                 continue
             result.append(_label(
                 title="외주가공 LOT",
-                part_no=item_row.part_no,
-                part_name=item_row.part_name,
+                part_no=inbound_item.part_no if inbound_item else item_row.part_no,
+                part_name=inbound_item.part_name if inbound_item else item_row.part_name,
                 lot_no=lot_no,
                 qty=lot.good_qty,
                 unit=item_row.unit or "EA",
