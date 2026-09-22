@@ -305,7 +305,7 @@ def create_outbound(
         if any(abs(float(x.allocated_qty or 0) - float(x.lot_qty or 0)) >= 1e-9 for x in item.allocations):
             raise HTTPException(409, f"{item.order_part_no}의 출고 LOT는 LOT 전체수량을 사용해야 합니다.")
 
-        available = {row["lot_no"]: row for row in _available_lots(db, item.previous_part_no, item.id)}
+        available = {row["lot_no"]: row for row in _available_lots(db, item.previous_item_id, item.id)}
         for allocation in item.allocations:
             source = available.get(allocation.lot_no)
             if source is None or float(source["lot_qty"]) + 1e-9 < float(allocation.allocated_qty or 0):
