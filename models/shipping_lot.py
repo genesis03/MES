@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String, UniqueConstraint
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
 
 from core.database import Base
 
@@ -18,6 +18,7 @@ class ShippingLotRegistry(Base):
     )
 
     id = Column(Integer, primary_key=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
     part_no = Column(String(50), nullable=False, index=True)
     lot_no = Column(String(60), nullable=False, index=True)
     lot_date = Column(String(10), nullable=False, index=True)
