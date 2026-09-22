@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from core.config import DATABASE_URL
 from core.database import get_db
 from core.security import require_permission
-from models.models import ShippingMasterModel, UserModel
+from models.models import ItemMasterModel, ShippingMasterModel, UserModel
 from models.sales import ShipmentMaster
 from services.excel_service import create_shipping_analysis_excel
 from services.shipping_analysis_adapter import LEGACY_COLUMNS, build_shipping_analysis_rows
@@ -123,22 +123,28 @@ def source_shipments(
         query = query.filter(ShipmentMaster.shipment_date <= end_date)
 
     rows = query.order_by(ShipmentMaster.shipment_date.desc(), ShipmentMaster.id.desc()).limit(1000).all()
-    return {
-        "items": [
-            {
-                "id": row.id,
-                "shipment_no": row.shipment_no,
-                "shipment_date": row.shipment_date,
-                "customer_name": row.customer_name,
-                "status": row.status,
-                "item_count": len(row.items),
-                "box_count": sum(_shipment_item_box_count(item) for item in row.items),
-                "total_qty": sum(float(item.shipped_qty or 0) for item in row.items),
-                "part_nos": [item.part_no for item in row.items],
-            }
-            for row in rows
-        ]
-    }
+    result = []
+    for row in rows:
+        item_ids = [item.item_id for item in row.items if item.item_id]
+        master_map = {
+            item.id: item
+            for item in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all()
+        } if item_ids else {}
+        result.append({
+            "id": row.id,
+            "shipment_no": row.shipment_no,
+            "shipment_date": row.shipment_date,
+            "customer_name": row.customer_name,
+            "status": row.status,
+            "item_count": len(row.items),
+            "box_count": sum(_shipment_item_box_count(item) for item in row.items),
+            "total_qty": sum(float(item.shipped_qty or 0) for item in row.items),
+            "part_nos": [
+                master_map[item.item_id].part_no if item.item_id in master_map else item.part_no
+                for item in row.items
+            ],
+        })
+    return {"items": result}
 
 
 @router.post("/shipping/from-shipments")
