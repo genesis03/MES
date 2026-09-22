@@ -95,7 +95,7 @@ def main() -> int:
         f"part_no FK잔여={len(legacy_part_fk)}"
     )
 
-    return 1 if missing_item_columns or missing_item_indexes else 0
+    return 1 if missing_item_columns or missing_item_indexes or legacy_part_fk else 0
 
 
 if __name__ == "__main__":
