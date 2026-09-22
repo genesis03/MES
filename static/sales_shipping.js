@@ -6,6 +6,8 @@ let currentOrder = null;
 let currentItemId = null;
 let viewingShipment = null;
 let viewMode = false;
+let editShipmentMode = false;
+const requestedEditShipmentId = Number(new URLSearchParams(location.search).get('shipment_id') || 0);
 const allocations = new Map();
 
 function today(){ return new Date().toISOString().slice(0,10); }
@@ -102,13 +104,18 @@ async function loadOrders(preserveOrderIds=null){
 function setEntryMode(isView){
   viewMode = isView;
   if($('orderSelect')) $('orderSelect').disabled = isView;
-  $('shipmentDate').disabled = isView;
-  $('shipmentNote').readOnly = isView;
+  $('shipmentDate').disabled = isView && !editShipmentMode;
+  $('shipmentNote').readOnly = isView && !editShipmentMode;
   $('reloadBtn').disabled = isView;
-  $('confirmBtn').disabled = true;
-  $('shippingHelp').innerHTML = isView
-    ? '※ 기존 출고건 조회 상태입니다. 이 화면에서는 출고내용을 확인만 할 수 있으며 수정/삭제는 출고 내역 조회 메뉴에서 처리합니다.'
-    : '※ 동일 판매처의 여러 수주를 한 출고전표로 묶을 수 있습니다.<br>※ 품번별 출고대기 LOT를 스캔합니다. 뒤 LOT를 스캔해도 실제 배정은 선입 LOT부터 필요한 완전 BOX 수량만큼 자동 배정됩니다.<br>※ 포장 BOX 단위로 출고하며, 수주 잔량보다 큰 BOX는 부분 수량으로 쪼개서 출고하지 않습니다.';
+  $('confirmBtn').disabled = isView && !editShipmentMode;
+  $('confirmBtn').textContent = editShipmentMode ? '출고 수정 저장' : '출고 처리';
+  if(editShipmentMode){
+    $('shippingHelp').innerHTML = '※ 기존 출고 수정 상태입니다. 출고일자와 비고를 수정할 수 있습니다.<br>※ 확정된 출고의 수주/품번/LOT/출고수량은 재고 이력 보호를 위해 이 화면에서 변경하지 않습니다. 해당 항목 변경이 필요하면 기존 출고를 삭제 후 다시 출고해 주세요.';
+  }else{
+    $('shippingHelp').innerHTML = isView
+      ? '※ 기존 출고건 조회 상태입니다. 이 화면에서는 출고내용을 확인만 할 수 있습니다.'
+      : '※ 동일 판매처의 여러 수주를 한 출고전표로 묶을 수 있습니다.<br>※ 품번별 출고대기 LOT를 스캔합니다. 뒤 LOT를 스캔해도 실제 배정은 선입 LOT부터 필요한 완전 BOX 수량만큼 자동 배정됩니다.<br>※ 포장 BOX 단위로 출고하며, 수주 잔량보다 큰 BOX는 부분 수량으로 쪼개서 출고하지 않습니다.';
+  }
 }
 
 function clearOrder(){
@@ -135,6 +142,7 @@ function clearOrder(){
 }
 
 async function newEntry(){
+  editShipmentMode = false;
   setEntryMode(false);
   viewingShipment = null;
   allocations.clear();
@@ -244,6 +252,10 @@ function closeLotModal(){
   currentItemId = null;
   renderItems();
   updateSummary();
+  if(editShipmentMode){
+    $('confirmBtn').disabled = false;
+    $('confirmBtn').textContent = '출고 수정 저장';
+  }
 }
 
 function renderAllocatedLots(){
@@ -323,6 +335,25 @@ function resetCurrentAllocation(){
 }
 
 async function confirmShipment(){
+  if(editShipmentMode && viewingShipment){
+    $('confirmBtn').disabled = true;
+    try{
+      const data = await getJson('/api/shipping/inquiry/' + encodeURIComponent(viewingShipment.id), {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          shipment_date:$('shipmentDate').value,
+          note:$('shipmentNote').value.trim() || null
+        })
+      });
+      alert(data.message || '출고 내역을 수정했습니다.');
+      await loadShipmentDetail(viewingShipment.id);
+    }catch(e){
+      alert(e.message);
+      $('confirmBtn').disabled = false;
+    }
+    return;
+  }
   if(viewMode) return;
   if(!currentOrder) return alert('미출고 수주를 선택해 주세요.');
   const items = currentOrder.items
@@ -391,6 +422,7 @@ async function loadShipmentDetail(shipmentId){
   const detail = await getJson(`/api/shipping/inquiry/${shipmentId}`);
   allocations.clear();
   viewingShipment = detail;
+  editShipmentMode = requestedEditShipmentId > 0 && Number(shipmentId) === requestedEditShipmentId;
   setEntryMode(true);
 
   const items = (detail.items || []).map(row => {
@@ -435,6 +467,12 @@ async function loadShipmentDetail(shipmentId){
 
   $('shipmentNo').value = detail.shipment_no;
   $('shipmentDate').value = detail.shipment_date || '';
+  if(editShipmentMode && detail.shipment_mode === 'DIRECT'){
+    $('shipmentDate').disabled = true;
+    $('shipmentDate').title = '샘플/개발 직출고는 출고 LOT 번호에 일자가 포함되어 있어 일자를 변경할 수 없습니다.';
+  }else{
+    $('shipmentDate').title = '';
+  }
   $('customerName').value = detail.customer_name || '';
   $('deliveryDueDate').value = currentOrder.delivery_due_date || '';
   $('managerName').value = currentOrder.manager_name || '';
@@ -474,6 +512,10 @@ document.addEventListener('DOMContentLoaded',()=>{
   $('shipmentLookupClose').addEventListener('click', closeShipmentLookup);
   $('shipmentLookupModal').addEventListener('click', e => { if(e.target === $('shipmentLookupModal')) closeShipmentLookup(); });
 
-  setEntryMode(false);
-  loadOrders().catch(e=>alert(e.message));
+  if(requestedEditShipmentId){
+    loadShipmentDetail(requestedEditShipmentId).catch(e=>alert(e.message));
+  }else{
+    setEntryMode(false);
+    loadOrders().catch(e=>alert(e.message));
+  }
 });
