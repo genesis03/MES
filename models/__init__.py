@@ -28,8 +28,11 @@ from models.purchase import PurchaseMaster, PurchaseItem
 from models.packing import PackingMaster, PackingLotAllocation, PackingBox
 from models.sales import SalesOrderMaster, SalesOrderItem, ShipmentMaster, ShipmentItem, ShipmentBox, ShipmentDirectLot
 from models.shipping_lot import ShippingLotRegistry
-from models.item_identity import ItemPartNoHistory
+from models.item_identity import ItemPartNoHistory, install_item_identity_events
 
+
+# 신규/수정 업무행은 품번과 함께 영구 item_id를 자동 연결합니다.
+install_item_identity_events()
 
 # 테이블 일괄 자동 생성 트리거
 Base.metadata.create_all(bind=engine)
