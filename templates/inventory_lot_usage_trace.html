@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}LOT 사용처 추적{% endblock %}
+
+{% block content %}
+<div style="max-width:1500px;margin:0 auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px;">
+        <div>
+            <h1 style="font-size:24px;margin-bottom:6px;">LOT 사용처 추적</h1>
+            <div style="font-size:13px;color:#64748b;">자재 또는 공정 LOT를 검색하고 해당 LOT가 어느 생산/후공정 LOT에 사용됐는지 정방향으로 조회합니다.</div>
+        </div>
+        <a href="/inventory/lot-trace" style="padding:8px 14px;border:1px solid #cbd5e1;border-radius:5px;color:#334155;text-decoration:none;background:#fff;">LOT 추적</a>
+    </div>
+
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;margin-bottom:16px;">
+        <div style="display:grid;grid-template-columns:minmax(280px,1fr) 100px;gap:10px;align-items:end;">
+            <label style="font-size:12px;font-weight:bold;">LOT 번호
+                <input id="lotNo" placeholder="자재/공정 LOT 번호 전체 또는 일부 입력" style="width:100%;padding:9px;margin-top:5px;border:1px solid #cbd5e1;border-radius:4px;box-sizing:border-box;">
+            </label>
+            <button id="searchBtn" style="padding:9px 18px;background:#2563eb;color:#fff;border:0;border-radius:4px;font-weight:bold;cursor:pointer;">조회</button>
+        </div>
+        <div id="status" style="margin-top:10px;font-size:13px;color:#475569;"></div>
+    </div>
+
+    <div id="searchResultPanel" style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;margin-bottom:16px;display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-weight:bold;">검색 결과</div>
+            <div id="searchCount" style="font-size:12px;color:#64748b;"></div>
+        </div>
+        <div style="overflow:auto;max-height:320px;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:760px;">
+                <thead><tr style="background:#f1f5f9;">
+                    <th style="border:1px solid #cbd5e1;padding:7px;">구분</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">LOT 번호</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">생성일</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">LOT 수량</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">품번</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;width:80px;">처리</th>
+                </tr></thead>
+                <tbody id="searchBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="tracePanel" style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <div style="font-weight:bold;">LOT 사용처 추적 결과</div>
+            <div id="rootLabel" style="font-size:12px;color:#2563eb;font-weight:bold;"></div>
+        </div>
+        <div style="overflow:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:1200px;">
+                <thead><tr style="background:#f1f5f9;">
+                    <th style="border:1px solid #cbd5e1;padding:7px;">사용 공정</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">기준 LOT</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">기준 LOT 생성일</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">기준 품번</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">사용처 LOT</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">사용처 LOT 수량</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">사용처 품번</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">사용수량</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;">TREE</th>
+                </tr></thead>
+                <tbody id="traceBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+const esc = v => String(v ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[s]));
+const fmt = v => Number(v || 0).toLocaleString(undefined, {maximumFractionDigits:6});
+
+async function searchLots(){
+    const keyword = document.getElementById('lotNo').value.trim();
+    const status = document.getElementById('status');
+    if(!keyword){ status.textContent = 'LOT 번호를 입력해 주세요.'; return; }
+    status.textContent = '검색 중...';
+    document.getElementById('tracePanel').style.display = 'none';
+    const res = await fetch('/api/inventory/lot-usage/search?q=' + encodeURIComponent(keyword));
+    const data = await res.json();
+    if(!res.ok){ status.textContent = data.detail || 'LOT 검색에 실패했습니다.'; return; }
+    document.getElementById('searchResultPanel').style.display = 'block';
+    document.getElementById('searchCount').textContent = `${data.total || 0}건`;
+    document.getElementById('searchBody').innerHTML = data.items?.length ? data.items.map(row => `
+        <tr>
+            <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.kind)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;font-weight:bold;">${esc(row.lot_no)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.date)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${fmt(row.qty)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.part_no)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;"><button type="button" onclick='traceUsage(${JSON.stringify(row.lot_no)})' style="padding:5px 10px;border:1px solid #2563eb;background:#fff;color:#2563eb;border-radius:4px;cursor:pointer;font-weight:bold;">추적</button></td>
+        </tr>`).join('') : '<tr><td colspan="6" style="padding:20px;text-align:center;">검색 결과가 없습니다.</td></tr>';
+    status.textContent = data.items?.length ? '검색 결과에서 LOT를 선택해 주세요.' : '검색 결과가 없습니다.';
+    if(data.items?.length === 1) traceUsage(data.items[0].lot_no);
+}
+
+async function traceUsage(lotNo){
+    const status = document.getElementById('status');
+    status.textContent = lotNo + ' 사용처 조회 중...';
+    const res = await fetch('/api/inventory/lot-usage-trace?lot_no=' + encodeURIComponent(lotNo));
+    const data = await res.json();
+    if(!res.ok){ status.textContent = data.detail || 'LOT 사용처 추적에 실패했습니다.'; return; }
+    document.getElementById('tracePanel').style.display = 'block';
+    document.getElementById('rootLabel').textContent = '기준 LOT: ' + data.root_lot_no;
+    document.getElementById('traceBody').innerHTML = data.rows?.length ? data.rows.map(row => `
+        <tr>
+            <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.process)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;font-weight:bold;">${esc(row.source_lot_no)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.source_date)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.source_part_no)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.used_lot_no)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${fmt(row.used_lot_qty)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.used_part_no)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${fmt(row.used_qty)}</td>
+            <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.tree)}</td>
+        </tr>`).join('') : '<tr><td colspan="9" style="padding:20px;text-align:center;">이 LOT를 사용한 후속 LOT가 없습니다.</td></tr>';
+    status.textContent = `사용처 ${data.row_count || 0}건`;
+    document.getElementById('tracePanel').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+document.getElementById('searchBtn').addEventListener('click', searchLots);
+document.getElementById('lotNo').addEventListener('keydown', e => { if(e.key === 'Enter') searchLots(); });
+</script>
+{% endblock %}
