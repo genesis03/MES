@@ -288,8 +288,17 @@ def ensure_item_part_no_fk_removed(engine) -> None:
                 )
 
         backup_path = _backup_sqlite_database(conn, engine)
+
+        # 위의 조회로 열린 암묵적 트랜잭션을 먼저 종료해야 SQLite가
+        # PRAGMA foreign_keys=OFF 변경을 실제로 적용합니다.
+        conn.commit()
         conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
         conn.commit()
+
+        fk_state = int(conn.exec_driver_sql("PRAGMA foreign_keys").scalar_one() or 0)
+        conn.commit()
+        if fk_state != 0:
+            raise RuntimeError("SQLite foreign_keys 비활성화에 실패해 스키마 전환을 중단했습니다.")
 
         transaction = conn.begin()
         try:
