@@ -60,31 +60,32 @@ def _get_run(db: Session, run_id: int) -> ProductionRun:
     return run
 
 
-def _bom_rows(db: Session, part_no: str, process_code: str):
+def _bom_rows(db: Session, item_id: int, process_code: str):
     rows = (
         db.query(ItemBomModel)
-        .filter(ItemBomModel.parent_part_no == part_no, ItemBomModel.process_code == process_code)
+        .filter(ItemBomModel.parent_item_id == item_id, ItemBomModel.process_code == process_code)
         .order_by(ItemBomModel.sort_order.asc(), ItemBomModel.id.asc())
         .all()
     )
     if not rows:
         rows = (
             db.query(ItemBomModel)
-            .filter(ItemBomModel.parent_part_no == part_no)
+            .filter(ItemBomModel.parent_item_id == item_id)
             .order_by(ItemBomModel.sort_order.asc(), ItemBomModel.id.asc())
             .all()
         )
     return rows
 
 
-def _lot_rows(db: Session, part_no: str):
+def _lot_rows(db: Session, item_id: int):
     rows = []
+    item = db.get(ItemMasterModel, item_id) if item_id else None
     purchases = (
         db.query(PurchaseInboundItem)
         .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
         .filter(
             PurchaseInboundMaster.status == "CONFIRMED",
-            PurchaseInboundItem.part_no == part_no,
+            PurchaseInboundItem.item_id == item_id,
             PurchaseInboundItem.internal_lot_no.isnot(None),
             PurchaseInboundItem.internal_lot_no != "",
         )
@@ -93,20 +94,22 @@ def _lot_rows(db: Session, part_no: str):
     for row in purchases:
         rows.append({
             "lot_no": row.internal_lot_no,
-            "part_no": row.part_no,
+            "item_id": row.item_id,
+            "part_no": item.part_no if item else row.part_no,
             "base_qty": float(row.inbound_qty or 0),
             "storage_location": row.storage_location or "",
             "source_type": "PURCHASE",
         })
     productions = (
         db.query(ProductionLotModel)
-        .filter(ProductionLotModel.part_no == part_no, ProductionLotModel.status == "ACTIVE")
+        .filter(ProductionLotModel.item_id == item_id, ProductionLotModel.status == "ACTIVE")
         .all()
     )
     for row in productions:
         rows.append({
             "lot_no": row.lot_no,
-            "part_no": row.part_no,
+            "item_id": row.item_id,
+            "part_no": item.part_no if item else row.part_no,
             "base_qty": float(row.lot_qty or 0),
             "storage_location": row.storage_location or "",
             "source_type": "PRODUCTION",
@@ -145,6 +148,7 @@ def _serialize_material(material: ProductionRunMaterial):
     allocated = sum(float(x.allocated_qty or 0) for x in material.allocations)
     return {
         "id": material.id,
+        "item_id": material.material_item_id,
         "part_no": material.material_part_no,
         "part_name": material.material_name or "",
         "unit": material.unit,
@@ -175,9 +179,10 @@ def _serialize_run(run: ProductionRun, db: Optional[Session] = None):
         process = db.query(ProcessModel).filter(ProcessModel.process_code == run.process_code).first()
         if process and process.process_name:
             process_name = process.process_name
-        if part_no:
-            item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
+        if work_order and work_order.item_id:
+            item = db.get(ItemMasterModel, work_order.item_id)
             if item:
+                part_no = item.part_no
                 part_name = item.part_name or ""
         if run.performance_id:
             marker = f"PERF:{run.performance_id}|"
@@ -233,14 +238,15 @@ def selectable_orders(process_code: str = Query(...), db: Session = Depends(get_
     )
     result = []
     for order in orders:
-        item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == order.part_no).first()
-        process_match = db.query(ItemBomModel.id).filter(ItemBomModel.parent_part_no == order.part_no, ItemBomModel.process_code == code).first()
+        item = db.get(ItemMasterModel, order.item_id) if order.item_id else None
+        process_match = db.query(ItemBomModel.id).filter(ItemBomModel.parent_item_id == order.item_id, ItemBomModel.process_code == code).first()
         if not process_match and (not item or (item.production_loc or "") != code):
             continue
         result.append({
             "id": order.id,
             "work_order_no": order.work_order_no,
-            "part_no": order.part_no,
+            "item_id": order.item_id,
+            "part_no": item.part_no if item else order.part_no,
             "part_name": item.part_name if item else "",
             "order_qty": order.order_qty,
             "production_qty": order.production_qty,
@@ -347,22 +353,27 @@ def start_run(payload: StartRunPayload, db: Session = Depends(get_db), current_u
     db.add(run)
     db.flush()
 
-    bom_rows = _bom_rows(db, order.part_no, process.process_code)
+    bom_rows = _bom_rows(db, order.item_id, process.process_code)
     if not bom_rows:
         db.rollback()
         raise HTTPException(400, "작업지시 품번의 BOM 자재를 찾을 수 없습니다.")
-    item_map = {x.part_no: x for x in db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_({x.child_part_no for x in bom_rows})).all()}
+    child_ids = {int(x.child_item_id) for x in bom_rows if x.child_item_id}
+    item_map = {x.id: x for x in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(child_ids)).all()} if child_ids else {}
     grouped = {}
     for bom in bom_rows:
-        key = bom.child_part_no
+        if not bom.child_item_id:
+            continue
+        key = int(bom.child_item_id)
         if key not in grouped:
             grouped[key] = {"qty": 0.0, "unit": bom.unit or "EA", "sort": int(bom.sort_order or 1)}
         grouped[key]["qty"] += float(bom.quantity or 0)
-    for part_no, data in grouped.items():
+    for item_id, data in grouped.items():
+        item = item_map.get(item_id)
         db.add(ProductionRunMaterial(
             run_id=run.id,
-            material_part_no=part_no,
-            material_name=item_map.get(part_no).part_name if item_map.get(part_no) else "",
+            material_item_id=item_id,
+            material_part_no=item.part_no if item else "",
+            material_name=item.part_name if item else "",
             unit=data["unit"],
             bom_qty=data["qty"],
             required_qty=0.0,
@@ -393,7 +404,7 @@ def material_lots(
 
     rows = []
     fifo_enabled = True
-    for lot in _lot_rows(db, material.material_part_no):
+    for lot in _lot_rows(db, material.material_item_id):
         current_alloc = current_alloc_by_lot.get(lot["lot_no"], 0.0)
         available_before_current = _available_qty(
             db,
@@ -467,7 +478,7 @@ def scan_material_lot(
     if not scanned:
         raise HTTPException(400, "LOT 번호를 입력하세요.")
 
-    lots = _lot_rows(db, material.material_part_no)
+    lots = _lot_rows(db, material.material_item_id)
     scanned_lot = next((lot for lot in lots if lot["lot_no"].upper() == scanned.upper()), None)
     if scanned_lot is None:
         raise HTTPException(404, f"{material.material_part_no} 품번에 해당하는 LOT가 아닙니다.")
@@ -612,7 +623,7 @@ def scan_lot(run_id: int, payload: ScanLotPayload, db: Session = Depends(get_db)
     matched_material = None
     matched_lot = None
     for material in run.materials:
-        for lot in _lot_rows(db, material.material_part_no):
+        for lot in _lot_rows(db, material.material_item_id):
             if lot["lot_no"].upper() == scanned.upper():
                 matched_material = material
                 matched_lot = lot
@@ -630,7 +641,7 @@ def scan_lot(run_id: int, payload: ScanLotPayload, db: Session = Depends(get_db)
 
     fifo_lot = None
     fifo_available = 0.0
-    for lot in _lot_rows(db, matched_material.material_part_no):
+    for lot in _lot_rows(db, matched_material.material_item_id):
         if any(x.lot_no == lot["lot_no"] for x in matched_material.allocations):
             continue
         available = _available_qty(db, lot["lot_no"], lot["base_qty"], current_run_id=run.id)
@@ -707,6 +718,7 @@ def complete_run(run_id: int, db: Session = Depends(get_db), current_user=Depend
         for allocation in material.allocations:
             db.add(LotConsumptionModel(
                 lot_no=allocation.lot_no,
+                item_id=material.material_item_id,
                 part_no=material.material_part_no,
                 work_order_id=order.id,
                 performance_id=perf.id,
