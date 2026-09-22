@@ -28,9 +28,10 @@
     td { border-bottom:1px solid #e2e8f0; padding:8px 7px; text-align:center; white-space:nowrap; }
     td.left { text-align:left; }
     tr.selected-row { background:#eff6ff; }
-    .row-no { width:30px; height:26px; border:1px solid #cbd5e1; border-radius:5px; background:#fff; color:#475569; cursor:pointer; font-weight:800; }
-    .row-no:hover { border-color:#2563eb; color:#2563eb; }
-    .row-no.selected { background:#2563eb; border-color:#2563eb; color:#fff; }
+    .select-cell { display:flex; align-items:center; justify-content:center; gap:7px; }
+    .row-check { width:15px; height:15px; cursor:pointer; }
+    .row-check:disabled { cursor:not-allowed; opacity:.35; }
+    .doc-link { color:#1d4ed8; font-weight:800; text-decoration:underline; cursor:pointer; }
     .select-all { border:1px solid #cbd5e1; border-radius:4px; background:#fff; padding:3px 7px; cursor:pointer; font-size:11px; font-weight:700; }
     .type-badge { display:inline-block; border-radius:12px; padding:3px 8px; font-weight:700; }
     .type-general { background:#dbeafe; color:#1d4ed8; }
@@ -69,17 +70,17 @@
     </div>
 
     <div class="action-row">
-        <button id="editSelectedInbound" class="btn btn-primary" onclick="editSelectedInbound()" disabled>선택수정</button>
         <button id="deleteSelectedInbounds" class="btn btn-danger" onclick="deleteSelectedInbounds()" disabled>선택삭제 (0)</button>
-        <div style="font-size:12px;color:#64748b;">일반구매는 선택 후 수정/삭제, 외주가공은 행의 순번을 눌러 수정합니다. 후공정 사용 LOT가 있으면 수정이 차단됩니다.</div>
+        <div style="font-size:12px;color:#64748b;">입고번호를 클릭하면 해당 입력/수정 화면으로 이동합니다. 다건 삭제는 체크박스로 선택합니다.</div>
         <div class="summary">조회 <span id="inboundCount">0</span>건</div>
     </div>
 
     <div class="table-box"><table><thead><tr>
-        <th style="width:54px;"><button class="select-all" onclick="toggleAllInbounds()">전체</button></th>
+        <th style="width:64px;"><button class="select-all" onclick="toggleAllInbounds()">전체</button></th>
+        <th style="width:52px;">No.</th>
         <th>구분</th><th>입고번호</th><th>입고일자</th><th>상태</th><th>발주번호</th><th>거래처</th>
         <th>품번</th><th>품명</th><th>규격</th><th>입고수량</th><th>단위</th><th>공급사/외주 LOT</th><th>내부 LOT</th><th>창고</th><th>저장위치</th><th>검사상태</th><th>비고</th>
-    </tr></thead><tbody id="inboundInquiryBody"><tr><td colspan="18" class="empty">조회 중입니다...</td></tr></tbody></table></div>
+    </tr></thead><tbody id="inboundInquiryBody"><tr><td colspan="19" class="empty">조회 중입니다...</td></tr></tbody></table></div>
     <div class="notice" id="inboundNotice"></div>
 </div>
 {% endblock %}
@@ -96,14 +97,12 @@ function resetInboundInquiry(){['inboundStartDate','inboundEndDate','inboundNo',
 function statusClass(status){if(status==='DRAFT')return 'st-draft';if(status==='CANCELLED')return 'st-cancelled';return 'st-confirmed';}
 
 function updateInboundSelection(){
-    document.querySelectorAll('#inboundInquiryBody tr[data-inbound-id]').forEach(row=>{const selected=selectedInboundIds.has(Number(row.dataset.inboundId));row.classList.toggle('selected-row',selected);const btn=row.querySelector('.row-no');if(btn)btn.classList.toggle('selected',selected);});
+    document.querySelectorAll('#inboundInquiryBody tr[data-inbound-id]').forEach(row=>{const selected=selectedInboundIds.has(Number(row.dataset.inboundId));row.classList.toggle('selected-row',selected);const check=row.querySelector('.row-check:not(:disabled)');if(check)check.checked=selected;});
     const deleteBtn=document.getElementById('deleteSelectedInbounds');deleteBtn.textContent=`선택삭제 (${selectedInboundIds.size})`;deleteBtn.disabled=selectedInboundIds.size===0;
-    document.getElementById('editSelectedInbound').disabled=selectedInboundIds.size!==1;
 }
 function toggleInboundSelection(id){if(selectedInboundIds.has(id))selectedInboundIds.delete(id);else selectedInboundIds.add(id);updateInboundSelection();}
 function toggleAllInbounds(){const ids=[...new Set(currentInboundRows.filter(row=>row.source_type!=='SUBCONTRACT').map(row=>Number(row.inbound_id)))];const allSelected=ids.length>0&&ids.every(id=>selectedInboundIds.has(id));ids.forEach(id=>allSelected?selectedInboundIds.delete(id):selectedInboundIds.add(id));updateInboundSelection();}
-function editSelectedInbound(){if(selectedInboundIds.size!==1)return;const id=[...selectedInboundIds][0];location.href='/purchase/inbound?edit='+encodeURIComponent(id);}
-function editSubcontractInbound(id){location.href='/subcontract/inbound/edit/'+encodeURIComponent(id);}
+function inboundEditUrl(row){return row.source_type==='SUBCONTRACT'?'/subcontract/inbound/edit/'+encodeURIComponent(row.inbound_id):'/purchase/inbound?edit='+encodeURIComponent(row.inbound_id);}
 
 async function deleteSelectedInbounds(){
     const ids=[...selectedInboundIds];if(!ids.length)return;
@@ -124,20 +123,23 @@ async function fetchInboundRows(url){
 
 function renderInboundRows(rows){
     const body=document.getElementById('inboundInquiryBody');
-    if(!rows.length){body.innerHTML='<tr><td colspan="18" class="empty">조회된 입고 내역이 없습니다.</td></tr>';return;}
+    if(!rows.length){body.innerHTML='<tr><td colspan="19" class="empty">조회된 입고 내역이 없습니다.</td></tr>';return;}
     body.innerHTML=rows.map((x,index)=>{
         const isSub=x.source_type==='SUBCONTRACT';
-        const firstCell=isSub?`<button class="row-no" title="외주가공 입고 수정" onclick="editSubcontractInbound(${Number(x.inbound_id)})">${index+1}</button>`:`<button class="row-no" onclick="toggleInboundSelection(${Number(x.inbound_id)})">${index+1}</button>`;
+        const checkbox=isSub
+          ? '<input class="row-check" type="checkbox" disabled title="외주가공 입고는 현재 선택삭제 대상이 아닙니다.">'
+          : `<input class="row-check" type="checkbox" onclick="toggleInboundSelection(${Number(x.inbound_id)})">`;
         const rowAttr=isSub?'':` data-inbound-id="${Number(x.inbound_id)}"`;
         const typeBadge=isSub?'<span class="type-badge type-subcontract">외주가공</span>':'<span class="type-badge type-general">일반구매</span>';
+        const editUrl=inboundEditUrl(x);
         const inspection=x.inspection_status||'';
         const note=isSub&&x.source_lot_no?`원 LOT: ${x.source_lot_no}${x.sample_qty?` / 샘플 ${Number(x.sample_qty).toLocaleString()}`:''}${x.note?` / ${x.note}`:''}`:(x.note||'');
-        return `<tr${rowAttr}><td>${firstCell}</td><td>${typeBadge}</td><td>${escInbound(x.inbound_no)}</td><td>${escInbound(x.inbound_date)}</td><td><span class="status-badge ${statusClass(x.status)}">${escInbound(x.status_name)}</span></td><td>${escInbound(x.po_no)}</td><td class="left">${escInbound(x.partner_name)}</td><td>${escInbound(x.part_no)}</td><td class="left">${escInbound(x.part_name)}</td><td class="left">${escInbound(x.spec)}</td><td>${Number(x.inbound_qty||0).toLocaleString()}</td><td>${escInbound(x.unit)}</td><td class="lot">${escInbound(x.supplier_lot_no)}</td><td class="lot">${escInbound(x.internal_lot_no)}</td><td>${escInbound(x.warehouse_code)}</td><td>${escInbound(x.storage_location)}</td><td>${escInbound(inspection)}</td><td class="left">${escInbound(note)}</td></tr>`;
+        return `<tr${rowAttr}><td><div class="select-cell">${checkbox}</div></td><td>${index+1}</td><td>${typeBadge}</td><td><a class="doc-link" href="${editUrl}">${escInbound(x.inbound_no)}</a></td><td>${escInbound(x.inbound_date)}</td><td><span class="status-badge ${statusClass(x.status)}">${escInbound(x.status_name)}</span></td><td>${escInbound(x.po_no)}</td><td class="left">${escInbound(x.partner_name)}</td><td>${escInbound(x.part_no)}</td><td class="left">${escInbound(x.part_name)}</td><td class="left">${escInbound(x.spec)}</td><td>${Number(x.inbound_qty||0).toLocaleString()}</td><td>${escInbound(x.unit)}</td><td class="lot">${escInbound(x.supplier_lot_no)}</td><td class="lot">${escInbound(x.internal_lot_no)}</td><td>${escInbound(x.warehouse_code)}</td><td>${escInbound(x.storage_location)}</td><td>${escInbound(inspection)}</td><td class="left">${escInbound(note)}</td></tr>`;
     }).join('');
 }
 
 async function loadInboundInquiry(){
-    const body=document.getElementById('inboundInquiryBody');const notice=document.getElementById('inboundNotice');selectedInboundIds.clear();currentInboundRows=[];updateInboundSelection();body.innerHTML='<tr><td colspan="18" class="empty">조회 중입니다...</td></tr>';notice.textContent='';
+    const body=document.getElementById('inboundInquiryBody');const notice=document.getElementById('inboundNotice');selectedInboundIds.clear();currentInboundRows=[];updateInboundSelection();body.innerHTML='<tr><td colspan="19" class="empty">조회 중입니다...</td></tr>';notice.textContent='';
     const p=queryParams();
     try{
         const requests=[];
@@ -150,9 +152,9 @@ async function loadInboundInquiry(){
         document.getElementById('inboundCount').textContent=rows.length.toLocaleString();
         renderInboundRows(rows);
         updateInboundSelection();
-        if(inboundType==='SUBCONTRACT')notice.textContent='외주가공 입고는 입고번호 1건당 1행으로 표시됩니다. 순번을 누르면 수정 화면으로 이동합니다.';
-        else if(inboundType==='ALL')notice.textContent='일반구매와 외주가공 입고 이력을 통합 표시합니다.';
-    }catch(e){body.innerHTML=`<tr><td colspan="18" class="empty" style="color:#dc2626;">${escInbound(e.message)}</td></tr>`;}
+        if(inboundType==='SUBCONTRACT')notice.textContent='외주가공 입고는 입고번호를 클릭하면 수정 화면으로 이동합니다.';
+        else if(inboundType==='ALL')notice.textContent='일반구매와 외주가공 모두 입고번호를 클릭해 해당 입력/수정 화면으로 이동합니다.';
+    }catch(e){body.innerHTML=`<tr><td colspan="19" class="empty" style="color:#dc2626;">${escInbound(e.message)}</td></tr>`;}
 }
 
 document.addEventListener('DOMContentLoaded',loadInboundInquiry);
