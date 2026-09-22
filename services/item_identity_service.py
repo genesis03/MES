@@ -1,9 +1,11 @@
+import json
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from models.item_identity import ItemPartNoHistory
 from models.item_identity_migration import IDENTITY_COLUMNS
-from models.models import ItemMasterModel
+from models.models import ItemMasterModel, ShippingMasterModel
 
 
 def _quote(identifier: str) -> str:
@@ -82,6 +84,22 @@ def rename_item_part_no(
                 "item_id": item.id,
             },
         )
+
+    # 레거시 출고 원장(shipping_master)은 JSON 스테이징 구조라 item_id 컬럼이 없습니다.
+    # MES 출고에서 생성되었거나 과거 업로드된 행 중 품번(textBox9)이 정확히 이전 품번인 행만 함께 갱신합니다.
+    for staging in db.query(ShippingMasterModel).all():
+        try:
+            row = json.loads(staging.row_json)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if str(row.get("textBox9") or "").strip() != old_part_no:
+            continue
+        row["textBox9"] = new_part_no
+        barcode = str(row.get("barcode1") or "")
+        old_prefix = f"P{old_part_no}Q"
+        if barcode.startswith(old_prefix):
+            row["barcode1"] = f"P{new_part_no}Q" + barcode[len(old_prefix):]
+        staging.row_json = json.dumps(row, ensure_ascii=False)
 
     item.part_no = new_part_no
     db.add(
