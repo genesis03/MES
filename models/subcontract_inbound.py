@@ -51,6 +51,8 @@ class SubcontractInboundItem(Base):
     inbound_id = Column(Integer, ForeignKey("subcontract_inbound_masters.id"), nullable=False, index=True)
     outbound_item_id = Column(Integer, ForeignKey("subcontract_outbound_items.id"), nullable=False, index=True)
     order_item_id = Column(Integer, ForeignKey("subcontract_order_items.id"), nullable=False, index=True)
+    previous_item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
     previous_part_no = Column(String(50), nullable=False, index=True)
     part_no = Column(String(80), nullable=False, index=True)
     part_name = Column(String(200), nullable=False)
