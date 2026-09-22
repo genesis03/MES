@@ -23,14 +23,14 @@ class ScanLotPayload(BaseModel):
     lot_no: str
 
 
-def _lot_rows(db: Session, part_no: str):
+def _lot_rows(db: Session, item_id: int):
     rows = []
     purchases = (
         db.query(PurchaseInboundItem, PurchaseInboundMaster)
         .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
         .filter(
             PurchaseInboundMaster.status == "CONFIRMED",
-            PurchaseInboundItem.part_no == part_no,
+            PurchaseInboundItem.item_id == item_id,
             PurchaseInboundItem.internal_lot_no.isnot(None),
             PurchaseInboundItem.internal_lot_no != "",
         )
@@ -39,6 +39,8 @@ def _lot_rows(db: Session, part_no: str):
     for row, master in purchases:
         rows.append({
             "lot_no": row.internal_lot_no,
+            "item_id": row.item_id,
+            "item_id": row.item_id,
             "part_no": row.part_no,
             "base_qty": float(row.inbound_qty or 0),
             "storage_location": row.storage_location or "",
@@ -48,7 +50,7 @@ def _lot_rows(db: Session, part_no: str):
 
     productions = (
         db.query(ProductionLotModel)
-        .filter(ProductionLotModel.part_no == part_no, ProductionLotModel.status == "ACTIVE")
+        .filter(ProductionLotModel.item_id == item_id, ProductionLotModel.status == "ACTIVE")
         .all()
     )
     for row in productions:
@@ -123,6 +125,7 @@ def _serialize_material(material: ProductionRunMaterial):
     allocated = sum(float(x.allocated_qty or 0) for x in material.allocations)
     return {
         "id": material.id,
+        "item_id": material.material_item_id,
         "part_no": material.material_part_no,
         "part_name": material.material_name or "",
         "unit": material.unit,
@@ -150,7 +153,7 @@ def scan_lot(run_id: int, payload: ScanLotPayload, db: Session = Depends(get_db)
     matched_rows = None
     scanned_index = None
     for material in run.materials:
-        rows = _lot_rows(db, material.material_part_no)
+        rows = _lot_rows(db, material.material_item_id)
         for index, lot in enumerate(rows):
             if str(lot["lot_no"]).upper() == scanned.upper():
                 matched_material = material
