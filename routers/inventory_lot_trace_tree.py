@@ -86,6 +86,7 @@ def _node(db: Session, lot_no: str, process_map: dict[str, str]) -> dict:
             "date": master.inbound_date or "",
             "qty": float(lot.good_qty or 0),
             "part_no": item.part_no or "",
+            "external_lot_no": lot.supplier_lot_no or "",
         }
 
     production = db.query(ProductionLotModel).filter(ProductionLotModel.lot_no == lot_no).first()
@@ -105,6 +106,7 @@ def _node(db: Session, lot_no: str, process_map: dict[str, str]) -> dict:
             "date": production.created_at.strftime("%Y-%m-%d") if production.created_at else "",
             "qty": float(production.lot_qty or 0),
             "part_no": production.part_no or "",
+            "external_lot_no": "",
         }
 
     purchase = (
@@ -121,9 +123,10 @@ def _node(db: Session, lot_no: str, process_map: dict[str, str]) -> dict:
             "date": master.inbound_date or "",
             "qty": float(item.inbound_qty or 0),
             "part_no": item.part_no or "",
+            "external_lot_no": item.supplier_lot_no or "",
         }
 
-    return {"lot_no": lot_no, "process_name": "연결", "date": "", "qty": 0.0, "part_no": ""}
+    return {"lot_no": lot_no, "process_name": "연결", "date": "", "qty": 0.0, "part_no": "", "external_lot_no": ""}
 
 
 def _edges(db: Session) -> list[dict]:
@@ -217,9 +220,41 @@ def inventory_lot_trace_tree(
     def node(value: str) -> dict:
         if value not in node_cache:
             node_cache[value] = _node(db, value, process_map)
+            node_cache[value].setdefault("external_lot_no", "")
         return node_cache[value]
 
     rows: list[dict] = []
+
+    # 외주 전량입고는 내부 LOT 번호를 유지할 수 있어 LotRelation(parent==child)로 표현할 수 없습니다.
+    # 이 경우 외주입고 이력 자체를 가상 연결행으로 표시해 가공 전 품번과 공급처 LOT를 추적합니다.
+    same_lot_inbound = (
+        db.query(SubcontractInboundLot, SubcontractInboundItem, SubcontractInboundMaster)
+        .join(SubcontractInboundItem, SubcontractInboundItem.id == SubcontractInboundLot.inbound_item_id)
+        .join(SubcontractInboundMaster, SubcontractInboundMaster.id == SubcontractInboundItem.inbound_id)
+        .filter(
+            SubcontractInboundMaster.status == "RECEIVED",
+            SubcontractInboundLot.child_lot_no == root,
+            SubcontractInboundLot.source_lot_no == root,
+        )
+        .order_by(SubcontractInboundMaster.id.desc(), SubcontractInboundLot.id.desc())
+        .first()
+    )
+    if same_lot_inbound:
+        inbound_lot, inbound_item, inbound_master = same_lot_inbound
+        current_node = node(root)
+        rows.append({
+            "process": inbound_master.processing_type_name or current_node["process_name"],
+            "lot_no": root,
+            "lot_date": inbound_master.inbound_date or current_node["date"],
+            "part_no": inbound_item.part_no or current_node["part_no"],
+            "external_lot_no": inbound_lot.supplier_lot_no or "",
+            "child_lot_no": inbound_lot.source_lot_no,
+            "child_lot_qty": float(inbound_lot.source_qty or 0),
+            "child_part_no": inbound_item.previous_part_no or "",
+            "consumed_qty": float(inbound_lot.good_qty or 0),
+            "tree": f"{root} - {inbound_lot.source_lot_no} ({inbound_item.previous_part_no or ''})",
+        })
+
     queue = deque([(root, [root])])
     visited_paths: set[tuple[str, ...]] = set()
 
@@ -235,6 +270,7 @@ def inventory_lot_trace_tree(
                     "lot_no": current,
                     "lot_date": current_node["date"],
                     "part_no": current_node["part_no"],
+                    "external_lot_no": current_node.get("external_lot_no", ""),
                     "child_lot_no": "",
                     "child_lot_qty": None,
                     "child_part_no": "",
@@ -259,6 +295,7 @@ def inventory_lot_trace_tree(
                 "lot_no": current,
                 "lot_date": current_node["date"],
                 "part_no": current_node["part_no"],
+                "external_lot_no": current_node.get("external_lot_no", ""),
                 "child_lot_no": source,
                 "child_lot_qty": source_node["qty"],
                 "child_part_no": source_node["part_no"],
