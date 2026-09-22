@@ -143,7 +143,7 @@ def inbound_defect_list(
             .join(PurchaseInboundItem, PurchaseInboundItem.inbound_id == PurchaseInboundMaster.id)
             .outerjoin(PurchaseOrderItem, PurchaseOrderItem.id == PurchaseInboundItem.po_item_id)
             .outerjoin(PurchaseOrderMaster, PurchaseOrderMaster.id == PurchaseOrderItem.po_id)
-            .join(ItemMasterModel, ItemMasterModel.part_no == PurchaseInboundItem.part_no)
+            .join(ItemMasterModel, ItemMasterModel.id == PurchaseInboundItem.item_id)
             .filter(PurchaseInboundMaster.status == "CONFIRMED")
         )
         if start_date:
@@ -175,7 +175,8 @@ def inbound_defect_list(
                 "inbound_no": master.inbound_no,
                 "order_no": po_no or "",
                 "partner_name": master.partner_name,
-                "part_no": item.part_no,
+                "item_id": item.item_id,
+                "part_no": product.part_no,
                 "part_name": product.part_name,
                 "inbound_qty": float(item.inbound_qty or 0),
                 "unit": item.unit,
@@ -219,6 +220,7 @@ def inbound_defect_list(
                 "inbound_no": master.inbound_no,
                 "order_no": master.order_no,
                 "partner_name": master.partner_name,
+                "item_id": item.item_id,
                 "part_no": item.part_no,
                 "part_name": item.part_name,
                 "inbound_qty": float(item.good_qty or 0),
