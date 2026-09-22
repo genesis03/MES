@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import get_current_user
+from models.lot_consumption import LotConsumptionModel
 from models.lot_relation import LotRelationModel
 from models.models import ProcessModel, PurchaseInboundItem, PurchaseInboundMaster
 from models.packing import PackingBox, PackingMaster
@@ -147,6 +148,26 @@ def _edges(db: Session) -> list[dict]:
 
     for relation in db.query(LotRelationModel).all():
         add(relation.parent_lot_no, relation.child_lot_no, relation.process_code or "", relation.consumed_qty or 0)
+
+    # 생산실적의 실제 자재 LOT 소비원장을 생산 LOT 계보에 연결합니다.
+    # 다중 BOM/다중 LOT 배정도 performance_id 기준으로 모두 연결합니다.
+    consumptions = db.query(LotConsumptionModel).all()
+    perf_ids = sorted({row.performance_id for row in consumptions if row.performance_id})
+    output_by_perf: dict[int, list[ProductionLotModel]] = {}
+    if perf_ids:
+        output_lots = db.query(ProductionLotModel).filter(ProductionLotModel.note.like("PERF:%")).all()
+        for output_lot in output_lots:
+            perf_id = performance_id_from_lot_note(output_lot.note)
+            if perf_id in perf_ids:
+                output_by_perf.setdefault(perf_id, []).append(output_lot)
+    for consumption in consumptions:
+        for output_lot in output_by_perf.get(consumption.performance_id, []):
+            add(
+                consumption.lot_no,
+                output_lot.lot_no,
+                consumption.process_code or "",
+                consumption.consumed_qty or 0,
+            )
 
     for box, master in (
         db.query(PackingBox, PackingMaster)
