@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -11,6 +12,11 @@ from models.sales import SalesOrderMaster, ShipmentMaster
 
 router = APIRouter(tags=["Shipping Inquiry"])
 templates = Jinja2Templates(directory="templates")
+
+
+class ShipmentUpdateInput(BaseModel):
+    shipment_date: str = Field(min_length=10, max_length=10)
+    note: str | None = Field(default=None, max_length=1000)
 
 
 def _sync_order_status(order: SalesOrderMaster):
@@ -195,6 +201,59 @@ def shipping_inquiry_detail(shipment_id: int, db: Session = Depends(get_db), cur
     if not row:
         raise HTTPException(404, "출고 내역을 찾을 수 없습니다.")
     return _serialize_shipment(db, row, detail=True)
+
+
+@router.put("/api/shipping/inquiry/{shipment_id}")
+def update_shipment(
+    shipment_id: int,
+    payload: ShipmentUpdateInput,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    shipment = db.get(ShipmentMaster, shipment_id)
+    if not shipment:
+        raise HTTPException(404, "출고 내역을 찾을 수 없습니다.")
+
+    has_direct = any(
+        bool(getattr(item, "direct_lots", []) or [])
+        for item in shipment.items
+    )
+    if has_direct and payload.shipment_date != shipment.shipment_date:
+        raise HTTPException(
+            409,
+            "샘플/개발 직출고는 출고 LOT 번호에 출고일자가 포함되어 있어 출고일자를 변경할 수 없습니다.",
+        )
+
+    # 이미 출하 인쇄용 작업 데이터가 생성된 경우 날짜/비고 수정 후 재생성되도록
+    # 해당 출고의 포장 LOT가 포함된 staging 데이터만 제거합니다.
+    lot_nos = {
+        str(box.package_lot_no).strip()
+        for item in shipment.items
+        for box in item.boxes
+        if box.package_lot_no
+    }
+    staging_removed = 0
+    if lot_nos:
+        for row in db.query(ShippingMasterModel).all():
+            raw = str(row.row_json or "")
+            if any(lot_no in raw for lot_no in lot_nos):
+                db.delete(row)
+                staging_removed += 1
+
+    shipment.shipment_date = payload.shipment_date
+    shipment.note = (payload.note or "").strip() or None
+    db.commit()
+
+    return {
+        "status": "success",
+        "shipment_id": shipment.id,
+        "shipment_no": shipment.shipment_no,
+        "staging_removed": staging_removed,
+        "message": (
+            "출고 내역을 수정했습니다."
+            + (f" 기존 인쇄 작업 데이터 {staging_removed}건은 재생성하도록 정리했습니다." if staging_removed else "")
+        ),
+    }
 
 
 @router.delete("/api/shipping/inquiry/{shipment_id}")
