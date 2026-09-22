@@ -30,7 +30,7 @@ def scan_waiting_lot_auto(
     if item.status not in ("WAITING", "PARTIAL") or item.order.status not in ("ORDERED", "PARTIAL"):
         raise HTTPException(409, "이미 출고 완료되었거나 출고할 수 없는 수주 품목입니다.")
 
-    waiting = _waiting_rows(db, item.part_no)
+    waiting = _waiting_rows(db, item.item_id)
     if not waiting:
         raise HTTPException(409, "출고 가능한 출고대기LOT가 없습니다.")
 
