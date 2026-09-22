@@ -38,7 +38,7 @@ class SalesOrderItem(Base):
     id = Column(Integer, primary_key=True)
     order_id = Column(Integer, ForeignKey("sales_order_masters.id"), nullable=False, index=True)
     item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
-    part_no = Column(String(50), ForeignKey("item_master.part_no"), nullable=False, index=True)
+    part_no = Column(String(50), nullable=False, index=True)
     part_name = Column(String(200), nullable=True)
     order_qty = Column(Float, nullable=False)
     shipped_qty = Column(Float, nullable=False, default=0.0)
