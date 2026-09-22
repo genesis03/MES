@@ -12,6 +12,72 @@ def _quote(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
+def item_usage_summary(db: Session, item_id: int) -> list[dict]:
+    """item_id를 참조하는 업무 데이터를 표준 목록으로 반환합니다."""
+    bind = db.get_bind()
+    dialect = bind.dialect.name
+    seen: set[tuple[str, str]] = set()
+    result: list[dict] = []
+
+    for table_name, id_column, _ in IDENTITY_COLUMNS:
+        key = (table_name, id_column)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        if dialect == "sqlite":
+            exists = db.execute(
+                text("SELECT 1 FROM sqlite_master WHERE type='table' AND name=:name LIMIT 1"),
+                {"name": table_name},
+            ).scalar_one_or_none()
+            if not exists:
+                continue
+            columns = {
+                row[1]
+                for row in db.execute(text(f"PRAGMA table_info({_quote(table_name)})")).fetchall()
+            }
+            if id_column not in columns:
+                continue
+        else:
+            try:
+                columns = {
+                    row[0]
+                    for row in db.execute(
+                        text(
+                            """
+                            SELECT column_name
+                              FROM information_schema.columns
+                             WHERE table_name = :table_name
+                            """
+                        ),
+                        {"table_name": table_name},
+                    ).fetchall()
+                }
+            except Exception:
+                continue
+            if id_column not in columns:
+                continue
+
+        count = int(
+            db.execute(
+                text(
+                    f"SELECT COUNT(*) FROM {_quote(table_name)} "
+                    f"WHERE {_quote(id_column)} = :item_id"
+                ),
+                {"item_id": item_id},
+            ).scalar_one()
+            or 0
+        )
+        if count:
+            result.append({
+                "table": table_name,
+                "column": id_column,
+                "count": count,
+            })
+
+    return result
+
+
 def rename_item_part_no(
     db: Session,
     item: ItemMasterModel,
