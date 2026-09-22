@@ -287,25 +287,28 @@ def search_order_items(part_no: Optional[str] = Query(None), part_name: Optional
     if not items:
         return []
 
-    part_nos = [x.part_no for x in items]
-    bom_rows = db.query(ItemBomModel).filter(ItemBomModel.child_part_no.in_(part_nos)).order_by(ItemBomModel.child_part_no.asc(), ItemBomModel.sort_order.asc(), ItemBomModel.id.asc()).all()
+    item_ids = [x.id for x in items]
+    bom_rows = db.query(ItemBomModel).filter(ItemBomModel.child_item_id.in_(item_ids)).order_by(ItemBomModel.child_item_id.asc(), ItemBomModel.sort_order.asc(), ItemBomModel.id.asc()).all()
     bom_map = {}
     for row in bom_rows:
-        if row.child_part_no not in bom_map:
-            bom_map[row.child_part_no] = row
-    process_codes = {(bom_map.get(item.part_no).process_code if bom_map.get(item.part_no) else item.production_loc) for item in items}
+        if row.child_item_id not in bom_map:
+            bom_map[row.child_item_id] = row
+    parent_ids = {row.parent_item_id for row in bom_rows if row.parent_item_id}
+    parent_map = {x.id: x for x in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(parent_ids)).all()} if parent_ids else {}
+    process_codes = {(bom_map.get(item.id).process_code if bom_map.get(item.id) else item.production_loc) for item in items}
     process_codes.discard(None); process_codes.discard("")
     process_map = {x.process_code: x for x in db.query(ProcessModel).filter(ProcessModel.process_code.in_(process_codes)).all()} if process_codes else {}
-    production_rows = db.query(ProductionWorkOrder.part_no, func.coalesce(func.sum(ProductionPerformance.good_qty), 0)).join(ProductionPerformance, ProductionPerformance.work_order_id == ProductionWorkOrder.id).filter(ProductionWorkOrder.part_no.in_(part_nos)).group_by(ProductionWorkOrder.part_no).all()
-    production_map = {part: float(qty or 0) for part, qty in production_rows}
-    stock_rows = db.query(ProductionLotModel.part_no, func.coalesce(func.sum(ProductionLotModel.lot_qty), 0)).filter(ProductionLotModel.part_no.in_(part_nos), ProductionLotModel.status == "ACTIVE").group_by(ProductionLotModel.part_no).all()
-    stock_map = {part: float(qty or 0) for part, qty in stock_rows}
+    production_rows = db.query(ProductionWorkOrder.item_id, func.coalesce(func.sum(ProductionPerformance.good_qty), 0)).join(ProductionPerformance, ProductionPerformance.work_order_id == ProductionWorkOrder.id).filter(ProductionWorkOrder.item_id.in_(item_ids)).group_by(ProductionWorkOrder.item_id).all()
+    production_map = {item_id: float(qty or 0) for item_id, qty in production_rows}
+    stock_rows = db.query(ProductionLotModel.item_id, func.coalesce(func.sum(ProductionLotModel.lot_qty), 0)).filter(ProductionLotModel.item_id.in_(item_ids), ProductionLotModel.status == "ACTIVE").group_by(ProductionLotModel.item_id).all()
+    stock_map = {item_id: float(qty or 0) for item_id, qty in stock_rows}
     result = []
     for item in items:
-        bom = bom_map.get(item.part_no)
+        bom = bom_map.get(item.id)
         process_code = (bom.process_code if bom else None) or item.production_loc or ""
         process = process_map.get(process_code)
-        result.append({"part_no": item.part_no, "part_name": item.part_name, "material_type": item.material_type or "", "parent_part_no": bom.parent_part_no if bom else "", "process_code": process_code, "process_name": process.process_name if process else "", "process_order": int(bom.sort_order or 0) if bom else 0, "safety_stock": float(item.safety_stock or 0), "current_stock": stock_map.get(item.part_no, 0), "production_qty": production_map.get(item.part_no, 0)})
+        parent = parent_map.get(bom.parent_item_id) if bom else None
+        result.append({"item_id": item.id, "part_no": item.part_no, "part_name": item.part_name, "material_type": item.material_type or "", "parent_part_no": parent.part_no if parent else "", "process_code": process_code, "process_name": process.process_name if process else "", "process_order": int(bom.sort_order or 0) if bom else 0, "safety_stock": float(item.safety_stock or 0), "current_stock": stock_map.get(item.id, 0), "production_qty": production_map.get(item.id, 0)})
     return result
 
 
@@ -360,8 +363,9 @@ def list_plans(start_date: Optional[str] = Query(None), end_date: Optional[str] 
     if end_date: query = query.filter(ProductionPlan.plan_date <= end_date)
     if part_no: query = query.filter(ProductionPlan.part_no.ilike(f"%{part_no.strip()}%"))
     plans = query.order_by(ProductionPlan.plan_date.desc(), ProductionPlan.id.desc()).all()
-    item_map = {item.part_no: item for item in db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_({p.part_no for p in plans})).all()} if plans else {}
-    return [_serialize_plan(plan, item_map.get(plan.part_no)) for plan in plans]
+    item_ids = {p.item_id for p in plans if p.item_id}
+    item_map = {item.id: item for item in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all()} if item_ids else {}
+    return [_serialize_plan(plan, item_map.get(plan.item_id)) for plan in plans]
 
 
 @router.post("/plans")
@@ -397,8 +401,9 @@ def list_orders(start_date: Optional[str] = Query(None), end_date: Optional[str]
     if part_no: query = query.filter(ProductionWorkOrder.part_no.ilike(f"%{part_no.strip()}%"))
     if status: query = query.filter(ProductionWorkOrder.status == status)
     orders = query.order_by(ProductionWorkOrder.order_date.desc(), ProductionWorkOrder.priority.asc(), ProductionWorkOrder.id.desc()).all()
-    item_map = {item.part_no: item for item in db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_({o.part_no for o in orders})).all()} if orders else {}
-    return [_serialize_order(order, item_map.get(order.part_no)) for order in orders]
+    item_ids = {o.item_id for o in orders if o.item_id}
+    item_map = {item.id: item for item in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all()} if item_ids else {}
+    return [_serialize_order(order, item_map.get(order.item_id)) for order in orders]
 
 
 @router.get("/performance/orders")
@@ -406,12 +411,13 @@ def performance_orders(process_code: Optional[str] = Query(None), db: Session = 
     orders = db.query(ProductionWorkOrder).filter(ProductionWorkOrder.status.in_(["WAITING", "IN_PROGRESS"])).order_by(ProductionWorkOrder.priority.asc(), ProductionWorkOrder.order_date.desc(), ProductionWorkOrder.id.desc()).all()
     if process_code:
         code = process_code.strip()
-        bom_parts = {x[0] for x in db.query(ItemBomModel.parent_part_no).filter(ItemBomModel.process_code == code).distinct().all()}
-        item_parts = {x[0] for x in db.query(ItemMasterModel.part_no).filter(ItemMasterModel.production_loc == code).all()}
-        allowed = bom_parts | item_parts
-        orders = [x for x in orders if x.part_no in allowed]
-    item_map = {item.part_no: item for item in db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_({o.part_no for o in orders})).all()} if orders else {}
-    return [_serialize_order(order, item_map.get(order.part_no)) for order in orders]
+        bom_items = {x[0] for x in db.query(ItemBomModel.parent_item_id).filter(ItemBomModel.process_code == code).distinct().all() if x[0]}
+        item_ids_for_process = {x[0] for x in db.query(ItemMasterModel.id).filter(ItemMasterModel.production_loc == code).all()}
+        allowed = bom_items | item_ids_for_process
+        orders = [x for x in orders if x.item_id in allowed]
+    item_ids = {o.item_id for o in orders if o.item_id}
+    item_map = {item.id: item for item in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all()} if item_ids else {}
+    return [_serialize_order(order, item_map.get(order.item_id)) for order in orders]
 
 
 @router.post("/orders")
@@ -463,11 +469,11 @@ def list_performances(start_date: Optional[str] = Query(None), end_date: Optiona
         value = work_order_no.strip().lower(); rows = [x for x in rows if value in order_map[x.work_order_id].work_order_no.lower()]
     if part_no:
         value = part_no.strip().lower(); rows = [x for x in rows if value in order_map[x.work_order_id].part_no.lower()]
-    part_nos = {order_map[x.work_order_id].part_no for x in rows}
-    item_map = {x.part_no: x for x in db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_(part_nos)).all()} if part_nos else {}
+    item_ids = {order_map[x.work_order_id].item_id for x in rows if order_map[x.work_order_id].item_id}
+    item_map = {x.id: x for x in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all()} if item_ids else {}
     process_codes = {x.process_code for x in rows}
     process_map = {x.process_code: x for x in db.query(ProcessModel).filter(ProcessModel.process_code.in_(process_codes)).all()} if process_codes else {}
-    return [_serialize_performance(x, order_map[x.work_order_id], item_map.get(order_map[x.work_order_id].part_no), process_map.get(x.process_code)) for x in rows]
+    return [_serialize_performance(x, order_map[x.work_order_id], item_map.get(order_map[x.work_order_id].item_id), process_map.get(x.process_code)) for x in rows]
 
 
 @router.post("/performances")
