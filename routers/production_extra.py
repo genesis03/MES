@@ -208,8 +208,8 @@ def production_performance_status(
     if part_no:
         keyword = part_no.strip().lower()
         rows = [x for x in rows if x.work_order_id in order_map and keyword in order_map[x.work_order_id].part_no.lower()]
-    part_nos = {order_map[x.work_order_id].part_no for x in rows if x.work_order_id in order_map}
-    item_map = {x.part_no: x for x in db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_(part_nos)).all()} if part_nos else {}
+    item_ids = {order_map[x.work_order_id].item_id for x in rows if x.work_order_id in order_map and order_map[x.work_order_id].item_id}
+    item_map = {x.id: x for x in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all()} if item_ids else {}
     process_codes = {x.process_code for x in rows}
     process_map = {x.process_code: x for x in db.query(ProcessModel).filter(ProcessModel.process_code.in_(process_codes)).all()} if process_codes else {}
     can_delete = _is_super_admin(current_user)
@@ -218,7 +218,7 @@ def production_performance_status(
         order = order_map.get(perf.work_order_id)
         if not order:
             continue
-        item = item_map.get(order.part_no)
+        item = item_map.get(order.item_id)
         process = process_map.get(perf.process_code)
         output_lots = _performance_output_lots(db, perf.id)
         output_lot_nos = [lot.lot_no for lot in output_lots]
@@ -229,7 +229,8 @@ def production_performance_status(
             "performance_type": perf.performance_type,
             "performance_type_name": "조립" if perf.performance_type == "ASSEMBLY" else "가공",
             "work_order_no": order.work_order_no,
-            "part_no": order.part_no,
+            "item_id": order.item_id,
+            "part_no": item.part_no if item else order.part_no,
             "part_name": item.part_name if item else "",
             "process_code": perf.process_code,
             "process_name": process.process_name if process else "",
