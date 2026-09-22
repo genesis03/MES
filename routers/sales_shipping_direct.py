@@ -44,7 +44,7 @@ class DirectShipmentCreateInput(BaseModel):
 
 def _direct_rows(db: Session, item: SalesOrderItem):
     rows = []
-    for row in _lots(db, item.part_no):
+    for row in _lots(db, item.item_id):
         lot = row["lot"]
         available = float(row["available"] or 0)
         if available <= 1e-9:
@@ -53,8 +53,8 @@ def _direct_rows(db: Session, item: SalesOrderItem):
     return rows
 
 
-def _standard_box_qty(db: Session, part_no: str, requested_qty: float) -> float:
-    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
+def _standard_box_qty(db: Session, item_id: int, requested_qty: float) -> float:
+    item = db.get(ItemMasterModel, item_id) if item_id else None
     if item:
         standard = float(item.moq or 0) or float(item.snp or 0)
         if standard > 0:
@@ -90,7 +90,7 @@ def direct_lots(
     if str(item.order.order_type or "NORMAL").upper() not in DIRECT_ORDER_TYPES:
         raise HTTPException(409, "양산 수주는 생산 LOT 직출고를 사용할 수 없습니다.")
 
-    standard_box_qty = _standard_box_qty(db, item.part_no, max(float(item.order_qty or 0) - float(item.shipped_qty or 0), 0.0))
+    standard_box_qty = _standard_box_qty(db, item.item_id, max(float(item.order_qty or 0) - float(item.shipped_qty or 0), 0.0))
     return [{
         "id": lot.id,
         "lot_no": lot.lot_no,
@@ -181,7 +181,7 @@ def direct_scan(
     })
     allocated_qty += qty
 
-    standard_box_qty = _standard_box_qty(db, item.part_no, payload.requested_qty)
+    standard_box_qty = _standard_box_qty(db, item.item_id, payload.requested_qty)
     return {
         "allocations": allocations,
         "allocated_qty": allocated_qty,
@@ -255,7 +255,7 @@ def direct_confirm(
         if abs(total - allocation.requested_qty) > 1e-9:
             raise HTTPException(409, f"{order.order_no} / {item.part_no}: 금회 출고수량과 생산 LOT 배정수량이 일치하지 않습니다.")
 
-        standard_box_qty = _standard_box_qty(db, item.part_no, total)
+        standard_box_qty = _standard_box_qty(db, item.item_id, total)
         box_quantities = _box_quantities(total, standard_box_qty)
         orders[order.id] = order
         validated.append((item, selected, total, box_quantities))
@@ -285,6 +285,7 @@ def direct_confirm(
         shipment_item = ShipmentItem(
             shipment_id=shipment.id,
             sales_order_item_id=item.id,
+            item_id=item.item_id,
             part_no=item.part_no,
             shipped_qty=shipment_qty,
             unit=item.unit or "EA",
@@ -319,6 +320,7 @@ def direct_confirm(
                     box_no=box_no,
                     outbound_lot_no=outbound_lot_no,
                     source_lot_no=lot.lot_no,
+                    source_item_id=lot.item_id,
                     source_part_no=source_part_no,
                     shipped_qty=use_qty,
                 ))
