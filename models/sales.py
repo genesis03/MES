@@ -37,6 +37,7 @@ class SalesOrderItem(Base):
 
     id = Column(Integer, primary_key=True)
     order_id = Column(Integer, ForeignKey("sales_order_masters.id"), nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
     part_no = Column(String(50), ForeignKey("item_master.part_no"), nullable=False, index=True)
     part_name = Column(String(200), nullable=True)
     order_qty = Column(Float, nullable=False)
@@ -75,6 +76,7 @@ class ShipmentItem(Base):
     id = Column(Integer, primary_key=True)
     shipment_id = Column(Integer, ForeignKey("shipment_masters.id"), nullable=False, index=True)
     sales_order_item_id = Column(Integer, ForeignKey("sales_order_items.id"), nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
     part_no = Column(String(50), nullable=False, index=True)
     shipped_qty = Column(Float, nullable=False)
     unit = Column(String(10), nullable=False, default="EA")
@@ -113,6 +115,7 @@ class ShipmentDirectLot(Base):
     # 포장 LOT와 출고 LOT는 같은 번호를 의미한다. 형식은 YYMMDD + 01 + 3자리 순번이다.
     outbound_lot_no = Column(String(60), nullable=True, index=True)
     source_lot_no = Column(String(100), nullable=False, index=True)
+    source_item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
     source_part_no = Column(String(50), nullable=False, index=True)
     shipped_qty = Column(Float, nullable=False)
 
