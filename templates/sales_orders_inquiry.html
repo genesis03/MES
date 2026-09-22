@@ -2,23 +2,69 @@
 {% block title %}수주 조회{% endblock %}
 {% block extra_head %}
 <style>
-.card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:16px;margin-bottom:16px}.filters{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}.field select,.field input{min-width:180px;padding:9px;border:1px solid #cbd5e1;border-radius:6px}.field.search-field input{min-width:360px}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer;background:#2563eb;color:#fff}.btn-delete{background:#dc2626;color:#fff;padding:5px 10px;border:0;border-radius:4px;font-weight:700;cursor:pointer}.btn-delete:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:center}th{background:#f1f5f9}.muted{color:#64748b}.status{font-weight:700}.detail-row td{background:#f8fafc;text-align:left}.detail-table td,.detail-table th{font-size:11px}
+.page{font-size:13px}.page h1{font-size:21px;margin:0 0 16px}.card{background:#fff;border:1px solid #dbe3ec;border-radius:6px;padding:14px;margin-bottom:14px}
+.filters{display:grid;grid-template-columns:150px 150px 210px 180px 180px minmax(320px,1fr) auto;gap:10px;align-items:end}
+.field label{display:block;font-weight:700;margin-bottom:5px}.field input,.field select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;background:#fff}
+.btn{border:0;border-radius:4px;padding:8px 15px;font-weight:800;cursor:pointer}.blue{background:#2563eb;color:#fff}.red{background:#dc2626;color:#fff}.red:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed}
+.toolbar{display:flex;justify-content:flex-end;gap:8px;margin:10px 0}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th,td{border:1px solid #e2e8f0;padding:8px;text-align:center;white-space:nowrap}th{background:#f8fafc}.muted{color:#94a3b8;padding:36px!important}.status{font-weight:700}.doc-link{font-weight:800;color:#1d4ed8;text-decoration:underline}.row-check{width:15px;height:15px;cursor:pointer}
+.part-picker{position:relative}.picker-box{min-height:34px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:3px 7px}.picker-box:focus-within{border-color:#2563eb;box-shadow:0 0 0 1px #2563eb}.picker-box input{border:0;outline:0;height:26px;min-width:100px;flex:1;padding:0}
+.chip{display:inline-flex;align-items:center;gap:5px;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:14px;padding:3px 8px;font-size:12px;font-weight:700}.chip button{border:0;background:transparent;color:#64748b;cursor:pointer;font-size:14px;line-height:1;padding:0}
+.suggestions{position:absolute;z-index:50;left:0;right:0;top:38px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;box-shadow:0 6px 18px rgba(15,23,42,.12);max-height:260px;overflow:auto;display:none}.suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12.5px}.suggestion:hover,.suggestion.active{background:#eff6ff}.suggestion .pn{font-weight:800;color:#1e3a8a}.suggestion .name{margin-left:10px;color:#64748b}
+.summary{margin-top:10px;text-align:right;font-weight:700;color:#64748b}
+@media(max-width:1400px){.filters{grid-template-columns:repeat(4,minmax(150px,1fr))}.part-field{grid-column:span 2}}
 </style>
 {% endblock %}
 {% block content %}
-<h2 style="margin-bottom:16px">수주 조회</h2>
-<div class="card">
-  <div class="filters">
-    <div class="field search-field"><label>통합검색</label><input id="keywordFilter" type="text" placeholder="품번 / 업체 / 수주번호 검색" autocomplete="off"></div>
-    <div class="field"><label>상태</label><select id="statusFilter"><option value="">전체</option><option value="ORDERED">수주</option><option value="PARTIAL">부분출고</option><option value="COMPLETED">출고완료</option><option value="CANCELLED">취소</option></select></div>
-    <button class="btn" id="searchBtn">조회</button>
+<div class="page">
+  <h1>수주 조회</h1>
+  <div class="card">
+    <div class="filters">
+      <div class="field"><label>수주일자 From</label><input id="startDate" type="date"></div>
+      <div class="field"><label>수주일자 To</label><input id="endDate" type="date"></div>
+      <div class="field"><label>판매처</label><select id="customerFilter"><option value="">전체</option></select></div>
+      <div class="field"><label>수주번호</label><input id="orderNoFilter" type="text" placeholder="SO..." autocomplete="off"></div>
+      <div class="field"><label>상태</label><select id="statusFilter"><option value="">전체</option><option value="ORDERED">수주</option><option value="PARTIAL">부분출고</option><option value="COMPLETED">출고완료</option><option value="CANCELLED">취소</option></select></div>
+      <div class="field part-field">
+        <label>품번</label>
+        <div class="part-picker">
+          <div class="picker-box" id="pickerBox">
+            <div id="chips" style="display:contents"></div>
+            <input id="partSearch" placeholder="품번 입력" autocomplete="off">
+          </div>
+          <div id="suggestions" class="suggestions"></div>
+        </div>
+      </div>
+      <button class="btn blue" id="searchBtn">조회</button>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button id="deleteSelectedBtn" class="btn red" disabled>선택삭제 (0)</button>
+  </div>
+
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:42px"><input id="checkAll" type="checkbox" class="row-check" title="삭제 가능한 조회행 전체선택"></th>
+            <th style="width:58px">No.</th>
+            <th>수주번호</th>
+            <th>수주일자</th>
+            <th>판매처</th>
+            <th>수주구분</th>
+            <th>거래구분</th>
+            <th>납기예정일</th>
+            <th>상태</th>
+            <th>담당자</th>
+            <th>품목수</th>
+          </tr>
+        </thead>
+        <tbody id="orderBody"></tbody>
+      </table>
+    </div>
+    <div id="summary" class="summary">총 0건</div>
   </div>
 </div>
-<div class="card">
-  <table>
-    <thead><tr><th>수주번호</th><th>수주일자</th><th>판매처</th><th>수주구분</th><th>거래구분</th><th>납기예정일</th><th>상태</th><th>담당자</th><th>품목수</th><th style="width:80px">삭제</th></tr></thead>
-    <tbody id="orderBody"></tbody>
-  </table>
-</div>
-<script src="/static/sales_orders_inquiry.js?v=20260922-1"></script>
+<script src="/static/sales_orders_inquiry.js?v=20260922-2"></script>
 {% endblock %}
