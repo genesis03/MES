@@ -52,7 +52,7 @@ def inquiry_orders(
     query = (
         db.query(PurchaseOrderMaster, PurchaseOrderItem, ItemMasterModel)
         .join(PurchaseOrderItem, PurchaseOrderItem.po_id == PurchaseOrderMaster.id)
-        .join(ItemMasterModel, ItemMasterModel.part_no == PurchaseOrderItem.part_no)
+        .join(ItemMasterModel, ItemMasterModel.id == PurchaseOrderItem.item_id)
     )
     if start_date:
         query = query.filter(PurchaseOrderMaster.order_date >= start_date)
@@ -158,7 +158,7 @@ def inquiry_inbounds(
         .join(PurchaseInboundItem, PurchaseInboundItem.inbound_id == PurchaseInboundMaster.id)
         .outerjoin(PurchaseOrderItem, PurchaseOrderItem.id == PurchaseInboundItem.po_item_id)
         .outerjoin(PurchaseOrderMaster, PurchaseOrderMaster.id == PurchaseOrderItem.po_id)
-        .join(ItemMasterModel, ItemMasterModel.part_no == PurchaseInboundItem.part_no)
+        .join(ItemMasterModel, ItemMasterModel.id == PurchaseInboundItem.item_id)
     )
     if start_date:
         query = query.filter(PurchaseInboundMaster.inbound_date >= start_date)
