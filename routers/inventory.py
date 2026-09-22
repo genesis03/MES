@@ -98,7 +98,7 @@ def inventory_item_candidates(
         query = query.filter(ItemMasterModel.part_no.contains(keyword, autoescape=True))
     rows = query.order_by(ItemMasterModel.part_no.asc()).limit(limit).all()
     return [
-        {"part_no": row.part_no, "part_name": row.part_name or ""}
+        {"item_id": row.id, "part_no": row.part_no, "part_name": row.part_name or ""}
         for row in rows
     ]
 
@@ -119,17 +119,16 @@ def inventory_lots(
 
     rows = []
     storage_map = _storage_name_map(db)
-    item_map = {
-        item.part_no: item
-        for item in db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_(selected)).all()
-    }
+    selected_items = db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_(selected)).all()
+    item_map = {item.id: item for item in selected_items}
+    item_ids = [item.id for item in selected_items]
 
     purchase_query = (
         db.query(PurchaseInboundItem, PurchaseInboundMaster)
         .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
         .filter(
             PurchaseInboundMaster.status == "CONFIRMED",
-            PurchaseInboundItem.part_no.in_(selected),
+            PurchaseInboundItem.item_id.in_(item_ids),
             PurchaseInboundItem.internal_lot_no.isnot(None),
             PurchaseInboundItem.internal_lot_no != "",
         )
@@ -137,10 +136,11 @@ def inventory_lots(
     for item, master in purchase_query.order_by(PurchaseInboundMaster.created_at.desc(), PurchaseInboundItem.id.desc()).all():
         lot_qty = float(item.inbound_qty or 0)
         used_qty = _used_qty(db, item.internal_lot_no)
-        part = item_map.get(item.part_no)
+        part = item_map.get(item.item_id)
         rows.append({
             "source": "구매입고",
-            "part_no": item.part_no,
+            "item_id": item.item_id,
+            "part_no": part.part_no if part else item.part_no,
             "part_name": part.part_name if part else "",
             "lot_no": item.internal_lot_no,
             "created_at": master.created_at.strftime("%Y-%m-%d %H:%M:%S") if master.created_at else master.inbound_date,
@@ -150,14 +150,15 @@ def inventory_lots(
             "storage_location": _storage_display(item.storage_location, storage_map),
         })
 
-    production_query = db.query(ProductionLotModel).filter(ProductionLotModel.part_no.in_(selected))
+    production_query = db.query(ProductionLotModel).filter(ProductionLotModel.item_id.in_(item_ids))
     for lot in production_query.order_by(ProductionLotModel.created_at.desc(), ProductionLotModel.id.desc()).all():
         lot_qty = float(lot.lot_qty or 0)
         used_qty = _used_qty(db, lot.lot_no)
-        part = item_map.get(lot.part_no)
+        part = item_map.get(lot.item_id)
         rows.append({
             "source": "생산",
-            "part_no": lot.part_no,
+            "item_id": lot.item_id,
+            "part_no": part.part_no if part else lot.part_no,
             "part_name": part.part_name if part else "",
             "lot_no": lot.lot_no,
             "created_at": lot.created_at.strftime("%Y-%m-%d %H:%M:%S") if lot.created_at else "",
