@@ -6,7 +6,7 @@ from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from models.models import ManualLabelModel, UserModel
+from models.models import ItemMasterModel, ManualLabelModel, UserModel
 from core.security import require_permission
 from services.excel_service import create_manual_history_excel
 
@@ -48,6 +48,10 @@ async def add_manual_data(
     delivery_date = str(body.get("delivery_date", "")).strip()
     part_no = str(body.get("part_no", "")).strip()
     part_name = str(body.get("part_name", "")).strip()
+    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
+    if item:
+        part_no = item.part_no
+        part_name = item.part_name
     qty_str = str(body.get("qty", "0")).replace(",", "").strip()
     qty = int(qty_str) if qty_str.isdigit() else 0
     serial = str(body.get("serial", "")).strip()
@@ -58,6 +62,7 @@ async def add_manual_data(
         
     try:
         new_record = ManualLabelModel(
+            item_id=item.id if item else None,
             created_at=now_str,
             barcode=barcode,
             customer=customer,
