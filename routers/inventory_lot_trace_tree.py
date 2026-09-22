@@ -70,6 +70,23 @@ def _node(db: Session, lot_no: str, process_map: dict[str, str]) -> dict:
             "part_no": master.part_no or "",
         }
 
+    purchase = (
+        db.query(PurchaseInboundItem, PurchaseInboundMaster)
+        .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
+        .filter(PurchaseInboundItem.internal_lot_no == lot_no, PurchaseInboundMaster.status == "CONFIRMED")
+        .first()
+    )
+    if purchase:
+        item, master = purchase
+        return {
+            "lot_no": lot_no,
+            "process_name": "구매입고",
+            "date": master.inbound_date or "",
+            "qty": float(item.inbound_qty or 0),
+            "part_no": item.part_no or "",
+            "external_lot_no": item.supplier_lot_no or "",
+        }
+
     inbound = (
         db.query(SubcontractInboundLot, SubcontractInboundItem, SubcontractInboundMaster)
         .join(SubcontractInboundItem, SubcontractInboundItem.id == SubcontractInboundLot.inbound_item_id)
@@ -107,23 +124,6 @@ def _node(db: Session, lot_no: str, process_map: dict[str, str]) -> dict:
             "qty": float(production.lot_qty or 0),
             "part_no": production.part_no or "",
             "external_lot_no": "",
-        }
-
-    purchase = (
-        db.query(PurchaseInboundItem, PurchaseInboundMaster)
-        .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
-        .filter(PurchaseInboundItem.internal_lot_no == lot_no, PurchaseInboundMaster.status == "CONFIRMED")
-        .first()
-    )
-    if purchase:
-        item, master = purchase
-        return {
-            "lot_no": lot_no,
-            "process_name": "구매입고",
-            "date": master.inbound_date or "",
-            "qty": float(item.inbound_qty or 0),
-            "part_no": item.part_no or "",
-            "external_lot_no": item.supplier_lot_no or "",
         }
 
     return {"lot_no": lot_no, "process_name": "연결", "date": "", "qty": 0.0, "part_no": "", "external_lot_no": ""}
