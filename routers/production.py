@@ -113,7 +113,8 @@ def _serialize_plan(plan: ProductionPlan, item: Optional[ItemMasterModel] = None
     return {
         "id": plan.id,
         "plan_date": plan.plan_date,
-        "part_no": plan.part_no,
+        "item_id": plan.item_id,
+        "part_no": item.part_no if item else plan.part_no,
         "part_name": item.part_name if item else "",
         "plan_qty": plan.plan_qty,
         "note": plan.note or "",
@@ -128,7 +129,8 @@ def _serialize_order(order: ProductionWorkOrder, item: Optional[ItemMasterModel]
         "order_date": order.order_date,
         "scheduled_date": order.scheduled_date or "",
         "plan_id": order.plan_id,
-        "part_no": order.part_no,
+        "item_id": order.item_id,
+        "part_no": item.part_no if item else order.part_no,
         "part_name": item.part_name if item else "",
         "order_qty": order.order_qty,
         "production_qty": order.production_qty,
@@ -147,7 +149,8 @@ def _serialize_performance(perf, order, item, process):
         "performance_date": perf.performance_date,
         "work_order_id": order.id,
         "work_order_no": order.work_order_no,
-        "part_no": order.part_no,
+        "item_id": order.item_id,
+        "part_no": item.part_no if item else order.part_no,
         "part_name": item.part_name if item else "",
         "process_code": perf.process_code,
         "process_name": process.process_name if process else "",
@@ -166,26 +169,33 @@ def _serialize_performance(perf, order, item, process):
     }
 
 
-def _lot_base_rows(db: Session, part_nos: List[str]):
+def _lot_base_rows(db: Session, item_ids: List[int]):
     result = []
-    if not part_nos:
+    item_ids = [int(x) for x in item_ids if x]
+    if not item_ids:
         return result
 
+    item_map = {
+        item.id: item
+        for item in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all()
+    }
     purchase_rows = (
         db.query(PurchaseInboundItem)
         .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
         .filter(
             PurchaseInboundMaster.status == "CONFIRMED",
-            PurchaseInboundItem.part_no.in_(part_nos),
+            PurchaseInboundItem.item_id.in_(item_ids),
             PurchaseInboundItem.internal_lot_no.isnot(None),
             PurchaseInboundItem.internal_lot_no != "",
         )
         .all()
     )
     for row in purchase_rows:
+        item = item_map.get(row.item_id)
         result.append({
             "lot_no": row.internal_lot_no,
-            "part_no": row.part_no,
+            "item_id": row.item_id,
+            "part_no": item.part_no if item else row.part_no,
             "base_qty": float(row.inbound_qty or 0),
             "storage_location": row.storage_location or "",
             "source": "PURCHASE",
@@ -193,13 +203,15 @@ def _lot_base_rows(db: Session, part_nos: List[str]):
 
     production_rows = (
         db.query(ProductionLotModel)
-        .filter(ProductionLotModel.part_no.in_(part_nos), ProductionLotModel.status == "ACTIVE")
+        .filter(ProductionLotModel.item_id.in_(item_ids), ProductionLotModel.status == "ACTIVE")
         .all()
     )
     for row in production_rows:
+        item = item_map.get(row.item_id)
         result.append({
             "lot_no": row.lot_no,
-            "part_no": row.part_no,
+            "item_id": row.item_id,
+            "part_no": item.part_no if item else row.part_no,
             "base_qty": float(row.lot_qty or 0),
             "storage_location": row.storage_location or "",
             "source": "PRODUCTION",
@@ -234,11 +246,11 @@ def _lot_available_qty(db: Session, lot_no: str, base_qty: float) -> float:
     return max(float(base_qty) - float(linked_consumed) - float(production_consumed) - float(reserved), 0.0)
 
 
-def _previous_part_nos(db: Session, output_part_no: str, process_code: str) -> List[str]:
+def _previous_item_ids(db: Session, output_item_id: int, process_code: str) -> List[int]:
     rows = (
         db.query(ItemBomModel)
         .filter(
-            ItemBomModel.parent_part_no == output_part_no,
+            ItemBomModel.parent_item_id == output_item_id,
             ItemBomModel.process_code == process_code,
         )
         .order_by(ItemBomModel.sort_order.asc(), ItemBomModel.id.asc())
@@ -247,11 +259,11 @@ def _previous_part_nos(db: Session, output_part_no: str, process_code: str) -> L
     if not rows:
         rows = (
             db.query(ItemBomModel)
-            .filter(ItemBomModel.parent_part_no == output_part_no)
+            .filter(ItemBomModel.parent_item_id == output_item_id)
             .order_by(ItemBomModel.sort_order.asc(), ItemBomModel.id.asc())
             .all()
         )
-    return list(dict.fromkeys(row.child_part_no for row in rows if row.child_part_no))
+    return list(dict.fromkeys(int(row.child_item_id) for row in rows if row.child_item_id))
 
 
 @router.get("/items")
@@ -261,7 +273,7 @@ def production_items(keyword: Optional[str] = Query(None), db: Session = Depends
         value = f"%{keyword.strip()}%"
         query = query.filter((ItemMasterModel.part_no.ilike(value)) | (ItemMasterModel.part_name.ilike(value)))
     items = query.order_by(ItemMasterModel.part_no.asc()).limit(1000).all()
-    return [{"part_no": item.part_no, "part_name": item.part_name, "unit": item.unit or "EA"} for item in items]
+    return [{"item_id": item.id, "part_no": item.part_no, "part_name": item.part_name, "unit": item.unit or "EA"} for item in items]
 
 
 @router.get("/order-items/search")
@@ -322,11 +334,18 @@ def performance_source_lots(work_order_id: int = Query(..., gt=0), process_code:
     order = db.get(ProductionWorkOrder, work_order_id)
     if not order:
         raise HTTPException(status_code=404, detail="작업지시를 찾을 수 없습니다.")
-    previous_parts = _previous_part_nos(db, order.part_no, process_code.strip())
-    if not previous_parts:
+    previous_item_ids = _previous_item_ids(db, order.item_id, process_code.strip())
+    if not previous_item_ids:
         return {"previous_parts": [], "items": [], "message": "BOM에서 이전 품번을 찾을 수 없습니다."}
+    previous_parts = [
+        row.part_no
+        for row in db.query(ItemMasterModel)
+        .filter(ItemMasterModel.id.in_(previous_item_ids))
+        .order_by(ItemMasterModel.part_no.asc())
+        .all()
+    ]
     items = []
-    for row in _lot_base_rows(db, previous_parts):
+    for row in _lot_base_rows(db, previous_item_ids):
         available = _lot_available_qty(db, row["lot_no"], row["base_qty"])
         if available > 0:
             items.append({**row, "available_qty": available})
@@ -347,8 +366,8 @@ def list_plans(start_date: Optional[str] = Query(None), end_date: Optional[str] 
 
 @router.post("/plans")
 def create_plan(payload: ProductionPlanPayload, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    part_no = payload.part_no.strip(); _item_or_404(db, part_no)
-    plan = ProductionPlan(plan_date=payload.plan_date, part_no=part_no, plan_qty=payload.plan_qty, note=(payload.note or "").strip() or None, created_by=_user_name(current_user))
+    part_no = payload.part_no.strip(); item = _item_or_404(db, part_no)
+    plan = ProductionPlan(plan_date=payload.plan_date, item_id=item.id, part_no=item.part_no, plan_qty=payload.plan_qty, note=(payload.note or "").strip() or None, created_by=_user_name(current_user))
     db.add(plan); db.commit(); db.refresh(plan)
     return {"status": "success", "id": plan.id, "message": "생산계획이 등록되었습니다."}
 
@@ -357,8 +376,8 @@ def create_plan(payload: ProductionPlanPayload, db: Session = Depends(get_db), c
 def update_plan(plan_id: int, payload: ProductionPlanPayload, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     plan = db.get(ProductionPlan, plan_id)
     if not plan: raise HTTPException(status_code=404, detail="생산계획을 찾을 수 없습니다.")
-    part_no = payload.part_no.strip(); _item_or_404(db, part_no)
-    plan.plan_date = payload.plan_date; plan.part_no = part_no; plan.plan_qty = payload.plan_qty; plan.note = (payload.note or "").strip() or None
+    part_no = payload.part_no.strip(); item = _item_or_404(db, part_no)
+    plan.plan_date = payload.plan_date; plan.item_id = item.id; plan.part_no = item.part_no; plan.plan_qty = payload.plan_qty; plan.note = (payload.note or "").strip() or None
     db.commit(); return {"status": "success", "message": "생산계획이 수정되었습니다."}
 
 
@@ -397,13 +416,13 @@ def performance_orders(process_code: Optional[str] = Query(None), db: Session = 
 
 @router.post("/orders")
 def create_order(payload: ProductionOrderPayload, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    part_no = payload.part_no.strip(); _item_or_404(db, part_no)
+    part_no = payload.part_no.strip(); item = _item_or_404(db, part_no)
     if payload.plan_id is not None:
         plan = db.get(ProductionPlan, payload.plan_id)
         if not plan: raise HTTPException(status_code=404, detail="연결할 생산계획을 찾을 수 없습니다.")
-        if plan.part_no != part_no: raise HTTPException(status_code=400, detail="생산계획 품번과 작업지시 품번이 일치하지 않습니다.")
+        if plan.item_id != item.id: raise HTTPException(status_code=400, detail="생산계획 품목과 작업지시 품목이 일치하지 않습니다.")
     prefix, seq = _work_order_prefix_and_seq(db, payload.order_date)
-    order = ProductionWorkOrder(work_order_no=f"{prefix}{seq:03d}", order_date=payload.order_date, scheduled_date=(payload.scheduled_date or "").strip() or None, plan_id=payload.plan_id, part_no=part_no, order_qty=payload.order_qty, production_qty=0, priority=payload.priority, status="WAITING", note=(payload.note or "").strip() or None, created_by=_user_name(current_user))
+    order = ProductionWorkOrder(work_order_no=f"{prefix}{seq:03d}", order_date=payload.order_date, scheduled_date=(payload.scheduled_date or "").strip() or None, plan_id=payload.plan_id, item_id=item.id, part_no=item.part_no, order_qty=payload.order_qty, production_qty=0, priority=payload.priority, status="WAITING", note=(payload.note or "").strip() or None, created_by=_user_name(current_user))
     db.add(order); db.commit(); db.refresh(order)
     return {"status": "success", "id": order.id, "work_order_no": order.work_order_no, "message": "작업지시가 등록되었습니다."}
 
@@ -414,8 +433,8 @@ def create_orders_batch(payload: ProductionOrderBatchPayload, db: Session = Depe
     if not payload.items: raise HTTPException(status_code=400, detail="작업지시 대상 품번을 선택해 주세요.")
     prefix, seq = _work_order_prefix_and_seq(db, payload.order_date); created = []
     for index, row in enumerate(payload.items):
-        part_no = row.part_no.strip(); _item_or_404(db, part_no)
-        order = ProductionWorkOrder(work_order_no=f"{prefix}{seq + index:03d}", order_date=payload.order_date, scheduled_date=(payload.scheduled_date or "").strip() or None, plan_id=None, part_no=part_no, order_qty=row.order_qty, production_qty=0, priority=row.priority, status="WAITING", created_by=_user_name(current_user))
+        part_no = row.part_no.strip(); item = _item_or_404(db, part_no)
+        order = ProductionWorkOrder(work_order_no=f"{prefix}{seq + index:03d}", order_date=payload.order_date, scheduled_date=(payload.scheduled_date or "").strip() or None, plan_id=None, item_id=item.id, part_no=item.part_no, order_qty=row.order_qty, production_qty=0, priority=row.priority, status="WAITING", created_by=_user_name(current_user))
         db.add(order); created.append(order)
     db.commit(); return {"status": "success", "count": len(created), "work_order_nos": [x.work_order_no for x in created], "message": f"작업지시 {len(created)}건이 생성되었습니다."}
 
@@ -471,9 +490,9 @@ def create_performance(payload: ProductionPerformancePayload, db: Session = Depe
     if shift_type not in {"DAY", "NIGHT"}: raise HTTPException(status_code=400, detail="주간 또는 야간을 선택해 주세요.")
 
     source_lot_no = payload.source_lot_no.strip()
-    previous_parts = _previous_part_nos(db, order.part_no, process_code)
-    if not previous_parts: raise HTTPException(status_code=400, detail="BOM에서 해당 작업지시의 이전 품번을 찾을 수 없습니다.")
-    source_rows = {row["lot_no"]: row for row in _lot_base_rows(db, previous_parts)}
+    previous_item_ids = _previous_item_ids(db, order.item_id, process_code)
+    if not previous_item_ids: raise HTTPException(status_code=400, detail="BOM에서 해당 작업지시의 이전 품번을 찾을 수 없습니다.")
+    source_rows = {row["lot_no"]: row for row in _lot_base_rows(db, previous_item_ids)}
     source = source_rows.get(source_lot_no)
     if not source: raise HTTPException(status_code=400, detail="해당 공정에서 사용할 수 있는 이전 LOT가 아닙니다.")
 
@@ -502,7 +521,7 @@ def create_performance(payload: ProductionPerformancePayload, db: Session = Depe
         created_by=_user_name(current_user),
     )
     db.add(perf); db.flush()
-    db.add(LotConsumptionModel(lot_no=source_lot_no, part_no=source["part_no"], work_order_id=order.id, performance_id=perf.id, process_code=process_code, consumed_qty=consumed_qty))
+    db.add(LotConsumptionModel(lot_no=source_lot_no, item_id=source["item_id"], part_no=source["part_no"], work_order_id=order.id, performance_id=perf.id, process_code=process_code, consumed_qty=consumed_qty))
 
     # 작업지시 생산누계는 양품만 반영합니다. 불량/SET-UP은 원재료 LOT 소비에만 포함됩니다.
     order.production_qty = float(order.production_qty or 0) + float(payload.good_qty)
