@@ -50,7 +50,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
       <div><label>처리수량(양품+불량+SET-UP)</label><input type="text" id="processQty" readonly value="0"></div>
       <div style="grid-column:span 2"><label>비고</label><input type="text" id="runNote" maxlength="1000"></div>
     </div>
-    <div class="actions" id="editActions"><button class="btn danger" id="defectBtn" onclick="openDefectModal()">불량 유형 설정</button>{% if performance_type == "ASSEMBLY" %}<button class="btn green" id="lotAssignBtn" onclick="openLotAllocationModal()">LOT 배정</button>{% endif %}<button class="btn secondary" id="saveBtn" onclick="saveDetails(true)">수량/시간 저장</button></div>
+    <div class="actions" id="editActions"><button class="btn danger" id="defectBtn" onclick="openDefectModal()">불량 유형 설정</button>{% if performance_type == "ASSEMBLY" %}<button class="btn green" id="lotAssignBtn" onclick="openLotAllocationModal()">LOT 배정</button>{% endif %}<button class="btn secondary" id="saveBtn" onclick="saveDetails(true)">수량/시간 저장</button>{% if performance_type == "ASSEMBLY" %}<button class="btn danger" id="completeBtn" onclick="completeRun()">종료 / 생산실적 등록</button>{% endif %}</div>
 
     {% if performance_type == "ASSEMBLY" %}
     <div id="materialList" style="display:none"></div>
@@ -62,7 +62,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
     <div class="scan-row" id="scanRow"><label style="align-self:center;margin:0">LOT 스캔/입력</label><input id="scanLotInput" placeholder="LOT 번호 입력 또는 바코드 스캔 후 Enter"><button class="btn green" id="scanBtn" onclick="scanLot()">LOT 배정</button></div>
     {% endif %}
     <div id="runMsg" class="msg"></div>
-    <div class="actions" id="runActions"><button class="btn secondary" id="clearBtn" onclick="clearAllocations()" {% if performance_type == "ASSEMBLY" %}style="display:none"{% endif %}>LOT 배정 초기화</button><button class="btn danger" id="completeBtn" onclick="completeRun()">종료 / 생산실적 등록</button></div>
+    {% if performance_type != "ASSEMBLY" %}<div class="actions" id="runActions"><button class="btn secondary" id="clearBtn" onclick="clearAllocations()">LOT 배정 초기화</button><button class="btn danger" id="completeBtn" onclick="completeRun()">종료 / 생산실적 등록</button></div>{% else %}<div id="runActions" style="display:none"><button id="clearBtn"></button></div>{% endif %}
   </div>
 </div>
 
