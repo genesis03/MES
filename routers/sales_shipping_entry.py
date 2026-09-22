@@ -278,8 +278,8 @@ def confirm_shipment(
     if not sales_items:
         raise HTTPException(409, "출고할 수주 품목이 없습니다.")
 
-    # 같은 품번이 여러 수주에 걸쳐 있어도, 이번 출고전표 전체 기준으로 FIFO 앞쪽 LOT만 사용해야 합니다.
-    part_selected_ids: dict[str, list[int]] = {}
+    # 같은 품목이 여러 수주에 걸쳐 있어도, 이번 출고전표 전체 기준으로 FIFO 앞쪽 LOT만 사용해야 합니다.
+    item_selected_ids: dict[int, list[int]] = {}
     used_box_ids: set[int] = set()
     for allocation in payload.items:
         sales_item = sales_items[allocation.sales_order_item_id]
@@ -289,22 +289,23 @@ def confirm_shipment(
         if any(box_id in used_box_ids for box_id in box_ids):
             raise HTTPException(409, "서로 다른 수주 품목에 동일 포장 LOT가 중복 배정되었습니다.")
         used_box_ids.update(box_ids)
-        part_selected_ids.setdefault(sales_item.part_no, []).extend(box_ids)
+        item_selected_ids.setdefault(int(sales_item.item_id), []).extend(box_ids)
 
-    waiting_by_part: dict[str, list[tuple[PackingBox, PackingMaster]]] = {}
-    for part_no, selected_ids in part_selected_ids.items():
-        waiting = _waiting_rows(db, part_no)
-        waiting_by_part[part_no] = waiting
+    waiting_by_item: dict[int, list[tuple[PackingBox, PackingMaster]]] = {}
+    for item_id, selected_ids in item_selected_ids.items():
+        waiting = _waiting_rows(db, item_id)
+        waiting_by_item[item_id] = waiting
         expected_ids = [box.id for box, _ in waiting[:len(selected_ids)]]
         if len(expected_ids) != len(selected_ids) or set(selected_ids) != set(expected_ids):
             first_expected = waiting[0][0].package_lot_no if waiting else "없음"
-            raise HTTPException(409, f"{part_no}: 선입선출 위반입니다. 선입 LOT {first_expected}부터 필요한 수량만큼 배정해야 합니다.")
+            part_label = sales_items[next(k for k, v in sales_items.items() if v.item_id == item_id)].part_no
+            raise HTTPException(409, f"{part_label}: 선입선출 위반입니다. 선입 LOT {first_expected}부터 필요한 수량만큼 배정해야 합니다.")
 
     validated = []
     for allocation in payload.items:
         sales_item = sales_items[allocation.sales_order_item_id]
         box_ids = list(dict.fromkeys(allocation.packing_box_ids))
-        waiting = waiting_by_part.get(sales_item.part_no, [])
+        waiting = waiting_by_item.get(sales_item.item_id, [])
         row_map = {box.id: (box, master) for box, master in waiting}
         selected_rows = [row_map[box_id] for box_id in box_ids if box_id in row_map]
         if len(selected_rows) != len(box_ids):
