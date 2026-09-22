@@ -51,6 +51,7 @@ class ProductionRunMaterial(Base):
 
     id = Column(Integer, primary_key=True)
     run_id = Column(Integer, ForeignKey("production_runs.id"), nullable=False, index=True)
+    material_item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
     material_part_no = Column(String(80), nullable=False, index=True)
     material_name = Column(String(200), nullable=True)
     unit = Column(String(10), nullable=False, default="EA")
