@@ -191,12 +191,17 @@ def create_purchase(
         if not item.part_no.strip():
             continue
         
+        part_master = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == item.part_no.strip()).first()
+        if not part_master:
+            raise HTTPException(status_code=422, detail=f"등록되지 않은 품번입니다. ({item.part_no.strip()})")
+
         # 공급가액 계산 (수량 * 단가)
         calculated_supply = item.supply_price if item.supply_price > 0 else (item.qty * item.unit_price)
 
         new_master.items.append(
             PurchaseItem(
-                part_no=item.part_no.strip(),
+                item_id=part_master.id,
+                part_no=part_master.part_no,
                 part_name=item.part_name.strip(),
                 lot_no=item.lot_no.strip() if item.lot_no else None,
                 qty=item.qty,
@@ -298,7 +303,7 @@ def unreceived_orders(
 ):
     query = db.query(PurchaseOrderMaster, PurchaseOrderItem, ItemMasterModel).join(
     PurchaseOrderItem, PurchaseOrderItem.po_id == PurchaseOrderMaster.id
-    ).join(ItemMasterModel, ItemMasterModel.part_no == PurchaseOrderItem.part_no).filter(
+    ).join(ItemMasterModel, ItemMasterModel.id == PurchaseOrderItem.item_id).filter(
         PurchaseOrderMaster.status.in_(["ORDERED", "PARTIAL"]),
         PurchaseOrderItem.received_qty < PurchaseOrderItem.order_qty,
     )
@@ -313,7 +318,7 @@ def unreceived_orders(
         {"po_id": m.id, "po_no": m.po_no, "order_date": m.order_date, "delivery_due_date": m.delivery_due_date,
          "partner_id": m.partner_id, "partner_name": m.partner_name, "manager_name": m.manager_name or "",
          "po_status": m.status,
-         "po_item_id": i.id, "part_no": i.part_no, "part_name": p.part_name, "spec": p.spec or "",
+         "po_item_id": i.id, "item_id": i.item_id, "part_no": p.part_no, "part_name": p.part_name, "spec": p.spec or "",
          "item_delivery_date": i.delivery_date,
          "order_qty": i.order_qty, "received_qty": i.received_qty,
          "remaining_qty": float(Decimal(str(i.order_qty)) - Decimal(str(i.received_qty))),
@@ -351,10 +356,10 @@ def get_inbound_draft(
     items = []
     for row in master.items:
         po_item = db.get(PurchaseOrderItem, row.po_item_id) if row.po_item_id else None
-        part = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == row.part_no).one_or_none()
+        part = db.get(ItemMasterModel, row.item_id) if row.item_id else db.query(ItemMasterModel).filter(ItemMasterModel.part_no == row.part_no).one_or_none()
         items.append({
             "po_item_id": row.po_item_id, "po_no": po_item.order.po_no if po_item else "",
-            "part_no": row.part_no, "part_name": part.part_name if part else "",
+            "item_id": row.item_id, "part_no": part.part_no if part else row.part_no, "part_name": part.part_name if part else "",
             "spec": (part.spec or "") if part else "", "unit": row.unit,
             "order_qty": po_item.order_qty if po_item else None,
             "remaining_qty": po_item.order_qty - po_item.received_qty if po_item else None,
@@ -418,7 +423,7 @@ def inbound_history(
          "partner_id": m.partner_id, "partner_name": m.partner_name, "invoice_no": m.invoice_no,
          "created_by": m.created_by, "created_at": m.created_at,
          "inbound_item_id": i.id, "po_item_id": i.po_item_id, "po_no": po_no,
-         "part_no": i.part_no, "inbound_qty": i.inbound_qty, "unit_price": i.unit_price,
+         "item_id": i.item_id, "part_no": i.part_no, "inbound_qty": i.inbound_qty, "unit_price": i.unit_price,
          "unit": i.unit, "inspection_status": i.inspection_status,
          "supplier_lot_no": i.supplier_lot_no, "internal_lot_no": i.internal_lot_no,
          "warehouse_code": i.warehouse_code, "storage_location": i.storage_location} for m, i, po_no in rows]}
@@ -441,7 +446,7 @@ def search_purchase_items(
     total = query.count()
     rows = query.order_by(ItemMasterModel.part_no).offset(offset).limit(limit).all()
     return {"total": total, "offset": offset, "limit": limit, "items": [
-        {"part_no": item.part_no, "part_name": item.part_name, "spec": item.spec or "", "unit": item.unit}
+        {"item_id": item.id, "part_no": item.part_no, "part_name": item.part_name, "spec": item.spec or "", "unit": item.unit}
         for item in rows
     ]}
 
@@ -459,7 +464,7 @@ def purchase_order_list(
     labels = {"ORDERED": "발주완료", "PARTIAL": "부분입고", "COMPLETED": "입고완료", "CANCELLED": "취소"}
     query = db.query(PurchaseOrderMaster, PurchaseOrderItem, ItemMasterModel).join(
         PurchaseOrderItem, PurchaseOrderItem.po_id == PurchaseOrderMaster.id
-    ).join(ItemMasterModel, ItemMasterModel.part_no == PurchaseOrderItem.part_no)
+    ).join(ItemMasterModel, ItemMasterModel.id == PurchaseOrderItem.item_id)
     if status and status != "ALL":
         selected = {**{value: key for key, value in labels.items()}, "입고대기": "PARTIAL"}.get(status, status)
         if selected not in labels:
