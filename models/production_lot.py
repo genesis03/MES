@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String
 
 from core.database import Base
 
@@ -16,6 +16,7 @@ class ProductionLotModel(Base):
 
     id = Column(Integer, primary_key=True)
     lot_no = Column(String(100), unique=True, nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
     part_no = Column(String(50), nullable=False, index=True)
     lot_qty = Column(Float, nullable=False)
     storage_location = Column(String(20), nullable=True)
