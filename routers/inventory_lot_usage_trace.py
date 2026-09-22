@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import get_current_user
-from models.models import PurchaseInboundItem, PurchaseInboundMaster
+from models.models import ItemMasterModel, PurchaseInboundItem, PurchaseInboundMaster
 from models.production_lot import ProductionLotModel
 from routers.inventory_lot_trace_tree import _edges, _node, _process_map
 
@@ -35,14 +35,16 @@ def inventory_lot_usage_search(
     results: list[dict] = []
     seen: set[str] = set()
 
-    def add(lot_no: str, part_no: str, qty: float, date: str, kind: str):
+    def add(lot_no: str, item_id: int | None, part_no: str, qty: float, date: str, kind: str):
         lot_no = str(lot_no or "").strip()
         if not lot_no or lot_no in seen:
             return
         seen.add(lot_no)
+        item = db.get(ItemMasterModel, item_id) if item_id else None
         results.append({
             "lot_no": lot_no,
-            "part_no": part_no or "",
+            "item_id": item_id,
+            "part_no": item.part_no if item else (part_no or ""),
             "qty": float(qty or 0),
             "date": date or "",
             "kind": kind,
@@ -60,7 +62,7 @@ def inventory_lot_usage_search(
         .all()
     )
     for item, master in purchases:
-        add(item.internal_lot_no, item.part_no, item.inbound_qty, master.inbound_date, "구매입고")
+        add(item.internal_lot_no, item.item_id, item.part_no, item.inbound_qty, master.inbound_date, "구매입고")
 
     remaining = max(limit - len(results), 0)
     if remaining:
@@ -74,6 +76,7 @@ def inventory_lot_usage_search(
         for lot in productions:
             add(
                 lot.lot_no,
+                lot.item_id,
                 lot.part_no,
                 lot.lot_qty,
                 lot.created_at.strftime("%Y-%m-%d") if lot.created_at else "",
