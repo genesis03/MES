@@ -46,7 +46,7 @@ class SubcontractOrderItem(Base):
     order_id = Column(Integer, ForeignKey("subcontract_order_masters.id"), nullable=False, index=True)
     previous_item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
     item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
-    previous_part_no = Column(String(50), ForeignKey("item_master.part_no"), nullable=False, index=True)
+    previous_part_no = Column(String(50), nullable=False, index=True)
     order_part_no = Column(String(80), nullable=False, index=True)
     order_part_name = Column(String(200), nullable=False)
     spec = Column(String(200), nullable=True)
