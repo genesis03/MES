@@ -36,13 +36,13 @@ class SalesOrderCreateInput(BaseModel):
     items: list[SalesOrderItemInput] = Field(min_length=1)
 
 
-def _waiting_rows(db: Session, part_no: str):
+def _waiting_rows(db: Session, item_id: int):
     return (
         db.query(PackingBox, PackingMaster)
         .join(PackingMaster, PackingMaster.id == PackingBox.packing_id)
         .outerjoin(ShipmentBox, ShipmentBox.packing_box_id == PackingBox.id)
         .filter(
-            PackingMaster.part_no == part_no,
+            PackingMaster.item_id == item_id,
             PackingMaster.status == "PACKED",
             ShipmentBox.id.is_(None),
         )
@@ -111,6 +111,7 @@ def create_sales_order_with_policy(
     for row in payload.items:
         master = item_map[row.part_no.strip()]
         order.items.append(SalesOrderItem(
+            item_id=master.id,
             part_no=master.part_no,
             part_name=master.part_name,
             order_qty=float(row.order_qty),
@@ -153,6 +154,7 @@ def sales_orders_with_policy(
         "note": x.note,
         "items": [{
             "id": i.id,
+            "item_id": i.item_id,
             "part_no": i.part_no,
             "part_name": i.part_name,
             "order_qty": i.order_qty,
@@ -179,21 +181,22 @@ def open_orders_with_policy(db: Session = Depends(get_db), current_user=Depends(
         open_items = [item for item in order.items if float(item.shipped_qty or 0) < float(item.order_qty or 0) - 1e-9]
         if not open_items:
             continue
-        part_nos = [item.part_no for item in open_items]
-        masters = db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_(part_nos)).all()
-        master_map = {row.part_no: row for row in masters}
+        item_ids = [item.item_id for item in open_items if item.item_id]
+        masters = db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all() if item_ids else []
+        master_map = {row.id: row for row in masters}
         items = []
         for item in open_items:
-            master = master_map.get(item.part_no)
-            waiting = _waiting_rows(db, item.part_no)
+            master = master_map.get(item.item_id)
+            waiting = _waiting_rows(db, item.item_id)
             remaining_qty = max(float(item.order_qty or 0) - float(item.shipped_qty or 0), 0.0)
             items.append({
                 "id": item.id,
+                "item_id": item.item_id,
                 "order_id": order.id,
                 "order_no": order.order_no,
                 "order_type": order.order_type or "NORMAL",
                 "transaction_type": order.transaction_type or "PAID",
-                "part_no": item.part_no,
+                "part_no": master.part_no if master else item.part_no,
                 "part_name": item.part_name or (master.part_name if master else ""),
                 "unit": item.unit or "EA",
                 "order_qty": float(item.order_qty or 0),
