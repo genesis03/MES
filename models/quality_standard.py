@@ -28,12 +28,12 @@ class QualityInspectionItemMaster(Base):
 class QualityInboundStandard(Base):
     __tablename__ = "quality_inbound_standards"
     __table_args__ = (
-        UniqueConstraint("part_no", "revision", name="uq_quality_inbound_standard_part_revision"),
+        UniqueConstraint("item_id", "revision", name="uq_quality_inbound_standard_item_revision"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
-    part_no = Column(String(80), ForeignKey("item_master.part_no"), nullable=False, index=True)
+    part_no = Column(String(80), nullable=False, index=True)
     revision = Column(String(20), nullable=False, default="Rev.00")
     effective_date = Column(String(10), nullable=True)
     is_active = Column(String(1), nullable=False, default="Y", index=True)
