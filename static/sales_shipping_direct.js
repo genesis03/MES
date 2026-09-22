@@ -137,6 +137,7 @@
 
     allocations.clear();
     viewingShipment = detail;
+    editShipmentMode = requestedEditShipmentId > 0 && Number(shipmentId) === requestedEditShipmentId;
     setEntryMode(true);
     const items = (detail.items || []).map(row => {
       const directLots = (row.direct_lots || []).map(lot => ({
@@ -185,6 +186,10 @@
     selectedOrderIds = [...(detail.sales_order_ids || [])];
     document.getElementById('shipmentNo').value = detail.shipment_no;
     document.getElementById('shipmentDate').value = detail.shipment_date || '';
+    if(editShipmentMode){
+      document.getElementById('shipmentDate').disabled = true;
+      document.getElementById('shipmentDate').title = '샘플/개발 직출고는 출고 LOT 번호에 일자가 포함되어 있어 일자를 변경할 수 없습니다.';
+    }
     document.getElementById('customerName').value = detail.customer_name || '';
     document.getElementById('deliveryDueDate').value = currentOrder.delivery_due_date || '';
     document.getElementById('managerName').value = currentOrder.manager_name || '';
@@ -195,6 +200,10 @@
     currentItemId = null;
     renderItems();
     updateSummary();
+    if(editShipmentMode){
+      document.getElementById('confirmBtn').disabled = false;
+      document.getElementById('confirmBtn').textContent = '출고 수정 저장';
+    }
   };
 
   document.addEventListener('DOMContentLoaded', () => {
