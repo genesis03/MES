@@ -149,10 +149,10 @@ def _production_lot_is_valid(db: Session, lot: ProductionLotModel) -> bool:
     return db.get(ProductionPerformance, performance_id) is not None
 
 
-def _available_lots(db: Session, part_no: str, current_item_id: int | None = None):
-    """구매 LOT + 생산 LOT 중 현재 외주발주에 사용할 수 있는 LOT를 반환합니다."""
+def _available_lots(db: Session, source_item_id: int, current_order_item_id: int | None = None):
+    """구매 LOT + 생산 LOT 중 현재 외주발주에 사용할 수 있는 LOT를 item_id 기준으로 반환합니다."""
     result = []
-    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
+    item = db.get(ItemMasterModel, source_item_id) if source_item_id else None
     if item is None:
         return result
 
@@ -169,7 +169,7 @@ def _available_lots(db: Session, part_no: str, current_item_id: int | None = Non
         .all()
     )
     for row in purchase_rows:
-        available = _available_qty(db, row.internal_lot_no, row.inbound_qty, current_item_id)
+        available = _available_qty(db, row.internal_lot_no, row.inbound_qty, current_order_item_id)
         if available > 0:
             result.append({
                 "lot_no": row.internal_lot_no,
@@ -192,7 +192,7 @@ def _available_lots(db: Session, part_no: str, current_item_id: int | None = Non
     for row in production_rows:
         if not _production_lot_is_valid(db, row):
             continue
-        available = _available_qty(db, row.lot_no, row.lot_qty, current_item_id)
+        available = _available_qty(db, row.lot_no, row.lot_qty, current_order_item_id)
         if available > 0:
             result.append({
                 "lot_no": row.lot_no,
@@ -290,7 +290,7 @@ def subcontract_stock(
     part = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
     if part is None:
         raise HTTPException(404, "품목 마스터에서 이전 품번을 찾을 수 없습니다.")
-    lots = _available_lots(db, part_no, order_item_id)
+    lots = _available_lots(db, part.id, order_item_id)
     return {
         "part_no": part_no,
         "stock_qty": sum(float(row["lot_qty"]) for row in lots),
@@ -441,7 +441,7 @@ def set_subcontract_lots(
     if item is None or item.order_id != master.id:
         raise HTTPException(404, "외주가공 발주 품목을 찾을 수 없습니다.")
 
-    available = {row["lot_no"]: row for row in _available_lots(db, item.previous_part_no, item.id)}
+    available = {row["lot_no"]: row for row in _available_lots(db, item.previous_item_id, item.id)}
     requested = list(dict.fromkeys(payload.lot_nos))
     missing = [lot_no for lot_no in requested if lot_no not in available]
     if missing:
@@ -493,7 +493,7 @@ def confirm_subcontract_order(
         if any(abs(float(row.allocated_qty) - float(row.lot_qty)) >= 1e-9 for row in item.allocations):
             raise HTTPException(409, "외주 출고 LOT는 LOT 전체수량을 사용해야 합니다.")
 
-        available = {row["lot_no"]: row for row in _available_lots(db, item.previous_part_no, item.id)}
+        available = {row["lot_no"]: row for row in _available_lots(db, item.previous_item_id, item.id)}
         invalid = []
         for allocation in item.allocations:
             source = available.get(allocation.lot_no)
