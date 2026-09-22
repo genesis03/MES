@@ -16,8 +16,9 @@ from core.security import (
     parse_user_permissions,
 )
 # 실제 존재하는 품목/공정 마스터 모델만 import
+from models.item_identity import ItemPartNoHistory
 from models.models import ItemMasterModel, ProcessModel
-from services.item_identity_service import rename_item_part_no
+from services.item_identity_service import item_usage_summary, rename_item_part_no
 
 # 절대 경로 기준 templates 디렉터리 설정
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -245,6 +246,39 @@ async def update_item(request: Request, db: Session = Depends(get_db)):
     return {"status": "success", "message": "품목 정보가 성공적으로 수정되었습니다."}
 
 
+@router.get("/api/basic-info/items/{item_id}/part-no-history")
+async def get_item_part_no_history(item_id: int, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user_optional(request, db)
+    if not check_basic_info_permission(user):
+        raise HTTPException(status_code=403, detail="권한이 없습니다.")
+
+    target = db.get(ItemMasterModel, item_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="해당 품목을 찾을 수 없습니다.")
+
+    rows = (
+        db.query(ItemPartNoHistory)
+        .filter(ItemPartNoHistory.item_id == item_id)
+        .order_by(ItemPartNoHistory.changed_at.desc(), ItemPartNoHistory.id.desc())
+        .all()
+    )
+    return {
+        "item_id": target.id,
+        "current_part_no": target.part_no,
+        "history": [
+            {
+                "id": row.id,
+                "old_part_no": row.old_part_no,
+                "new_part_no": row.new_part_no,
+                "changed_by": row.changed_by or "",
+                "reason": row.reason or "",
+                "changed_at": row.changed_at.strftime("%Y-%m-%d %H:%M:%S") if row.changed_at else "",
+            }
+            for row in rows
+        ],
+    }
+
+
 # 5. 품목 삭제 API
 @router.post("/api/basic-info/items/delete")
 async def delete_item(request: Request, db: Session = Depends(get_db)):
@@ -260,6 +294,17 @@ async def delete_item(request: Request, db: Session = Depends(get_db)):
     target = db.query(ItemMasterModel).filter(ItemMasterModel.id == item_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="해당 품목을 찾을 수 없습니다.")
+
+    usage = item_usage_summary(db, target.id)
+    if usage:
+        total = sum(row["count"] for row in usage)
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"사용이력이 있는 품목은 삭제할 수 없습니다. 연결 데이터 {total}건이 있습니다. "
+                "품번 수정 또는 사용중지로 처리해 주세요."
+            ),
+        )
 
     db.delete(target)
     db.commit()
