@@ -9,7 +9,7 @@ from core.security import get_current_user
 from models.models import ItemMasterModel
 from models.packing import PackingBox, PackingMaster
 from models.partner import Partner
-from models.sales import SalesOrderItem, SalesOrderMaster, ShipmentBox
+from models.sales import SalesOrderItem, SalesOrderMaster, ShipmentBox, ShipmentItem, ShipmentMaster
 from routers.sales_shipping_entry import _next_no, _username
 
 router = APIRouter(tags=["Sales Order Policy"])
@@ -55,6 +55,129 @@ def _pack_qty(master: ItemMasterModel | None) -> int:
     if not master:
         return 0
     return int(master.moq or 0) or int(master.snp or 0) or 0
+
+
+def _serialize_order(order: SalesOrderMaster) -> dict:
+    has_shipment = any(float(item.shipped_qty or 0) > 1e-9 for item in order.items)
+    return {
+        "id": order.id,
+        "order_no": order.order_no,
+        "order_date": order.order_date,
+        "delivery_due_date": order.delivery_due_date,
+        "customer_id": order.customer_id,
+        "customer_name": order.customer_name,
+        "status": order.status,
+        "order_type": order.order_type or "NORMAL",
+        "transaction_type": order.transaction_type or "PAID",
+        "manager_name": order.manager_name or "",
+        "note": order.note or "",
+        "editable": order.status == "ORDERED" and not has_shipment,
+        "items": [{
+            "id": item.id,
+            "item_id": item.item_id,
+            "part_no": item.part_no,
+            "part_name": item.part_name or "",
+            "order_qty": float(item.order_qty or 0),
+            "shipped_qty": float(item.shipped_qty or 0),
+            "remaining_qty": max(float(item.order_qty or 0) - float(item.shipped_qty or 0), 0.0),
+            "unit": item.unit or "EA",
+            "delivery_date": item.delivery_date,
+            "note": item.note or "",
+            "status": item.status,
+        } for item in order.items],
+    }
+
+
+def _validate_order_payload(db: Session, payload: SalesOrderCreateInput):
+    order_type, transaction_type, customer, item_map = _validate_order_payload(db, payload)
+    return order_type, transaction_type, customer, item_map
+
+
+@router.get("/api/sales/orders/{order_id}")
+def sales_order_detail(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    order = db.get(SalesOrderMaster, order_id)
+    if order is None:
+        raise HTTPException(404, "수주를 찾을 수 없습니다.")
+
+    # shipped_qty 외에도 실제 출고 레코드가 있으면 수정 불가로 봅니다.
+    has_shipment = (
+        db.query(ShipmentMaster.id)
+        .filter(ShipmentMaster.sales_order_id == order.id)
+        .first()
+        is not None
+    ) or (
+        db.query(ShipmentItem.id)
+        .join(SalesOrderItem, SalesOrderItem.id == ShipmentItem.sales_order_item_id)
+        .filter(SalesOrderItem.order_id == order.id)
+        .first()
+        is not None
+    )
+    data = _serialize_order(order)
+    if has_shipment:
+        data["editable"] = False
+    return data
+
+
+@router.put("/api/sales/orders/{order_id}")
+def update_sales_order_with_policy(
+    order_id: int,
+    payload: SalesOrderCreateInput,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    order = db.get(SalesOrderMaster, order_id)
+    if order is None:
+        raise HTTPException(404, "수주를 찾을 수 없습니다.")
+
+    has_shipment = (
+        db.query(ShipmentMaster.id)
+        .filter(ShipmentMaster.sales_order_id == order.id)
+        .first()
+        is not None
+    ) or (
+        db.query(ShipmentItem.id)
+        .join(SalesOrderItem, SalesOrderItem.id == ShipmentItem.sales_order_item_id)
+        .filter(SalesOrderItem.order_id == order.id)
+        .first()
+        is not None
+    ) or any(float(item.shipped_qty or 0) > 1e-9 for item in order.items)
+    if has_shipment or order.status != "ORDERED":
+        raise HTTPException(409, "출고 이력이 있는 수주는 수정할 수 없습니다.")
+
+    order_type, transaction_type, customer, item_map = _validate_order_payload(db, payload)
+
+    order.order_date = payload.order_date
+    order.delivery_due_date = payload.delivery_due_date or None
+    order.customer_id = customer.id
+    order.customer_name = customer.partner_name
+    order.order_type = order_type
+    order.transaction_type = transaction_type
+    order.manager_name = (payload.manager_name or "").strip() or None
+    order.note = (payload.note or "").strip() or None
+
+    order.items.clear()
+    db.flush()
+    for row in payload.items:
+        master = item_map[row.part_no.strip()]
+        order.items.append(SalesOrderItem(
+            item_id=master.id,
+            part_no=master.part_no,
+            part_name=master.part_name,
+            order_qty=float(row.order_qty),
+            shipped_qty=0.0,
+            unit=master.unit or "EA",
+            delivery_date=row.delivery_date or payload.delivery_due_date or None,
+            note=(row.note or "").strip() or None,
+            status="WAITING",
+        ))
+
+    db.commit()
+    db.refresh(order)
+    return {"id": order.id, "order_no": order.order_no, "message": "수주가 수정되었습니다."}
 
 
 @router.post("/api/sales/orders")
@@ -140,31 +263,7 @@ def sales_orders_with_policy(
     if customer_id:
         query = query.filter(SalesOrderMaster.customer_id == customer_id)
     rows = query.order_by(SalesOrderMaster.order_date.desc(), SalesOrderMaster.id.desc()).limit(500).all()
-    return [{
-        "id": x.id,
-        "order_no": x.order_no,
-        "order_date": x.order_date,
-        "delivery_due_date": x.delivery_due_date,
-        "customer_id": x.customer_id,
-        "customer_name": x.customer_name,
-        "status": x.status,
-        "order_type": x.order_type or "NORMAL",
-        "transaction_type": x.transaction_type or "PAID",
-        "manager_name": x.manager_name,
-        "note": x.note,
-        "items": [{
-            "id": i.id,
-            "item_id": i.item_id,
-            "part_no": i.part_no,
-            "part_name": i.part_name,
-            "order_qty": i.order_qty,
-            "shipped_qty": i.shipped_qty,
-            "remaining_qty": max(float(i.order_qty or 0) - float(i.shipped_qty or 0), 0.0),
-            "unit": i.unit,
-            "delivery_date": i.delivery_date,
-            "status": i.status,
-        } for i in x.items],
-    } for x in rows]
+    return [_serialize_order(x) for x in rows]
 
 
 @router.get("/api/sales/shipping-entry/open-orders")
