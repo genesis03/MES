@@ -2,6 +2,9 @@ const $ = (id) => document.getElementById(id);
 let customers = [];
 let customerCandidates = [];
 let customerActiveIndex = -1;
+const editingOrderId = Number(new URLSearchParams(location.search).get('order_id') || 0);
+let editingOrder = null;
+let readOnlyOrder = false;
 
 function today() {
   return new Date().toISOString().slice(0, 10);
@@ -81,7 +84,11 @@ function searchCustomer() {
 
 async function loadMasters() {
   customers = await getJson('/api/sales/customers');
-  addRow();
+  if (editingOrderId) {
+    await loadOrder(editingOrderId);
+  } else {
+    addRow();
+  }
 }
 
 function closeSuggestions(tr) {
@@ -143,7 +150,7 @@ async function searchPart(tr) {
   }
 }
 
-function addRow() {
+function addRow(data = null) {
   const tr = document.createElement('tr');
   tr.dataset.partNo = '';
   tr._candidates = [];
@@ -185,10 +192,67 @@ function addRow() {
 
   tr.querySelector('.delete-row').addEventListener('click', () => {
     tr.remove();
-    if (!$('itemBody').querySelector('tr')) addRow();
+    if (!$('itemBody').querySelector('tr') && !readOnlyOrder) addRow();
   });
   $('itemBody').appendChild(tr);
+
+  if (data) {
+    tr.dataset.partNo = data.part_no || '';
+    tr.querySelector('.part-input').value = data.part_no || '';
+    tr.querySelector('.part-name').textContent = data.part_name || '';
+    tr.querySelector('.order-qty').value = data.order_qty ?? '';
+    tr.querySelector('.unit').textContent = data.unit || 'EA';
+    tr.querySelector('.delivery-date').value = data.delivery_date || '';
+  }
 }
+
+function setReadOnlyMode(message) {
+  readOnlyOrder = true;
+  document.querySelectorAll('#orderDate,#deliveryDueDate,#customerSearch,#orderType,#transactionType,#managerName,#note,#itemBody input,#itemBody button,#addRowBtn').forEach(el => {
+    el.disabled = true;
+  });
+  $('saveBtn').disabled = true;
+  $('saveBtn').textContent = '출고 이력으로 수정 불가';
+  $('pageTitle').textContent = '수주 입력 · 조회';
+  if (message) {
+    const hint = document.createElement('div');
+    hint.style.cssText = 'margin:0 0 12px;color:#b45309;font-size:12px;font-weight:700';
+    hint.textContent = message;
+    $('pageTitle').after(hint);
+  }
+}
+
+async function loadOrder(orderId) {
+  const order = await getJson('/api/sales/orders/' + encodeURIComponent(orderId));
+  editingOrder = order;
+  $('pageTitle').textContent = `수주 입력 · ${order.order_no}`;
+  $('orderDate').value = order.order_date || '';
+  $('deliveryDueDate').value = order.delivery_due_date || '';
+  $('orderType').value = order.order_type || 'NORMAL';
+  $('transactionType').value = order.transaction_type || 'PAID';
+  $('managerName').value = order.manager_name || '';
+  $('note').value = order.note || '';
+
+  const customer = customers.find(x => Number(x.id) === Number(order.customer_id));
+  if (customer) {
+    chooseCustomer(customer);
+  } else {
+    $('customerId').value = order.customer_id || '';
+    $('customerSearch').value = order.customer_name || '';
+    $('selectedCustomer').textContent = order.customer_name || '';
+  }
+
+  $('itemBody').innerHTML = '';
+  (order.items || []).forEach(item => addRow(item));
+  if (!(order.items || []).length) addRow();
+
+  if (order.editable) {
+    $('saveBtn').textContent = '수주 수정 저장';
+  } else {
+    setReadOnlyMode('이미 출고 이력이 있는 수주입니다. 조회만 가능하며 수정은 할 수 없습니다.');
+  }
+}
+
 
 function validateOrder(items) {
   const orderDate = $('orderDate').value;
@@ -219,8 +283,8 @@ async function saveOrder() {
   if (error) return alert(error);
 
   try {
-    const data = await getJson('/api/sales/orders', {
-      method: 'POST',
+    const data = await getJson(editingOrderId ? '/api/sales/orders/' + encodeURIComponent(editingOrderId) : '/api/sales/orders', {
+      method: editingOrderId ? 'PUT' : 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         order_date: $('orderDate').value,
@@ -248,7 +312,7 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-  $('orderDate').value = today();
+  if (!editingOrderId) $('orderDate').value = today();
   $('addRowBtn').addEventListener('click', addRow);
   $('saveBtn').addEventListener('click', saveOrder);
   $('deliveryDueDate').addEventListener('change', () => {
