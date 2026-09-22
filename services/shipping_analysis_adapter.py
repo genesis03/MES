@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
+from models.models import ItemMasterModel
 from models.sales import ShipmentMaster
 
 # 현재 회사 고정값. 향후 회사정보 설정으로 이관하기 쉽도록 한 곳에서만 관리합니다.
@@ -91,8 +92,9 @@ def build_shipping_analysis_rows(db: Session, shipment_ids: list[int]) -> list[d
     for shipment in ordered_shipments:
         for shipment_item in shipment.items:
             sales_item = shipment_item.sales_order_item
-            part_name = sales_item.part_name if sales_item else ""
-            part_no = shipment_item.part_no
+            master_item = db.get(ItemMasterModel, shipment_item.item_id) if shipment_item.item_id else None
+            part_name = master_item.part_name if master_item else (sales_item.part_name if sales_item else "")
+            part_no = master_item.part_no if master_item else shipment_item.part_no
 
             # 양산: 포장 BOX의 LOT를 그대로 출고 LOT로 사용합니다.
             for box in shipment_item.boxes:
