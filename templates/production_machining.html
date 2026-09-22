@@ -10,11 +10,11 @@ label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4
 .btn{border:0;border-radius:4px;padding:8px 14px;font-weight:800;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#334155}.danger{background:#b91c1c;color:#fff}.green{background:#65a30d;color:#fff}.orange{background:#f59e0b;color:#fff}.teal{background:#0f766e;color:#fff}.btn:disabled{opacity:.45;cursor:not-allowed}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}.msg{font-size:12px;margin-top:8px}.ok{color:#15803d}.err{color:#b91c1c}
 .run-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.badge{display:inline-block;padding:4px 8px;border-radius:12px;background:#dbeafe;color:#1d4ed8;font-size:12px;font-weight:800}.badge.status-completed{background:#dcfce7;color:#166534}.badge.status-cancelled{background:#fee2e2;color:#991b1b}
-.material-card{border:1px solid #e2e8f0;border-radius:5px;padding:10px;margin-top:8px}.material-top{display:grid;grid-template-columns:1.2fr 1.5fr .7fr .8fr .8fr .8fr;gap:8px;align-items:center;font-size:12px}.material-lots{margin-top:7px;font-size:12px;color:#475569}.complete{background:#f0fdf4}.incomplete{background:#fff7ed}
+.material-card{border:1px solid #e2e8f0;border-radius:5px;padding:10px;margin-top:8px}.material-top{display:grid;grid-template-columns:1.2fr 1.5fr .7fr .8fr .8fr .8fr;gap:8px;align-items:center;font-size:12px}.material-lots{margin-top:7px;font-size:12px;color:#475569}.material-action{display:flex;justify-content:flex-end;margin-top:8px}.complete{background:#f0fdf4}.incomplete{background:#fff7ed}
 .scan-row{display:grid;grid-template-columns:220px 1fr auto;gap:8px;margin-top:8px}.scan-row input{font-family:Consolas,monospace}
 table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left;white-space:nowrap}th{background:#f8fafc}.num{text-align:right}.empty{text-align:center;color:#94a3b8;padding:22px}.history-wrap{overflow:auto}.history-table{min-width:1550px}.row-actions{display:flex;gap:5px}.row-actions .btn{padding:5px 8px;font-size:11px}.st-progress{color:#1d4ed8;font-weight:800}.st-completed{color:#15803d;font-weight:800}.st-cancelled{color:#b91c1c;font-weight:800}
 .modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000}.modal.show{display:flex}.modal-box{width:min(1180px,94vw);max-height:90vh;overflow:auto;background:#fff;border-radius:7px;box-shadow:0 20px 50px rgba(0,0,0,.25)}.modal-head{padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center}.modal-body{padding:14px}.modal-foot{padding:12px 14px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:8px}.close-x{border:0;background:none;font-size:22px;cursor:pointer}
-.defect-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.defect-item{display:grid;grid-template-columns:1fr 90px;gap:6px;align-items:center}.hint{font-size:12px;color:#64748b}.readonly-note{display:none;margin-bottom:10px;padding:8px 10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;color:#475569}.readonly-note.show{display:block}
+.defect-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.defect-item{display:grid;grid-template-columns:1fr 90px;gap:6px;align-items:center}.lot-popup-summary{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:12px}.lot-popup-summary>div{border:1px solid #e2e8f0;border-radius:4px;padding:8px;background:#f8fafc;font-size:12px}.lot-popup-summary b{display:block;margin-top:3px;color:#0f172a}.lot-popup-scan{display:grid;grid-template-columns:110px 1fr 110px;gap:8px;align-items:center;margin:10px 0}.lot-popup-table{max-height:390px;overflow:auto;border:1px solid #e2e8f0}.lot-popup-table table{margin:0}.fifo-wait{color:#94a3b8;font-size:11px}.hint{font-size:12px;color:#64748b}.readonly-note{display:none;margin-bottom:10px;padding:8px 10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;color:#475569}.readonly-note.show{display:block}
 @media(max-width:900px){.grid,.history-filter{grid-template-columns:1fr}.material-top{grid-template-columns:1fr 1fr}.scan-row{grid-template-columns:1fr}}
 </style>
 {% endblock %}
@@ -94,14 +94,38 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
     <div class="modal-foot"><button class="btn secondary" onclick="resetDefects()">수량 초기화</button><button class="btn orange" onclick="saveDefects()">저장</button></div>
   </div>
 </div>
+
+
+<div class="modal" id="materialLotModal">
+  <div class="modal-box" style="width:min(1050px,94vw)">
+    <div class="modal-head"><strong id="materialLotTitle">BOM 자재 LOT 배정</strong><button class="close-x" onclick="closeModal('materialLotModal')">×</button></div>
+    <div class="modal-body">
+      <div id="materialLotSummary" class="lot-popup-summary"></div>
+      <div class="lot-popup-scan">
+        <label style="margin:0">LOT 스캔/입력</label>
+        <input id="materialLotScanInput" placeholder="LOT 번호 입력 또는 바코드 스캔 후 Enter">
+        <button class="btn green" id="materialLotScanBtn" onclick="assignMaterialLot()">LOT 배정</button>
+      </div>
+      <div class="hint" style="margin-bottom:8px">선입선출 기준의 배정 가능한 LOT가 우선 표시됩니다. 배정 후 잔량이 남으면 다음 LOT를 계속 배정할 수 있습니다.</div>
+      <div class="lot-popup-table">
+        <table>
+          <thead><tr><th>LOT NO</th><th class="num">LOT 수량</th><th class="num">잔여 수량</th><th class="num">배정 수량</th><th>저장위치</th><th style="width:100px">처리</th></tr></thead>
+          <tbody id="materialLotBody"></tbody>
+        </table>
+      </div>
+      <div id="materialLotMsg" class="msg"></div>
+    </div>
+    <div class="modal-foot"><button class="btn secondary" onclick="clearCurrentMaterialAllocations()">선택 품번 초기화</button><button class="btn primary" onclick="closeModal('materialLotModal')">배정 완료</button><button class="btn secondary" onclick="closeModal('materialLotModal')">닫기</button></div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_script %}
 <script>
 const PERFORMANCE_TYPE='{{ performance_type }}';
-const n=v=>Number(v||0);const today=new Date().toISOString().slice(0,10);let currentRun=null;let defects=[];let defectTypes=[];let selectedOrderId=null;
+const n=v=>Number(v||0);const today=new Date().toISOString().slice(0,10);let currentRun=null;let defects=[];let defectTypes=[];let selectedOrderId=null;let currentMaterialId=null;
 function oneMonthAgo(){const now=new Date();const day=now.getDate();now.setDate(1);now.setMonth(now.getMonth()-1);const lastDay=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();now.setDate(Math.min(day,lastDay));return now.toISOString().slice(0,10);}
-document.addEventListener('DOMContentLoaded',async()=>{performanceDate.value=today;historyStartDate.value=oneMonthAgo();historyEndDate.value=today;await loadProcesses();await loadDefectTypes();await loadRunHistory();['goodQty','setupQty'].forEach(id=>document.getElementById(id).addEventListener('input',updateProcessQty));scanLotInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scanLot();}});historyStatus.addEventListener('change',loadRunHistory);historyLimit.addEventListener('change',loadRunHistory);});
+document.addEventListener('DOMContentLoaded',async()=>{performanceDate.value=today;historyStartDate.value=oneMonthAgo();historyEndDate.value=today;await loadProcesses();await loadDefectTypes();await loadRunHistory();['goodQty','setupQty'].forEach(id=>document.getElementById(id).addEventListener('input',updateProcessQty));scanLotInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scanLot();}});materialLotScanInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();assignMaterialLot();}});if(PERFORMANCE_TYPE==='ASSEMBLY')scanRow.style.display='none';historyStatus.addEventListener('change',loadRunHistory);historyLimit.addEventListener('change',loadRunHistory);});
 async function jf(url,opt){const r=await fetch(url,opt);const d=await r.json();if(!r.ok)throw new Error(d.detail||'처리 실패');return d;}
 function msg(el,text,ok=false){el.textContent=text||'';el.className='msg '+(ok?'ok':'err');}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
@@ -115,15 +139,60 @@ async function loadRunHistory(){if(historyStartDate.value&&historyEndDate.value&
 async function deleteRun(id,orderNo){if(!confirm(`${orderNo} 생산중 가동내역을 삭제하시겠습니까?\n삭제하면 이력에 남지 않고 LOT 예약도 해제됩니다.`))return;try{const d=await jf(`/api/production-run/${id}`,{method:'DELETE'});if(currentRun&&currentRun.id===id){currentRun=null;defects=[];runEditorPanel.style.display='none';}await loadRunHistory();msg(topMsg,d.message,true);}catch(e){msg(topMsg,e.message);}}
 async function deleteCompletedRun(performanceId,orderNo){if(!performanceId)return;if(!confirm(`${orderNo} 완료 생산실적을 삭제하시겠습니까?\n후공정·외주·포장에서 생산 LOT가 사용된 경우 삭제할 수 없습니다.\n삭제되면 투입 LOT 소비량은 복원되고 생성 생산 LOT는 제거됩니다.`))return;try{const d=await jf(`/api/production/performances/${performanceId}`,{method:'DELETE'});if(currentRun&&Number(currentRun.performance_id||0)===Number(performanceId)){currentRun=null;defects=[];runEditorPanel.style.display='none';}await loadRunHistory();msg(topMsg,d.message,true);}catch(e){msg(topMsg,e.message);}}
 function dtLocal(v){return (v||'').replace(' ','T');}
-function setReadonlyMode(readonly){[startTime,endTime,goodQty,setupQty,runNote].forEach(x=>x.disabled=readonly);defectBtn.disabled=readonly;saveBtn.disabled=readonly;scanLotInput.disabled=readonly;scanBtn.disabled=readonly;clearBtn.disabled=readonly;completeBtn.disabled=readonly;scanRow.style.display=readonly?'none':'grid';editActions.style.display=readonly?'none':'flex';runActions.style.display=readonly?'none':'flex';readonlyNote.classList.toggle('show',readonly);readonlyNote.textContent=readonly?(currentRun.status==='COMPLETED'?'완료된 가동내역입니다. 상세는 읽기 전용이며 라벨은 가동내역 목록에서 재출력할 수 있습니다.':'취소된 가동내역입니다. 이력 확인만 가능합니다.') : '';}
-async function selectRun(id){currentRun=await jf('/api/production-run/'+id);defects=(currentRun.defects||[]).map(x=>({code:x.code,qty:n(x.qty)}));runEditorPanel.style.display='block';runStatusBadge.textContent=currentRun.status_name||currentRun.status;runStatusBadge.className='badge '+(currentRun.status==='COMPLETED'?'status-completed':currentRun.status==='CANCELLED'?'status-cancelled':'');runOrderBadge.textContent='작업지시 '+currentRun.work_order_no;runPartBadge.textContent='품번 '+currentRun.part_no;runProcessBadge.textContent='공정 '+(currentRun.process_name||currentRun.process_code);runShiftBadge.textContent=currentRun.shift_name;runEquipmentBadge.textContent=currentRun.equipment_name;startTime.value=dtLocal(currentRun.start_time);endTime.value=dtLocal(currentRun.end_time);goodQty.value=n(currentRun.good_qty)||'';setupQty.value=n(currentRun.setup_qty);defectQty.value=n(currentRun.defect_qty);runNote.value=currentRun.note||'';updateProcessQty();renderMaterials();setReadonlyMode(currentRun.status!=='IN_PROGRESS');msg(runMsg,'');if(currentRun.status==='IN_PROGRESS')setTimeout(()=>scanLotInput.focus(),50);}
+function setReadonlyMode(readonly){[startTime,endTime,goodQty,setupQty,runNote].forEach(x=>x.disabled=readonly);defectBtn.disabled=readonly;saveBtn.disabled=readonly;scanLotInput.disabled=readonly;scanBtn.disabled=readonly;clearBtn.disabled=readonly;completeBtn.disabled=readonly;scanRow.style.display=(readonly||PERFORMANCE_TYPE==='ASSEMBLY')?'none':'grid';editActions.style.display=readonly?'none':'flex';runActions.style.display=readonly?'none':'flex';readonlyNote.classList.toggle('show',readonly);readonlyNote.textContent=readonly?(currentRun.status==='COMPLETED'?'완료된 가동내역입니다. 상세는 읽기 전용이며 라벨은 가동내역 목록에서 재출력할 수 있습니다.':'취소된 가동내역입니다. 이력 확인만 가능합니다.') : '';}
+async function selectRun(id){currentRun=await jf('/api/production-run/'+id);defects=(currentRun.defects||[]).map(x=>({code:x.code,qty:n(x.qty)}));runEditorPanel.style.display='block';runStatusBadge.textContent=currentRun.status_name||currentRun.status;runStatusBadge.className='badge '+(currentRun.status==='COMPLETED'?'status-completed':currentRun.status==='CANCELLED'?'status-cancelled':'');runOrderBadge.textContent='작업지시 '+currentRun.work_order_no;runPartBadge.textContent='품번 '+currentRun.part_no;runProcessBadge.textContent='공정 '+(currentRun.process_name||currentRun.process_code);runShiftBadge.textContent=currentRun.shift_name;runEquipmentBadge.textContent=currentRun.equipment_name;startTime.value=dtLocal(currentRun.start_time);endTime.value=dtLocal(currentRun.end_time);goodQty.value=n(currentRun.good_qty)||'';setupQty.value=n(currentRun.setup_qty);defectQty.value=n(currentRun.defect_qty);runNote.value=currentRun.note||'';updateProcessQty();renderMaterials();setReadonlyMode(currentRun.status!=='IN_PROGRESS');msg(runMsg,'');if(currentRun.status==='IN_PROGRESS'&&PERFORMANCE_TYPE!=='ASSEMBLY')setTimeout(()=>scanLotInput.focus(),50);}
 function updateProcessQty(){processQty.value=(n(goodQty.value)+n(defectQty.value)+n(setupQty.value)).toLocaleString();}
 async function loadDefectTypes(){defectTypes=await jf('/api/production-run/defect-types');}
 function openDefectModal(){if(!currentRun||currentRun.status!=='IN_PROGRESS')return;defectGrid.innerHTML=defectTypes.map(x=>`<div class="defect-item"><span>${x.name}</span><input type="number" min="0" step="0.001" data-code="${x.code}" value="${(defects.find(d=>d.code===x.code)||{}).qty||0}"></div>`).join('');defectModal.classList.add('show');const first=defectGrid.querySelector('input');if(first)first.focus();}
 function resetDefects(){defectGrid.querySelectorAll('input').forEach(x=>x.value=0);}
 function saveDefects(){defects=[...defectGrid.querySelectorAll('input')].map(x=>({code:x.dataset.code,qty:n(x.value)})).filter(x=>x.qty>0);defectQty.value=defects.reduce((s,x)=>s+x.qty,0);updateProcessQty();closeModal('defectModal');}
 async function saveDetails(showMessage=true){if(!currentRun||currentRun.status!=='IN_PROGRESS')return false;if(!startTime.value){msg(runMsg,'시작시간을 입력해 주세요.');return false;}try{currentRun=await jf(`/api/production-run/${currentRun.id}/details`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({start_time:startTime.value.replace('T',' '),end_time:endTime.value?endTime.value.replace('T',' '):null,good_qty:n(goodQty.value),setup_qty:n(setupQty.value),defects:defects.map(x=>({defect_type_code:x.code,defect_qty:x.qty})),note:runNote.value})});renderMaterials();if(showMessage)msg(runMsg,'수량과 시간이 저장되었습니다.',true);return true;}catch(e){msg(runMsg,e.message);return false;}}
-function renderMaterials(){if(!currentRun)return;materialList.innerHTML=(currentRun.materials||[]).map(m=>`<div class="material-card ${m.complete?'complete':'incomplete'}"><div class="material-top"><b>${m.part_no}</b><span>${m.part_name||''}</span><span>BOM ${n(m.bom_qty).toLocaleString()} ${m.unit}</span><span>필요 ${n(m.required_qty).toLocaleString()}</span><span>배정 ${n(m.allocated_qty).toLocaleString()}</span><span>잔량 ${n(m.remaining_qty).toLocaleString()}</span></div><div class="material-lots">${(m.allocations||[]).length?m.allocations.map(a=>`${a.lot_no} : ${n(a.allocated_qty).toLocaleString()}`).join(' / '):'배정 LOT 없음'}</div></div>`).join('')||'<div class="empty">BOM 자재가 없습니다.</div>';}
+function renderMaterials(){if(!currentRun)return;materialList.innerHTML=(currentRun.materials||[]).map(m=>`<div class="material-card ${m.complete?'complete':'incomplete'}"><div class="material-top"><b>${m.part_no}</b><span>${m.part_name||''}</span><span>BOM ${n(m.bom_qty).toLocaleString()} ${m.unit}</span><span>필요 ${n(m.required_qty).toLocaleString()}</span><span>배정 ${n(m.allocated_qty).toLocaleString()}</span><span>잔량 ${n(m.remaining_qty).toLocaleString()}</span></div><div class="material-lots">${(m.allocations||[]).length?m.allocations.map(a=>`${a.lot_no} : ${n(a.allocated_qty).toLocaleString()}`).join(' / '):'배정 LOT 없음'}</div>${PERFORMANCE_TYPE==='ASSEMBLY'?`<div class="material-action"><button class="btn green" ${currentRun.status==='IN_PROGRESS'?'':'disabled'} onclick="openMaterialLotModal(${m.id})">LOT 배정</button></div>`:''}</div>`).join('')||'<div class="empty">BOM 자재가 없습니다.</div>';}
+async function openMaterialLotModal(materialId){
+  if(!currentRun||currentRun.status!=='IN_PROGRESS')return;
+  if(!(await saveDetails(false)))return;
+  currentMaterialId=materialId;
+  materialLotModal.classList.add('show');
+  materialLotScanInput.value='';
+  await refreshMaterialLotModal();
+  setTimeout(()=>materialLotScanInput.focus(),50);
+}
+async function refreshMaterialLotModal(){
+  if(!currentRun||!currentMaterialId)return;
+  try{
+    const d=await jf(`/api/production-run/${currentRun.id}/materials/${currentMaterialId}/lots`);
+    const m=d.material;
+    materialLotTitle.textContent=`LOT 배정 - ${m.part_no}`;
+    materialLotSummary.innerHTML=`<div>품번<b>${m.part_no}</b></div><div>품명<b>${m.part_name||'-'}</b></div><div>필요수량<b>${n(m.required_qty).toLocaleString()} ${m.unit}</b></div><div>현재배정<b>${n(m.allocated_qty).toLocaleString()}</b></div><div>잔량<b>${n(m.remaining_qty).toLocaleString()}</b></div>`;
+    materialLotBody.innerHTML=(d.lots||[]).length?(d.lots||[]).map(x=>`<tr><td style="font-family:Consolas,monospace;font-weight:700">${x.lot_no}</td><td class="num">${n(x.lot_qty).toLocaleString()}</td><td class="num">${n(x.remaining_qty).toLocaleString()}</td><td class="num">${n(x.allocated_qty).toLocaleString()}</td><td>${x.storage_location||''}</td><td>${x.can_allocate?`<button class="btn green" style="padding:5px 9px" onclick="assignMaterialLot('${x.lot_no}')">배정</button>`:x.allocated_qty>0?'<span class="ok">배정됨</span>':x.fifo_wait?'<span class="fifo-wait">FIFO 대기</span>':'-'}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">사용 가능한 LOT가 없습니다.</td></tr>';
+    materialLotScanBtn.disabled=n(m.remaining_qty)<=0;
+    msg(materialLotMsg,'');
+  }catch(e){msg(materialLotMsg,e.message);}
+}
+async function assignMaterialLot(lotNo){
+  if(!currentRun||currentRun.status!=='IN_PROGRESS'||!currentMaterialId)return;
+  const lot=(lotNo||materialLotScanInput.value||'').trim();
+  if(!lot){msg(materialLotMsg,'LOT 번호를 입력해 주세요.');return;}
+  try{
+    const d=await jf(`/api/production-run/${currentRun.id}/scan-lot`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lot_no:lot})});
+    currentRun=await jf('/api/production-run/'+currentRun.id);
+    renderMaterials();
+    materialLotScanInput.value='';
+    await refreshMaterialLotModal();
+    msg(materialLotMsg,d.message,true);
+    materialLotScanInput.focus();
+  }catch(e){msg(materialLotMsg,e.message);materialLotScanInput.select();}
+}
+async function clearCurrentMaterialAllocations(){
+  if(!currentRun||!currentMaterialId||!confirm('선택한 품번의 LOT 배정을 초기화하시겠습니까?'))return;
+  try{
+    const d=await jf(`/api/production-run/${currentRun.id}/materials/${currentMaterialId}/allocations`,{method:'DELETE'});
+    currentRun=await jf('/api/production-run/'+currentRun.id);
+    renderMaterials();
+    await refreshMaterialLotModal();
+    msg(materialLotMsg,d.message,true);
+  }catch(e){msg(materialLotMsg,e.message);}
+}
 async function scanLot(){if(!currentRun||currentRun.status!=='IN_PROGRESS')return;if(!scanLotInput.value.trim()){msg(runMsg,'LOT 번호를 입력해 주세요.');return;}if(!(await saveDetails(false)))return;const lot=scanLotInput.value.trim();try{const d=await jf(`/api/production-run/${currentRun.id}/scan-lot`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lot_no:lot})});currentRun=await jf('/api/production-run/'+currentRun.id);renderMaterials();scanLotInput.value='';scanLotInput.focus();msg(runMsg,d.message,true);}catch(e){msg(runMsg,e.message);scanLotInput.select();}}
 async function clearAllocations(){if(!currentRun||currentRun.status!=='IN_PROGRESS'||!confirm('현재 LOT 배정을 모두 초기화하시겠습니까?'))return;try{const d=await jf(`/api/production-run/${currentRun.id}/allocations`,{method:'DELETE'});currentRun=await jf('/api/production-run/'+currentRun.id);renderMaterials();msg(runMsg,d.message,true);}catch(e){msg(runMsg,e.message);}}
 async function completeRun(){if(!currentRun||currentRun.status!=='IN_PROGRESS')return;if(!endTime.value){msg(runMsg,'종료시간을 입력해 주세요.');return;}if(!(await saveDetails(false)))return;if(!confirm('가동을 종료하고 생산실적을 등록하시겠습니까?'))return;const runId=currentRun.id;try{const d=await jf(`/api/production-run/${runId}/complete`,{method:'POST'});await loadRunHistory();await selectRun(runId);msg(runMsg,d.message,true);}catch(e){msg(runMsg,e.message);}}
