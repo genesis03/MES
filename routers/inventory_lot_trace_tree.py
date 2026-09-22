@@ -267,6 +267,40 @@ def _same_lot_inbound_for_state(db: Session, lot_no: str, part_no: str):
     )
 
 
+def _external_lot_for_state(db: Session, lot_no: str, part_no: str) -> str:
+    """LOT 번호뿐 아니라 현재 품번 상태까지 반영해 외부 LOT를 찾습니다."""
+    purchase = (
+        db.query(PurchaseInboundItem)
+        .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
+        .filter(
+            PurchaseInboundMaster.status == "CONFIRMED",
+            PurchaseInboundItem.internal_lot_no == lot_no,
+            PurchaseInboundItem.part_no == part_no,
+        )
+        .order_by(PurchaseInboundItem.id.desc())
+        .first()
+    )
+    if purchase:
+        return purchase.supplier_lot_no or ""
+
+    subcontract = (
+        db.query(SubcontractInboundLot, SubcontractInboundItem, SubcontractInboundMaster)
+        .join(SubcontractInboundItem, SubcontractInboundItem.id == SubcontractInboundLot.inbound_item_id)
+        .join(SubcontractInboundMaster, SubcontractInboundMaster.id == SubcontractInboundItem.inbound_id)
+        .filter(
+            SubcontractInboundMaster.status == "RECEIVED",
+            SubcontractInboundLot.child_lot_no == lot_no,
+            SubcontractInboundItem.part_no == part_no,
+        )
+        .order_by(SubcontractInboundMaster.id.desc(), SubcontractInboundLot.id.desc())
+        .first()
+    )
+    if subcontract:
+        return subcontract[0].supplier_lot_no or ""
+
+    return ""
+
+
 @router.get("/api/inventory/lot-trace/tree")
 def inventory_lot_trace_tree(
     lot_no: str = Query(..., min_length=1, max_length=100),
@@ -330,6 +364,7 @@ def inventory_lot_trace_tree(
                 "child_lot_no": current_lot,
                 "child_lot_qty": float(inbound_lot.source_qty or 0),
                 "child_part_no": previous_part,
+                "child_external_lot_no": _external_lot_for_state(db, current_lot, previous_part),
                 "consumed_qty": float(inbound_lot.good_qty or 0),
                 "tree": " - ".join(next_path),
             })
@@ -373,10 +408,11 @@ def inventory_lot_trace_tree(
                         "lot_no": current_lot,
                         "lot_date": perf.performance_date or current_node["date"],
                         "part_no": current_part or current_node["part_no"],
-                        "external_lot_no": current_node.get("external_lot_no", ""),
+                        "external_lot_no": _external_lot_for_state(db, current_lot, current_part or current_node["part_no"]),
                         "child_lot_no": source_lot,
                         "child_lot_qty": source_node["qty"],
                         "child_part_no": source_part,
+                        "child_external_lot_no": _external_lot_for_state(db, source_lot, source_part),
                         "consumed_qty": float(consumption.consumed_qty or 0),
                         "tree": " - ".join(next_path),
                     })
@@ -402,10 +438,11 @@ def inventory_lot_trace_tree(
                     "lot_no": current_lot,
                     "lot_date": current_node["date"],
                     "part_no": current_part or current_node["part_no"],
-                    "external_lot_no": current_node.get("external_lot_no", ""),
+                    "external_lot_no": _external_lot_for_state(db, current_lot, current_part or current_node["part_no"]),
                     "child_lot_no": source_lot,
                     "child_lot_qty": source_node["qty"],
                     "child_part_no": source_part,
+                    "child_external_lot_no": _external_lot_for_state(db, source_lot, source_part),
                     "consumed_qty": float(edge.get("qty") or 0),
                     "tree": " - ".join(next_path),
                 })
@@ -425,10 +462,11 @@ def inventory_lot_trace_tree(
                 "lot_no": current_lot,
                 "lot_date": current_node["date"],
                 "part_no": current_part or current_node["part_no"],
-                "external_lot_no": current_node.get("external_lot_no", ""),
+                "external_lot_no": _external_lot_for_state(db, current_lot, current_part or current_node["part_no"]),
                 "child_lot_no": "",
                 "child_lot_qty": None,
                 "child_part_no": "",
+                "child_external_lot_no": "",
                 "consumed_qty": None,
                 "tree": " - ".join(path),
             })
