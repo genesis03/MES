@@ -16,6 +16,7 @@ router = APIRouter(tags=["Sales Order Policy"])
 
 ORDER_TYPES = {"NORMAL", "SAMPLE", "DEVELOPMENT"}
 TRANSACTION_TYPES = {"PAID", "FREE"}
+ORDER_STATUSES = {"ORDERED", "PARTIAL", "COMPLETED", "CANCELLED"}
 
 
 class SalesOrderItemInput(BaseModel):
@@ -34,6 +35,10 @@ class SalesOrderCreateInput(BaseModel):
     manager_name: Optional[str] = Field(default=None, max_length=50)
     note: Optional[str] = Field(default=None, max_length=1000)
     items: list[SalesOrderItemInput] = Field(min_length=1)
+
+
+class SelectedOrderIds(BaseModel):
+    ids: list[int] = Field(min_length=1, max_length=500)
 
 
 def _waiting_rows(db: Session, item_id: int):
@@ -89,8 +94,73 @@ def _serialize_order(order: SalesOrderMaster) -> dict:
 
 
 def _validate_order_payload(db: Session, payload: SalesOrderCreateInput):
-    order_type, transaction_type, customer, item_map = _validate_order_payload(db, payload)
+    order_type = payload.order_type.strip().upper()
+    transaction_type = payload.transaction_type.strip().upper()
+
+    if order_type not in ORDER_TYPES:
+        raise HTTPException(409, "수주구분은 양산/샘플/개발 중에서 선택해 주세요.")
+    if transaction_type not in TRANSACTION_TYPES:
+        raise HTTPException(409, "거래구분은 유상/무상 중에서 선택해 주세요.")
+
+    customer = db.query(Partner).filter(
+        Partner.id == payload.customer_id,
+        Partner.is_active == "Y",
+        Partner.partner_type.in_(["CUSTOMER", "BOTH"]),
+    ).first()
+    if not customer:
+        raise HTTPException(404, "사용 가능한 판매처를 찾을 수 없습니다.")
+
+    part_nos = [row.part_no.strip() for row in payload.items]
+    if len(set(part_nos)) != len(part_nos):
+        raise HTTPException(409, "동일 품번은 수주 한 건에 중복 입력할 수 없습니다.")
+
+    item_rows = db.query(ItemMasterModel).filter(
+        ItemMasterModel.part_no.in_(part_nos),
+        ItemMasterModel.is_active == "Y",
+        ItemMasterModel.material_type.in_(["SEMI", "FINISHED"]),
+    ).all()
+    item_map = {row.part_no: row for row in item_rows}
+    missing = [part_no for part_no in part_nos if part_no not in item_map]
+    if missing:
+        raise HTTPException(404, f"수주 가능한 완제품/반제품을 찾을 수 없습니다: {', '.join(missing)}")
+
     return order_type, transaction_type, customer, item_map
+
+
+def _has_shipment_history(db: Session, order: SalesOrderMaster) -> bool:
+    return bool(
+        db.query(ShipmentMaster.id)
+        .filter(ShipmentMaster.sales_order_id == order.id)
+        .first()
+        or db.query(ShipmentItem.id)
+        .join(SalesOrderItem, SalesOrderItem.id == ShipmentItem.sales_order_item_id)
+        .filter(SalesOrderItem.order_id == order.id)
+        .first()
+        or any(float(item.shipped_qty or 0) > 1e-9 for item in order.items)
+    )
+
+
+@router.post("/api/sales/orders/delete-selected")
+def delete_selected_sales_orders(
+    payload: SelectedOrderIds,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    ids = sorted(set(payload.ids))
+    orders = db.query(SalesOrderMaster).filter(SalesOrderMaster.id.in_(ids)).all()
+    found = {order.id for order in orders}
+    missing = [order_id for order_id in ids if order_id not in found]
+    if missing:
+        raise HTTPException(404, "수주를 찾을 수 없습니다: " + ", ".join(map(str, missing)))
+
+    blocked = [order.order_no for order in orders if order.status != "ORDERED" or _has_shipment_history(db, order)]
+    if blocked:
+        raise HTTPException(409, "출고 이력이 있거나 삭제할 수 없는 상태의 수주가 포함되어 있습니다: " + ", ".join(blocked))
+
+    for order in orders:
+        db.delete(order)
+    db.commit()
+    return {"deleted": len(orders), "message": f"수주 {len(orders)}건을 삭제했습니다."}
 
 
 @router.get("/api/sales/orders/{order_id}")
@@ -103,21 +173,8 @@ def sales_order_detail(
     if order is None:
         raise HTTPException(404, "수주를 찾을 수 없습니다.")
 
-    # shipped_qty 외에도 실제 출고 레코드가 있으면 수정 불가로 봅니다.
-    has_shipment = (
-        db.query(ShipmentMaster.id)
-        .filter(ShipmentMaster.sales_order_id == order.id)
-        .first()
-        is not None
-    ) or (
-        db.query(ShipmentItem.id)
-        .join(SalesOrderItem, SalesOrderItem.id == ShipmentItem.sales_order_item_id)
-        .filter(SalesOrderItem.order_id == order.id)
-        .first()
-        is not None
-    )
     data = _serialize_order(order)
-    if has_shipment:
+    if _has_shipment_history(db, order):
         data["editable"] = False
     return data
 
@@ -133,19 +190,7 @@ def update_sales_order_with_policy(
     if order is None:
         raise HTTPException(404, "수주를 찾을 수 없습니다.")
 
-    has_shipment = (
-        db.query(ShipmentMaster.id)
-        .filter(ShipmentMaster.sales_order_id == order.id)
-        .first()
-        is not None
-    ) or (
-        db.query(ShipmentItem.id)
-        .join(SalesOrderItem, SalesOrderItem.id == ShipmentItem.sales_order_item_id)
-        .filter(SalesOrderItem.order_id == order.id)
-        .first()
-        is not None
-    ) or any(float(item.shipped_qty or 0) > 1e-9 for item in order.items)
-    if has_shipment or order.status != "ORDERED":
+    if _has_shipment_history(db, order) or order.status != "ORDERED":
         raise HTTPException(409, "출고 이력이 있는 수주는 수정할 수 없습니다.")
 
     order_type, transaction_type, customer, item_map = _validate_order_payload(db, payload)
@@ -186,34 +231,7 @@ def create_sales_order_with_policy(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    order_type = payload.order_type.strip().upper()
-    transaction_type = payload.transaction_type.strip().upper()
-    if order_type not in ORDER_TYPES:
-        raise HTTPException(409, "수주구분은 정상/샘플/개발 중에서 선택해 주세요.")
-    if transaction_type not in TRANSACTION_TYPES:
-        raise HTTPException(409, "거래구분은 유상/무상 중에서 선택해 주세요.")
-
-    customer = db.query(Partner).filter(
-        Partner.id == payload.customer_id,
-        Partner.is_active == "Y",
-        Partner.partner_type.in_(["CUSTOMER", "BOTH"]),
-    ).first()
-    if not customer:
-        raise HTTPException(404, "사용 가능한 판매처를 찾을 수 없습니다.")
-
-    part_nos = [x.part_no.strip() for x in payload.items]
-    if len(set(part_nos)) != len(part_nos):
-        raise HTTPException(409, "동일 품번은 수주 한 건에 중복 입력할 수 없습니다.")
-
-    item_rows = db.query(ItemMasterModel).filter(
-        ItemMasterModel.part_no.in_(part_nos),
-        ItemMasterModel.is_active == "Y",
-        ItemMasterModel.material_type.in_(["SEMI", "FINISHED"]),
-    ).all()
-    item_map = {x.part_no: x for x in item_rows}
-    missing = [x for x in part_nos if x not in item_map]
-    if missing:
-        raise HTTPException(404, f"수주 가능한 완제품/반제품을 찾을 수 없습니다: {', '.join(missing)}")
+    order_type, transaction_type, customer, item_map = _validate_order_payload(db, payload)
 
     order = SalesOrderMaster(
         order_no=_next_no(db, SalesOrderMaster, SalesOrderMaster.order_no, "SO", payload.order_date),
@@ -252,18 +270,44 @@ def create_sales_order_with_policy(
 
 @router.get("/api/sales/orders")
 def sales_orders_with_policy(
+    start_date: Optional[str] = Query(None, max_length=10),
+    end_date: Optional[str] = Query(None, max_length=10),
+    customer_id: Optional[int] = Query(None, gt=0),
+    order_no: Optional[str] = Query(None, max_length=30),
     status: Optional[str] = Query(None, max_length=20),
-    customer_id: Optional[int] = None,
+    item_id: Optional[list[int]] = Query(None),
+    limit: int = Query(1000, ge=1, le=2000),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     query = db.query(SalesOrderMaster)
-    if status:
-        query = query.filter(SalesOrderMaster.status == status)
+
+    if start_date:
+        query = query.filter(SalesOrderMaster.order_date >= start_date)
+    if end_date:
+        query = query.filter(SalesOrderMaster.order_date <= end_date)
     if customer_id:
         query = query.filter(SalesOrderMaster.customer_id == customer_id)
-    rows = query.order_by(SalesOrderMaster.order_date.desc(), SalesOrderMaster.id.desc()).limit(500).all()
-    return [_serialize_order(x) for x in rows]
+    if order_no and order_no.strip():
+        query = query.filter(SalesOrderMaster.order_no.contains(order_no.strip(), autoescape=True))
+    if status:
+        normalized_status = status.strip().upper()
+        if normalized_status not in ORDER_STATUSES:
+            raise HTTPException(422, "지원하지 않는 수주 상태입니다.")
+        query = query.filter(SalesOrderMaster.status == normalized_status)
+
+    selected_item_ids = sorted({value for value in (item_id or []) if value > 0})
+    if selected_item_ids:
+        query = query.filter(
+            SalesOrderMaster.items.any(SalesOrderItem.item_id.in_(selected_item_ids))
+        )
+
+    rows = (
+        query.order_by(SalesOrderMaster.order_date.desc(), SalesOrderMaster.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [_serialize_order(order) for order in rows]
 
 
 @router.get("/api/sales/shipping-entry/open-orders")
