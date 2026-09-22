@@ -74,7 +74,7 @@ def confirm_shipment_with_requested_qty(
         if any(box_id in used_box_ids for box_id in box_ids):
             raise HTTPException(409, "서로 다른 수주 품목에 동일 포장 LOT가 중복 배정되었습니다.")
 
-        waiting = waiting_cache.setdefault(sales_item.part_no, _waiting_rows(db, sales_item.part_no))
+        waiting = waiting_cache.setdefault(sales_item.part_no, _waiting_rows(db, sales_item.item_id))
         row_map = {box.id: (box, master) for box, master in waiting}
         selected_rows = [row_map[box_id] for box_id in box_ids if box_id in row_map]
         if len(selected_rows) != len(box_ids):
@@ -128,6 +128,7 @@ def confirm_shipment_with_requested_qty(
         shipment_item = ShipmentItem(
             shipment_id=shipment.id,
             sales_order_item_id=sales_item.id,
+            item_id=sales_item.item_id,
             part_no=sales_item.part_no,
             shipped_qty=shipment_qty,
             unit=sales_item.unit or "EA",
