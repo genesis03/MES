@@ -91,7 +91,18 @@ async def get_items(
     query = db.query(ItemMasterModel)
 
     if part_no:
-        query = query.filter(ItemMasterModel.part_no.ilike(f"%{part_no.strip()}%"))
+        keyword = part_no.strip()
+        history_item_ids = (
+            db.query(ItemPartNoHistory.item_id)
+            .filter(
+                (ItemPartNoHistory.old_part_no.ilike(f"%{keyword}%"))
+                | (ItemPartNoHistory.new_part_no.ilike(f"%{keyword}%"))
+            )
+        )
+        query = query.filter(
+            (ItemMasterModel.part_no.ilike(f"%{keyword}%"))
+            | (ItemMasterModel.id.in_(history_item_ids))
+        )
     if part_name:
         query = query.filter(ItemMasterModel.part_name.ilike(f"%{part_name.strip()}%"))
     if account_type:
