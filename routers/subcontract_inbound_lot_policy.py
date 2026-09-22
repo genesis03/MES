@@ -101,6 +101,8 @@ def create_inbound_with_lot_policy(
             inbound_item = SubcontractInboundItem(
                 outbound_item_id=source_item.id,
                 order_item_id=source_item.order_item_id,
+                previous_item_id=source_item.previous_item_id,
+                item_id=source_item.item_id,
                 previous_part_no=source_item.previous_part_no,
                 part_no=source_item.order_part_no,
                 part_name=source_item.order_part_name,
@@ -128,6 +130,7 @@ def create_inbound_with_lot_policy(
             ))
             db.add(ProductionLotModel(
                 lot_no=child_lot_no,
+                item_id=source_item.item_id,
                 part_no=source_item.order_part_no,
                 lot_qty=float(inbound_qty),
                 storage_location=payload.storage_location,
@@ -140,6 +143,7 @@ def create_inbound_with_lot_policy(
             if stock is None:
                 db.add(ProductionLotModel(
                     lot_no=child_lot_no,
+                    item_id=source_item.item_id,
                     part_no=source_item.order_part_no,
                     lot_qty=float(inbound_qty),
                     storage_location=payload.storage_location,
@@ -147,6 +151,7 @@ def create_inbound_with_lot_policy(
                     note=f"외주가공 전량입고 {inbound_no} / LOT 유지",
                 ))
             else:
+                stock.item_id = source_item.item_id
                 stock.part_no = source_item.order_part_no
                 stock.lot_qty = float(inbound_qty)
                 stock.storage_location = payload.storage_location
