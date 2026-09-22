@@ -2,6 +2,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from models.models import ItemMasterModel
 from models.packing import PackingBox, PackingMaster
 from models.sales import ShipmentDirectLot, ShipmentItem
 from models.shipping_lot import ShippingLotRegistry
@@ -25,13 +26,16 @@ def _lot_suffix(lot_no: str | None, prefix: str) -> int | None:
 
 
 def used_shipping_sequences(db: Session, part_no: str, shipping_date: str) -> set[int]:
-    """동일 품번/동일 날짜에서 이미 사용된 포장(=출고) LOT 순번을 수집합니다."""
+    """동일 품목(item_id)/동일 날짜에서 이미 사용된 포장(=출고) LOT 순번을 수집합니다."""
     prefix = _shipping_prefix(shipping_date)
+    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
+    if item is None:
+        raise HTTPException(404, f"품목을 찾을 수 없습니다. ({part_no})")
     used: set[int] = {
         int(row[0])
         for row in db.query(ShippingLotRegistry.sequence)
         .filter(
-            ShippingLotRegistry.part_no == part_no,
+            ShippingLotRegistry.item_id == item.id,
             ShippingLotRegistry.lot_date == shipping_date,
         )
         .all()
@@ -42,7 +46,7 @@ def used_shipping_sequences(db: Session, part_no: str, shipping_date: str) -> se
         db.query(PackingBox.package_lot_no)
         .join(PackingMaster, PackingMaster.id == PackingBox.packing_id)
         .filter(
-            PackingMaster.part_no == part_no,
+            PackingMaster.item_id == item.id,
             PackingBox.package_lot_no.like(prefix + "%"),
         )
         .all()
@@ -56,7 +60,7 @@ def used_shipping_sequences(db: Session, part_no: str, shipping_date: str) -> se
         db.query(ShipmentDirectLot.outbound_lot_no)
         .join(ShipmentItem, ShipmentItem.id == ShipmentDirectLot.shipment_item_id)
         .filter(
-            ShipmentItem.part_no == part_no,
+            ShipmentItem.item_id == item.id,
             ShipmentDirectLot.outbound_lot_no.like(prefix + "%"),
         )
         .all()
@@ -85,7 +89,10 @@ def next_shipping_lot_no(
     발번 즉시 공용 레지스트리에 예약하고 flush하여 동시 요청에서도 같은 품번/LOT 중복을 DB가 차단합니다.
     """
     prefix = _shipping_prefix(shipping_date)
-    used = used_shipping_sequences(db, part_no, shipping_date)
+    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
+    if item is None:
+        raise HTTPException(404, f"품목을 찾을 수 없습니다. ({part_no})")
+    used = used_shipping_sequences(db, item.part_no, shipping_date)
     for lot_no in reserved or set():
         suffix = _lot_suffix(lot_no, prefix)
         if suffix is not None:
@@ -96,7 +103,8 @@ def next_shipping_lot_no(
             continue
         lot_no = f"{prefix}{seq:03d}"
         registry = ShippingLotRegistry(
-            part_no=part_no,
+            item_id=item.id,
+            part_no=item.part_no,
             lot_no=lot_no,
             lot_date=shipping_date,
             sequence=seq,
