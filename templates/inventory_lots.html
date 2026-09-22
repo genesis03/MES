@@ -5,7 +5,7 @@
 <style>
 .page-head{margin-bottom:14px}.page-head h1{font-size:23px;margin:0 0 4px}.page-head p{font-size:12.5px;color:#64748b}
 .panel{background:#fff;border:1px solid #dbe3ec;border-radius:6px}.panel-title{padding:10px 14px;border-bottom:1px solid #6495ed;font-weight:800;font-size:13px}.panel-body{padding:14px}
-.search-row{display:grid;grid-template-columns:80px minmax(420px,760px) 100px 1fr;gap:8px;align-items:center}.btn{height:36px;border:0;border-radius:4px;background:#2563eb;color:#fff;font-weight:800;cursor:pointer}.summary{font-size:12px;color:#64748b;text-align:right}
+.search-row{display:grid;grid-template-columns:80px minmax(360px,680px) 90px 150px 100px 1fr;gap:8px;align-items:center}.btn{height:36px;border:0;border-radius:4px;background:#2563eb;color:#fff;font-weight:800;cursor:pointer}.summary{font-size:12px;color:#64748b;text-align:right}
 .part-picker{position:relative}.picker-box{min-height:38px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 8px}.picker-box:focus-within{border-color:#2563eb;box-shadow:0 0 0 1px #2563eb}.picker-box input{border:0;outline:0;height:28px;min-width:150px;flex:1;font-size:13px}.chip{display:inline-flex;align-items:center;gap:6px;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:14px;padding:4px 8px;font-size:12px;font-weight:700}.chip button{border:0;background:transparent;color:#64748b;cursor:pointer;font-size:14px;line-height:1;padding:0}.suggestions{position:absolute;z-index:50;left:0;right:0;top:42px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;box-shadow:0 6px 18px rgba(15,23,42,.12);max-height:260px;overflow:auto;display:none}.suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12.5px}.suggestion:hover,.suggestion.active{background:#eff6ff}.suggestion .pn{font-weight:800;color:#1e3a8a}.suggestion .name{margin-left:10px;color:#64748b}.hint{font-size:11px;color:#94a3b8;margin-top:5px}
 table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{border:1px solid #e2e8f0;padding:8px 9px}th{background:#f8fafc;color:#475569}.num{text-align:right}.lot{font-family:Consolas,monospace;font-weight:700}.empty{text-align:center;color:#94a3b8;padding:28px}.good{color:#15803d;font-weight:700}
 </style>
@@ -29,6 +29,12 @@ table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{b
         <div id="suggestions" class="suggestions"></div>
         <div class="hint">검색 결과에서 품번을 선택하세요. 여러 품번을 연속으로 추가할 수 있습니다.</div>
       </div>
+      <strong>재고상태</strong>
+      <select id="stockStatus" style="height:36px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;background:#fff;">
+        <option value="ALL">전체</option>
+        <option value="REMAINING">잔여재고 있음</option>
+        <option value="USED">사용완료</option>
+      </select>
       <button class="btn" onclick="loadLots()">조회</button>
       <div id="summary" class="summary">총 0건</div>
     </div>
@@ -100,11 +106,13 @@ async function loadLots(){
   body.innerHTML='<tr><td colspan="9" class="empty">조회 중...</td></tr>';
   const q=new URLSearchParams();
   selectedParts.forEach(x=>q.append('part_no',x.part_no));
+  q.set('stock_status',document.getElementById('stockStatus').value);
   try{
     const r=await fetch('/api/inventory/lots?'+q.toString());
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||'조회 실패');
-    document.getElementById('summary').textContent=`품번 ${selectedParts.length}개 · LOT ${d.total||0}건`;
+    const statusName={ALL:'전체',REMAINING:'잔여재고 있음',USED:'사용완료'}[d.stock_status||'ALL']||'전체';
+    document.getElementById('summary').textContent=`품번 ${selectedParts.length}개 · ${statusName} · LOT ${d.total||0}건`;
     const rows=d.items||[];
     body.innerHTML=rows.length?rows.map(x=>`<tr>
       <td>${esc(x.source)}</td><td>${esc(x.part_no)}</td><td>${esc(x.part_name||'')}</td>
@@ -127,6 +135,7 @@ partSearch.addEventListener('keydown',e=>{
   else if(e.key==='Escape'){hideSuggestions();}
 });
 partSearch.addEventListener('focus',()=>{if(partSearch.value.trim())searchCandidates();});
+document.getElementById('stockStatus').addEventListener('change',()=>{if(selectedParts.length)loadLots();});
 document.addEventListener('click',e=>{if(!e.target.closest('.part-picker'))hideSuggestions();});
 </script>
 {% endblock %}
