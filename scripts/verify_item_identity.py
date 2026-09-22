@@ -58,9 +58,9 @@ def main() -> int:
                 SELECT COUNT(*)
                   FROM {table_q}
                   JOIN item_master im ON im.id = {table_q}.{id_q}
-                 WHERE {id_q} IS NOT NULL
-                   AND {part_q} IS NOT NULL
-                   AND TRIM({part_q}) <> ''
+                 WHERE {table_q}.{id_q} IS NOT NULL
+                   AND {table_q}.{part_q} IS NOT NULL
+                   AND TRIM({table_q}.{part_q}) <> ''
                    AND im.part_no <> {table_q}.{part_q}
                 """
             )).scalar_one()
