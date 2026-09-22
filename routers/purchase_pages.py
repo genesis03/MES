@@ -121,7 +121,7 @@ def purchase_inbound_order_picker(
     query = (
         db.query(PurchaseOrderMaster, PurchaseOrderItem, ItemMasterModel)
         .join(PurchaseOrderItem, PurchaseOrderItem.po_id == PurchaseOrderMaster.id)
-        .join(ItemMasterModel, ItemMasterModel.part_no == PurchaseOrderItem.part_no)
+        .join(ItemMasterModel, ItemMasterModel.id == PurchaseOrderItem.item_id)
         .filter(
             PurchaseOrderMaster.status.in_(["ORDERED", "PARTIAL"]),
             PurchaseOrderItem.received_qty < PurchaseOrderItem.order_qty,
@@ -160,11 +160,12 @@ def purchase_inbound_order_picker(
         })
         order["items"].append({
             "po_item_id": item.id,
+            "item_id": item.item_id,
             "po_no": master.po_no,
             "partner_id": master.partner_id,
             "partner_name": master.partner_name,
             "manager_name": master.manager_name or "",
-            "part_no": item.part_no,
+            "part_no": part.part_no,
             "part_name": part.part_name,
             "spec": part.spec or "",
             "unit": item.unit,
@@ -203,7 +204,7 @@ def purchase_order_inquiry_api(
     query = (
         db.query(PurchaseOrderMaster, PurchaseOrderItem, ItemMasterModel)
         .join(PurchaseOrderItem, PurchaseOrderItem.po_id == PurchaseOrderMaster.id)
-        .join(ItemMasterModel, ItemMasterModel.part_no == PurchaseOrderItem.part_no)
+        .join(ItemMasterModel, ItemMasterModel.id == PurchaseOrderItem.item_id)
     )
     if start_date:
         query = query.filter(PurchaseOrderMaster.order_date >= start_date)
@@ -224,6 +225,7 @@ def purchase_order_inquiry_api(
     for master, item, part in rows:
         items.append({
             "type": "GENERAL",
+            "item_id": item.item_id,
             "po_id": master.id,
             "po_no": master.po_no,
             "order_date": master.order_date,
@@ -231,7 +233,7 @@ def purchase_order_inquiry_api(
             "partner_id": master.partner_id,
             "partner_name": master.partner_name,
             "manager_name": master.manager_name or "",
-            "part_no": item.part_no,
+            "part_no": part.part_no,
             "part_name": part.part_name,
             "spec": part.spec or "",
             "order_qty": item.order_qty,
@@ -262,7 +264,7 @@ def purchase_inbound_inquiry_api(
     query = (
         db.query(PurchaseInboundMaster, PurchaseInboundItem, ItemMasterModel, PurchaseOrderMaster.po_no)
         .join(PurchaseInboundItem, PurchaseInboundItem.inbound_id == PurchaseInboundMaster.id)
-        .join(ItemMasterModel, ItemMasterModel.part_no == PurchaseInboundItem.part_no)
+        .join(ItemMasterModel, ItemMasterModel.id == PurchaseInboundItem.item_id)
         .outerjoin(PurchaseOrderItem, PurchaseOrderItem.id == PurchaseInboundItem.po_item_id)
         .outerjoin(PurchaseOrderMaster, PurchaseOrderMaster.id == PurchaseOrderItem.po_id)
         .filter(PurchaseInboundMaster.status == "CONFIRMED")
@@ -292,6 +294,7 @@ def purchase_inbound_inquiry_api(
     for master, item, part, order_no in rows:
         items.append({
             "type": "GENERAL",
+            "item_id": item.item_id,
             "inbound_id": master.id,
             "inbound_no": master.inbound_no,
             "inbound_date": master.inbound_date,
