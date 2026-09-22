@@ -17,6 +17,7 @@ from core.security import (
 )
 # 실제 존재하는 품목/공정 마스터 모델만 import
 from models.models import ItemMasterModel, ProcessModel
+from services.item_identity_service import rename_item_part_no
 
 # 절대 경로 기준 templates 디렉터리 설정
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -199,6 +200,27 @@ async def update_item(request: Request, db: Session = Depends(get_db)):
     target = db.query(ItemMasterModel).filter(ItemMasterModel.id == item_id).first()
     if not target:
         raise HTTPException(status_code=404, detail="해당 품목을 찾을 수 없습니다.")
+
+    new_part_no = str(body.get("part_no", target.part_no)).strip()
+    if not new_part_no:
+        raise HTTPException(status_code=400, detail="품번은 필수 입력 항목입니다.")
+
+    if new_part_no != target.part_no:
+        changed_by = (
+            str(getattr(user, "name", "") or getattr(user, "username", "") or "").strip()
+            or None
+        )
+        try:
+            rename_item_part_no(
+                db,
+                target,
+                new_part_no,
+                changed_by=changed_by,
+                reason=str(body.get("part_no_change_reason", "")).strip() or "품목마스터 수정",
+            )
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     target.vehicle_model = str(body.get("vehicle_model", "")).strip() or None
     target.part_name = str(body.get("part_name", target.part_name)).strip()
