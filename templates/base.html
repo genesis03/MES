@@ -267,7 +267,7 @@
 
             <!-- 8. 관리자 메뉴 (공정 및 저장위치 관리 매핑) -->
             {% if user.role == "ADMIN" %}
-            <li class="menu-item open" id="adminMenu">
+            <li class="menu-item{% if request.url.path.startswith('/admin/') %} open{% endif %}" id="adminMenu">
                 <div class="menu-title" onclick="toggleAccordion('adminMenu')"><span>관리자 메뉴</span><span class="arrow-icon">▼</span></div>
                 <ul class="submenu">
                     <li class="submenu-item"><a href="/admin/users" id="nav-admin-users">계정 관리</a></li>
@@ -286,7 +286,12 @@
     <script>
         function toggleAccordion(menuId) {
             const el = document.getElementById(menuId);
-            if (el) el.classList.toggle('open');
+            if (!el) return;
+            const wasOpen = el.classList.contains('open');
+            document.querySelectorAll('.sidebar-menu > .menu-item.open').forEach(item => {
+                item.classList.remove('open');
+            });
+            if (!wasOpen) el.classList.add('open');
         }
 
         document.addEventListener("DOMContentLoaded", function() {
