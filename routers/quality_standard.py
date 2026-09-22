@@ -85,6 +85,7 @@ def _item_dict(row: QualityInspectionItemMaster):
 def _standard_dict(row: QualityInboundStandard, include_items: bool = False):
     data = {
         "id": row.id,
+        "item_id": row.item_id,
         "part_no": row.part_no,
         "revision": row.revision,
         "effective_date": row.effective_date or "",
@@ -271,7 +272,7 @@ def inbound_standard_options(
         QualityInspectionItemMaster.sort_order, QualityInspectionItemMaster.item_code
     ).all()
     return {
-        "products": [{"part_no": x.part_no, "part_name": x.part_name, "revision": x.revision, "unit": x.unit} for x in products],
+        "products": [{"item_id": x.id, "part_no": x.part_no, "part_name": x.part_name, "revision": x.revision, "unit": x.unit} for x in products],
         "inspection_items": [_item_dict(x) for x in items],
     }
 
@@ -324,9 +325,9 @@ def _apply_standard_items(row: QualityInboundStandard, payload_items: list[Stand
         )
 
 
-def _deactivate_other_revisions(db: Session, part_no: str, exclude_id: Optional[int] = None):
+def _deactivate_other_revisions(db: Session, item_id: int, exclude_id: Optional[int] = None):
     query = db.query(QualityInboundStandard).filter(
-        QualityInboundStandard.part_no == part_no,
+        QualityInboundStandard.item_id == item_id,
         QualityInboundStandard.is_active == "Y",
     )
     if exclude_id:
@@ -349,16 +350,17 @@ def create_inbound_standard(
     if not revision:
         raise HTTPException(422, "REV는 필수입니다.")
     if db.query(QualityInboundStandard.id).filter(
-        QualityInboundStandard.part_no == part_no,
+        QualityInboundStandard.item_id == product.id,
         QualityInboundStandard.revision == revision,
     ).first():
         raise HTTPException(409, "해당 품번의 동일 REV 기준서가 이미 존재합니다.")
     _validate_standard_items(db, payload.items)
     active = _yn(payload.is_active, "사용여부")
     if active == "Y":
-        _deactivate_other_revisions(db, part_no)
+        _deactivate_other_revisions(db, product.id)
     row = QualityInboundStandard(
-        part_no=part_no,
+        item_id=product.id,
+        part_no=product.part_no,
         revision=revision,
         effective_date=(payload.effective_date or "").strip() or None,
         is_active=active,
@@ -388,7 +390,7 @@ def update_inbound_standard(
     if not product:
         raise HTTPException(422, "사용 가능한 품번을 선택해 주십시오.")
     duplicate = db.query(QualityInboundStandard.id).filter(
-        QualityInboundStandard.part_no == part_no,
+        QualityInboundStandard.item_id == product.id,
         QualityInboundStandard.revision == revision,
         QualityInboundStandard.id != standard_id,
     ).first()
@@ -397,8 +399,9 @@ def update_inbound_standard(
     _validate_standard_items(db, payload.items)
     active = _yn(payload.is_active, "사용여부")
     if active == "Y":
-        _deactivate_other_revisions(db, part_no, exclude_id=standard_id)
-    row.part_no = part_no
+        _deactivate_other_revisions(db, product.id, exclude_id=standard_id)
+    row.item_id = product.id
+    row.part_no = product.part_no
     row.revision = revision
     row.effective_date = (payload.effective_date or "").strip() or None
     row.is_active = active
