@@ -98,8 +98,14 @@ def create_order(db, payload, created_by):
         parts = {part.part_no: part for part in db.query(ItemMasterModel).filter(
             ItemMasterModel.part_no.in_({item.part_no for item in payload.items})
         )}
-        master.items = [PurchaseOrderItem(**item.model_dump(), unit=parts[item.part_no].unit)
-                        for item in payload.items]
+        master.items = [
+            PurchaseOrderItem(
+                **item.model_dump(),
+                item_id=parts[item.part_no].id,
+                unit=parts[item.part_no].unit,
+            )
+            for item in payload.items
+        ]
         db.add(master)
         db.flush()
         result = OrderOut.model_validate(master)
@@ -133,8 +139,14 @@ def update_order(db, po_id, payload):
         parts = {part.part_no: part for part in db.query(ItemMasterModel).filter(
             ItemMasterModel.part_no.in_({item.part_no for item in payload.items})
         )}
-        master.items = [PurchaseOrderItem(**item.model_dump(), unit=parts[item.part_no].unit)
-                        for item in payload.items]
+        master.items = [
+            PurchaseOrderItem(
+                **item.model_dump(),
+                item_id=parts[item.part_no].id,
+                unit=parts[item.part_no].unit,
+            )
+            for item in payload.items
+        ]
         db.flush()
         result = OrderOut.model_validate(master)
     return result
@@ -149,7 +161,10 @@ def linked_order_item(db, item, master):
     order = po_item.order
     if order.status == "CANCELLED":
         raise HTTPException(409, "취소된 발주에는 입고할 수 없습니다.")
-    if po_item.part_no != item.part_no:
+    if po_item.item_id and item.item_id:
+        if po_item.item_id != item.item_id:
+            raise HTTPException(422, "발주 품목과 입고 품목이 일치하지 않습니다.")
+    elif po_item.part_no != item.part_no:
         raise HTTPException(422, "발주 품목과 입고 품목이 일치하지 않습니다.")
     if order.partner_id != master.partner_id or order.partner_name != master.partner_name:
         raise HTTPException(422, "발주 거래처와 입고 거래처가 일치하지 않습니다.")
@@ -210,7 +225,9 @@ def create_inbound(db, payload, created_by, draft=False):
         for item in payload.items:
             if draft and item.po_item_id is None:
                 raise HTTPException(422, "발주를 불러온 품목만 임시저장할 수 있습니다.")
-            row = PurchaseInboundItem(**inbound_values(item, parts[item.part_no].unit, keep_internal=not draft))
+            part = parts[item.part_no]
+            row = PurchaseInboundItem(**inbound_values(item, part.unit, keep_internal=not draft))
+            row.item_id = part.id
             linked_order_item(db, row, master)
             master.items.append(row)
         db.add(master)
@@ -266,7 +283,9 @@ def update_inbound(db, inbound_id, payload, allow_confirmed=True):
         if master.status == "DRAFT":
             new_items = []
             for item in payload.items:
-                row = PurchaseInboundItem(**inbound_values(item, parts[item.part_no].unit))
+                part = parts[item.part_no]
+                row = PurchaseInboundItem(**inbound_values(item, part.unit))
+                row.item_id = part.id
                 linked_order_item(db, row, master)
                 new_items.append(row)
             master.items = new_items
@@ -285,8 +304,11 @@ def update_inbound(db, inbound_id, payload, allow_confirmed=True):
 
             for item in payload.items:
                 row = existing[item.inbound_item_id]
-                if row.po_item_id != item.po_item_id or row.part_no != item.part_no:
+                part = parts[item.part_no]
+                if row.po_item_id != item.po_item_id or (row.item_id and row.item_id != part.id):
                     raise HTTPException(409, "확정된 구매에서는 연결 발주/품목을 변경할 수 없습니다.")
+                row.item_id = part.id
+                row.part_no = part.part_no
                 po_item = db.get(PurchaseOrderItem, row.po_item_id) if row.po_item_id else None
                 if po_item is None:
                     raise HTTPException(404, "연결된 발주 상세를 찾을 수 없습니다.")
