@@ -335,6 +335,8 @@ def create_outbound(
     for source in order.items:
         out_item = SubcontractOutboundItem(
             order_item_id=source.id,
+            previous_item_id=source.previous_item_id,
+            item_id=source.item_id,
             previous_part_no=source.previous_part_no,
             order_part_no=source.order_part_no,
             order_part_name=source.order_part_name,
