@@ -12,6 +12,7 @@ class PackingMaster(Base):
     id = Column(Integer, primary_key=True)
     packing_no = Column(String(30), unique=True, nullable=False, index=True)
     packing_date = Column(String(10), nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
     part_no = Column(String(50), nullable=False, index=True)
     part_name = Column(String(200), nullable=True)
     box_count = Column(Integer, nullable=False)
