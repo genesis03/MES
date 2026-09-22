@@ -313,7 +313,9 @@
     byId('lotScanInput').focus();
   };
 
+  const baseConfirmShipmentForLookup = confirmShipment;
   confirmShipment = async function(){
+    if(typeof editShipmentMode !== 'undefined' && editShipmentMode) return baseConfirmShipmentForLookup();
     if(viewMode) return;
     if(!currentOrder) return alert('미출고 수주를 선택해 주세요.');
     const targetItems = currentOrder.items.filter(item => requestedQty(item) > 0);
