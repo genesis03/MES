@@ -142,6 +142,7 @@ def get_edit_data(
         "blocked_lots": used_lots,
         "items": [
             {
+                "item_id": item.item_id,
                 "part_no": item.part_no,
                 "part_name": item.part_name,
                 "spec": item.spec or "",
