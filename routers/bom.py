@@ -80,6 +80,7 @@ async def get_bom_parent_items(
 
     data = [
         {
+            "item_id": it.id,
             "part_no": it.part_no,
             "part_name": it.part_name,
             "vehicle_model": it.vehicle_model or "",
@@ -105,10 +106,14 @@ async def get_bom_children(
     if not check_bom_permission(user):
         raise HTTPException(status_code=403, detail="권한이 없습니다.")
 
+    parent_item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == parent_part_no).first()
+    if not parent_item:
+        raise HTTPException(status_code=404, detail="기준 품목을 찾을 수 없습니다.")
+
     boms = (
         db.query(ItemBomModel, ItemMasterModel)
-        .outerjoin(ItemMasterModel, ItemBomModel.child_part_no == ItemMasterModel.part_no)
-        .filter(ItemBomModel.parent_part_no == parent_part_no)
+        .outerjoin(ItemMasterModel, ItemBomModel.child_item_id == ItemMasterModel.id)
+        .filter(ItemBomModel.parent_item_id == parent_item.id)
         .order_by(ItemBomModel.sort_order.asc(), ItemBomModel.id.asc())
         .all()
     )
@@ -117,8 +122,10 @@ async def get_bom_children(
     for bom, item in boms:
         data.append({
             "id": bom.id,
-            "parent_part_no": bom.parent_part_no,
-            "child_part_no": bom.child_part_no,
+            "parent_item_id": bom.parent_item_id,
+            "child_item_id": bom.child_item_id,
+            "parent_part_no": parent_item.part_no,
+            "child_part_no": item.part_no if item else bom.child_part_no,
             "child_part_name": item.part_name if item else "(미등록 품목)",
             "material_type": item.material_type if item else "",
             "spec": item.spec if item else "",
@@ -152,37 +159,52 @@ async def get_bom_tree(
     if not root_item:
         raise HTTPException(status_code=404, detail="기준 품목을 찾을 수 없습니다.")
 
-    def build_tree(part_no: str, level: int = 0, visited: set = None) -> Dict[str, Any]:
+    def build_tree(item_id: int, level: int = 0, visited: set = None) -> Dict[str, Any]:
         if visited is None:
             visited = set()
 
-        item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
+        item = db.query(ItemMasterModel).filter(ItemMasterModel.id == item_id).first()
+        if not item:
+            return {
+                "item_id": item_id,
+                "part_no": "",
+                "part_name": "(미등록)",
+                "material_type": "",
+                "unit": "EA",
+                "weight": 0.0,
+                "level": level,
+                "children": [],
+            }
+
         node = {
-            "part_no": part_no,
-            "part_name": item.part_name if item else "(미등록)",
-            "material_type": item.material_type if item else "",
-            "unit": item.unit if item else "EA",
-            "weight": item.weight if item else 0.0,
+            "item_id": item.id,
+            "part_no": item.part_no,
+            "part_name": item.part_name,
+            "material_type": item.material_type,
+            "unit": item.unit,
+            "weight": item.weight or 0.0,
             "level": level,
             "children": []
         }
 
-        # 순환 참조 방지
-        if part_no in visited:
+        # 순환 참조는 품번 문자열이 아니라 영구 item_id로 판정합니다.
+        if item_id in visited:
             node["part_name"] += " [순환참조 오류]"
             return node
 
-        visited.add(part_no)
+        visited.add(item_id)
 
         children_boms = (
             db.query(ItemBomModel)
-            .filter(ItemBomModel.parent_part_no == part_no)
+            .filter(ItemBomModel.parent_item_id == item_id)
             .order_by(ItemBomModel.sort_order.asc(), ItemBomModel.id.asc())
             .all()
         )
 
         for b in children_boms:
-            child_node = build_tree(b.child_part_no, level + 1, visited.copy())
+            if not b.child_item_id:
+                continue
+            child_node = build_tree(b.child_item_id, level + 1, visited.copy())
             child_node["bom_id"] = b.id
             child_node["process_code"] = b.process_code or ""
             child_node["quantity"] = b.quantity
@@ -192,7 +214,7 @@ async def get_bom_tree(
 
         return node
 
-    tree_data = build_tree(root_part_no, 0)
+    tree_data = build_tree(root_item.id, 0)
     return {"status": "success", "data": tree_data}
 
 
@@ -226,15 +248,17 @@ async def create_bom_child(request: Request, db: Session = Depends(get_db)):
 
     # 2) 중복 자재 등록 방지
     exists = db.query(ItemBomModel).filter(
-        ItemBomModel.parent_part_no == parent_part_no,
-        ItemBomModel.child_part_no == child_part_no
+        ItemBomModel.parent_item_id == p_item.id,
+        ItemBomModel.child_item_id == c_item.id
     ).first()
     if exists:
         raise HTTPException(status_code=400, detail=f"이미 등록된 하위 자재입니다. ({child_part_no})")
 
     new_bom = ItemBomModel(
-        parent_part_no=parent_part_no,
-        child_part_no=child_part_no,
+        parent_item_id=p_item.id,
+        child_item_id=c_item.id,
+        parent_part_no=p_item.part_no,
+        child_part_no=c_item.part_no,
         bom_type=str(body.get("bom_type", "MFG")).strip(),
         process_code=str(body.get("process_code", "")).strip() or None,
         quantity=quantity,
