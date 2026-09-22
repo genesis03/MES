@@ -61,6 +61,7 @@
                     <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">LOT 번호</th>
                     <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">LOT 생성일</th>
                     <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">품번</th>
+                    <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">외부 LOT</th>
                     <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">하위 LOT 번호</th>
                     <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">하위 LOT 수량</th>
                     <th style="border:1px solid #cbd5e1;padding:7px;white-space:nowrap;">하위 품번</th>
@@ -129,12 +130,13 @@ async function traceLot(lotNo){
                 <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.lot_no)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;white-space:nowrap;">${esc(row.lot_date)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.part_no)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.external_lot_no)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.child_lot_no)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;white-space:nowrap;">${fmt(row.child_lot_qty)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.child_part_no)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;white-space:nowrap;">${fmt(row.consumed_qty)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.tree)}</td>
-            </tr>`).join('') : '<tr><td colspan="9" style="padding:20px;text-align:center;">연결된 LOT가 없습니다.</td></tr>';
+            </tr>`).join('') : '<tr><td colspan="10" style="padding:20px;text-align:center;">연결된 LOT가 없습니다.</td></tr>';
         status.textContent = `연결 LOT ${data.lot_count || 0}건 / 추적 행 ${data.row_count || 0}건`;
         document.getElementById('tracePanel').scrollIntoView({behavior:'smooth', block:'start'});
     }catch(e){
