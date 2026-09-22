@@ -243,7 +243,10 @@
     byId('sumAllocatedQty').textContent = fmt(viewMode ? allocatedTotal : requestedTotal);
     if(viewMode){
       byId('shipmentStatus').value = viewingShipment?.status || 'CONFIRMED';
-      byId('confirmBtn').disabled = true;
+      byId('confirmBtn').disabled = !(typeof editShipmentMode !== 'undefined' && editShipmentMode);
+      if(typeof editShipmentMode !== 'undefined' && editShipmentMode){
+        byId('confirmBtn').textContent = '출고 수정 저장';
+      }
       return;
     }
     const targetItems = currentOrder.items.filter(item => requestedQty(item) > 0);
