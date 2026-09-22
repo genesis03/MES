@@ -106,64 +106,56 @@ def _lot_available(db: Session, lot: ProductionLotModel) -> float:
     return max(float(lot.lot_qty or 0) - consumed - related - reserved_run - reserved_subcontract - _packed_qty(db, lot.lot_no), 0.0)
 
 
-def _packing_source_parts(db: Session, finished_part_no: str) -> list[str]:
-    """포장 대상 완제품의 직속 하위 생산품을 반환합니다.
-
-    FINAL BOM이 있으면 FINAL BOM을 우선 사용하고, 없으면 직속 BOM 전체를 사용합니다.
-    BOM이 없는 품번은 기존과 동일하게 자기 품번의 생산 LOT를 사용합니다.
-    """
+def _packing_source_item_ids(db: Session, finished_item_id: int) -> list[int]:
+    """포장 대상 완제품의 직속 하위 생산품 item_id를 반환합니다."""
     bom_rows = (
         db.query(ItemBomModel)
-        .filter(ItemBomModel.parent_part_no == finished_part_no)
+        .filter(ItemBomModel.parent_item_id == finished_item_id)
         .order_by(ItemBomModel.sort_order.asc(), ItemBomModel.id.asc())
         .all()
     )
     if not bom_rows:
-        return [finished_part_no]
+        return [finished_item_id]
 
     final_rows = [row for row in bom_rows if str(row.bom_type or "").upper() == "FINAL"]
     source_rows = final_rows or bom_rows
 
     result = []
     for row in source_rows:
-        child = str(row.child_part_no or "").strip()
-        if not child or child in result:
+        child_id = int(row.child_item_id) if row.child_item_id else None
+        if not child_id or child_id in result:
             continue
         has_production_lot = (
             db.query(ProductionLotModel.id)
             .filter(
-                ProductionLotModel.part_no == child,
+                ProductionLotModel.item_id == child_id,
                 ProductionLotModel.status == "ACTIVE",
             )
             .first()
             is not None
         )
         if has_production_lot:
-            result.append(child)
+            result.append(child_id)
 
     if result:
         return result
 
-    return [
-        str(row.child_part_no).strip()
-        for row in source_rows
-        if str(row.child_part_no or "").strip()
-    ]
+    return [int(row.child_item_id) for row in source_rows if row.child_item_id]
 
 
-def _lots(db: Session, finished_part_no: str):
-    source_parts = _packing_source_parts(db, finished_part_no)
-    if not source_parts:
+def _lots(db: Session, finished_item_id: int):
+    source_item_ids = _packing_source_item_ids(db, finished_item_id)
+    if not source_item_ids:
         return []
 
     item_map = {
-        item.part_no: item
-        for item in db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_(source_parts)).all()
+        item.id: item
+        for item in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(source_item_ids)).all()
     }
     rows = (
         db.query(ProductionLotModel)
         .filter(
-            ProductionLotModel.part_no.in_(source_parts),
+            ProductionLotModel.item_id.in_(source_item_ids),
             ProductionLotModel.status == "ACTIVE",
         )
         .order_by(ProductionLotModel.created_at.asc(), ProductionLotModel.id.asc())
@@ -171,18 +163,19 @@ def _lots(db: Session, finished_part_no: str):
     )
     result = []
     for row in rows:
-        source_item = item_map.get(row.part_no)
+        source_item = item_map.get(row.item_id)
         result.append({
             "lot": row,
-            "source_part_no": row.part_no,
+            "source_item_id": row.item_id,
+            "source_part_no": source_item.part_no if source_item else row.part_no,
             "source_part_name": source_item.part_name if source_item else "",
             "available": _lot_available(db, row),
         })
     return result
 
 
-def _preview(db: Session, finished_part_no: str, scanned_lot_no: str, target_qty: float):
-    rows = _lots(db, finished_part_no)
+def _preview(db: Session, finished_item_id: int, scanned_lot_no: str, target_qty: float):
+    rows = _lots(db, finished_item_id)
     scanned_row = next(
         (x for x in rows if x["lot"].lot_no.upper() == scanned_lot_no.upper()),
         None,
@@ -190,8 +183,9 @@ def _preview(db: Session, finished_part_no: str, scanned_lot_no: str, target_qty
     if scanned_row is None:
         raise HTTPException(404, "선택 완제품의 하위 품번에 해당하는 사용 가능한 생산 LOT가 아닙니다.")
 
+    source_item_id = scanned_row["source_item_id"]
     source_part_no = scanned_row["source_part_no"]
-    source_rows = [x for x in rows if x["source_part_no"] == source_part_no]
+    source_rows = [x for x in rows if x["source_item_id"] == source_item_id]
     scan_index = next(
         i for i, x in enumerate(source_rows)
         if x["lot"].lot_no.upper() == scanned_lot_no.upper()
@@ -209,6 +203,7 @@ def _preview(db: Session, finished_part_no: str, scanned_lot_no: str, target_qty
                 "lot_no": row["lot"].lot_no,
                 "qty": qty,
                 "remaining_before": available,
+                "source_item_id": row["source_item_id"],
                 "source_part_no": row["source_part_no"],
                 "source_part_name": row["source_part_name"],
             })
@@ -231,7 +226,7 @@ def packing_items(
     if q and q.strip():
         query = query.filter(ItemMasterModel.part_no.contains(q.strip(), autoescape=True))
     rows = query.order_by(ItemMasterModel.part_no.asc()).limit(50).all()
-    return [{"part_no": x.part_no, "part_name": x.part_name, "moq": int(x.moq or 0), "snp": int(x.snp or 0)} for x in rows]
+    return [{"item_id": x.id, "part_no": x.part_no, "part_name": x.part_name, "moq": int(x.moq or 0), "snp": int(x.snp or 0)} for x in rows]
 
 
 @router.get("/api/packing/item/{part_no}")
@@ -240,9 +235,15 @@ def packing_item(part_no: str, db: Session = Depends(get_db), current_user=Depen
     if not item:
         raise HTTPException(404, "품목을 찾을 수 없습니다.")
 
-    source_parts = _packing_source_parts(db, item.part_no)
+    source_item_ids = _packing_source_item_ids(db, item.id)
+    source_parts = [
+        x.part_no for x in db.query(ItemMasterModel)
+        .filter(ItemMasterModel.id.in_(source_item_ids))
+        .order_by(ItemMasterModel.part_no.asc())
+        .all()
+    ]
     lot_rows = []
-    for row in _lots(db, item.part_no):
+    for row in _lots(db, item.id):
         lot = row["lot"]
         available = row["available"]
         if available <= 1e-9:
@@ -256,6 +257,7 @@ def packing_item(part_no: str, db: Session = Depends(get_db), current_user=Depen
         })
     standard_qty = int(item.moq or 0) or int(item.snp or 0)
     return {
+        "item_id": item.id,
         "part_no": item.part_no,
         "part_name": item.part_name,
         "moq": int(item.moq or 0),
@@ -268,7 +270,10 @@ def packing_item(part_no: str, db: Session = Depends(get_db), current_user=Depen
 
 @router.post("/api/packing/scan")
 def packing_scan(payload: PackingScanInput, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    allocations, remaining = _preview(db, payload.part_no.strip(), payload.lot_no.strip(), payload.target_qty)
+    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == payload.part_no.strip(), ItemMasterModel.is_active == "Y").first()
+    if not item:
+        raise HTTPException(404, "품목을 찾을 수 없습니다.")
+    allocations, remaining = _preview(db, item.id, payload.lot_no.strip(), payload.target_qty)
     return {
         "allocations": allocations,
         "allocated_qty": sum(x["qty"] for x in allocations),
@@ -287,7 +292,7 @@ def create_packing(payload: PackingCreateInput, db: Session = Depends(get_db), c
     if abs(target_qty - supplied_total) > 1e-6:
         raise HTTPException(409, f"포장수량 {target_qty:g}과 LOT 배정수량 {supplied_total:g}이 일치하지 않습니다.")
     last_lot = payload.allocations[-1].lot_no
-    expected, remaining = _preview(db, item.part_no, last_lot, target_qty)
+    expected, remaining = _preview(db, item.id, last_lot, target_qty)
     if remaining > 1e-9:
         raise HTTPException(409, f"가용 LOT가 부족합니다. 미배정 {remaining:g}")
     expected_map = {x["lot_no"]: round(float(x["qty"]), 9) for x in expected}
@@ -299,6 +304,7 @@ def create_packing(payload: PackingCreateInput, db: Session = Depends(get_db), c
     master = PackingMaster(
         packing_no=packing_no,
         packing_date=payload.packing_date,
+        item_id=item.id,
         part_no=item.part_no,
         part_name=item.part_name,
         box_count=payload.box_count,
@@ -311,7 +317,7 @@ def create_packing(payload: PackingCreateInput, db: Session = Depends(get_db), c
     db.add(master)
     db.flush()
 
-    lot_map = {x["lot"].lot_no: x["lot"] for x in _lots(db, item.part_no)}
+    lot_map = {x["lot"].lot_no: x["lot"] for x in _lots(db, item.id)}
     for row in expected:
         lot = lot_map.get(row["lot_no"])
         master.allocations.append(PackingLotAllocation(
@@ -369,6 +375,7 @@ def packing_records(
             "id": master.id,
             "packing_no": master.packing_no,
             "packing_date": master.packing_date,
+            "item_id": master.item_id,
             "part_no": master.part_no,
             "part_name": master.part_name or "",
             "total_qty": sum(float(box.box_qty or 0) for box in waiting_boxes),
