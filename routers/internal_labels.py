@@ -21,6 +21,10 @@ def _item(db: Session, part_no: str):
     return db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
 
 
+def _item_by_id(db: Session, item_id: int | None):
+    return db.get(ItemMasterModel, item_id) if item_id else None
+
+
 def _storage_text(db: Session, code: str | None) -> str:
     raw = str(code or "").strip()
     if not raw:
@@ -65,10 +69,10 @@ def _purchase_labels(db: Session, inbound_id: int) -> list[dict]:
         lot_no = str(row.internal_lot_no or "").strip()
         if not lot_no:
             continue
-        item = _item(db, row.part_no)
+        item = _item_by_id(db, row.item_id) or _item(db, row.part_no)
         result.append(_label(
             title="자재 LOT",
-            part_no=row.part_no,
+            part_no=item.part_no if item else row.part_no,
             part_name=item.part_name if item else "",
             lot_no=lot_no,
             qty=row.inbound_qty,
@@ -92,14 +96,14 @@ def _production_labels(db: Session, performance_id: int) -> list[dict]:
     if not lot:
         raise HTTPException(409, "생산 LOT가 생성되지 않은 실적입니다.")
     order = performance.work_order
-    item = _item(db, order.part_no)
+    item = _item_by_id(db, order.item_id) or _item(db, order.part_no)
     is_assembly = str(performance.performance_type or "").upper() == "ASSEMBLY"
     good = float(performance.good_qty or 0)
     defect = float(performance.defect_qty or 0)
     production = good + defect + float(performance.setup_qty or 0)
     return [_label(
         title="조립 LOT" if is_assembly else "생산 LOT",
-        part_no=order.part_no,
+        part_no=item.part_no if item else order.part_no,
         part_name=item.part_name if item else "",
         lot_no=lot.lot_no,
         qty=good,
