@@ -204,24 +204,12 @@ def inventory_lot_trace_tree(
 ):
     root = lot_no.strip()
     all_edges = _edges(db)
-    adjacency: dict[str, list[tuple[str, dict]]] = {}
-    for edge in all_edges:
-        a = edge["parent_lot_no"]
-        b = edge["child_lot_no"]
-        adjacency.setdefault(a, []).append((b, edge))
-        adjacency.setdefault(b, []).append((a, edge))
 
-    depth = {root: 0}
-    parent: dict[str, str | None] = {root: None}
-    queue = deque([root])
-    while queue and len(depth) < 500:
-        current = queue.popleft()
-        for neighbor, _ in adjacency.get(current, []):
-            if neighbor in depth:
-                continue
-            depth[neighbor] = depth[current] + 1
-            parent[neighbor] = current
-            queue.append(neighbor)
+    # LOT 추적은 선택 LOT의 원천만 역추적합니다.
+    # 같은 자재 LOT를 사용한 다른 생산 LOT(형제 LOT)는 포함하지 않습니다.
+    parent_edges: dict[str, list[dict]] = {}
+    for edge in all_edges:
+        parent_edges.setdefault(edge["child_lot_no"], []).append(edge)
 
     process_map = _process_map(db)
     node_cache: dict[str, dict] = {}
@@ -231,72 +219,58 @@ def inventory_lot_trace_tree(
             node_cache[value] = _node(db, value, process_map)
         return node_cache[value]
 
-    def path_to(value: str) -> list[str]:
-        path = []
-        current: str | None = value
-        guard = 0
-        while current is not None and guard < 500:
-            path.append(current)
-            current = parent.get(current)
-            guard += 1
-        path.reverse()
-        return path
+    rows: list[dict] = []
+    queue = deque([(root, [root])])
+    visited_paths: set[tuple[str, ...]] = set()
 
-    oriented: list[tuple[str, str, dict]] = []
-    for edge in all_edges:
-        a = edge["parent_lot_no"]
-        b = edge["child_lot_no"]
-        if a not in depth or b not in depth:
+    while queue and len(rows) < 500:
+        current, path = queue.popleft()
+        incoming = parent_edges.get(current, [])
+
+        if not incoming:
+            if current == root and not rows:
+                current_node = node(current)
+                rows.append({
+                    "process": current_node["process_name"],
+                    "lot_no": current,
+                    "lot_date": current_node["date"],
+                    "part_no": current_node["part_no"],
+                    "child_lot_no": "",
+                    "child_lot_qty": None,
+                    "child_part_no": "",
+                    "consumed_qty": None,
+                    "tree": " - ".join(path),
+                })
             continue
-        if depth[a] < depth[b]:
-            current, lower = a, b
-        elif depth[b] < depth[a]:
-            current, lower = b, a
-        else:
-            current, lower = (a, b) if a <= b else (b, a)
-        oriented.append((current, lower, edge))
 
-    oriented.sort(key=lambda x: (depth.get(x[0], 999), path_to(x[0]), x[1]))
-    rows = []
-    has_child: set[str] = set()
-    for current, lower, edge in oriented:
-        has_child.add(current)
-        current_node = node(current)
-        lower_node = node(lower)
-        tree = path_to(current) + [lower]
-        rows.append({
-            "process": current_node["process_name"],
-            "lot_no": current,
-            "lot_date": current_node["date"],
-            "part_no": current_node["part_no"],
-            "child_lot_no": lower,
-            "child_lot_qty": lower_node["qty"],
-            "child_part_no": lower_node["part_no"],
-            "consumed_qty": float(edge.get("qty") or 0),
-            "tree": " - ".join(tree),
-        })
+        for edge in incoming:
+            source = edge["parent_lot_no"]
+            if source in path:
+                continue
+            current_node = node(current)
+            source_node = node(source)
+            source_path = path + [source]
+            path_key = tuple(source_path)
+            if path_key in visited_paths:
+                continue
+            visited_paths.add(path_key)
+            rows.append({
+                "process": current_node["process_name"],
+                "lot_no": current,
+                "lot_date": current_node["date"],
+                "part_no": current_node["part_no"],
+                "child_lot_no": source,
+                "child_lot_qty": source_node["qty"],
+                "child_part_no": source_node["part_no"],
+                "consumed_qty": float(edge.get("qty") or 0),
+                "tree": " - ".join(source_path),
+            })
+            queue.append((source, source_path))
 
-    for value in sorted(depth, key=lambda x: (depth[x], path_to(x), x)):
-        if value in has_child:
-            continue
-        current_node = node(value)
-        rows.append({
-            "process": current_node["process_name"],
-            "lot_no": value,
-            "lot_date": current_node["date"],
-            "part_no": current_node["part_no"],
-            "child_lot_no": "",
-            "child_lot_qty": None,
-            "child_part_no": "",
-            "consumed_qty": None,
-            "tree": " - ".join(path_to(value)),
-        })
-
-    rows.sort(key=lambda row: (row["tree"].count(" - "), row["tree"], row["lot_no"], row["child_lot_no"]))
     return {
         "root_lot_no": root,
         "root": node(root),
         "rows": rows,
         "row_count": len(rows),
-        "lot_count": len(depth),
+        "lot_count": len({root} | {row["child_lot_no"] for row in rows if row["child_lot_no"]}),
     }
