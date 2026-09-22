@@ -74,6 +74,7 @@ app.include_router(production_extra.router)
 app.include_router(inventory_lot_location.router)
 app.include_router(inventory.router)
 app.include_router(inventory_lot_trace.router)
+app.include_router(inventory_lot_usage_trace.router)
 app.include_router(inventory_lot_trace_tree.router)
 # 내부 LOT 라벨은 기존 출고 라벨 시스템과 별도 경로에서 출력합니다.
 app.include_router(internal_labels.router)
