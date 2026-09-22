@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from models.lot_relation import LotRelationModel
+from models.models import ItemMasterModel
 from models.subcontract import SubcontractOrderItem, SubcontractOrderMaster
 from models.subcontract_outbound import SubcontractOutboundMaster
 
@@ -67,20 +68,34 @@ def inquiry_subcontract_orders(
         .all()
     )
     items = []
+    item_ids = {
+        value
+        for _, row in rows
+        for value in (row.item_id, row.previous_item_id)
+        if value
+    }
+    master_map = {
+        row.id: row
+        for row in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all()
+    } if item_ids else {}
     for master, item in rows:
+        current_item = master_map.get(item.item_id)
+        previous_item = master_map.get(item.previous_item_id)
         allocated_qty = sum(float(x.allocated_qty or 0) for x in item.allocations)
         items.append({
             "type": "SUBCONTRACT",
             "po_id": master.id,
             "po_item_id": item.id,
+            "item_id": item.item_id,
+            "previous_item_id": item.previous_item_id,
             "po_no": master.order_no,
             "order_date": master.order_date,
             "delivery_due_date": master.delivery_due_date or "",
             "partner_name": master.partner_name,
             "manager_name": master.manager_name or "",
-            "part_no": item.order_part_no,
-            "previous_part_no": item.previous_part_no,
-            "part_name": item.order_part_name,
+            "part_no": current_item.part_no if current_item else item.order_part_no,
+            "previous_part_no": previous_item.part_no if previous_item else item.previous_part_no,
+            "part_name": current_item.part_name if current_item else item.order_part_name,
             "spec": item.spec or "",
             "order_qty": item.order_qty,
             "unit": item.unit,
