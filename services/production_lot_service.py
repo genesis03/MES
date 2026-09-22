@@ -46,7 +46,7 @@ def ensure_output_lot_for_performance(db, performance: ProductionPerformance) ->
 
     equipment = db.get(EquipmentMaster, performance.equipment_id) if performance.equipment_id else None
     machine_no = equipment.machine_no if equipment else 1
-    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == order.part_no).first()
+    item = db.get(ItemMasterModel, order.item_id) if order.item_id else None
 
     lot_no = next_lot_no(
         db,
@@ -56,7 +56,8 @@ def ensure_output_lot_for_performance(db, performance: ProductionPerformance) ->
     )
     lot = ProductionLotModel(
         lot_no=lot_no,
-        part_no=order.part_no,
+        item_id=order.item_id,
+        part_no=item.part_no if item else order.part_no,
         lot_qty=float(performance.good_qty or 0),
         storage_location=(item.inbound_loc if item else None),
         status="ACTIVE",
