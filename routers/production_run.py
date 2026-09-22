@@ -375,6 +375,78 @@ def start_run(payload: StartRunPayload, db: Session = Depends(get_db), current_u
     return _serialize_run(run, db)
 
 
+@router.get("/{run_id}/materials/{material_id}/lots")
+def material_lots(
+    run_id: int,
+    material_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    run = _get_run(db, run_id)
+    material = db.get(ProductionRunMaterial, material_id)
+    if material is None or material.run_id != run.id:
+        raise HTTPException(404, "BOM 자재를 찾을 수 없습니다.")
+
+    current_alloc_by_lot = {}
+    for row in material.allocations:
+        current_alloc_by_lot[row.lot_no] = current_alloc_by_lot.get(row.lot_no, 0.0) + float(row.allocated_qty or 0)
+
+    rows = []
+    fifo_enabled = True
+    for lot in _lot_rows(db, material.material_part_no):
+        current_alloc = current_alloc_by_lot.get(lot["lot_no"], 0.0)
+        available_before_current = _available_qty(
+            db,
+            lot["lot_no"],
+            lot["base_qty"],
+            current_run_id=run.id,
+        )
+        additional_available = max(float(available_before_current) - current_alloc, 0.0)
+        already_allocated = current_alloc > 1e-9
+        can_allocate = (
+            run.status == "IN_PROGRESS"
+            and not already_allocated
+            and additional_available > 1e-9
+            and fifo_enabled
+            and float(material.required_qty or 0) - sum(float(x.allocated_qty or 0) for x in material.allocations) > 1e-9
+        )
+        if can_allocate:
+            fifo_enabled = False
+        rows.append({
+            "lot_no": lot["lot_no"],
+            "lot_qty": float(lot["base_qty"] or 0),
+            "remaining_qty": additional_available,
+            "allocated_qty": current_alloc,
+            "source_type": lot["source_type"],
+            "storage_location": lot["storage_location"],
+            "can_allocate": can_allocate,
+            "fifo_wait": (not already_allocated and additional_available > 1e-9 and not can_allocate),
+        })
+
+    return {
+        "material": _serialize_material(material),
+        "lots": rows,
+    }
+
+
+@router.delete("/{run_id}/materials/{material_id}/allocations")
+def clear_material_allocations(
+    run_id: int,
+    material_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    run = _get_run(db, run_id)
+    if run.status != "IN_PROGRESS":
+        raise HTTPException(400, "생산중 가동내역만 LOT 배정을 초기화할 수 있습니다.")
+    material = db.get(ProductionRunMaterial, material_id)
+    if material is None or material.run_id != run.id:
+        raise HTTPException(404, "BOM 자재를 찾을 수 없습니다.")
+    material.allocations.clear()
+    db.commit()
+    return {"message": f"{material.material_part_no} LOT 배정을 초기화했습니다."}
+
+
 @router.get("/{run_id}")
 def get_run(run_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     run = _get_run(db, run_id)
