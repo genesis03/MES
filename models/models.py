@@ -21,6 +21,7 @@ class ManualLabelModel(Base):
     __tablename__ = "manual_labels"
 
     id = Column(Integer, primary_key=True, index=True)
+    item_id = Column(Integer, nullable=True, index=True)             # 영구 품목 내부키
     created_at = Column(String, nullable=False)
     barcode = Column(String, nullable=False)
     customer = Column(String, nullable=False)
@@ -124,6 +125,8 @@ class ItemBomModel(Base):
     __tablename__ = "item_boms"
 
     id = Column(Integer, primary_key=True, index=True)
+    parent_item_id = Column(Integer, nullable=True, index=True)
+    child_item_id = Column(Integer, nullable=True, index=True)
     parent_part_no = Column(String, nullable=False, index=True)
     child_part_no = Column(String, nullable=False, index=True)
     bom_type = Column(String, nullable=False, default="MFG")
@@ -172,6 +175,7 @@ class PurchaseOrderItem(Base):
 
     id = Column(Integer, primary_key=True)
     po_id = Column(Integer, ForeignKey("purchase_order_masters.id"), nullable=False, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
     part_no = Column(String(50), ForeignKey("item_master.part_no"), nullable=False)
     order_qty = Column(Float, nullable=False)
     unit = Column(String(10), nullable=False)
@@ -212,6 +216,7 @@ class PurchaseInboundItem(Base):
     id = Column(Integer, primary_key=True)
     inbound_id = Column(Integer, ForeignKey("purchase_inbound_masters.id"), nullable=False, index=True)
     po_item_id = Column(Integer, ForeignKey("purchase_order_items.id"), nullable=True, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
     part_no = Column(String(50), ForeignKey("item_master.part_no"), nullable=False, index=True)
     unit = Column(String(10), nullable=False)
     inspection_status = Column(String(20), nullable=False, default="WAITING")
