@@ -49,6 +49,21 @@
             <button onclick="downloadLegacyExcel()" style="padding:8px 16px;background:#475569;color:#fff;border:none;border-radius:4px;font-weight:bold;cursor:pointer;">업로드 데이터 LOT 계산</button>
         </div>
         <div id="uploadStatus" style="margin-top:10px;font-weight:bold;color:#64748b;"></div>
+        <div style="margin-top:16px;">
+            <div style="font-weight:bold;margin-bottom:8px;">품번별 출고 요약</div>
+            <div style="overflow:auto;border:1px solid #cbd5e1;">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:520px;">
+                    <thead style="background:#f8fafc;">
+                        <tr>
+                            <th style="border:1px solid #cbd5e1;padding:7px;">품번</th>
+                            <th style="border:1px solid #cbd5e1;padding:7px;">수량</th>
+                            <th style="border:1px solid #cbd5e1;padding:7px;">라벨수</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summaryBody"><tr><td colspan="3" style="padding:16px;text-align:center;">출고 원장 데이터가 없습니다.</td></tr></tbody>
+                </table>
+            </div>
+        </div>
     </details>
 
     <div class="card" style="background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:20px;margin-bottom:20px;">
@@ -115,9 +130,32 @@
         document.getElementById('sourceStatus').innerText = `출고 ${result.items?.length || 0}건 조회`;
     }
 
+    function renderSummary(rows) {
+        const body = document.getElementById("summaryBody");
+        const grouped = new Map();
+        (rows || []).forEach(row => {
+            const partNo = String(row.textBox9 ?? "").trim();
+            if (!partNo) return;
+            const rawQty = String(row.textBox11 ?? "0").replace(/,/g, "").trim();
+            const qty = Number(rawQty);
+            const current = grouped.get(partNo) || {qty: 0, labels: 0};
+            current.qty += Number.isFinite(qty) ? qty : 0;
+            current.labels += 1;
+            grouped.set(partNo, current);
+        });
+        const entries = [...grouped.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+        body.innerHTML = entries.length ? entries.map(([partNo, info]) => `
+            <tr>
+                <td style="border:1px solid #cbd5e1;padding:7px;">${esc(partNo)}</td>
+                <td style="border:1px solid #cbd5e1;padding:7px;text-align:right;">${Number(info.qty || 0).toLocaleString(undefined,{maximumFractionDigits:6})}</td>
+                <td style="border:1px solid #cbd5e1;padding:7px;text-align:right;">${info.labels.toLocaleString()}</td>
+            </tr>`).join("") : '<tr><td colspan="3" style="padding:16px;text-align:center;">출고 원장 데이터가 없습니다.</td></tr>';
+    }
+
     function renderPreview(rows) {
         const container = document.getElementById('tableContainer');
         currentPreviewRows = rows || [];
+        renderSummary(currentPreviewRows);
         if (!currentPreviewRows.length) {
             container.innerHTML = '조회할 데이터가 없습니다.';
             return;
