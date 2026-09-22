@@ -128,6 +128,7 @@ def sales_items(
     rows = query.order_by(ItemMasterModel.part_no.asc()).limit(limit).all()
     return [
         {
+            "item_id": x.id,
             "part_no": x.part_no,
             "part_name": x.part_name,
             "unit": x.unit or "EA",
@@ -178,6 +179,7 @@ def create_sales_order(payload: SalesOrderCreateInput, db: Session = Depends(get
     for row in payload.items:
         master = item_map[row.part_no.strip()]
         order.items.append(SalesOrderItem(
+            item_id=master.id,
             part_no=master.part_no,
             part_name=master.part_name,
             order_qty=float(row.order_qty),
@@ -218,6 +220,7 @@ def sales_orders(
         "note": x.note,
         "items": [{
             "id": i.id,
+            "item_id": i.item_id,
             "part_no": i.part_no,
             "part_name": i.part_name,
             "order_qty": i.order_qty,
@@ -269,6 +272,7 @@ def sales_unsold(
             "order_date": order.order_date,
             "customer_id": order.customer_id,
             "customer_name": order.customer_name,
+            "item_id": item.item_id,
             "part_no": item.part_no,
             "part_name": item.part_name,
             "order_qty": order_qty,
@@ -299,6 +303,7 @@ def shipping_open_items(db: Session = Depends(get_db), current_user=Depends(get_
         "order_id": x.order_id,
         "order_no": x.order.order_no,
         "customer_name": x.order.customer_name,
+        "item_id": x.item_id,
         "part_no": x.part_no,
         "part_name": x.part_name,
         "order_qty": x.order_qty,
@@ -324,7 +329,7 @@ def shipping_waiting_boxes(
         .join(PackingMaster, PackingMaster.id == PackingBox.packing_id)
         .outerjoin(ShipmentBox, ShipmentBox.packing_box_id == PackingBox.id)
         .filter(
-            PackingMaster.part_no == item.part_no,
+            PackingMaster.item_id == item.item_id,
             PackingMaster.status == "PACKED",
             ShipmentBox.id.is_(None),
         )
@@ -368,7 +373,7 @@ def create_shipment(payload: ShipmentCreateInput, db: Session = Depends(get_db),
     )
     if len(rows) != len(box_ids):
         raise HTTPException(409, "이미 출고된 LOT가 포함되어 있습니다. 목록을 새로고침해 주세요.")
-    if any(master.part_no != order_item.part_no or master.status != "PACKED" for _, master in rows):
+    if any(master.item_id != order_item.item_id or master.status != "PACKED" for _, master in rows):
         raise HTTPException(409, "수주 품번과 일치하지 않는 출고대기LOT가 포함되어 있습니다.")
 
     shipment_qty = sum(float(box.box_qty or 0) for box, _ in rows)
@@ -395,6 +400,7 @@ def create_shipment(payload: ShipmentCreateInput, db: Session = Depends(get_db),
     shipment_item = ShipmentItem(
         shipment_id=shipment.id,
         sales_order_item_id=order_item.id,
+        item_id=order_item.item_id,
         part_no=order_item.part_no,
         shipped_qty=shipment_qty,
         unit=order_item.unit,
@@ -432,6 +438,7 @@ def shipment_records(db: Session = Depends(get_db), current_user=Depends(get_cur
         "customer_name": x.customer_name,
         "status": x.status,
         "items": [{
+            "item_id": i.item_id,
             "part_no": i.part_no,
             "shipped_qty": i.shipped_qty,
             "unit": i.unit,
