@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from models.lot_relation import LotRelationModel
-from models.models import ShippingMasterModel
+from models.models import ItemMasterModel, ShippingMasterModel
 from models.sales import SalesOrderMaster, ShipmentMaster
 
 router = APIRouter(tags=["Shipping Inquiry"])
@@ -36,7 +36,7 @@ def _sync_order_status(order: SalesOrderMaster):
         order.status = "ORDERED"
 
 
-def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
+def _serialize_shipment(db: Session, row: ShipmentMaster, detail: bool = False):
     items = []
     total_qty = 0.0
     total_boxes = 0
@@ -46,6 +46,8 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
     has_direct = False
 
     for item in row.items:
+        master_item = db.get(ItemMasterModel, item.item_id) if item.item_id else None
+        current_part_no = master_item.part_no if master_item else item.part_no
         qty = float(item.shipped_qty or 0)
         boxes = list(item.boxes)
         direct_lots = list(getattr(item, "direct_lots", []) or [])
@@ -59,8 +61,8 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
         total_qty += qty
         # BOX 수는 실제 포장 LOT(=출고 LOT) 수를 의미합니다. 샘플/개발도 BOX별 LOT를 셉니다.
         total_boxes += len(boxes) if boxes else (len(direct_outbound_lots) or (1 if direct_lots else 0))
-        if item.part_no and item.part_no not in part_nos:
-            part_nos.append(item.part_no)
+        if current_part_no and current_part_no not in part_nos:
+            part_nos.append(current_part_no)
 
         sales_item = item.sales_order_item
         sales_order = sales_item.order if sales_item else None
@@ -72,7 +74,8 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
 
         item_data = {
             "id": item.id,
-            "part_no": item.part_no,
+            "item_id": item.item_id,
+            "part_no": current_part_no,
             "part_name": sales_item.part_name if sales_item else "",
             "shipped_qty": qty,
             "unit": item.unit or "EA",
@@ -107,7 +110,12 @@ def _serialize_shipment(row: ShipmentMaster, detail: bool = False):
                     "outbound_lot_no": getattr(direct, "outbound_lot_no", None) or "",
                     "lot_no": direct.source_lot_no,
                     "source_lot_no": direct.source_lot_no,
-                    "source_part_no": direct.source_part_no,
+                    "source_item_id": direct.source_item_id,
+                    "source_part_no": (
+                        db.get(ItemMasterModel, direct.source_item_id).part_no
+                        if direct.source_item_id and db.get(ItemMasterModel, direct.source_item_id)
+                        else direct.source_part_no
+                    ),
                     "shipped_qty": float(direct.shipped_qty or 0),
                 }
                 for direct in direct_lots
@@ -174,7 +182,7 @@ def shipping_inquiry(
     result = []
     keyword = (part_no or "").strip().lower()
     for row in rows:
-        data = _serialize_shipment(row)
+        data = _serialize_shipment(db, row)
         if keyword and not any(keyword in str(value or "").lower() for value in data["part_nos"]):
             continue
         result.append(data)
@@ -186,7 +194,7 @@ def shipping_inquiry_detail(shipment_id: int, db: Session = Depends(get_db), cur
     row = db.get(ShipmentMaster, shipment_id)
     if not row:
         raise HTTPException(404, "출고 내역을 찾을 수 없습니다.")
-    return _serialize_shipment(row, detail=True)
+    return _serialize_shipment(db, row, detail=True)
 
 
 @router.delete("/api/shipping/inquiry/{shipment_id}")
