@@ -20,10 +20,10 @@ def get_order_for_edit(
     if master is None:
         raise HTTPException(404, "발주를 찾을 수 없습니다.")
 
-    part_nos = {item.part_no for item in master.items}
+    item_ids = {item.item_id for item in master.items if item.item_id}
     parts = {
-        row.part_no: row
-        for row in db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_(part_nos)).all()
+        row.id: row
+        for row in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all()
     }
     editable = all((item.received_qty or 0) == 0 for item in master.items) and master.status != "CANCELLED"
     return {
@@ -41,8 +41,8 @@ def get_order_for_edit(
             {
                 "id": item.id,
                 "part_no": item.part_no,
-                "part_name": parts[item.part_no].part_name if item.part_no in parts else "",
-                "spec": (parts[item.part_no].spec or "") if item.part_no in parts else "",
+                "part_name": parts[item.item_id].part_name if item.item_id in parts else "",
+                "spec": (parts[item.item_id].spec or "") if item.item_id in parts else "",
                 "unit": item.unit,
                 "order_qty": item.order_qty,
                 "delivery_date": item.delivery_date or "",
@@ -79,7 +79,7 @@ def get_inbound_for_edit(
     items = []
     for row in master.items:
         po_item = db.get(PurchaseOrderItem, row.po_item_id) if row.po_item_id else None
-        part = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == row.part_no).one_or_none()
+        part = db.get(ItemMasterModel, row.item_id) if row.item_id else db.query(ItemMasterModel).filter(ItemMasterModel.part_no == row.part_no).one_or_none()
         order = po_item.order if po_item else None
         editable_remaining = None
         if po_item is not None:
