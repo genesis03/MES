@@ -9,7 +9,7 @@ from models.lot_consumption import LotConsumptionModel
 from models.lot_relation import LotRelationModel
 from models.models import ProcessModel, PurchaseInboundItem, PurchaseInboundMaster
 from models.packing import PackingBox, PackingMaster
-from models.production import ProductionPerformance
+from models.production import ProductionPerformance, ProductionWorkOrder
 from models.production_lot import ProductionLotModel
 from models.sales import ShipmentBox, ShipmentDirectLot, ShipmentItem, ShipmentMaster
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundLot, SubcontractInboundMaster
@@ -199,6 +199,74 @@ def _edges(db: Session) -> list[dict]:
     return rows
 
 
+def _production_performance_for_lot_state(
+    db: Session,
+    lot_no: str,
+    part_no: str,
+    expected_qty: float | None = None,
+):
+    """생산 LOT의 원 생산실적을 찾습니다.
+
+    정상 LOT는 PERF note로 정확히 연결하고, 외주 전량입고 과정에서 note/품번이
+    덮어써진 기존 LOT는 LOT 최초 생성시각 + 당시 품번 + 생산수량으로 복구합니다.
+    """
+    stock = db.query(ProductionLotModel).filter(ProductionLotModel.lot_no == lot_no).first()
+    if stock is None:
+        return None
+
+    perf_id = performance_id_from_lot_note(stock.note)
+    if perf_id is not None:
+        perf = db.get(ProductionPerformance, perf_id)
+        if perf is not None:
+            order = db.get(ProductionWorkOrder, perf.work_order_id)
+            if not part_no or (order and order.part_no == part_no):
+                return perf
+
+    query = (
+        db.query(ProductionPerformance)
+        .join(ProductionWorkOrder, ProductionWorkOrder.id == ProductionPerformance.work_order_id)
+        .filter(ProductionWorkOrder.part_no == part_no)
+    )
+    if stock.created_at:
+        created_date = stock.created_at.strftime("%Y-%m-%d")
+        same_day = query.filter(ProductionPerformance.performance_date == created_date).all()
+    else:
+        same_day = []
+
+    candidates = same_day or query.order_by(ProductionPerformance.created_at.desc()).limit(50).all()
+    if not candidates:
+        return None
+
+    target_qty = float(expected_qty if expected_qty is not None else (stock.lot_qty or 0))
+    target_time = stock.created_at
+
+    def rank(perf: ProductionPerformance):
+        qty_gap = abs(float(perf.good_qty or 0) - target_qty)
+        if target_time and perf.created_at:
+            time_gap = abs((target_time - perf.created_at).total_seconds())
+        else:
+            time_gap = float("inf")
+        return (qty_gap, time_gap, perf.id)
+
+    return min(candidates, key=rank)
+
+
+def _same_lot_inbound_for_state(db: Session, lot_no: str, part_no: str):
+    return (
+        db.query(SubcontractInboundLot, SubcontractInboundItem, SubcontractInboundMaster)
+        .join(SubcontractInboundItem, SubcontractInboundItem.id == SubcontractInboundLot.inbound_item_id)
+        .join(SubcontractInboundMaster, SubcontractInboundMaster.id == SubcontractInboundItem.inbound_id)
+        .filter(
+            SubcontractInboundMaster.status == "RECEIVED",
+            SubcontractInboundLot.child_lot_no == lot_no,
+            SubcontractInboundLot.source_lot_no == lot_no,
+            SubcontractInboundItem.part_no == part_no,
+        )
+        .order_by(SubcontractInboundMaster.id.desc(), SubcontractInboundLot.id.desc())
+        .first()
+    )
+
+
 @router.get("/api/inventory/lot-trace/tree")
 def inventory_lot_trace_tree(
     lot_no: str = Query(..., min_length=1, max_length=100),
@@ -208,8 +276,7 @@ def inventory_lot_trace_tree(
     root = lot_no.strip()
     all_edges = _edges(db)
 
-    # LOT 추적은 선택 LOT의 원천만 역추적합니다.
-    # 같은 자재 LOT를 사용한 다른 생산 LOT(형제 LOT)는 포함하지 않습니다.
+    # 생산/외주 외의 포장·출고·분할외주 관계용 역방향 인덱스입니다.
     parent_edges: dict[str, list[dict]] = {}
     for edge in all_edges:
         parent_edges.setdefault(edge["child_lot_no"], []).append(edge)
@@ -223,91 +290,160 @@ def inventory_lot_trace_tree(
             node_cache[value].setdefault("external_lot_no", "")
         return node_cache[value]
 
+    root_node = node(root)
     rows: list[dict] = []
+    visited_states: set[tuple[str, str]] = set()
 
-    # 외주 전량입고는 내부 LOT 번호를 유지할 수 있어 LotRelation(parent==child)로 표현할 수 없습니다.
-    # 이 경우 외주입고 이력 자체를 가상 연결행으로 표시해 가공 전 품번과 공급처 LOT를 추적합니다.
-    same_lot_inbound = (
-        db.query(SubcontractInboundLot, SubcontractInboundItem, SubcontractInboundMaster)
-        .join(SubcontractInboundItem, SubcontractInboundItem.id == SubcontractInboundLot.inbound_item_id)
-        .join(SubcontractInboundMaster, SubcontractInboundMaster.id == SubcontractInboundItem.inbound_id)
-        .filter(
-            SubcontractInboundMaster.status == "RECEIVED",
-            SubcontractInboundLot.child_lot_no == root,
-            SubcontractInboundLot.source_lot_no == root,
+    def state_label(lot_value: str, part_value: str) -> str:
+        return f"{lot_value} ({part_value})" if part_value else lot_value
+
+    def walk(
+        current_lot: str,
+        current_part: str,
+        path: list[str],
+        expected_qty: float | None = None,
+        depth: int = 0,
+    ):
+        if depth >= 100 or len(rows) >= 500:
+            return
+
+        state_key = (current_lot, current_part or "")
+        if state_key in visited_states:
+            return
+        visited_states.add(state_key)
+
+        current_node = node(current_lot)
+
+        # 1) 외주 전량입고로 LOT 번호가 유지된 경우:
+        #    동일 LOT라도 가공 후 품번 -> 가공 전 품번을 하나의 공정변환으로 표시합니다.
+        same_lot = _same_lot_inbound_for_state(db, current_lot, current_part)
+        if same_lot:
+            inbound_lot, inbound_item, inbound_master = same_lot
+            previous_part = inbound_item.previous_part_no or ""
+            next_path = path + [state_label(current_lot, previous_part)]
+            rows.append({
+                "process": inbound_master.processing_type_name or current_node["process_name"],
+                "lot_no": current_lot,
+                "lot_date": inbound_master.inbound_date or current_node["date"],
+                "part_no": current_part or inbound_item.part_no or current_node["part_no"],
+                "external_lot_no": inbound_lot.supplier_lot_no or "",
+                "child_lot_no": current_lot,
+                "child_lot_qty": float(inbound_lot.source_qty or 0),
+                "child_part_no": previous_part,
+                "consumed_qty": float(inbound_lot.good_qty or 0),
+                "tree": " - ".join(next_path),
+            })
+            walk(
+                current_lot,
+                previous_part,
+                next_path,
+                expected_qty=float(inbound_lot.source_qty or 0),
+                depth=depth + 1,
+            )
+            return
+
+        # 2) 생산/조립 LOT는 실제 생산실적의 LotConsumption을 기준으로
+        #    BOM에 투입된 모든 자재/반제품 LOT를 분기해서 역추적합니다.
+        perf = _production_performance_for_lot_state(
+            db,
+            current_lot,
+            current_part,
+            expected_qty=expected_qty,
         )
-        .order_by(SubcontractInboundMaster.id.desc(), SubcontractInboundLot.id.desc())
-        .first()
-    )
-    if same_lot_inbound:
-        inbound_lot, inbound_item, inbound_master = same_lot_inbound
-        current_node = node(root)
-        rows.append({
-            "process": inbound_master.processing_type_name or current_node["process_name"],
-            "lot_no": root,
-            "lot_date": inbound_master.inbound_date or current_node["date"],
-            "part_no": inbound_item.part_no or current_node["part_no"],
-            "external_lot_no": inbound_lot.supplier_lot_no or "",
-            "child_lot_no": inbound_lot.source_lot_no,
-            "child_lot_qty": float(inbound_lot.source_qty or 0),
-            "child_part_no": inbound_item.previous_part_no or "",
-            "consumed_qty": float(inbound_lot.good_qty or 0),
-            "tree": f"{root} - {inbound_lot.source_lot_no} ({inbound_item.previous_part_no or ''})",
-        })
+        if perf is not None:
+            consumptions = (
+                db.query(LotConsumptionModel)
+                .filter(LotConsumptionModel.performance_id == perf.id)
+                .order_by(LotConsumptionModel.id.asc())
+                .all()
+            )
+            if consumptions:
+                process_name = (
+                    "조립"
+                    if (perf.performance_type or "").upper() == "ASSEMBLY"
+                    else process_map.get(perf.process_code, perf.process_code or current_node["process_name"])
+                )
+                for consumption in consumptions:
+                    source_lot = consumption.lot_no
+                    source_node = node(source_lot)
+                    source_part = consumption.part_no or source_node["part_no"]
+                    next_path = path + [state_label(source_lot, source_part)]
+                    rows.append({
+                        "process": process_name,
+                        "lot_no": current_lot,
+                        "lot_date": perf.performance_date or current_node["date"],
+                        "part_no": current_part or current_node["part_no"],
+                        "external_lot_no": current_node.get("external_lot_no", ""),
+                        "child_lot_no": source_lot,
+                        "child_lot_qty": source_node["qty"],
+                        "child_part_no": source_part,
+                        "consumed_qty": float(consumption.consumed_qty or 0),
+                        "tree": " - ".join(next_path),
+                    })
+                    walk(
+                        source_lot,
+                        source_part,
+                        next_path,
+                        expected_qty=float(consumption.consumed_qty or 0),
+                        depth=depth + 1,
+                    )
+                return
 
-    queue = deque([(root, [root])])
-    visited_paths: set[tuple[str, ...]] = set()
-
-    while queue and len(rows) < 500:
-        current, path = queue.popleft()
-        incoming = parent_edges.get(current, [])
-
-        if not incoming:
-            if current == root and not rows:
-                current_node = node(current)
+        # 3) 포장/출고/분할 외주처럼 별도 LotRelation으로 연결된 단계입니다.
+        incoming = parent_edges.get(current_lot, [])
+        if incoming:
+            for edge in incoming:
+                source_lot = edge["parent_lot_no"]
+                source_node = node(source_lot)
+                source_part = source_node["part_no"]
+                next_path = path + [state_label(source_lot, source_part)]
                 rows.append({
                     "process": current_node["process_name"],
-                    "lot_no": current,
+                    "lot_no": current_lot,
                     "lot_date": current_node["date"],
-                    "part_no": current_node["part_no"],
+                    "part_no": current_part or current_node["part_no"],
                     "external_lot_no": current_node.get("external_lot_no", ""),
-                    "child_lot_no": "",
-                    "child_lot_qty": None,
-                    "child_part_no": "",
-                    "consumed_qty": None,
-                    "tree": " - ".join(path),
+                    "child_lot_no": source_lot,
+                    "child_lot_qty": source_node["qty"],
+                    "child_part_no": source_part,
+                    "consumed_qty": float(edge.get("qty") or 0),
+                    "tree": " - ".join(next_path),
                 })
-            continue
+                walk(
+                    source_lot,
+                    source_part,
+                    next_path,
+                    expected_qty=float(edge.get("qty") or 0),
+                    depth=depth + 1,
+                )
+            return
 
-        for edge in incoming:
-            source = edge["parent_lot_no"]
-            if source in path:
-                continue
-            current_node = node(current)
-            source_node = node(source)
-            source_path = path + [source]
-            path_key = tuple(source_path)
-            if path_key in visited_paths:
-                continue
-            visited_paths.add(path_key)
+        # 원소재/구매입고처럼 더 이상 이전 LOT가 없는 경우는 기준 LOT 단독 조회일 때만 표시합니다.
+        if depth == 0 and not rows:
             rows.append({
                 "process": current_node["process_name"],
-                "lot_no": current,
+                "lot_no": current_lot,
                 "lot_date": current_node["date"],
-                "part_no": current_node["part_no"],
+                "part_no": current_part or current_node["part_no"],
                 "external_lot_no": current_node.get("external_lot_no", ""),
-                "child_lot_no": source,
-                "child_lot_qty": source_node["qty"],
-                "child_part_no": source_node["part_no"],
-                "consumed_qty": float(edge.get("qty") or 0),
-                "tree": " - ".join(source_path),
+                "child_lot_no": "",
+                "child_lot_qty": None,
+                "child_part_no": "",
+                "consumed_qty": None,
+                "tree": " - ".join(path),
             })
-            queue.append((source, source_path))
+
+    walk(root, root_node["part_no"], [state_label(root, root_node["part_no"])])
+
+    traced_lots = {root}
+    for row in rows:
+        if row["child_lot_no"]:
+            traced_lots.add(row["child_lot_no"])
 
     return {
         "root_lot_no": root,
-        "root": node(root),
+        "root": root_node,
         "rows": rows,
         "row_count": len(rows),
-        "lot_count": len({root} | {row["child_lot_no"] for row in rows if row["child_lot_no"]}),
+        "lot_count": len(traced_lots),
     }
