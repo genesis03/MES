@@ -57,7 +57,7 @@ def unreceived_list(
         query = (
             db.query(PurchaseOrderMaster, PurchaseOrderItem, ItemMasterModel)
             .join(PurchaseOrderItem, PurchaseOrderItem.po_id == PurchaseOrderMaster.id)
-            .join(ItemMasterModel, ItemMasterModel.part_no == PurchaseOrderItem.part_no)
+            .join(ItemMasterModel, ItemMasterModel.id == PurchaseOrderItem.item_id)
             .filter(PurchaseOrderMaster.status != "CANCELLED")
             .filter(PurchaseOrderItem.received_qty < PurchaseOrderItem.order_qty)
         )
