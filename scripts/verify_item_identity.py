@@ -85,17 +85,17 @@ def main() -> int:
                 f"{id_column:18s} 미연결={missing:4d} 불일치={mismatch:4d} 고아={orphan:4d}"
             )
 
-    history_orphan = 0
-    if "item_part_no_history" in tables:
-        history_orphan = int(conn.execute(text(
-            """
-            SELECT COUNT(*)
-              FROM item_part_no_history h
-         LEFT JOIN item_master im ON im.id = h.item_id
-             WHERE im.id IS NULL
-            """
-        )).scalar_one() or 0)
-        total_orphan += history_orphan
+        history_orphan = 0
+        if "item_part_no_history" in tables:
+            history_orphan = int(conn.execute(text(
+                """
+                SELECT COUNT(*)
+                  FROM item_part_no_history h
+             LEFT JOIN item_master im ON im.id = h.item_id
+                 WHERE im.id IS NULL
+                """
+            )).scalar_one() or 0)
+            total_orphan += history_orphan
 
     print("=" * 72)
     print(
