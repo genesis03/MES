@@ -59,7 +59,8 @@ class PurchaseItem(Base):
         index=True
     )
     
-    part_no = Column(String(50), nullable=False, index=True)       # 품번
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
+    part_no = Column(String(50), nullable=False, index=True)       # 당시/호환 품번
     part_name = Column(String(100), nullable=False)                # 품명
     lot_no = Column(String(50), nullable=True, index=True)         # 입고 LOT 번호 / 바코드
     qty = Column(Float, nullable=False, default=0.0)               # 구매(입고) 수량
