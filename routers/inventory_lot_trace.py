@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from models.lot_relation import LotRelationModel
-from models.models import ProcessModel, PurchaseInboundItem, PurchaseInboundMaster
+from models.models import ItemMasterModel, ProcessModel, PurchaseInboundItem, PurchaseInboundMaster
 from models.packing import PackingBox, PackingMaster
 from models.production_lot import ProductionLotModel
 from models.sales import ShipmentBox, ShipmentDirectLot, ShipmentItem, ShipmentMaster
@@ -35,6 +35,14 @@ def _process_name_map(db: Session) -> dict[str, str]:
         for row in db.query(ProcessModel).all()
         if row.process_code
     }
+
+
+def _item_part_no(db: Session, item_id: int | None, fallback: str = "") -> str:
+    if item_id:
+        item = db.get(ItemMasterModel, item_id)
+        if item:
+            return item.part_no
+    return fallback or ""
 
 
 def _shipment_for_package_lot(db: Session, lot_no: str):
@@ -63,7 +71,8 @@ def _node_details(db: Session, lot_no: str) -> dict:
         return {
             "lot_no": lot_no,
             "type": "출고 LOT",
-            "part_no": shipment_item.part_no,
+            "item_id": shipment_item.item_id,
+            "part_no": _item_part_no(db, shipment_item.item_id, shipment_item.part_no),
             "qty": qty,
             "date": shipment.shipment_date or "",
             "reference": shipment.shipment_no or "",
@@ -84,7 +93,8 @@ def _node_details(db: Session, lot_no: str) -> dict:
         return {
             "lot_no": lot_no,
             "type": "출고 LOT" if shipment_row else "포장 LOT",
-            "part_no": master.part_no,
+            "item_id": master.item_id,
+            "part_no": _item_part_no(db, master.item_id, master.part_no),
             "qty": float(box.box_qty or 0),
             "date": shipment_date or master.packing_date or "",
             "reference": shipment_no or master.packing_no or "",
@@ -101,7 +111,8 @@ def _node_details(db: Session, lot_no: str) -> dict:
         return {
             "lot_no": lot_no,
             "type": "구매입고 LOT",
-            "part_no": item.part_no,
+            "item_id": item.item_id,
+            "part_no": _item_part_no(db, item.item_id, item.part_no),
             "qty": float(item.inbound_qty or 0),
             "date": master.inbound_date or "",
             "reference": master.inbound_no or "",
@@ -123,7 +134,8 @@ def _node_details(db: Session, lot_no: str) -> dict:
         return {
             "lot_no": lot_no,
             "type": f"외주입고 LOT ({master.processing_type_name})",
-            "part_no": item.part_no,
+            "item_id": item.item_id,
+            "part_no": _item_part_no(db, item.item_id, item.part_no),
             "qty": float(lot.good_qty or 0),
             "date": master.inbound_date or "",
             "reference": master.inbound_no or "",
@@ -152,7 +164,8 @@ def _node_details(db: Session, lot_no: str) -> dict:
         return {
             "lot_no": lot_no,
             "type": type_name,
-            "part_no": production.part_no,
+            "item_id": production.item_id,
+            "part_no": _item_part_no(db, production.item_id, production.part_no),
             "qty": float(production.lot_qty or 0),
             "date": production.created_at.strftime("%Y-%m-%d") if production.created_at else "",
             "reference": reference,
@@ -161,6 +174,7 @@ def _node_details(db: Session, lot_no: str) -> dict:
     return {
         "lot_no": lot_no,
         "type": "연결 LOT",
+        "item_id": None,
         "part_no": "",
         "qty": 0,
         "date": "",
