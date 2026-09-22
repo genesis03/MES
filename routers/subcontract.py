@@ -56,27 +56,37 @@ def _processing(db: Session, code: str) -> ProcessModel:
 
 
 def _resolve_order_part(db: Session, previous_part_no: str, processing: ProcessModel, requested: str | None) -> str:
-    """외주가공 산출 품번은 문자열 조합이 아니라 BOM 관계를 우선 사용합니다."""
-    query = db.query(ItemBomModel).filter(ItemBomModel.child_part_no == previous_part_no)
+    """외주가공 산출 품번은 영구 item_id 기반 BOM 관계로 결정합니다."""
+    previous = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == previous_part_no).first()
+    if previous is None:
+        raise HTTPException(404, f"품목 마스터에서 이전 품번을 찾을 수 없습니다. ({previous_part_no})")
+
+    query = db.query(ItemBomModel).filter(ItemBomModel.child_item_id == previous.id)
 
     if requested:
-        exact = query.filter(ItemBomModel.parent_part_no == requested.strip()).first()
-        if exact is not None:
-            return exact.parent_part_no
+        requested_item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == requested.strip()).first()
+        if requested_item is not None:
+            exact = query.filter(ItemBomModel.parent_item_id == requested_item.id).first()
+            if exact is not None:
+                return requested_item.part_no
 
     process_match = query.filter(ItemBomModel.process_code == processing.process_code).order_by(ItemBomModel.sort_order, ItemBomModel.id).first()
-    if process_match is not None:
-        return process_match.parent_part_no
+    if process_match is not None and process_match.parent_item_id:
+        parent = db.get(ItemMasterModel, process_match.parent_item_id)
+        if parent is not None:
+            return parent.part_no
 
     candidates = query.order_by(ItemBomModel.sort_order, ItemBomModel.id).all()
-    if len(candidates) == 1:
-        return candidates[0].parent_part_no
+    if len(candidates) == 1 and candidates[0].parent_item_id:
+        parent = db.get(ItemMasterModel, candidates[0].parent_item_id)
+        if parent is not None:
+            return parent.part_no
 
     compact_name = (processing.process_name or "").replace(" ", "")
     if "은도금" in compact_name:
-        raise HTTPException(422, f"{previous_part_no}의 은도금 발주 품번을 BOM에서 찾을 수 없습니다.")
+        raise HTTPException(422, f"{previous.part_no}의 은도금 발주 품번을 BOM에서 찾을 수 없습니다.")
 
-    return (requested or previous_part_no).strip()
+    return (requested or previous.part_no).strip()
 
 
 def _validate_header(db: Session, payload: SubcontractOrderInput):
@@ -142,13 +152,16 @@ def _production_lot_is_valid(db: Session, lot: ProductionLotModel) -> bool:
 def _available_lots(db: Session, part_no: str, current_item_id: int | None = None):
     """구매 LOT + 생산 LOT 중 현재 외주발주에 사용할 수 있는 LOT를 반환합니다."""
     result = []
+    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
+    if item is None:
+        return result
 
     purchase_rows = (
         db.query(PurchaseInboundItem)
         .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
         .filter(
             PurchaseInboundMaster.status == "CONFIRMED",
-            PurchaseInboundItem.part_no == part_no,
+            PurchaseInboundItem.item_id == item.id,
             PurchaseInboundItem.internal_lot_no.isnot(None),
             PurchaseInboundItem.internal_lot_no != "",
         )
@@ -160,7 +173,8 @@ def _available_lots(db: Session, part_no: str, current_item_id: int | None = Non
         if available > 0:
             result.append({
                 "lot_no": row.internal_lot_no,
-                "part_no": row.part_no,
+                "item_id": item.id,
+                "part_no": item.part_no,
                 "lot_qty": available,
                 "storage_location": row.storage_location,
                 "source": "PURCHASE",
@@ -169,7 +183,7 @@ def _available_lots(db: Session, part_no: str, current_item_id: int | None = Non
     production_rows = (
         db.query(ProductionLotModel)
         .filter(
-            ProductionLotModel.part_no == part_no,
+            ProductionLotModel.item_id == item.id,
             ProductionLotModel.status == "ACTIVE",
         )
         .order_by(ProductionLotModel.lot_no)
@@ -182,7 +196,8 @@ def _available_lots(db: Session, part_no: str, current_item_id: int | None = Non
         if available > 0:
             result.append({
                 "lot_no": row.lot_no,
-                "part_no": row.part_no,
+                "item_id": item.id,
+                "part_no": item.part_no,
                 "lot_qty": available,
                 "storage_location": row.storage_location or "",
                 "source": "PRODUCTION",
@@ -209,6 +224,8 @@ def _serialize_order(master: SubcontractOrderMaster):
         all_allocated = all_allocated and allocation_complete
         items.append({
             "id": item.id,
+            "previous_item_id": item.previous_item_id,
+            "item_id": item.item_id,
             "previous_part_no": item.previous_part_no,
             "order_part_no": item.order_part_no,
             "order_part_name": item.order_part_name,
@@ -318,8 +335,10 @@ def create_subcontract_order(
         order_part_no = _resolve_order_part(db, previous.part_no, processing, item_payload.order_part_no)
         output_master = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == order_part_no).first()
         master.items.append(SubcontractOrderItem(
+            previous_item_id=previous.id,
+            item_id=output_master.id if output_master else previous.id,
             previous_part_no=previous.part_no,
-            order_part_no=order_part_no,
+            order_part_no=output_master.part_no if output_master else order_part_no,
             order_part_name=(output_master.part_name if output_master else previous.part_name),
             spec=(output_master.spec if output_master else previous.spec),
             unit=(output_master.unit if output_master else previous.unit),
@@ -375,8 +394,10 @@ def update_subcontract_order(
         order_part_no = _resolve_order_part(db, previous.part_no, processing, item_payload.order_part_no)
         output_master = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == order_part_no).first()
         master.items.append(SubcontractOrderItem(
+            previous_item_id=previous.id,
+            item_id=output_master.id if output_master else previous.id,
             previous_part_no=previous.part_no,
-            order_part_no=order_part_no,
+            order_part_no=output_master.part_no if output_master else order_part_no,
             order_part_name=(output_master.part_name if output_master else previous.part_name),
             spec=(output_master.spec if output_master else previous.spec),
             unit=(output_master.unit if output_master else previous.unit),
