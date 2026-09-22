@@ -199,7 +199,8 @@ async function refreshMaterialLotModal(){
   if(!currentRun||!currentMaterialId)return;
   try{
     const d=await jf(`/api/production-run/${currentRun.id}/materials/${currentMaterialId}/lots`);
-    materialLotBody.innerHTML=(d.lots||[]).length?(d.lots||[]).map(x=>`<tr><td style="font-family:Consolas,monospace;font-weight:700">${x.lot_no}</td><td class="num">${n(x.lot_qty).toLocaleString()}</td><td class="num">${n(x.remaining_qty).toLocaleString()}</td><td class="num">${n(x.allocated_qty).toLocaleString()}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">사용 가능한 LOT가 없습니다.</td></tr>';
+    const allocatedLots=(d.lots||[]).filter(x=>n(x.allocated_qty)>0);
+    materialLotBody.innerHTML=allocatedLots.length?allocatedLots.map(x=>`<tr><td style="font-family:Consolas,monospace;font-weight:700">${x.lot_no}</td><td class="num">${n(x.lot_qty).toLocaleString()}</td><td class="num">${n(x.remaining_qty).toLocaleString()}</td><td class="num">${n(x.allocated_qty).toLocaleString()}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">스캔한 LOT가 없습니다.</td></tr>';
     msg(materialLotMsg,'');
   }catch(e){msg(materialLotMsg,e.message);}
 }
