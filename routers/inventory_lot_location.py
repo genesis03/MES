@@ -80,6 +80,7 @@ def _current_storage(db: Session, lot_no: str, original: Optional[str]) -> str:
 @router.get("/api/inventory/lots")
 def inventory_lots_with_current_location(
     part_no: Optional[list[str]] = Query(None),
+    stock_status: Optional[str] = Query("ALL"),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -132,5 +133,18 @@ def inventory_lots_with_current_location(
             "storage_location": _storage_display(_current_storage(db, lot.lot_no, lot.storage_location), names),
         })
 
+    status = str(stock_status or "ALL").strip().upper()
+    if status not in {"ALL", "REMAINING", "USED"}:
+        status = "ALL"
+    if status == "REMAINING":
+        rows = [row for row in rows if float(row["remaining_qty"] or 0) > 1e-9]
+    elif status == "USED":
+        rows = [row for row in rows if float(row["remaining_qty"] or 0) <= 1e-9]
+
     rows.sort(key=lambda row: (row["part_no"], row["created_at"], row["lot_no"]), reverse=True)
-    return {"items": rows, "total": len(rows), "selected_parts": selected}
+    return {
+        "items": rows,
+        "total": len(rows),
+        "selected_parts": selected,
+        "stock_status": status,
+    }
