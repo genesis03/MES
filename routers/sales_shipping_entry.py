@@ -70,13 +70,13 @@ def _sync_order_status(order: SalesOrderMaster):
         order.status = "ORDERED"
 
 
-def _waiting_rows(db: Session, part_no: str):
+def _waiting_rows(db: Session, item_id: int):
     return (
         db.query(PackingBox, PackingMaster)
         .join(PackingMaster, PackingMaster.id == PackingBox.packing_id)
         .outerjoin(ShipmentBox, ShipmentBox.packing_box_id == PackingBox.id)
         .filter(
-            PackingMaster.part_no == part_no,
+            PackingMaster.item_id == item_id,
             PackingMaster.status == "PACKED",
             ShipmentBox.id.is_(None),
         )
@@ -122,20 +122,21 @@ def open_orders(db: Session = Depends(get_db), current_user=Depends(get_current_
         if not open_items:
             continue
 
-        part_nos = [item.part_no for item in open_items]
-        masters = db.query(ItemMasterModel).filter(ItemMasterModel.part_no.in_(part_nos)).all()
-        master_map = {row.part_no: row for row in masters}
+        item_ids = [item.item_id for item in open_items if item.item_id]
+        masters = db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all() if item_ids else []
+        master_map = {row.id: row for row in masters}
 
         items = []
         for item in open_items:
-            master = master_map.get(item.part_no)
-            waiting = _waiting_rows(db, item.part_no)
+            master = master_map.get(item.item_id)
+            waiting = _waiting_rows(db, item.item_id)
             remaining_qty = max(float(item.order_qty or 0) - float(item.shipped_qty or 0), 0.0)
             items.append({
                 "id": item.id,
+                "item_id": item.item_id,
                 "order_id": order.id,
                 "order_no": order.order_no,
-                "part_no": item.part_no,
+                "part_no": master.part_no if master else item.part_no,
                 "part_name": item.part_name or (master.part_name if master else ""),
                 "unit": item.unit or "EA",
                 "order_qty": float(item.order_qty or 0),
@@ -174,7 +175,7 @@ def waiting_boxes(
     if not item:
         raise HTTPException(404, "수주 품목을 찾을 수 없습니다.")
 
-    rows = _waiting_rows(db, item.part_no)
+    rows = _waiting_rows(db, item.item_id)
     return [{
         "id": box.id,
         "package_lot_no": box.package_lot_no,
@@ -198,7 +199,7 @@ def scan_waiting_lot(
     if item.status not in ("WAITING", "PARTIAL") or item.order.status not in ("ORDERED", "PARTIAL"):
         raise HTTPException(409, "이미 출고 완료되었거나 출고할 수 없는 수주 품목입니다.")
 
-    waiting = _waiting_rows(db, item.part_no)
+    waiting = _waiting_rows(db, item.item_id)
     waiting_ids = [box.id for box, _ in waiting]
     selected_ids = list(dict.fromkeys(payload.selected_box_ids))
     if len(selected_ids) != len(payload.selected_box_ids):
@@ -341,6 +342,7 @@ def confirm_shipment(
         shipment_item = ShipmentItem(
             shipment_id=shipment.id,
             sales_order_item_id=sales_item.id,
+            item_id=sales_item.item_id,
             part_no=sales_item.part_no,
             shipped_qty=shipment_qty,
             unit=sales_item.unit or "EA",
