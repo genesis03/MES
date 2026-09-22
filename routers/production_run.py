@@ -447,6 +447,74 @@ def clear_material_allocations(
     return {"message": f"{material.material_part_no} LOT 배정을 초기화했습니다."}
 
 
+@router.post("/{run_id}/materials/{material_id}/scan-lot")
+def scan_material_lot(
+    run_id: int,
+    material_id: int,
+    payload: ScanLotPayload,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    run = _get_run(db, run_id)
+    if run.status != "IN_PROGRESS":
+        raise HTTPException(400, "생산중 가동내역만 LOT를 배정할 수 있습니다.")
+
+    material = db.get(ProductionRunMaterial, material_id)
+    if material is None or material.run_id != run.id:
+        raise HTTPException(404, "BOM 자재를 찾을 수 없습니다.")
+
+    scanned = payload.lot_no.strip()
+    if not scanned:
+        raise HTTPException(400, "LOT 번호를 입력하세요.")
+
+    lots = _lot_rows(db, material.material_part_no)
+    scanned_lot = next((lot for lot in lots if lot["lot_no"].upper() == scanned.upper()), None)
+    if scanned_lot is None:
+        raise HTTPException(404, f"{material.material_part_no} 품번에 해당하는 LOT가 아닙니다.")
+
+    if any(x.lot_no.upper() == scanned.upper() for x in material.allocations):
+        raise HTTPException(409, f"{scanned} LOT는 이미 배정되어 있습니다.")
+
+    required = float(material.required_qty or 0)
+    allocated = sum(float(x.allocated_qty or 0) for x in material.allocations)
+    remaining = max(required - allocated, 0.0)
+    if remaining <= 1e-9:
+        raise HTTPException(409, f"{material.material_part_no}는 이미 필요수량이 모두 배정되었습니다.")
+
+    fifo_lot = None
+    fifo_available = 0.0
+    for lot in lots:
+        if any(x.lot_no == lot["lot_no"] for x in material.allocations):
+            continue
+        available = _available_qty(db, lot["lot_no"], lot["base_qty"], current_run_id=run.id)
+        if available > 1e-9:
+            fifo_lot = lot
+            fifo_available = available
+            break
+
+    if not fifo_lot:
+        raise HTTPException(409, "선입선출 기준으로 배정 가능한 LOT 재고가 없습니다.")
+
+    assign_qty = min(remaining, fifo_available)
+    material.allocations.append(
+        ProductionRunLotAllocation(
+            lot_no=fifo_lot["lot_no"],
+            allocated_qty=assign_qty,
+            source_type=fifo_lot["source_type"],
+            storage_location=fifo_lot["storage_location"],
+        )
+    )
+    db.commit()
+
+    message = f"{fifo_lot['lot_no']}에 {assign_qty:g} 배정했습니다."
+    if fifo_lot["lot_no"].upper() != scanned.upper():
+        message = (
+            f"스캔 LOT {scanned}보다 선입 LOT {fifo_lot['lot_no']}를 "
+            f"우선 배정했습니다. ({assign_qty:g})"
+        )
+    return {"message": message, "material": _serialize_material(material)}
+
+
 @router.get("/{run_id}")
 def get_run(run_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     run = _get_run(db, run_id)
