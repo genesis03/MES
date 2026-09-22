@@ -42,9 +42,9 @@ def _identity_listener(pairs):
             part_no = getattr(target, part_attr, None)
             if not part_no:
                 continue
-            current_id = getattr(target, id_attr, None)
-            if current_id is None:
-                setattr(target, id_attr, _resolve_item_id(connection, part_no))
+            resolved_id = _resolve_item_id(connection, part_no)
+            if resolved_id is not None:
+                setattr(target, id_attr, resolved_id)
     return listener
 
 
