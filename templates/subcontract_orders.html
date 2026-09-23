@@ -21,7 +21,7 @@
       <div class="so-field so-wide"><label>비고</label><textarea id="so-note" rows="2" maxlength="1000"></textarea></div>
     </div>
     <div class="so-toolbar"><button class="so-btn" type="button" id="so-add-row">+ 행 추가</button><span class="so-hint">먼저 저장한 뒤 각 품목의 LOT를 전체수량 단위로 배정합니다.</span></div>
-    <div class="so-grid-wrap"><table class="so-grid"><thead><tr><th>No.</th><th>이전 품번</th><th>이전품 재고</th><th>발주 품번</th><th>발주 품명</th><th>규격</th><th>가공유형</th><th>단위</th><th>발주수량</th><th>납기일</th><th>LOT 배정수량</th><th>LOT 상태</th><th>비고</th><th>LOT 배정</th><th></th></tr></thead><tbody id="so-lines"></tbody></table></div>
+    <div class="so-grid-wrap"><table class="so-grid"><thead><tr><th>No.</th><th>발주 품번</th><th>발주 품명</th><th>이전 품번</th><th>이전품 재고</th><th>규격</th><th>가공유형</th><th>단위</th><th>발주수량</th><th>납기일</th><th>LOT 배정수량</th><th>LOT 상태</th><th>비고</th><th>LOT 배정</th><th></th></tr></thead><tbody id="so-lines"></tbody></table></div>
     <div class="so-footer"><button class="so-btn" type="button" id="so-new">신규</button><button class="so-btn so-primary" type="submit" id="so-save">저장</button><button class="so-btn so-confirm" type="button" id="so-confirm" disabled>발주</button><span id="so-message" class="so-message"></span></div>
   </form>
 </div>
@@ -67,7 +67,7 @@
 </div>
 {% endblock %}
 {% block extra_script %}
-<script src="/static/subcontract_orders.js?v=20260923-4"></script>
+<script src="/static/subcontract_orders.js?v=20260923-5"></script>
 <script>
 (() => {
   'use strict';
