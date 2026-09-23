@@ -33,7 +33,7 @@ def inventory_lots_page(request: Request, current_user=Depends(get_current_user)
     )
 
 
-def _used_qty(db: Session, lot_no: str) -> float:
+def _used_qty(db: Session, lot_no: str, item_id: int | None = None) -> float:
     consumed = (
         db.query(func.coalesce(func.sum(LotConsumptionModel.consumed_qty), 0.0))
         .filter(LotConsumptionModel.lot_no == lot_no)
@@ -56,7 +56,7 @@ def _used_qty(db: Session, lot_no: str) -> float:
         .scalar()
         or 0.0
     )
-    subcontract_reserved = (
+    subcontract_query = (
         db.query(func.coalesce(func.sum(SubcontractLotAllocation.allocated_qty), 0.0))
         .join(SubcontractOrderItem, SubcontractOrderItem.id == SubcontractLotAllocation.order_item_id)
         .join(SubcontractOrderMaster, SubcontractOrderMaster.id == SubcontractOrderItem.order_id)
@@ -64,9 +64,10 @@ def _used_qty(db: Session, lot_no: str) -> float:
             SubcontractLotAllocation.lot_no == lot_no,
             SubcontractOrderMaster.status.in_(["DRAFT", "LOT_ALLOCATING", "ORDERED"]),
         )
-        .scalar()
-        or 0.0
     )
+    if item_id:
+        subcontract_query = subcontract_query.filter(SubcontractOrderItem.previous_item_id == item_id)
+    subcontract_reserved = subcontract_query.scalar() or 0.0
     return float(consumed) + float(related) + float(packed) + float(subcontract_reserved)
 
 
@@ -135,7 +136,7 @@ def inventory_lots(
     )
     for item, master in purchase_query.order_by(PurchaseInboundMaster.created_at.desc(), PurchaseInboundItem.id.desc()).all():
         lot_qty = float(item.inbound_qty or 0)
-        used_qty = _used_qty(db, item.internal_lot_no)
+        used_qty = _used_qty(db, item.internal_lot_no, item.item_id)
         part = item_map.get(item.item_id)
         rows.append({
             "source": "구매입고",
@@ -153,7 +154,7 @@ def inventory_lots(
     production_query = db.query(ProductionLotModel).filter(ProductionLotModel.item_id.in_(item_ids))
     for lot in production_query.order_by(ProductionLotModel.created_at.desc(), ProductionLotModel.id.desc()).all():
         lot_qty = float(lot.lot_qty or 0)
-        used_qty = _used_qty(db, lot.lot_no)
+        used_qty = _used_qty(db, lot.lot_no, lot.item_id)
         part = item_map.get(lot.item_id)
         rows.append({
             "source": "생산",
