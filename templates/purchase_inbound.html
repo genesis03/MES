@@ -78,8 +78,8 @@
 </div>
 <div class="pi-toolbar"><button class="pi-btn" type="button" id="pi-load-po">발주 불러오기</button><span class="pi-hint">기존 구매 수정은 입고 조회에서 순번 선택 후 선택수정을 누릅니다.</span></div>
 <div class="pi-grid-wrap"><table class="pi-grid"><thead><tr><th>No.</th><th>발주번호</th><th>품번</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>미입고수량</th><th>입고수량</th><th>납기일</th><th>공급사 LOT</th><th>저장위치</th><th>원자재 LOT 번호</th><th>비고</th><th></th></tr></thead><tbody id="pi-lines"><tr><td colspan="15" class="pi-hint">발주 불러오기로 품목을 선택하세요.</td></tr></tbody></table></div>
-<select id="pi-location-options" hidden><option value="">선택</option>{% for location in storage_locations %}<option value="{{ location.location_code }}">{{ location.location_code }} · {{ location.location_name }}</option>{% endfor %}</select>
-<div class="pi-footer"><button class="pi-btn" type="button" id="pi-new">신규</button><button class="pi-btn pi-primary" type="submit" id="pi-save">저장</button><button class="pi-btn pi-confirm" type="button" id="pi-confirm" disabled>입고 확정</button><button class="pi-btn" type="button" id="pi-label" disabled>라벨 출력</button><span id="pi-message" class="pi-message" role="status"></span></div>
+<select id="pi-location-options" hidden><option value="">선택</option>{% for location in storage_locations %}<option value="{{ location.location_code }}">{{ location.location_name }}</option>{% endfor %}</select>
+<div class="pi-footer"><button class="pi-btn" type="button" id="pi-new">신규</button><button class="pi-btn pi-primary" type="submit" id="pi-save">저장</button><button class="pi-btn pi-confirm" type="button" id="pi-confirm" disabled>확정</button><button class="pi-btn" type="button" id="pi-label" disabled>라벨 출력</button><span id="pi-message" class="pi-message" role="status"></span></div>
 </form></div>
 
 <dialog id="pi-po-dialog" class="po-modal" aria-labelledby="pi-po-dialog-title">
