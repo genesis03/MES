@@ -6,6 +6,7 @@
     entries: new Map(),
     popupEntries: new Map(),
     popupItemId: null,
+    viewInbound: null,
   };
 
   const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
@@ -99,7 +100,7 @@
     $("si-total-received").textContent = fmt(received);
     $("si-total-current").textContent = fmt(current);
     $("si-total-remaining").textContent = fmt(afterRemaining);
-    $("si-confirm").disabled = current <= 0;
+    $("si-confirm").disabled = !!state.viewInbound || current <= 0;
   }
 
   function renderItems() {
@@ -114,6 +115,7 @@
       const completed = s.available <= 0;
       const status = completed ? "입고완료" : (s.received > 0 ? "부분입고" : "입고대기");
       const cls = completed ? "st-done" : (s.received > 0 ? "st-partial" : "st-wait");
+      const viewOnly = completed && !!state.viewInbound;
       return `<tr>
         <td>${index + 1}</td>
         <td class="left">${esc(item.part_no)}</td>
@@ -126,31 +128,37 @@
         <td class="si-item-current">${s.current ? fmt(s.current) : "-"}</td>
         <td>${s.enteredLots}/${item.lots.length}</td>
         <td class="${cls}">${status}</td>
-        <td><button type="button" class="si-btn si-lot-btn" data-item-id="${item.outbound_item_id}"${completed ? " disabled" : ""}>LOT 입고</button></td>
+        <td><button type="button" class="si-btn si-lot-btn" data-item-id="${item.outbound_item_id}"${completed && !viewOnly ? " disabled" : ""}>${viewOnly ? "LOT 조회" : "LOT 입고"}</button></td>
       </tr>`;
     });
 
     $("si-items").innerHTML = rows.length ? rows.join("") : `<tr><td colspan="12">입고할 품목이 없습니다.</td></tr>`;
-    document.querySelectorAll(".si-lot-btn").forEach((btn) => btn.addEventListener("click", () => openLotPopup(Number(btn.dataset.itemId))));
+    document.querySelectorAll(".si-lot-btn").forEach((btn) => btn.addEventListener("click", () => {
+      const itemId = Number(btn.dataset.itemId);
+      openLotPopup(itemId, state.viewInbound && itemStats(itemById(itemId)).available <= 0 ? state.viewInbound : null);
+    }));
     recomputeTotals();
   }
 
-  function renderSource(source) {
+  function renderSource(source, selectedInbound = null) {
     state.source = source;
     state.entries.clear();
     state.popupEntries.clear();
     state.popupItemId = null;
-    const latestInbound = latestActiveInbound();
     const completed = source.inbound_status === "COMPLETED";
-    $("si-number").value = completed && latestInbound ? latestInbound.inbound_no : "입고 시 자동 발번";
-    $("si-date").value = completed && latestInbound ? latestInbound.inbound_date : todayLocal();
-    $("si-status").value = statusText(source.inbound_status);
+    state.viewInbound = selectedInbound || (completed ? source.inbound || null : null);
+    const shownInbound = state.viewInbound;
+    $("si-number").value = shownInbound ? shownInbound.inbound_no : "입고 시 자동 발번";
+    $("si-date").value = shownInbound ? shownInbound.inbound_date : todayLocal();
+    $("si-status").value = shownInbound ? shownInbound.status_name : statusText(source.inbound_status);
     $("si-outbound-no").value = source.outbound_no || "";
     $("si-order-no").value = source.order_no || "";
     $("si-partner").value = source.partner_name || "";
     $("si-process").value = source.processing_type_name || "";
     $("si-manager").value = source.manager_name || "";
-    $("si-location").value = latestInbound?.storage_location || source.external_storage_location || "";
+    $("si-location").value = shownInbound?.storage_location || source.external_storage_location || "";
+    $("si-date").disabled = !!shownInbound;
+    $("si-location").disabled = !!shownInbound;
     $("si-cancel").disabled = !latestActiveInbound();
     renderItems();
   }
@@ -216,6 +224,7 @@
 
   function renderReceiveLots() {
     const rows = currentPopupEntries();
+    const readOnly = !!state.viewInbound;
     let total = 0;
     if (!rows.length) {
       $("si-popup-receive-lots").innerHTML = `<tr><td colspan="9" class="si-empty">LOT를 스캔하거나 가운데 목록을 더블클릭하세요.</td></tr>`;
@@ -224,20 +233,21 @@
         total += num(entry.inbound_qty);
         return `<tr data-lot-id="${lot.outbound_lot_id}">
           <td class="left">${esc(lot.source_lot_no)}</td>
-          <td><input class="si-right-input si-r-supplier" maxlength="100" value="${esc(entry.supplier_lot_no || "")}"></td>
+          <td><input class="si-right-input si-r-supplier" maxlength="100" value="${esc(entry.supplier_lot_no || "")}"${readOnly ? " readonly" : ""}></td>
           <td>${fmt(lot.allocated_qty)}</td>
           <td>${fmt(lot.received_qty)}</td>
           <td>${fmt(lot.remaining_qty)}</td>
-          <td><input class="si-right-input si-r-inbound" type="number" min="0.001" max="${lot.remaining_qty}" step="0.001" value="${entry.inbound_qty}"></td>
-          <td><input class="si-right-input si-r-sample" type="number" min="0" step="0.001" value="${entry.sample_qty || 0}"></td>
-          <td>${esc(generatedLotText(lot, num(entry.inbound_qty)))}</td>
-          <td><button type="button" class="si-btn si-remove-lot" data-lot-id="${lot.outbound_lot_id}">삭제</button></td>
+          <td><input class="si-right-input si-r-inbound" type="number" min="0.001" max="${lot.remaining_qty}" step="0.001" value="${entry.inbound_qty}"${readOnly ? " readonly" : ""}></td>
+          <td><input class="si-right-input si-r-sample" type="number" min="0" step="0.001" value="${entry.sample_qty || 0}"${readOnly ? " readonly" : ""}></td>
+          <td>${esc(readOnly ? (entry.child_lot_no || "-") : generatedLotText(lot, num(entry.inbound_qty)))}</td>
+          <td>${readOnly ? "" : `<button type="button" class="si-btn si-remove-lot" data-lot-id="${lot.outbound_lot_id}">삭제</button>`}</td>
         </tr>`;
       }).join("");
     }
     $("si-popup-receive-count").textContent = rows.length;
     $("si-popup-receive-total").textContent = fmt(total);
 
+    if (readOnly) return;
     document.querySelectorAll("#si-popup-receive-lots tr[data-lot-id]").forEach((tr) => {
       const lotId = Number(tr.dataset.lotId);
       const lot = lotOwner(lotId)?.lot;
@@ -285,7 +295,7 @@
     renderSourceLots();
     renderReceiveLots();
     $("si-lot-scan").value = "";
-    $("si-lot-scan").focus();
+    if (!state.viewInbound) $("si-lot-scan").focus();
   }
 
   function addLotToReceive(lotId) {
@@ -333,17 +343,34 @@
     addLotToReceive(lot.outbound_lot_id);
   }
 
-  function openLotPopup(initialItemId) {
+  function openLotPopup(initialItemId, inbound = null) {
     if (!state.source) return;
-    state.popupEntries = cloneEntries(state.entries);
+    state.popupEntries = new Map();
+    if (inbound) {
+      (inbound.items || []).forEach((item) => {
+        (item.lots || []).forEach((lot) => {
+          state.popupEntries.set(Number(lot.outbound_lot_id), {
+            outbound_lot_id: Number(lot.outbound_lot_id),
+            inbound_qty: num(lot.inbound_qty),
+            supplier_lot_no: lot.supplier_lot_no || null,
+            sample_qty: num(lot.sample_qty),
+            child_lot_no: lot.child_lot_no || "",
+          });
+        });
+      });
+    } else {
+      state.popupEntries = cloneEntries(state.entries);
+    }
     state.popupItemId = initialItemId || state.source.items.find((x) => itemStats(x).available > 0)?.outbound_item_id || state.source.items[0]?.outbound_item_id || null;
-    lotMessage("");
+    $("si-scan-wrap").hidden = !!inbound;
+    $("si-lot-save").hidden = !!inbound;
+    lotMessage(inbound ? `입고번호 ${inbound.inbound_no}의 LOT 입고 내역입니다. 확정된 입고는 조회만 가능합니다.` : "");
     scanError("");
     renderPopupItems();
     renderSourceLots();
     renderReceiveLots();
     $("si-lot-modal").hidden = false;
-    setTimeout(() => $("si-lot-scan").focus(), 50);
+    if (!inbound) setTimeout(() => $("si-lot-scan").focus(), 50);
   }
 
   function applyLotPopup() {
@@ -369,6 +396,30 @@
     $("si-lot-modal").hidden = true;
     renderItems();
     message("LOT별 금회 입고 내용을 반영했습니다. 상단 '입고 확정'을 누르면 저장됩니다.");
+  }
+
+  async function loadInboundById(inboundId) {
+    const inbound = await api(`/api/subcontract/inbound/${encodeURIComponent(inboundId)}`);
+    const source = await api(`/api/subcontract/inbound/outbound/${encodeURIComponent(inbound.outbound_id)}`);
+    renderSource(source, inbound);
+    $("si-inbound-search").value = inbound.inbound_no || "";
+    message(`입고번호 ${inbound.inbound_no} 조회 완료. 확정 LOT는 'LOT 조회'에서 확인할 수 있습니다.`);
+  }
+
+  async function searchInboundNo() {
+    const keyword = $("si-inbound-search").value.trim();
+    if (!keyword) return message("조회할 입고번호를 입력하세요.", true);
+    try {
+      const data = await api(`/api/subcontract/inbound/lookup?inbound_no=${encodeURIComponent(keyword)}`);
+      if (!data.items?.length) return message("해당 입고번호를 찾을 수 없습니다.", true);
+      const exact = data.items.find((x) => String(x.inbound_no).toUpperCase() === keyword.toUpperCase());
+      if (!exact && data.items.length > 1) {
+        return message(`입고번호가 여러 건 검색되었습니다: ${data.items.map(x=>x.inbound_no).join(", ")}`, true);
+      }
+      await loadInboundById((exact || data.items[0]).id);
+    } catch (e) {
+      message(e.message, true);
+    }
   }
 
   async function loadOutboundList() {
@@ -398,7 +449,7 @@
     if (!state.selectedOutboundId) return;
     try {
       const source = await api(`/api/subcontract/inbound/outbound/${state.selectedOutboundId}`);
-      renderSource(source);
+      renderSource(source, null);
       $("si-load-modal").hidden = true;
       message(source.inbound_status === "PARTIAL" ? "부분입고 건을 불러왔습니다. 품번별 LOT 입고에서 잔량을 추가 입력할 수 있습니다." : "외주가공 출고건을 불러왔습니다.");
     } catch (e) {
@@ -421,8 +472,7 @@
         body: JSON.stringify({ outbound_id: state.source.outbound_id, inbound_date: $("si-date").value, storage_location: location, lot_results: lotResults }),
       });
       const refreshed = await api(`/api/subcontract/inbound/outbound/${state.source.outbound_id}`);
-      renderSource(refreshed);
-      $("si-number").value = inbound.inbound_no;
+      renderSource(refreshed, inbound);
       message(`입고 완료: ${inbound.inbound_no}`);
     } catch (e) {
       recomputeTotals();
@@ -438,7 +488,7 @@
     try {
       await api(`/api/subcontract/inbound/${inbound.id}/cancel`, { method: "POST" });
       const refreshed = await api(`/api/subcontract/inbound/outbound/${state.source.outbound_id}`);
-      renderSource(refreshed);
+      renderSource(refreshed, null);
       message("최근 입고가 취소되었습니다.");
     } catch (e) {
       $("si-cancel").disabled = false;
@@ -455,6 +505,8 @@
       loadOutboundList();
     });
     $("si-search-btn").addEventListener("click", loadOutboundList);
+    $("si-inbound-search-btn").addEventListener("click", searchInboundNo);
+    $("si-inbound-search").addEventListener("keydown", (e) => { if (e.key === "Enter") searchInboundNo(); });
     $("si-search").addEventListener("keydown", (e) => { if (e.key === "Enter") loadOutboundList(); });
     $("si-load-close").addEventListener("click", () => { $("si-load-modal").hidden = true; });
     $("si-load-apply").addEventListener("click", applySelectedOutbound);
@@ -463,6 +515,8 @@
     $("si-lot-save").addEventListener("click", applyLotPopup);
     $("si-confirm").addEventListener("click", confirmInbound);
     $("si-cancel").addEventListener("click", cancelLatestInbound);
+    const inboundId = new URLSearchParams(location.search).get("inbound_id");
+    if (inboundId) loadInboundById(inboundId).catch((e) => message(e.message, true));
   }
 
   document.addEventListener("DOMContentLoaded", init);
