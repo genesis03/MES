@@ -2,20 +2,21 @@
 {% block title %}수주 입력{% endblock %}
 {% block extra_head %}
 <style>
-.card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:18px;margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}.field input,.field select,.field textarea{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:6px}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer}.btn-primary{background:#2563eb;color:#fff}.btn-danger{background:#dc2626;color:#fff}.btn-light{background:#e2e8f0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:center}th{background:#f1f5f9}.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}.part-picker,.customer-picker{position:relative}.part-input,.customer-input{width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:4px}.suggestions,.customer-suggestions{position:absolute;z-index:100;left:0;right:0;top:36px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;box-shadow:0 6px 18px rgba(15,23,42,.15);max-height:240px;overflow:auto;display:none;text-align:left}.suggestion,.customer-suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9}.suggestion:hover,.suggestion.active,.customer-suggestion:hover,.customer-suggestion.active{background:#eff6ff}.suggestion .pn,.customer-suggestion .code{font-weight:800;color:#1e3a8a}.suggestion .name,.customer-suggestion .name{margin-left:8px;color:#64748b}.hint{font-size:11px;color:#64748b;margin-top:6px}.policy-hint{font-size:11px;color:#2563eb;margin-top:10px;line-height:1.6}.selected-customer{font-size:11px;color:#15803d;margin-top:5px;min-height:16px}@media(max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:18px;margin-bottom:16px}.grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}.field label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}.field input,.field select,.field textarea{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:6px}.btn{border:0;border-radius:6px;padding:9px 14px;font-weight:700;cursor:pointer}.btn-primary{background:#2563eb;color:#fff}.btn-danger{background:#dc2626;color:#fff}.btn-light{background:#e2e8f0}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cbd5e1;padding:8px;font-size:12px;text-align:center}th{background:#f1f5f9}.toolbar{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}.part-picker,.customer-picker{position:relative}.part-input,.customer-input{width:100%;padding:7px;border:1px solid #cbd5e1;border-radius:4px}.suggestions,.customer-suggestions{position:absolute;z-index:100;left:0;right:0;top:36px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;box-shadow:0 6px 18px rgba(15,23,42,.15);max-height:240px;overflow:auto;display:none;text-align:left}.suggestion,.customer-suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9}.suggestion:hover,.suggestion.active,.customer-suggestion:hover,.customer-suggestion.active{background:#eff6ff}.suggestion .pn,.customer-suggestion .code{font-weight:800;color:#1e3a8a}.suggestion .name,.customer-suggestion .name{margin-left:8px;color:#64748b}.hint{font-size:11px;color:#64748b;margin-top:6px}.policy-hint{font-size:11px;color:#2563eb;margin-top:10px;line-height:1.6}.selected-customer{font-size:11px;color:#15803d;margin-top:5px;min-height:16px}.inline-lookup{display:flex;gap:6px}.inline-lookup input{min-width:0;flex:1}.lookup-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:9999}.lookup-backdrop.show{display:flex}.lookup-modal{width:min(980px,96vw);max-height:86vh;background:#fff;border-radius:9px;box-shadow:0 20px 60px rgba(15,23,42,.3);display:flex;flex-direction:column}.lookup-head,.lookup-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px}.lookup-head{border-bottom:1px solid #e2e8f0}.lookup-foot{border-top:1px solid #e2e8f0;justify-content:flex-end}.lookup-body{padding:14px 16px;overflow:auto}.lookup-filters{display:grid;grid-template-columns:1fr 2fr 1fr 1fr auto;gap:10px;align-items:end;margin-bottom:12px}.lookup-filter label{display:block;font-size:12px;font-weight:700;margin-bottom:4px}.lookup-filter input,.lookup-filter select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;background:#fff}.lookup-table{width:100%;border-collapse:collapse}.lookup-table th,.lookup-table td{border:1px solid #dbe2eb;padding:8px;font-size:12px;text-align:center}.lookup-table th{background:#f8fafc}.lookup-table tbody tr{cursor:pointer}.lookup-table tbody tr:hover,.lookup-table tbody tr.selected{background:#eff6ff}@media(max-width:1100px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.lookup-filters{grid-template-columns:1fr 1fr}}
 </style>
 {% endblock %}
 {% block content %}
 <h2 id="pageTitle" style="margin-bottom:16px">수주 입력</h2>
 <div class="card">
   <div class="grid">
+    <div class="field"><label>수주번호</label><div class="inline-lookup"><input id="orderNumber" autocomplete="off" placeholder="저장 시 자동 발번"><button type="button" class="btn btn-light" id="orderNumberLookupBtn">조회</button></div></div>
     <div class="field"><label>수주일자</label><input type="date" id="orderDate"></div>
     <div class="field"><label>납기예정일</label><input type="date" id="deliveryDueDate"><button type="button" class="btn btn-light" id="applyDueDateBtn" style="margin-top:6px;width:100%;padding:6px 8px;font-size:11px">전체 품목에 적용</button></div>
     <div class="field">
       <label>판매처</label>
       <div class="customer-picker">
         <input type="hidden" id="customerId">
-        <input type="text" id="customerSearch" class="customer-input" autocomplete="off" placeholder="업체명 또는 업체코드 입력">
+        <input type="text" id="customerSearch" class="customer-input" autocomplete="off" placeholder="판매처명 입력">
         <div id="customerSuggestions" class="customer-suggestions"></div>
       </div>
       <div id="selectedCustomer" class="selected-customer"></div>
@@ -35,7 +36,25 @@
     <thead><tr><th style="width:34%">품번</th><th>품명</th><th style="width:13%">수주수량</th><th style="width:12%">단위</th><th style="width:15%">납기일</th><th style="width:70px">삭제</th></tr></thead>
     <tbody id="itemBody"></tbody>
   </table>
-  <div class="toolbar"><button class="btn btn-primary" id="saveBtn">수주 저장</button></div>
+  <div class="toolbar"><button class="btn btn-primary" id="saveBtn">저장</button></div>
 </div>
-<script src="/static/sales_orders.js?v=20260923-1"></script>
+
+<div class="lookup-backdrop" id="orderLookupModal">
+  <div class="lookup-modal">
+    <div class="lookup-head"><strong>수주 조회</strong><button type="button" class="btn btn-light" id="orderLookupClose">닫기</button></div>
+    <div class="lookup-body">
+      <div class="lookup-filters">
+        <div class="lookup-filter"><label>수주번호</label><input id="lookupOrderNo"></div>
+        <div class="lookup-filter"><label>수주기간</label><div style="display:flex;gap:5px"><input id="lookupStart" type="date"><input id="lookupEnd" type="date"></div></div>
+        <div class="lookup-filter"><label>판매처</label><input id="lookupCustomer"></div>
+        <div class="lookup-filter"><label>상태</label><select id="lookupStatus"><option value="">전체</option><option value="ORDERED">수주완료</option><option value="PARTIAL">부분출고</option><option value="COMPLETED">출고완료</option><option value="CANCELLED">취소</option></select></div>
+        <button type="button" class="btn btn-primary" id="lookupSearchBtn">조회</button>
+      </div>
+      <table class="lookup-table"><thead><tr><th>수주번호</th><th>판매처</th><th>수주일</th><th>납기일</th><th>상태</th><th>품목수</th></tr></thead><tbody id="lookupBody"><tr><td colspan="6">조회해 주세요.</td></tr></tbody></table>
+      <div class="hint" id="lookupMessage" style="margin-top:8px"></div>
+    </div>
+    <div class="lookup-foot"><button type="button" class="btn btn-primary" id="lookupApplyBtn" disabled>적용</button><button type="button" class="btn btn-light" id="lookupClose2">닫기</button></div>
+  </div>
+</div>
+<script src="/static/sales_orders.js?v=20260923-2"></script>
 {% endblock %}
