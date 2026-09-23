@@ -264,8 +264,8 @@ function validateOrder(items) {
   if (!items.length) return '수주 품목을 입력해 주세요.';
   if (items.some(x => !x.part_no || x.part_no !== x.typed_part_no || x.order_qty <= 0)) return '품번은 검색 결과에서 등록된 완제품/반제품을 선택하고 수량을 입력해 주세요.';
 
-  const partNos = items.map(x => x.part_no);
-  if (new Set(partNos).size !== partNos.length) return '동일 품번은 한 수주에 중복 입력할 수 없습니다.';
+  const itemKeys = items.map(x => `${x.part_no}|${x.delivery_date || dueDate || ''}`);
+  if (new Set(itemKeys).size !== itemKeys.length) return '동일 품번과 동일 납기일은 한 수주에 중복 입력할 수 없습니다.';
   if (items.some(x => x.delivery_date && x.delivery_date < orderDate)) return '품목 납기일은 수주일자보다 빠를 수 없습니다.';
   return '';
 }
