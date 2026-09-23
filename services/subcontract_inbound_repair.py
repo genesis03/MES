@@ -6,11 +6,10 @@ from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboun
 
 
 def repair_subcontract_inbound_sample_stock() -> None:
-    """확정된 외주입고 LOT의 재고 기준수량에서 샘플 사용수량을 제외합니다.
+    """확정된 외주입고 LOT의 최초수량을 실입고수량 기준으로 복원합니다.
 
-    과거 데이터도 동일 규칙으로 맞추기 위한 기동 시 보정입니다.
-    취소된 입고는 제외하고, LOT별 실입고수량 - 샘플수량 합계로
-    production_lots.lot_qty를 정렬합니다.
+    샘플수량은 LOT 사용수량으로 계산하므로 production_lots.lot_qty에는
+    최초 입고수량을 유지합니다. 과거 보정으로 줄어든 LOT 수량도 복원합니다.
     """
     db = SessionLocal()
     try:
@@ -28,7 +27,7 @@ def repair_subcontract_inbound_sample_stock() -> None:
 
         expected = defaultdict(float)
         for row in rows:
-            expected[row.child_lot_no] += max(float(row.good_qty or 0) - float(row.sample_qty or 0), 0.0)
+            expected[row.child_lot_no] += float(row.good_qty or 0)
 
         changed = False
         for lot_no, qty in expected.items():
