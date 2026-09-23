@@ -11,10 +11,10 @@
   <form id="so-form" class="so-box">
     <div class="so-head">
       <div class="so-field"><label>발주일자</label><input id="so-date" type="date" required></div>
-      <div class="so-field"><label>발주처</label><div><input id="so-vendor" list="so-vendors" autocomplete="off" placeholder="거래처 코드 또는 이름" required><datalist id="so-vendors">{% for vendor in vendors %}<option value="{{ vendor.partner_code }} · {{ vendor.partner_name }}" data-id="{{ vendor.id }}" data-code="{{ vendor.partner_code }}" data-name="{{ vendor.partner_name }}" data-manager="{{ vendor.manager_name or '' }}"></option>{% endfor %}</datalist><div id="so-vendor-hint" class="so-hint">등록된 활성 공급사에서 선택합니다.</div></div></div>
-      <div class="so-field"><label>가공유형</label><select id="so-process" required><option value="">선택</option>{% for process in processes %}<option value="{{ process.process_code }}" data-name="{{ process.process_name }}">{{ process.process_code }} · {{ process.process_name }}</option>{% endfor %}</select></div>
+      <div class="so-field"><label>발주처</label><div><input id="so-vendor" list="so-vendors" autocomplete="off" placeholder="거래처명 입력" required><datalist id="so-vendors">{% for vendor in vendors %}<option value="{{ vendor.partner_name }}" data-id="{{ vendor.id }}" data-code="{{ vendor.partner_code }}" data-name="{{ vendor.partner_name }}" data-manager="{{ vendor.manager_name or '' }}"></option>{% endfor %}</datalist><div id="so-vendor-hint" class="so-hint">등록된 활성 공급사에서 선택합니다.</div></div></div>
+      <div class="so-field"><label>가공유형</label><select id="so-process" required><option value="">선택</option>{% for process in processes %}<option value="{{ process.process_code }}" data-name="{{ process.process_name }}">{{ process.process_name }}</option>{% endfor %}</select></div>
       <div class="so-field"><label>납기일</label><input id="so-due-date" type="date"></div>
-      <div class="so-field"><label>외주 저장위치</label><select id="so-location" required><option value="">선택</option>{% for location in storage_locations %}<option value="{{ location.location_code }}">{{ location.location_code }} · {{ location.location_name }}</option>{% endfor %}</select></div>
+      <div class="so-field"><label>외주 저장위치</label><select id="so-location" required><option value="">선택</option>{% for location in storage_locations %}<option value="{{ location.location_code }}">{{ location.location_name }}</option>{% endfor %}</select></div>
       <div class="so-field"><label>담당자</label><input id="so-manager" maxlength="50"></div>
       <div class="so-field"><label>발주번호</label><div class="so-inline"><input id="so-number" type="text" autocomplete="off" placeholder="저장 시 자동 발번"><button class="so-btn" type="button" id="so-number-search">조회</button></div></div>
       <div class="so-field"><label>상태</label><input id="so-status" value="작성중" readonly></div>
@@ -67,7 +67,7 @@
 </div>
 {% endblock %}
 {% block extra_script %}
-<script src="/static/subcontract_orders.js?v=20260923-3"></script>
+<script src="/static/subcontract_orders.js?v=20260923-4"></script>
 <script>
 (() => {
   'use strict';
