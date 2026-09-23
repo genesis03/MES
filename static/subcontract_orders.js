@@ -232,7 +232,7 @@
 
   function reset() {
     $('so-form').reset();
-    $('so-date').value = today(); $('so-number').value = '저장 시 자동 발번'; $('so-status').value = '작성중';
+    $('so-date').value = today(); $('so-number').value = ''; $('so-status').value = '작성중';
     $('so-vendor').classList.remove('so-vendor-selected'); $('so-vendor-hint').textContent = '등록된 활성 공급사에서 선택합니다.';
     $('so-lines').replaceChildren(); rows.forEach(row => clearTimeout(row.timer)); rows = []; vendor = null; orderId = null;
     $('so-save').disabled = false; $('so-add-row').disabled = false; $('so-confirm').disabled = true;
@@ -309,32 +309,54 @@
     } catch (error) { alert(error.message); }
   }
 
+  function loadOrderData(data) {
+    $('so-lines').replaceChildren(); rows = []; orderId = data.id;
+    $('so-date').value = data.order_date;
+    $('so-due-date').value = data.delivery_due_date || '';
+    $('so-location').value = data.external_storage_location || '';
+    $('so-manager').value = data.manager_name || '';
+    $('so-note').value = data.note || '';
+    $('so-process').value = data.processing_type_code || '';
+    const matchedVendor = vendorOptions().find(x => x.id === Number(data.partner_id));
+    vendor = matchedVendor || {id:data.partner_id,name:data.partner_name,code:'',manager:data.manager_name||'',value:data.partner_name};
+    $('so-vendor').value = matchedVendor ? matchedVendor.value : data.partner_name;
+    $('so-vendor').classList.add('so-vendor-selected');
+    $('so-vendor-hint').textContent = `불러온 발주처: ${data.partner_name}`;
+    (data.items || []).forEach(item => addRow(item));
+    if (!rows.length) addRow();
+    applyServerOrder(data);
+    msg(`${data.order_no}을 불러왔습니다.`);
+  }
+
   async function loadOrder(id) {
     try {
       const data = await request(`/api/subcontract/orders/${id}`);
-      $('so-lines').replaceChildren(); rows = []; orderId = data.id;
-      $('so-date').value = data.order_date;
-      $('so-due-date').value = data.delivery_due_date || '';
-      $('so-location').value = data.external_storage_location || '';
-      $('so-manager').value = data.manager_name || '';
-      $('so-note').value = data.note || '';
-      $('so-process').value = data.processing_type_code || '';
-      const matchedVendor = vendorOptions().find(x => x.id === Number(data.partner_id));
-      vendor = matchedVendor || {id:data.partner_id,name:data.partner_name,code:'',manager:data.manager_name||'',value:data.partner_name};
-      $('so-vendor').value = matchedVendor ? matchedVendor.value : data.partner_name;
-      $('so-vendor').classList.add('so-vendor-selected');
-      $('so-vendor-hint').textContent = `불러온 발주처: ${data.partner_name}`;
-      (data.items || []).forEach(item => addRow(item));
-      if (!rows.length) addRow();
-      applyServerOrder(data);
-      msg(`${data.order_no}을 불러왔습니다.`);
+      loadOrderData(data);
     } catch (error) { msg(error.message); }
   }
 
+  async function loadOrderByNumber() {
+    const orderNo = $('so-number').value.trim();
+    if (!orderNo) {
+      msg('조회할 발주번호를 입력하세요.');
+      $('so-number').focus();
+      return;
+    }
+    try {
+      msg('발주를 조회하는 중...');
+      const data = await request('/api/subcontract/orders/by-number?' + new URLSearchParams({order_no: orderNo}));
+      loadOrderData(data);
+    } catch (error) {
+      msg(error.message);
+    }
+  }
+
   function init() {
-    const required=['so-form','so-date','so-vendor','so-vendors','so-process','so-due-date','so-location','so-manager','so-number','so-status','so-note','so-add-row','so-lines','so-new','so-save','so-confirm','so-message','so-lot-modal','so-lot-close','so-lot-cancel','so-lot-apply','so-lot-body'];
+    const required=['so-form','so-date','so-vendor','so-vendors','so-process','so-due-date','so-location','so-manager','so-number','so-number-search','so-status','so-note','so-add-row','so-lines','so-new','so-save','so-confirm','so-message','so-lot-modal','so-lot-close','so-lot-cancel','so-lot-apply','so-lot-body'];
     const missing=required.filter(id=>!$(id)); if(missing.length){console.error('Subcontract order UI missing:',missing);return;}
     $('so-vendor').addEventListener('input',resolveVendor); $('so-vendor').addEventListener('change',resolveVendor);
+    $('so-number-search').addEventListener('click',loadOrderByNumber);
+    $('so-number').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();loadOrderByNumber();}});
     $('so-process').addEventListener('change',()=>rows.forEach(row=>{if(!row.process.value)row.process.value=$('so-process').value;if(row.part)resolveBomOutput(row);}));
     $('so-due-date').addEventListener('change',()=>rows.forEach(row=>{if(!row.date.value)row.date.value=$('so-due-date').value;}));
     $('so-add-row').addEventListener('click',()=>addRow(null,true)); $('so-new').addEventListener('click',reset); $('so-form').addEventListener('submit',save); $('so-confirm').addEventListener('click',confirmOrder);
