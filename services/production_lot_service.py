@@ -30,8 +30,14 @@ def output_lots_for_performance(db, performance_id: int):
 def _lot_prefix(performance: ProductionPerformance) -> str:
     if (performance.performance_type or "").upper() == "ASSEMBLY":
         return LOT_PREFIXES["ASSEMBLY"]
-    if (performance.process_code or "").upper() == "LT":
+
+    process_code = (performance.process_code or "").upper()
+    if process_code == "LT":
         return LOT_PREFIXES["COMPLEX_LATHE"]
+    if process_code == "TP":
+        return LOT_PREFIXES["TAPPING"]
+    if process_code == "DOT":
+        return LOT_PREFIXES["SERRATION"]
     return LOT_PREFIXES["MACHINING"]
 
 
