@@ -15,6 +15,8 @@ from models.models import (
     PurchaseInboundMaster,
     PurchaseOrderItem,
     PurchaseOrderMaster,
+    StorageLocationModel,
+    WarehouseMasterModel,
 )
 
 router = APIRouter(prefix="/api/purchase/inquiry", tags=["Purchase Inquiry"])
@@ -34,6 +36,29 @@ INBOUND_STATUS_NAMES = {
     "DRAFT": "임시저장",
     "CONFIRMED": "입고확정",
 }
+
+
+def _warehouse_name_map(db: Session) -> dict[str, str]:
+    return {
+        row.warehouse_code: row.warehouse_name
+        for row in db.query(WarehouseMasterModel).all()
+        if row.warehouse_code
+    }
+
+
+def _storage_name_map(db: Session) -> dict[str, str]:
+    return {
+        row.location_code: row.location_name
+        for row in db.query(StorageLocationModel).all()
+        if row.location_code
+    }
+
+
+def _display_name(code: Optional[str], mapping: dict[str, str]) -> str:
+    value = str(code or "").strip()
+    if not value:
+        return ""
+    return mapping.get(value, value)
 
 
 @router.get("/orders")
@@ -190,6 +215,8 @@ def inquiry_inbounds(
         .limit(limit)
         .all()
     )
+    warehouse_map = _warehouse_name_map(db)
+    storage_map = _storage_name_map(db)
     return {
         "total": total,
         "items": [
@@ -208,8 +235,8 @@ def inquiry_inbounds(
                 "unit": item.unit,
                 "supplier_lot_no": item.supplier_lot_no,
                 "internal_lot_no": item.internal_lot_no or "",
-                "warehouse_code": item.warehouse_code,
-                "storage_location": item.storage_location,
+                "warehouse_code": _display_name(item.warehouse_code, warehouse_map),
+                "storage_location": _display_name(item.storage_location, storage_map),
                 "inspection_status": item.inspection_status,
                 "note": item.note or master.note or "",
                 "status": master.status,
@@ -295,6 +322,7 @@ def inquiry_subcontract_inbounds(
         .order_by(SubcontractInboundMaster.inbound_date.desc(), SubcontractInboundMaster.id.desc())
         .all()
     )
+    storage_map = _storage_name_map(db)
 
     items = []
     for master in masters:
@@ -350,7 +378,7 @@ def inquiry_subcontract_inbounds(
             "supplier_lot_no": _summary_text(supplier_lots),
             "internal_lot_no": _summary_text(internal_lots),
             "warehouse_code": "",
-            "storage_location": master.storage_location,
+            "storage_location": _display_name(master.storage_location, storage_map),
             "inspection_status": inspection_status,
             "note": master.note or _summary_text(notes),
             "status": "CONFIRMED" if is_received else "CANCELLED",
