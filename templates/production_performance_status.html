@@ -21,8 +21,8 @@ table{width:100%;border-collapse:collapse;font-size:12px;min-width:1720px}th,td{
     <div><label>종료일</label><input type="date" id="endDate"></div>
     <div><label>구분</label><select id="performanceType"><option value="">전체</option><option value="MACHINING">가공</option><option value="ASSEMBLY">조립</option></select></div>
     <div><label>공정</label><select id="processCode"><option value="">전체</option></select></div>
-    <div><label>작업지시번호</label><input type="text" id="workOrderNo"></div>
-    <div><label>품번</label><input type="text" id="partNo"></div>
+    <div><label>품번</label><input type="text" id="partNo" placeholder="품번"></div>
+    <div><label>작업지시번호</label><input type="text" id="workOrderNo" placeholder="작업지시번호"></div>
     <div><label>작업자</label><input type="text" id="operatorName"></div>
     <div style="display:flex;gap:6px"><button class="btn primary" onclick="loadRows()">조회</button><button class="btn secondary" onclick="resetFilters()">초기화</button></div>
   </div>
