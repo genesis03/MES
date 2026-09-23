@@ -406,6 +406,7 @@ ITEM_ID_NOT_NULL_COLUMNS = (
     ("purchase_inbound_items", "item_id"),
     ("production_plans", "item_id"),
     ("production_work_orders", "item_id"),
+    ("production_lots", "item_id"),
     ("production_run_materials", "material_item_id"),
     ("lot_consumptions", "item_id"),
     ("packing_masters", "item_id"),
