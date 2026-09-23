@@ -9,6 +9,7 @@
     .grid{display:grid;grid-template-columns:160px minmax(240px,1fr) 160px minmax(240px,1fr);gap:12px 14px;align-items:end}
     label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:5px}
     input,select{width:100%;height:36px;border:1px solid #cbd5e1;border-radius:5px;padding:0 9px;background:#fff}
+    .part-picker{position:relative}.suggestions{position:absolute;z-index:100;left:0;right:0;top:38px;background:#fff;border:1px solid #cbd5e1;border-radius:5px;box-shadow:0 6px 18px rgba(15,23,42,.15);max-height:240px;overflow:auto;display:none}.suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12.5px}.suggestion:hover,.suggestion.active{background:#eff6ff}.suggestion .pn{font-weight:800;color:#1e3a8a}.suggestion .name{margin-left:8px;color:#64748b}
     .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}.btn{border:0;border-radius:5px;padding:9px 15px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#334155}.danger{background:#dc2626;color:#fff}
     table{width:100%;border-collapse:collapse;font-size:12.5px}th,td{border-bottom:1px solid #e2e8f0;padding:9px;text-align:left}th{background:#f8fafc;color:#475569}.num{text-align:right}.msg{font-size:12px;margin-top:10px}.ok{color:#15803d}.err{color:#b91c1c}
 </style>
@@ -20,7 +21,7 @@
 <div class="card">
     <div class="grid">
         <div><label>계획일자 *</label><input type="date" id="planDate"></div>
-        <div><label>품번 *</label><select id="partNo"><option value="">선택</option></select></div>
+        <div><label>품번 *</label><div class="part-picker"><input type="hidden" id="partNo"><input type="text" id="partSearch" autocomplete="off" placeholder="품번 또는 품명 입력"><div id="partSuggestions" class="suggestions"></div></div></div>
         <div><label>계획수량 *</label><input type="number" id="planQty" min="0.001" step="0.001"></div>
         <div><label>비고</label><input type="text" id="note" maxlength="1000"></div>
     </div>
@@ -47,13 +48,39 @@
 
 {% block extra_script %}
 <script>
-let items=[];
+let items=[], partCandidates=[], partActiveIndex=-1, partTimer=null;
 const today=new Date().toISOString().slice(0,10);
-document.addEventListener('DOMContentLoaded', async()=>{document.getElementById('planDate').value=today; await loadItems(); await loadPlans();});
-async function loadItems(){const r=await fetch('/api/production/items');items=await r.json();const s=document.getElementById('partNo');s.innerHTML='<option value="">선택</option>'+items.map(x=>`<option value="${x.part_no}">${x.part_no} | ${x.part_name}</option>`).join('');}
+document.addEventListener('DOMContentLoaded', async()=>{
+    document.getElementById('planDate').value=today;
+    partSearch.addEventListener('input',()=>{partNo.value='';clearTimeout(partTimer);partTimer=setTimeout(searchParts,180);});
+    partSearch.addEventListener('focus',()=>{if(partSearch.value.trim()&&!partNo.value)searchParts();});
+    partSearch.addEventListener('keydown',e=>{
+        if(e.key==='ArrowDown'&&partCandidates.length){e.preventDefault();partActiveIndex=Math.min(partActiveIndex+1,partCandidates.length-1);renderPartSuggestions();}
+        else if(e.key==='ArrowUp'&&partCandidates.length){e.preventDefault();partActiveIndex=Math.max(partActiveIndex-1,0);renderPartSuggestions();}
+        else if(e.key==='Enter'&&partCandidates.length){e.preventDefault();choosePart(partCandidates[partActiveIndex>=0?partActiveIndex:0]);}
+        else if(e.key==='Escape')closePartSuggestions();
+    });
+    document.addEventListener('click',e=>{if(!e.target.closest('.part-picker'))closePartSuggestions();});
+    await loadPlans();
+});
+function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+function closePartSuggestions(){partSuggestions.style.display='none';partSuggestions.innerHTML='';partCandidates=[];partActiveIndex=-1;}
+function choosePart(row){if(!row)return;partNo.value=row.part_no;partSearch.value=row.part_no;closePartSuggestions();}
+function renderPartSuggestions(){
+    if(!partCandidates.length){partSuggestions.innerHTML='<div class="suggestion" style="color:#94a3b8">일치하는 품목이 없습니다.</div>';partSuggestions.style.display='block';return;}
+    partSuggestions.innerHTML=partCandidates.map((x,i)=>`<div class="suggestion${i===partActiveIndex?' active':''}" data-i="${i}"><span class="pn">${esc(x.part_no)}</span><span class="name">${esc(x.part_name||'')}</span></div>`).join('');
+    partSuggestions.querySelectorAll('[data-i]').forEach(el=>el.addEventListener('mousedown',e=>{e.preventDefault();choosePart(partCandidates[Number(el.dataset.i)]);}));
+    partSuggestions.style.display='block';
+}
+async function searchParts(){
+    const q=partSearch.value.trim();if(!q){closePartSuggestions();return;}
+    const r=await fetch('/api/production/items?keyword='+encodeURIComponent(q));const d=await r.json();
+    if(!r.ok){setMsg(d.detail||'품번 검색에 실패했습니다.');return;}
+    partCandidates=d.slice(0,30);partActiveIndex=-1;renderPartSuggestions();
+}
 function setMsg(t,ok=false){const e=document.getElementById('msg');e.textContent=t;e.className='msg '+(ok?'ok':'err');}
-function resetForm(){document.getElementById('planDate').value=today;document.getElementById('partNo').value='';document.getElementById('planQty').value='';document.getElementById('note').value='';setMsg('');}
-async function savePlan(){const payload={plan_date:planDate.value,part_no:partNo.value,plan_qty:Number(planQty.value),note:note.value};if(!payload.plan_date||!payload.part_no||!payload.plan_qty){setMsg('계획일자, 품번, 계획수량을 입력해 주세요.');return;}const r=await fetch('/api/production/plans',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){setMsg(d.detail||'등록에 실패했습니다.');return;}setMsg(d.message,true);resetForm();await loadPlans();}
+function resetForm(){document.getElementById('planDate').value=today;partNo.value='';partSearch.value='';document.getElementById('planQty').value='';document.getElementById('note').value='';closePartSuggestions();setMsg('');}
+async function savePlan(){const payload={plan_date:planDate.value,part_no:partNo.value,plan_qty:Number(planQty.value),note:note.value};if(!payload.plan_date||!payload.part_no||!payload.plan_qty){setMsg('계획일자, 품번, 계획수량을 입력해 주세요. 품번은 검색 결과에서 선택해야 합니다.');return;}const r=await fetch('/api/production/plans',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){setMsg(d.detail||'등록에 실패했습니다.');return;}setMsg(d.message,true);resetForm();await loadPlans();}
 async function loadPlans(){const q=new URLSearchParams();if(startDate.value)q.set('start_date',startDate.value);if(endDate.value)q.set('end_date',endDate.value);if(searchPartNo.value.trim())q.set('part_no',searchPartNo.value.trim());const r=await fetch('/api/production/plans?'+q.toString());const rows=await r.json();const b=document.getElementById('planBody');if(!rows.length){b.innerHTML='<tr><td colspan="8">조회된 데이터가 없습니다.</td></tr>';return;}b.innerHTML=rows.map((x,i)=>`<tr><td>${i+1}</td><td>${x.plan_date}</td><td>${x.part_no}</td><td>${x.part_name}</td><td class="num">${Number(x.plan_qty).toLocaleString()}</td><td>${x.note||''}</td><td>${x.created_by||''}</td><td><button class="btn danger" style="padding:5px 9px" onclick="deletePlan(${x.id})">삭제</button></td></tr>`).join('');}
 async function deletePlan(id){if(!confirm('생산계획을 삭제하시겠습니까?'))return;const r=await fetch('/api/production/plans/'+id,{method:'DELETE'});const d=await r.json();if(!r.ok){alert(d.detail||'삭제에 실패했습니다.');return;}await loadPlans();}
 </script>
