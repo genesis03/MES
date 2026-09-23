@@ -81,11 +81,11 @@
   </form>
 </div>
 
-<div id="po-search-modal" class="po-modal-backdrop" hidden>
-  <div class="po-modal" role="dialog" aria-modal="true" aria-labelledby="po-search-title">
-    <div class="po-modal-head"><strong id="po-search-title">발주 조회</strong><button class="po-btn" type="button" id="po-search-close-x">닫기</button></div>
-    <div class="po-modal-body">
-      <div class="po-search-grid">
+<div id="po-search-modal" class="po-modal-backdrop mes-popup-backdrop" hidden>
+  <div class="po-modal mes-popup" role="dialog" aria-modal="true" aria-labelledby="po-search-title">
+    <div class="po-modal-head mes-popup-head"><strong id="po-search-title">발주 조회</strong><button class="po-btn" type="button" id="po-search-close-x">닫기</button></div>
+    <div class="po-modal-body mes-popup-body">
+      <div class="po-search-grid mes-popup-filters">
         <div class="po-search-field"><label>발주번호</label><input id="po-search-number"></div>
         <div class="po-search-field"><label>발주기간</label><div class="po-search-period"><input id="po-search-start" type="date"><span>~</span><input id="po-search-end" type="date"></div></div>
         <div class="po-search-field"><label>거래처</label><input id="po-search-partner"></div>
@@ -93,10 +93,10 @@
         <div class="po-search-field"><label>상태</label><select id="po-search-status"><option value="">전체</option><option value="ORDERED">발주완료</option><option value="PARTIAL">부분입고</option><option value="COMPLETED">입고완료</option><option value="CANCELLED">취소</option></select></div>
         <div class="po-search-actions"><button class="po-btn po-btn-primary" type="button" id="po-search-submit">조회</button></div>
       </div>
-      <table class="po-search-table"><thead><tr><th>발주번호</th><th>거래처</th><th>발주일</th><th>상태</th><th>품목수</th></tr></thead><tbody id="po-search-body"><tr><td colspan="5">조회 중...</td></tr></tbody></table>
+      <table class="po-search-table mes-popup-table"><thead><tr><th>발주번호</th><th>거래처</th><th>발주일</th><th>상태</th><th>품목수</th></tr></thead><tbody id="po-search-body"><tr><td colspan="5">조회 중...</td></tr></tbody></table>
       <div id="po-search-message" class="po-lookup-hint" style="margin-top:8px"></div>
     </div>
-    <div class="po-modal-foot"><button class="po-btn po-btn-primary" type="button" id="po-search-apply" disabled>적용</button><button class="po-btn" type="button" id="po-search-close">닫기</button></div>
+    <div class="po-modal-foot mes-popup-foot"><button class="po-btn po-btn-primary" type="button" id="po-search-apply" disabled>적용</button><button class="po-btn" type="button" id="po-search-close">닫기</button></div>
   </div>
 </div>
 
