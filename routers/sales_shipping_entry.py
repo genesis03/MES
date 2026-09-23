@@ -86,67 +86,6 @@ def shipping_entry_page(request: Request, current_user=Depends(get_current_user)
     )
 
 
-@router.get("/api/sales/shipping-entry/open-orders")
-def open_orders(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    orders = (
-        db.query(SalesOrderMaster)
-        .filter(SalesOrderMaster.status.in_(["ORDERED", "PARTIAL"]))
-        .order_by(SalesOrderMaster.delivery_due_date.asc(), SalesOrderMaster.order_date.asc(), SalesOrderMaster.id.asc())
-        .all()
-    )
-
-    result = []
-    for order in orders:
-        open_items = [
-            item for item in order.items
-            if float(item.shipped_qty or 0) < float(item.order_qty or 0) - 1e-9
-        ]
-        if not open_items:
-            continue
-
-        item_ids = [item.item_id for item in open_items if item.item_id]
-        masters = db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all() if item_ids else []
-        master_map = {row.id: row for row in masters}
-
-        items = []
-        for item in open_items:
-            master = master_map.get(item.item_id)
-            waiting = _waiting_rows(db, item.item_id)
-            remaining_qty = max(float(item.order_qty or 0) - float(item.shipped_qty or 0), 0.0)
-            items.append({
-                "id": item.id,
-                "item_id": item.item_id,
-                "order_id": order.id,
-                "order_no": order.order_no,
-                "part_no": master.part_no if master else item.part_no,
-                "part_name": item.part_name or (master.part_name if master else ""),
-                "unit": item.unit or "EA",
-                "order_qty": float(item.order_qty or 0),
-                "shipped_qty": float(item.shipped_qty or 0),
-                "remaining_qty": remaining_qty,
-                "delivery_date": item.delivery_date or order.delivery_due_date,
-                "moq": int(master.moq or 0) if master else 0,
-                "pack_qty": _item_pack_qty(master),
-                "waiting_box_count": len(waiting),
-                "waiting_qty": sum(float(box.box_qty or 0) for box, _ in waiting),
-            })
-
-        result.append({
-            "id": order.id,
-            "order_no": order.order_no,
-            "order_date": order.order_date,
-            "delivery_due_date": order.delivery_due_date,
-            "customer_id": order.customer_id,
-            "customer_name": order.customer_name,
-            "manager_name": order.manager_name or "",
-            "status": order.status,
-            "note": order.note or "",
-            "items": items,
-        })
-
-    return result
-
-
 @router.get("/api/sales/shipping-entry/waiting-boxes")
 def waiting_boxes(
     sales_order_item_id: int,
