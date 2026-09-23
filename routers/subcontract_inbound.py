@@ -22,7 +22,7 @@ from models.subcontract_outbound import (
     SubcontractOutboundLot,
     SubcontractOutboundMaster,
 )
-from services.lot_service import next_lot_no
+from services.lot_service import LOT_PREFIXES, next_lot_no
 
 router = APIRouter(prefix="/api/subcontract/inbound", tags=["Subcontract Inbound"])
 
@@ -388,10 +388,12 @@ def create_inbound(
             master.items.append(inbound_item)
 
 
+        # 외주가공 범용 정책:
         # 첫 입고가 전량이면 기존 LOT를 유지하고, 부분입고가 발생하면 입고분마다 LZ LOT를 새로 생성합니다.
+        # LZ는 은도금 전용이 아니라 외주가공 범용 신규 LOT Prefix로 사용합니다.
         is_split = received > 0 or inbound_qty < allocated
         if is_split:
-            child_lot_no = next_lot_no(db, "LZ", payload.inbound_date, 1, reserved_lots)
+            child_lot_no = next_lot_no(db, LOT_PREFIXES["OUTSOURCE"], payload.inbound_date, 1, reserved_lots)
             reserved_lots.add(child_lot_no)
             db.add(LotRelationModel(
                 parent_lot_no=source_lot.lot_no,
