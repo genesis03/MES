@@ -82,12 +82,12 @@
 <div class="pi-footer"><button class="pi-btn" type="button" id="pi-new">신규</button><button class="pi-btn pi-primary" type="submit" id="pi-save">저장</button><button class="pi-btn pi-confirm" type="button" id="pi-confirm" disabled>확정</button><button class="pi-btn" type="button" id="pi-label" disabled>라벨 출력</button><span id="pi-message" class="pi-message" role="status"></span></div>
 </form></div>
 
-<dialog id="pi-inbound-dialog" class="po-modal" aria-labelledby="pi-inbound-dialog-title">
+<dialog id="pi-inbound-dialog" class="po-modal mes-popup" aria-labelledby="pi-inbound-dialog-title">
   <div class="po-modal-shell">
     <div class="po-modal-top"><button type="button" class="po-modal-close-x" id="pi-inbound-x" aria-label="닫기">×</button></div>
-    <div class="po-modal-body">
-      <h2 class="po-modal-title" id="pi-inbound-dialog-title">입고 조회</h2>
-      <div class="po-search-grid">
+    <div class="po-modal-body mes-popup-body">
+      <h2 class="po-modal-title mes-popup-title" id="pi-inbound-dialog-title">입고 조회</h2>
+      <div class="po-search-grid mes-popup-filters">
         <label for="pi-inbound-search-no">입고번호</label><input id="pi-inbound-search-no" maxlength="30">
         <label for="pi-inbound-start">입고기간</label><input id="pi-inbound-start" type="date"><span style="text-align:center">~</span><input id="pi-inbound-end" type="date">
         <label for="pi-inbound-search-partner">거래처</label><input id="pi-inbound-search-partner" maxlength="100">
@@ -96,36 +96,36 @@
         <label for="pi-inbound-search-lot">LOT</label><input id="pi-inbound-search-lot" maxlength="100">
         <button type="button" class="po-search-btn" id="pi-inbound-search-submit">조회</button>
       </div>
-      <div class="po-popup-table-wrap"><table class="po-popup-table">
+      <div class="po-popup-table-wrap"><table class="po-popup-table mes-popup-table">
         <thead><tr><th>입고번호</th><th>거래처</th><th>입고일</th><th>발주번호</th><th>상태</th><th>품목수</th></tr></thead>
         <tbody id="pi-inbound-popup-body"></tbody>
       </table></div>
       <div id="pi-inbound-popup-message" class="po-popup-message"></div>
-      <div class="po-popup-footer"><div id="pi-inbound-popup-count" class="po-popup-count">0건</div><div class="po-popup-actions"><button type="button" class="pi-btn po-popup-select" id="pi-inbound-select" disabled>선택</button><button type="button" class="pi-btn po-popup-close" id="pi-inbound-close">닫기</button></div></div>
+      <div class="po-popup-footer mes-popup-foot"><div id="pi-inbound-popup-count" class="po-popup-count">0건</div><div class="po-popup-actions"><button type="button" class="pi-btn po-popup-select" id="pi-inbound-select" disabled>선택</button><button type="button" class="pi-btn po-popup-close" id="pi-inbound-close">닫기</button></div></div>
     </div>
   </div>
 </dialog>
 
-<dialog id="pi-po-dialog" class="po-modal" aria-labelledby="pi-po-dialog-title">
+<dialog id="pi-po-dialog" class="po-modal mes-popup" aria-labelledby="pi-po-dialog-title">
   <div class="po-modal-shell">
     <div class="po-modal-top"><button type="button" class="po-modal-close-x" id="pi-po-x" aria-label="닫기">×</button></div>
-    <div class="po-modal-body">
-      <h2 class="po-modal-title" id="pi-po-dialog-title">발주 조회</h2>
-      <div class="po-search-grid">
+    <div class="po-modal-body mes-popup-body">
+      <h2 class="po-modal-title mes-popup-title" id="pi-po-dialog-title">발주 조회</h2>
+      <div class="po-search-grid mes-popup-filters">
         <label for="pi-po-search-no">발주번호</label><input id="pi-po-search-no" maxlength="30">
         <label for="pi-po-start">발주기간</label><input id="pi-po-start" type="date"><span style="text-align:center">~</span><input id="pi-po-end" type="date">
         <label for="pi-po-search-part">품번</label><input id="pi-po-search-part" maxlength="50">
         <button type="button" class="po-search-btn" id="pi-po-search-btn">조회</button>
       </div>
       <div class="po-popup-table-wrap">
-        <table class="po-popup-table">
+        <table class="po-popup-table mes-popup-table">
           <colgroup><col style="width:18%"><col style="width:18%"><col style="width:13%"><col style="width:13%"><col style="width:18%"><col style="width:20%"></colgroup>
           <thead><tr><th>발주번호</th><th>발주처</th><th>발주일</th><th>발주상태</th><th>관련 수주번호</th><th>최종 수정일</th></tr></thead>
           <tbody id="pi-po-popup-body"></tbody>
         </table>
       </div>
       <div id="pi-po-popup-message" class="po-popup-message"></div>
-      <div class="po-popup-footer">
+      <div class="po-popup-footer mes-popup-foot">
         <div id="pi-po-popup-count" class="po-popup-count">0건</div>
         <div class="po-popup-page">Page 1 of 1</div>
         <div class="po-popup-actions"><button type="button" class="pi-btn po-popup-select" id="pi-po-select">선택</button><button type="button" class="pi-btn po-popup-close" id="pi-po-close">닫기</button></div>
