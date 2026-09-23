@@ -27,7 +27,7 @@
 .pi-grid input[readonly] {color:#475569}
 .pi-grid td.pi-no {text-align:center;color:#64748b}
 .pi-lot {font-family:monospace;color:#166534}
-.pi-message {font-size:13px;min-height:18px}
+.pi-message {font-size:13px;min-height:18px}.pi-inline{display:flex;gap:6px;align-items:center}.pi-inline input{min-width:0;flex:1}.pi-inline .pi-btn{flex:0 0 auto}
 
 .po-modal {border:0;padding:0;width:min(940px,94vw);max-width:940px;border-radius:0;box-shadow:0 18px 40px rgba(15,23,42,.28)}
 .po-modal::backdrop {background:rgba(15,23,42,.42)}
@@ -72,7 +72,7 @@
 <div class="pi-field"><label for="pi-vendor">거래처</label><input id="pi-vendor" readonly placeholder="발주를 불러오면 표시됩니다"></div>
 <div class="pi-field"><label for="pi-manager">담당자</label><input id="pi-manager" readonly></div>
 <div class="pi-field"><label for="pi-po-no">발주번호</label><input id="pi-po-no" readonly></div>
-<div class="pi-field"><label for="pi-inbound-no">구매번호</label><input id="pi-inbound-no" readonly value="저장 시 자동 발번"></div>
+<div class="pi-field"><label for="pi-inbound-no">입고번호</label><div class="pi-inline"><input id="pi-inbound-no" autocomplete="off" placeholder="저장 시 자동 발번"><button class="pi-btn" type="button" id="pi-inbound-search-btn">조회</button></div></div>
 <div class="pi-field"><label for="pi-status">상태</label><input id="pi-status" readonly value="입력 중"></div>
 <div class="pi-field pi-wide"><label for="pi-note">비고</label><textarea id="pi-note" rows="2" maxlength="1000"></textarea></div>
 </div>
@@ -81,6 +81,30 @@
 <select id="pi-location-options" hidden><option value="">선택</option>{% for location in storage_locations %}<option value="{{ location.location_code }}">{{ location.location_name }}</option>{% endfor %}</select>
 <div class="pi-footer"><button class="pi-btn" type="button" id="pi-new">신규</button><button class="pi-btn pi-primary" type="submit" id="pi-save">저장</button><button class="pi-btn pi-confirm" type="button" id="pi-confirm" disabled>확정</button><button class="pi-btn" type="button" id="pi-label" disabled>라벨 출력</button><span id="pi-message" class="pi-message" role="status"></span></div>
 </form></div>
+
+<dialog id="pi-inbound-dialog" class="po-modal" aria-labelledby="pi-inbound-dialog-title">
+  <div class="po-modal-shell">
+    <div class="po-modal-top"><button type="button" class="po-modal-close-x" id="pi-inbound-x" aria-label="닫기">×</button></div>
+    <div class="po-modal-body">
+      <h2 class="po-modal-title" id="pi-inbound-dialog-title">입고 조회</h2>
+      <div class="po-search-grid">
+        <label for="pi-inbound-search-no">입고번호</label><input id="pi-inbound-search-no" maxlength="30">
+        <label for="pi-inbound-start">입고기간</label><input id="pi-inbound-start" type="date"><span style="text-align:center">~</span><input id="pi-inbound-end" type="date">
+        <label for="pi-inbound-search-partner">거래처</label><input id="pi-inbound-search-partner" maxlength="100">
+        <label for="pi-inbound-search-part">품번</label><input id="pi-inbound-search-part" maxlength="50">
+        <label for="pi-inbound-search-po">발주번호</label><input id="pi-inbound-search-po" maxlength="30">
+        <label for="pi-inbound-search-lot">LOT</label><input id="pi-inbound-search-lot" maxlength="100">
+        <button type="button" class="po-search-btn" id="pi-inbound-search-submit">조회</button>
+      </div>
+      <div class="po-popup-table-wrap"><table class="po-popup-table">
+        <thead><tr><th>입고번호</th><th>거래처</th><th>입고일</th><th>발주번호</th><th>상태</th><th>품목수</th></tr></thead>
+        <tbody id="pi-inbound-popup-body"></tbody>
+      </table></div>
+      <div id="pi-inbound-popup-message" class="po-popup-message"></div>
+      <div class="po-popup-footer"><div id="pi-inbound-popup-count" class="po-popup-count">0건</div><div class="po-popup-actions"><button type="button" class="pi-btn po-popup-select" id="pi-inbound-select" disabled>선택</button><button type="button" class="pi-btn po-popup-close" id="pi-inbound-close">닫기</button></div></div>
+    </div>
+  </div>
+</dialog>
 
 <dialog id="pi-po-dialog" class="po-modal" aria-labelledby="pi-po-dialog-title">
   <div class="po-modal-shell">
@@ -110,4 +134,4 @@
   </div>
 </dialog>
 {% endblock %}
-{% block extra_script %}<script src="/static/purchase_inbound.js?v=20260917-1"></script><script src="/static/internal_label_buttons.js?v=20260916-1"></script>{% endblock %}
+{% block extra_script %}<script src="/static/purchase_inbound.js?v=20260923-2"></script><script src="/static/internal_label_buttons.js?v=20260916-1"></script>{% endblock %}
