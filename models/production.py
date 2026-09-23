@@ -14,7 +14,7 @@ class ProductionPlan(Base):
 
     id = Column(Integer, primary_key=True)
     plan_date = Column(String(10), nullable=False, index=True)
-    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=False, index=True)
     part_no = Column(String(50), nullable=False, index=True)
     plan_qty = Column(Float, nullable=False)
     note = Column(Text, nullable=True)
@@ -42,7 +42,7 @@ class ProductionWorkOrder(Base):
     order_date = Column(String(10), nullable=False, index=True)
     scheduled_date = Column(String(10), nullable=True, index=True)
     plan_id = Column(Integer, ForeignKey("production_plans.id"), nullable=True, index=True)
-    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=False, index=True)
     part_no = Column(String(50), nullable=False, index=True)
     order_qty = Column(Float, nullable=False)
     production_qty = Column(Float, nullable=False, default=0.0)
