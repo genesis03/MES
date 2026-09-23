@@ -109,7 +109,13 @@ def _validate_header(db: Session, payload: SubcontractOrderInput):
     return partner, processing
 
 
-def _available_qty(db: Session, lot_no: str, base_qty: float, current_item_id: int | None = None) -> float:
+def _available_qty(
+    db: Session,
+    lot_no: str,
+    base_qty: float,
+    current_item_id: int | None = None,
+    source_item_id: int | None = None,
+) -> float:
     consumed_relation = (
         db.query(func.coalesce(func.sum(LotRelationModel.consumed_qty), 0.0))
         .filter(LotRelationModel.parent_lot_no == lot_no)
@@ -131,6 +137,8 @@ def _available_qty(db: Session, lot_no: str, base_qty: float, current_item_id: i
             SubcontractOrderMaster.status.in_(["DRAFT", "LOT_ALLOCATING", "ORDERED"]),
         )
     )
+    if source_item_id:
+        reserved_query = reserved_query.filter(SubcontractOrderItem.previous_item_id == source_item_id)
     if current_item_id:
         reserved_query = reserved_query.filter(SubcontractLotAllocation.order_item_id != current_item_id)
     reserved = reserved_query.scalar() or 0.0
@@ -169,7 +177,7 @@ def _available_lots(db: Session, source_item_id: int, current_order_item_id: int
         .all()
     )
     for row in purchase_rows:
-        available = _available_qty(db, row.internal_lot_no, row.inbound_qty, current_order_item_id)
+        available = _available_qty(db, row.internal_lot_no, row.inbound_qty, current_order_item_id, row.item_id)
         if available > 0:
             result.append({
                 "lot_no": row.internal_lot_no,
@@ -192,7 +200,7 @@ def _available_lots(db: Session, source_item_id: int, current_order_item_id: int
     for row in production_rows:
         if not _production_lot_is_valid(db, row):
             continue
-        available = _available_qty(db, row.lot_no, row.lot_qty, current_order_item_id)
+        available = _available_qty(db, row.lot_no, row.lot_qty, current_order_item_id, row.item_id)
         if available > 0:
             result.append({
                 "lot_no": row.lot_no,
