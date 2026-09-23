@@ -36,7 +36,11 @@ class EditInboundInput(BaseModel):
     lots: list[EditLotInput] = Field(min_length=1)
 
 
-def _downstream_used(db: Session, lot_nos: list[str]) -> list[str]:
+def _downstream_used(
+    db: Session,
+    lot_nos: list[str],
+    exclude_subcontract_order_id: int | None = None,
+) -> list[str]:
     lot_nos = [x for x in lot_nos if x]
     if not lot_nos:
         return []
@@ -60,17 +64,20 @@ def _downstream_used(db: Session, lot_nos: list[str]) -> list[str]:
             ).distinct().all()
         )
     )
-    used.update(
-        row[0] for row in (
-            db.query(SubcontractLotAllocation.lot_no)
-            .join(SubcontractOrderItem, SubcontractOrderItem.id == SubcontractLotAllocation.order_item_id)
-            .join(SubcontractOrderMaster, SubcontractOrderMaster.id == SubcontractOrderItem.order_id)
-            .filter(
-                SubcontractLotAllocation.lot_no.in_(lot_nos),
-                SubcontractOrderMaster.status != "CANCELLED",
-            ).distinct().all()
+    subcontract_query = (
+        db.query(SubcontractLotAllocation.lot_no)
+        .join(SubcontractOrderItem, SubcontractOrderItem.id == SubcontractLotAllocation.order_item_id)
+        .join(SubcontractOrderMaster, SubcontractOrderMaster.id == SubcontractOrderItem.order_id)
+        .filter(
+            SubcontractLotAllocation.lot_no.in_(lot_nos),
+            SubcontractOrderMaster.status != "CANCELLED",
         )
     )
+    if exclude_subcontract_order_id is not None:
+        subcontract_query = subcontract_query.filter(
+            SubcontractOrderMaster.id != exclude_subcontract_order_id
+        )
+    used.update(row[0] for row in subcontract_query.distinct().all())
     return sorted(x for x in used if x)
 
 
@@ -125,7 +132,7 @@ def get_edit_data(
         raise HTTPException(404, "외주가공 입고 내역을 찾을 수 없습니다.")
     lots = [lot for item in master.items for lot in item.lots]
     child_lots = [lot.child_lot_no for lot in lots if lot.child_lot_no]
-    used_lots = _downstream_used(db, child_lots)
+    used_lots = _downstream_used(db, child_lots, master.order_id)
     return {
         "id": master.id,
         "inbound_no": master.inbound_no,
@@ -194,7 +201,7 @@ def update_inbound(
         raise HTTPException(422, "기존 입고 LOT 구성은 수정할 수 없습니다. 수량/외주 LOT/샘플만 수정하세요.")
 
     child_lots = [lot.child_lot_no for lot in existing_lots if lot.child_lot_no]
-    used_lots = _downstream_used(db, child_lots)
+    used_lots = _downstream_used(db, child_lots, master.order_id)
     if used_lots:
         raise HTTPException(
             409,
@@ -214,6 +221,8 @@ def update_inbound(
             raise HTTPException(422, f"{lot.source_lot_no} 입고수량은 수정 가능수량 {max_qty:g}을 초과할 수 없습니다.")
         if row.sample_qty > row.inbound_qty:
             raise HTTPException(422, f"{lot.source_lot_no} 샘플수량은 입고수량을 초과할 수 없습니다.")
+        if not (row.supplier_lot_no or "").strip():
+            raise HTTPException(422, f"{lot.source_lot_no}의 공급사 외주 LOT를 입력해 주세요.")
 
         original_qty = float(lot.good_qty or 0)
         if lot.child_lot_no == lot.source_lot_no and abs(row.inbound_qty - original_qty) > 1e-9:
@@ -229,7 +238,7 @@ def update_inbound(
         if lot.child_lot_no:
             stock = db.query(ProductionLotModel).filter(ProductionLotModel.lot_no == lot.child_lot_no).one_or_none()
             if stock is not None:
-                stock.lot_qty = float(row.inbound_qty)
+                stock.lot_qty = max(float(row.inbound_qty) - float(row.sample_qty), 0.0)
                 stock.storage_location = payload.storage_location
                 stock.status = "ACTIVE"
             if lot.child_lot_no != lot.source_lot_no:
