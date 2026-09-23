@@ -33,6 +33,7 @@ class SalesOrderCreateInput(BaseModel):
     order_type: str = Field(default="NORMAL", max_length=20)
     transaction_type: str = Field(default="PAID", max_length=20)
     manager_name: Optional[str] = Field(default=None, max_length=50)
+    po_no: Optional[str] = Field(default=None, max_length=100)
     note: Optional[str] = Field(default=None, max_length=1000)
     items: list[SalesOrderItemInput] = Field(min_length=1)
 
@@ -75,6 +76,7 @@ def _serialize_order(order: SalesOrderMaster) -> dict:
         "order_type": order.order_type or "NORMAL",
         "transaction_type": order.transaction_type or "PAID",
         "manager_name": order.manager_name or "",
+        "po_no": order.po_no or "",
         "note": order.note or "",
         "editable": order.status == "ORDERED" and not has_shipment,
         "items": [{
@@ -206,6 +208,7 @@ def update_sales_order_with_policy(
     order.order_type = order_type
     order.transaction_type = transaction_type
     order.manager_name = (payload.manager_name or "").strip() or None
+    order.po_no = (payload.po_no or "").strip() or None
     order.note = (payload.note or "").strip() or None
 
     order.items.clear()
@@ -247,6 +250,7 @@ def create_sales_order_with_policy(
         order_type=order_type,
         transaction_type=transaction_type,
         manager_name=(payload.manager_name or "").strip() or None,
+        po_no=(payload.po_no or "").strip() or None,
         note=(payload.note or "").strip() or None,
         created_by=_username(current_user),
     )
