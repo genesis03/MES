@@ -8,6 +8,7 @@ from core.security import init_default_accounts
 from services.purchase_lot_format import install_purchase_lot_format
 from services.production_lot_service import ensure_production_output_lots
 from services.subcontract_reservation_repair import repair_cancelled_subcontract_reservations
+from services.subcontract_inbound_repair import repair_subcontract_inbound_sample_stock
 
 from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, subcontract_inbound_lot_policy, subcontract_inbound_edit, purchase_unreceived, quality_pages, quality, quality_standard, production_pages, production, production_complete, production_run, production_run_delete, production_run_lot_fix, production_extra, inventory_lot_location, inventory, inventory_lot_trace, inventory_lot_trace_tree, inventory_lot_usage_trace, internal_labels, packing, sales, sales_order_policy, sales_shipping_direct, sales_shipping_direct_page, sales_shipping_fifo_auto, sales_shipping_partial_confirm, sales_shipping_entry, sales_order_delete, shipping_inquiry
 
@@ -19,6 +20,8 @@ install_purchase_lot_format()
 ensure_production_output_lots()
 # 과거 출고취소 건에 남은 외주 LOT 예약을 해제해 가용재고를 복원합니다.
 repair_cancelled_subcontract_reservations()
+# 외주입고 샘플 사용수량은 LOT 재고 기준수량에서 제외합니다.
+repair_subcontract_inbound_sample_stock()
 
 app = FastAPI(title="출하 바코드 관리 시스템")
 
