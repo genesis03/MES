@@ -12,7 +12,7 @@ def _next_internal_lot(db, inbound_date: str, reserved: set[str]) -> str:
     if len(date_text) != 8 or not date_text.isdigit():
         raise HTTPException(422, "입고일자는 YYYY-MM-DD 형식이어야 합니다.")
 
-    prefix = f"LR{date_text[2:]}99"
+    prefix = f"LR{date_text[2:]}"
     existing = {
         row[0]
         for row in db.query(PurchaseInboundItem.internal_lot_no)
@@ -22,13 +22,13 @@ def _next_internal_lot(db, inbound_date: str, reserved: set[str]) -> str:
     }
     existing.update(reserved)
 
-    for seq in range(1, 10):
-        lot_no = f"{prefix}{seq}"
+    for seq in range(1, 1000):
+        lot_no = f"{prefix}{seq:03d}"
         if lot_no not in existing:
             reserved.add(lot_no)
             return lot_no
 
-    raise HTTPException(409, f"{prefix}의 일일 내부 LOT 순번 1~9를 모두 사용했습니다.")
+    raise HTTPException(409, f"{prefix}의 일일 내부 LOT 순번 001~999를 모두 사용했습니다.")
 
 
 def confirm_saved_inbound_short_lot(db, master, preserve_lot=False):
