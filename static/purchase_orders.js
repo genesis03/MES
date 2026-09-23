@@ -5,6 +5,7 @@
   let rows = [];
   let saving = false;
   let editingId = null;
+  let selectedSearchOrderId = null;
 
   const today = () => {
     const d = new Date();
@@ -74,7 +75,7 @@
       vendor = matches[0];
       $('po-vendor-query').value = vendor.value;
       $('po-vendor-query').classList.add('po-vendor-selected');
-      $('po-vendor-hint').textContent = `선택됨: ${vendor.partner_code} / ${vendor.partner_name}`;
+      $('po-vendor-hint').textContent = `선택됨: ${vendor.partner_name}`;
       if (!$('po-manager').value.trim()) $('po-manager').value = vendor.manager_name || '';
     } else {
       $('po-vendor-hint').textContent = '목록에서 거래처를 선택하세요.';
@@ -224,7 +225,7 @@
   function resetOrder() {
     $('po-form').reset();
     $('po-date').value = today();
-    $('po-number').value = '저장 시 자동 발번';
+    $('po-number').value = '';
     $('po-state').value = '발주완료';
     $('po-save').disabled = false;
     $('po-vendor-query').classList.remove('po-vendor-selected');
@@ -326,14 +327,100 @@
     }
   }
 
+
+  function closeOrderSearch() {
+    $('po-search-modal').hidden = true;
+    selectedSearchOrderId = null;
+  }
+
+  async function applySearchOrder(id = selectedSearchOrderId) {
+    if (!id) return;
+    await loadOrder(id);
+    closeOrderSearch();
+  }
+
+  async function loadOrderSearch() {
+    const params = new URLSearchParams({limit:'1000'});
+    const fields = [
+      ['po_no','po-search-number'], ['start_date','po-search-start'], ['end_date','po-search-end'],
+      ['partner_name','po-search-partner'], ['part_no','po-search-part'], ['status','po-search-status']
+    ];
+    fields.forEach(([key,id]) => { const value = $(id).value.trim(); if (value) params.set(key,value); });
+    $('po-search-body').innerHTML = '<tr><td colspan="5">조회 중...</td></tr>';
+    try {
+      const data = await request('/api/purchase/inquiry/orders?' + params.toString());
+      const grouped = new Map();
+      (data.items || []).forEach(row => {
+        if (!grouped.has(row.po_id)) grouped.set(row.po_id, {...row, item_count:0});
+        grouped.get(row.po_id).item_count += 1;
+      });
+      const rows = [...grouped.values()];
+      selectedSearchOrderId = null;
+      $('po-search-apply').disabled = true;
+      $('po-search-message').textContent = `조회 결과 ${rows.length}건`;
+      if (!rows.length) {
+        $('po-search-body').innerHTML = '<tr><td colspan="5">조회된 발주가 없습니다.</td></tr>';
+        return;
+      }
+      $('po-search-body').innerHTML = rows.map(row => `<tr data-id="${Number(row.po_id)}"><td>${row.po_no || ''}</td><td>${row.partner_name || ''}</td><td>${row.order_date || ''}</td><td>${row.status_name || row.status || ''}</td><td>${row.item_count}</td></tr>`).join('');
+      [...$('po-search-body').querySelectorAll('tr[data-id]')].forEach(tr => {
+        tr.addEventListener('click', () => {
+          [...$('po-search-body').querySelectorAll('tr')].forEach(x => x.classList.remove('selected'));
+          tr.classList.add('selected');
+          selectedSearchOrderId = Number(tr.dataset.id);
+          $('po-search-apply').disabled = false;
+        });
+        tr.addEventListener('dblclick', () => applySearchOrder(Number(tr.dataset.id)));
+      });
+    } catch (error) {
+      $('po-search-body').innerHTML = `<tr><td colspan="5">${error.message}</td></tr>`;
+      $('po-search-message').textContent = error.message;
+    }
+  }
+
+  function openOrderSearch() {
+    $('po-search-number').value = '';
+    $('po-search-partner').value = '';
+    $('po-search-part').value = '';
+    $('po-search-status').value = '';
+    $('po-search-start').value = '';
+    $('po-search-end').value = today();
+    $('po-search-modal').hidden = false;
+    loadOrderSearch();
+  }
+
+  async function loadOrderByNumber() {
+    const poNo = $('po-number').value.trim();
+    if (!poNo) {
+      openOrderSearch();
+      return;
+    }
+    try {
+      const data = await request('/api/purchase/inquiry/orders?' + new URLSearchParams({po_no:poNo,limit:'1000'}));
+      const exact = (data.items || []).find(row => String(row.po_no || '').toUpperCase() === poNo.toUpperCase());
+      if (!exact) throw new Error('해당 발주번호를 찾을 수 없습니다.');
+      await loadOrder(exact.po_id);
+    } catch (error) {
+      message(error.message);
+    }
+  }
+
   function init() {
-    const required = ['po-form','po-date','po-vendor-query','po-vendor-options','po-manager','po-requested-date','po-number','po-state','po-note','po-add-row','po-new','po-save','po-lines','po-warehouse-template','po-location-template','po-message'];
+    const required = ['po-form','po-date','po-vendor-query','po-vendor-options','po-manager','po-requested-date','po-number','po-number-search','po-state','po-note','po-add-row','po-new','po-save','po-lines','po-warehouse-template','po-location-template','po-message','po-search-modal','po-search-close-x','po-search-number','po-search-start','po-search-end','po-search-partner','po-search-part','po-search-status','po-search-submit','po-search-body','po-search-message','po-search-apply','po-search-close'];
     const missing = required.filter(id => !$(id));
     if (missing.length) {
       console.error('Purchase order UI missing elements:', missing);
       return;
     }
 
+    $('po-number-search').addEventListener('click', loadOrderByNumber);
+    $('po-number').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); loadOrderByNumber(); } });
+    $('po-search-close-x').addEventListener('click', closeOrderSearch);
+    $('po-search-close').addEventListener('click', closeOrderSearch);
+    $('po-search-modal').addEventListener('click', event => { if (event.target === $('po-search-modal')) closeOrderSearch(); });
+    $('po-search-submit').addEventListener('click', loadOrderSearch);
+    $('po-search-apply').addEventListener('click', () => applySearchOrder());
+    ['po-search-number','po-search-start','po-search-end','po-search-partner','po-search-part'].forEach(id => $(id).addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); loadOrderSearch(); } }));
     $('po-vendor-query').addEventListener('input', resolveVendorFromInput);
     $('po-vendor-query').addEventListener('change', resolveVendorFromInput);
     $('po-add-row').addEventListener('click', event => {
