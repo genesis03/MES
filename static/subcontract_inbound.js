@@ -140,15 +140,17 @@
     state.entries.clear();
     state.popupEntries.clear();
     state.popupItemId = null;
-    $("si-number").value = "입고 시 자동 발번";
-    $("si-date").value = todayLocal();
+    const latestInbound = latestActiveInbound();
+    const completed = source.inbound_status === "COMPLETED";
+    $("si-number").value = completed && latestInbound ? latestInbound.inbound_no : "입고 시 자동 발번";
+    $("si-date").value = completed && latestInbound ? latestInbound.inbound_date : todayLocal();
     $("si-status").value = statusText(source.inbound_status);
     $("si-outbound-no").value = source.outbound_no || "";
     $("si-order-no").value = source.order_no || "";
     $("si-partner").value = source.partner_name || "";
     $("si-process").value = source.processing_type_name || "";
     $("si-manager").value = source.manager_name || "";
-    $("si-location").value = source.external_storage_location || "";
+    $("si-location").value = latestInbound?.storage_location || source.external_storage_location || "";
     $("si-cancel").disabled = !latestActiveInbound();
     renderItems();
   }
@@ -356,6 +358,10 @@
       }
       if (sample < 0 || sample > q) {
         lotMessage(`${owner.lot.source_lot_no} 샘플수량은 입고수량을 초과할 수 없습니다.`, true);
+        return;
+      }
+      if (!String(entry.supplier_lot_no || "").trim()) {
+        lotMessage(`${owner.lot.source_lot_no} 공급사 외주 LOT를 입력해 주세요.`, true);
         return;
       }
     }
