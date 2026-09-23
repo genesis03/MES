@@ -175,7 +175,7 @@ class PurchaseOrderItem(Base):
 
     id = Column(Integer, primary_key=True)
     po_id = Column(Integer, ForeignKey("purchase_order_masters.id"), nullable=False, index=True)
-    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=False, index=True)
     part_no = Column(String(50), nullable=False)
     order_qty = Column(Float, nullable=False)
     unit = Column(String(10), nullable=False)
@@ -216,7 +216,7 @@ class PurchaseInboundItem(Base):
     id = Column(Integer, primary_key=True)
     inbound_id = Column(Integer, ForeignKey("purchase_inbound_masters.id"), nullable=False, index=True)
     po_item_id = Column(Integer, ForeignKey("purchase_order_items.id"), nullable=True, index=True)
-    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=False, index=True)
     part_no = Column(String(50), nullable=False, index=True)
     unit = Column(String(10), nullable=False)
     inspection_status = Column(String(20), nullable=False, default="WAITING")
