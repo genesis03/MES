@@ -353,7 +353,6 @@ def create_inbound(
             item_rows[source_item.id] = inbound_item
             master.items.append(inbound_item)
 
-        net_stock_qty = max(inbound_qty - Decimal(str(row.sample_qty)), Decimal("0"))
 
         # 첫 입고가 전량이면 기존 LOT를 유지하고, 부분입고가 발생하면 입고분마다 LZ LOT를 새로 생성합니다.
         is_split = received > 0 or inbound_qty < allocated
@@ -370,7 +369,7 @@ def create_inbound(
                 lot_no=child_lot_no,
                 item_id=source_item.item_id,
                 part_no=source_item.order_part_no,
-                lot_qty=float(net_stock_qty),
+                lot_qty=float(inbound_qty),
                 storage_location=payload.storage_location,
                 status="ACTIVE",
                 note=f"외주가공 부분입고 {inbound_no} / 원LOT {source_lot.lot_no}",
@@ -383,7 +382,7 @@ def create_inbound(
                     lot_no=child_lot_no,
                     item_id=source_item.item_id,
                     part_no=source_item.order_part_no,
-                    lot_qty=float(net_stock_qty),
+                    lot_qty=float(inbound_qty),
                     storage_location=payload.storage_location,
                     status="ACTIVE",
                     note=f"외주가공 전량입고 {inbound_no} / LOT 유지",
@@ -391,7 +390,7 @@ def create_inbound(
             else:
                 stock.item_id = source_item.item_id
                 stock.part_no = source_item.order_part_no
-                stock.lot_qty = float(net_stock_qty)
+                stock.lot_qty = float(inbound_qty)
                 stock.storage_location = payload.storage_location
                 stock.status = "ACTIVE"
                 stock.note = f"외주가공 전량입고 {inbound_no} / LOT 유지"
