@@ -411,6 +411,7 @@ ITEM_ID_NOT_NULL_COLUMNS = (
     ("packing_masters", "item_id"),
     ("sales_order_items", "item_id"),
     ("shipment_items", "item_id"),
+    ("shipment_direct_lots", "source_item_id"),
     ("subcontract_order_items", "previous_item_id"),
     ("subcontract_order_items", "item_id"),
     ("subcontract_outbound_items", "previous_item_id"),
