@@ -38,7 +38,7 @@ async function jf(url,opt){const r=await fetch(url,opt);let d={};try{d=await r.j
 
 async function loadCustomers(){
   const d=await jf('/api/sales/customers');
-  $('customerId').innerHTML='<option value="">전체</option>'+(d||[]).map(x=>`<option value="${x.id}">${esc(x.partner_name)}${x.partner_code?' ('+esc(x.partner_code)+')':''}</option>`).join('');
+  $('customerId').innerHTML='<option value="">전체</option>'+(d||[]).map(x=>`<option value="${x.id}">${esc(x.partner_name)}</option>`).join('');
 }
 function renderChips(){
   $('chips').innerHTML=selectedParts.map((x,i)=>`<span class="chip" title="${esc(x.part_name||'')}">${esc(x.part_no)}<button type="button" data-rm="${i}">×</button></span>`).join('');
