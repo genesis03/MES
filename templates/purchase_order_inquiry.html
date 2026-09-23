@@ -36,9 +36,9 @@
     <div class="filter-card">
         <div class="filter-field"><label>시작일</label><input type="date" id="orderStartDate"></div>
         <div class="filter-field"><label>종료일</label><input type="date" id="orderEndDate"></div>
-        <div class="filter-field"><label>발주번호</label><input type="text" id="orderPoNo" placeholder="PO / SO"></div>
         <div class="filter-field"><label>거래처</label><input type="text" id="orderPartner" placeholder="거래처명"></div>
         <div class="filter-field"><label>품번</label><input type="text" id="orderPartNo" placeholder="품번"></div>
+        <div class="filter-field"><label>발주번호</label><input type="text" id="orderPoNo" placeholder="발주번호"></div>
         <div class="filter-field"><label>상태</label><select id="orderStatus"><option value="">전체</option><option value="DRAFT">작성중</option><option value="LOT_ALLOCATING">LOT배정중</option><option value="ORDERED">발주완료</option><option value="PARTIAL">부분입고</option><option value="COMPLETED">입고완료</option><option value="CANCELLED">취소</option></select></div>
         <button class="btn btn-primary" onclick="loadOrderInquiry()">조회</button><button class="btn btn-light" onclick="resetOrderInquiry()">초기화</button>
     </div>
