@@ -13,6 +13,7 @@ from models.lot_relation import LotRelationModel
 from models.models import (
     ItemBomModel,
     ItemMasterModel,
+    CommonCodeModel,
     ProcessModel,
     PurchaseInboundItem,
     PurchaseInboundMaster,
@@ -298,6 +299,17 @@ def search_order_items(part_no: Optional[str] = Query(None), part_name: Optional
     process_codes = {(bom_map.get(item.id).process_code if bom_map.get(item.id) else item.production_loc) for item in items}
     process_codes.discard(None); process_codes.discard("")
     process_map = {x.process_code: x for x in db.query(ProcessModel).filter(ProcessModel.process_code.in_(process_codes)).all()} if process_codes else {}
+    material_type_codes = {str(item.material_type or "").strip() for item in items if str(item.material_type or "").strip()}
+    material_type_map = {
+        row.code: row.code_name
+        for row in db.query(CommonCodeModel)
+        .filter(
+            CommonCodeModel.group_code == "MATERIAL_TYPE",
+            CommonCodeModel.code.in_(material_type_codes),
+            CommonCodeModel.is_active == "Y",
+        )
+        .all()
+    } if material_type_codes else {}
     production_rows = db.query(ProductionWorkOrder.item_id, func.coalesce(func.sum(ProductionPerformance.good_qty), 0)).join(ProductionPerformance, ProductionPerformance.work_order_id == ProductionWorkOrder.id).filter(ProductionWorkOrder.item_id.in_(item_ids)).group_by(ProductionWorkOrder.item_id).all()
     production_map = {item_id: float(qty or 0) for item_id, qty in production_rows}
     stock_rows = db.query(ProductionLotModel.item_id, func.coalesce(func.sum(ProductionLotModel.lot_qty), 0)).filter(ProductionLotModel.item_id.in_(item_ids), ProductionLotModel.status == "ACTIVE").group_by(ProductionLotModel.item_id).all()
@@ -308,7 +320,7 @@ def search_order_items(part_no: Optional[str] = Query(None), part_name: Optional
         process_code = (bom.process_code if bom else None) or item.production_loc or ""
         process = process_map.get(process_code)
         parent = parent_map.get(bom.parent_item_id) if bom else None
-        result.append({"item_id": item.id, "part_no": item.part_no, "part_name": item.part_name, "material_type": item.material_type or "", "parent_part_no": parent.part_no if parent else "", "process_code": process_code, "process_name": process.process_name if process else "", "process_order": int(bom.sort_order or 0) if bom else 0, "safety_stock": float(item.safety_stock or 0), "current_stock": stock_map.get(item.id, 0), "production_qty": production_map.get(item.id, 0)})
+        result.append({"item_id": item.id, "part_no": item.part_no, "part_name": item.part_name, "material_type": material_type_map.get(item.material_type, item.material_type or ""), "parent_part_no": parent.part_no if parent else "", "process_code": process_code, "process_name": process.process_name if process else "", "process_order": int(bom.sort_order or 0) if bom else 0, "safety_stock": float(item.safety_stock or 0), "current_stock": stock_map.get(item.id, 0), "production_qty": production_map.get(item.id, 0)})
     return result
 
 
