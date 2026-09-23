@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from models.lot_relation import LotRelationModel
+from models.models import StorageLocationModel
 from models.subcontract import SubcontractOrderMaster
 from models.subcontract_outbound import (
     SubcontractOutboundItem,
@@ -53,6 +54,17 @@ def _active_outbound(db: Session, order_id: int):
         .order_by(SubcontractOutboundMaster.id.desc())
         .first()
     )
+
+
+def _storage_location_name(db: Session, location_code: str | None) -> str:
+    if not location_code:
+        return ""
+    row = (
+        db.query(StorageLocationModel)
+        .filter(StorageLocationModel.location_code == location_code)
+        .first()
+    )
+    return row.location_name if row and row.location_name else location_code
 
 
 def _serialize_source_order(order: SubcontractOrderMaster, outbound: SubcontractOutboundMaster | None = None):
@@ -261,7 +273,11 @@ def get_outbound_source_order(
         raise HTTPException(404, "외주가공 발주를 찾을 수 없습니다.")
     if order.status != "ORDERED":
         raise HTTPException(409, "발주완료 상태의 외주가공 발주만 출고할 수 있습니다.")
-    return _serialize_source_order(order, _active_outbound(db, order.id))
+    data = _serialize_source_order(order, _active_outbound(db, order.id))
+    data["external_storage_location_name"] = _storage_location_name(db, order.external_storage_location)
+    if data.get("outbound"):
+        data["outbound"]["external_storage_location_name"] = data["external_storage_location_name"]
+    return data
 
 
 @router.get("/{outbound_id}")
@@ -276,6 +292,7 @@ def get_outbound(
     data = _serialize_outbound(master)
     order = db.get(SubcontractOrderMaster, master.order_id)
     data["order_date"] = order.order_date if order else ""
+    data["external_storage_location_name"] = _storage_location_name(db, master.external_storage_location)
     return data
 
 
@@ -356,7 +373,9 @@ def create_outbound(
     db.add(master)
     db.commit()
     db.refresh(master)
-    return _serialize_outbound(master)
+    data = _serialize_outbound(master)
+    data["external_storage_location_name"] = _storage_location_name(db, master.external_storage_location)
+    return data
 
 
 @router.post("/{outbound_id}/cancel")
@@ -393,4 +412,6 @@ def cancel_outbound(
     _release_source_order_reservation(db, master)
     db.commit()
     db.refresh(master)
-    return _serialize_outbound(master)
+    data = _serialize_outbound(master)
+    data["external_storage_location_name"] = _storage_location_name(db, master.external_storage_location)
+    return data
