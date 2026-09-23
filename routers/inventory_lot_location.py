@@ -18,7 +18,7 @@ from models.subcontract_outbound import SubcontractOutboundItem, SubcontractOutb
 router = APIRouter(tags=["Inventory LOT Location"])
 
 
-def _used_qty(db: Session, lot_no: str) -> float:
+def _used_qty(db: Session, lot_no: str, item_id: int | None = None) -> float:
     consumed = db.query(func.coalesce(func.sum(LotConsumptionModel.consumed_qty), 0.0)).filter(LotConsumptionModel.lot_no == lot_no).scalar() or 0.0
     related = db.query(func.coalesce(func.sum(LotRelationModel.consumed_qty), 0.0)).filter(LotRelationModel.parent_lot_no == lot_no).scalar() or 0.0
     packed = (
@@ -27,13 +27,15 @@ def _used_qty(db: Session, lot_no: str) -> float:
         .filter(PackingLotAllocation.source_lot_no == lot_no, PackingMaster.status == "PACKED")
         .scalar() or 0.0
     )
-    subcontract_reserved = (
+    subcontract_query = (
         db.query(func.coalesce(func.sum(SubcontractLotAllocation.allocated_qty), 0.0))
         .join(SubcontractOrderItem, SubcontractOrderItem.id == SubcontractLotAllocation.order_item_id)
         .join(SubcontractOrderMaster, SubcontractOrderMaster.id == SubcontractOrderItem.order_id)
         .filter(SubcontractLotAllocation.lot_no == lot_no, SubcontractOrderMaster.status.in_(["DRAFT", "LOT_ALLOCATING", "ORDERED"]))
-        .scalar() or 0.0
     )
+    if item_id:
+        subcontract_query = subcontract_query.filter(SubcontractOrderItem.previous_item_id == item_id)
+    subcontract_reserved = subcontract_query.scalar() or 0.0
     return float(consumed) + float(related) + float(packed) + float(subcontract_reserved)
 
 
@@ -112,7 +114,7 @@ def inventory_lots_with_current_location(
     )
     for item, master in purchase_rows:
         qty = float(item.inbound_qty or 0)
-        used = _used_qty(db, item.internal_lot_no)
+        used = _used_qty(db, item.internal_lot_no, item.item_id)
         part = item_map.get(item.item_id)
         rows.append({
             "source": "구매입고", "item_id": item.item_id, "part_no": part.part_no if part else item.part_no, "part_name": part.part_name if part else "",
@@ -125,7 +127,7 @@ def inventory_lots_with_current_location(
     production_rows = db.query(ProductionLotModel).filter(ProductionLotModel.item_id.in_(item_ids)).order_by(ProductionLotModel.created_at.desc(), ProductionLotModel.id.desc()).all()
     for lot in production_rows:
         qty = float(lot.lot_qty or 0)
-        used = _used_qty(db, lot.lot_no)
+        used = _used_qty(db, lot.lot_no, lot.item_id)
         part = item_map.get(lot.item_id)
         rows.append({
             "source": "생산", "item_id": lot.item_id, "part_no": part.part_no if part else lot.part_no, "part_name": part.part_name if part else "",
