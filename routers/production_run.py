@@ -11,11 +11,13 @@ from core.security import get_current_user
 from models.equipment import EquipmentMaster
 from models.lot_consumption import LotConsumptionModel
 from models.lot_relation import LotRelationModel
+from models.packing import PackingLotAllocation, PackingMaster
 from models.models import CommonCodeModel, ItemBomModel, ItemMasterModel, ProcessModel, PurchaseInboundItem, PurchaseInboundMaster
 from models.production import ProductionPerformance, ProductionWorkOrder
 from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunDefect, ProductionRunLotAllocation, ProductionRunMaterial
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
+from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundLot, SubcontractInboundMaster
 from models.worker import WorkerMaster, WorkerProcess
 
 router = APIRouter(prefix="/api/production-run", tags=["Production Run"])
@@ -118,10 +120,23 @@ def _lot_rows(db: Session, item_id: int):
     return rows
 
 
-def _available_qty(db: Session, lot_no: str, base_qty: float, current_run_id: Optional[int] = None) -> float:
+def _available_qty(
+    db: Session,
+    lot_no: str,
+    base_qty: float,
+    current_run_id: Optional[int] = None,
+    item_id: Optional[int] = None,
+) -> float:
     consumed_process = db.query(func.coalesce(func.sum(LotConsumptionModel.consumed_qty), 0.0)).filter(LotConsumptionModel.lot_no == lot_no).scalar() or 0.0
     consumed_relation = db.query(func.coalesce(func.sum(LotRelationModel.consumed_qty), 0.0)).filter(LotRelationModel.parent_lot_no == lot_no).scalar() or 0.0
-    reserved_subcontract = (
+    packed = (
+        db.query(func.coalesce(func.sum(PackingLotAllocation.allocated_qty), 0.0))
+        .join(PackingMaster, PackingMaster.id == PackingLotAllocation.packing_id)
+        .filter(PackingLotAllocation.source_lot_no == lot_no, PackingMaster.status == "PACKED")
+        .scalar()
+        or 0.0
+    )
+    subcontract_query = (
         db.query(func.coalesce(func.sum(SubcontractLotAllocation.allocated_qty), 0.0))
         .join(SubcontractOrderItem, SubcontractOrderItem.id == SubcontractLotAllocation.order_item_id)
         .join(SubcontractOrderMaster, SubcontractOrderMaster.id == SubcontractOrderItem.order_id)
@@ -129,19 +144,100 @@ def _available_qty(db: Session, lot_no: str, base_qty: float, current_run_id: Op
             SubcontractLotAllocation.lot_no == lot_no,
             SubcontractOrderMaster.status.in_(["DRAFT", "LOT_ALLOCATING", "ORDERED"]),
         )
-        .scalar()
-        or 0.0
     )
+    if item_id:
+        subcontract_query = subcontract_query.filter(SubcontractOrderItem.previous_item_id == item_id)
+    reserved_subcontract = subcontract_query.scalar() or 0.0
+
+    sample_query = (
+        db.query(func.coalesce(func.sum(SubcontractInboundLot.sample_qty), 0.0))
+        .join(SubcontractInboundItem, SubcontractInboundItem.id == SubcontractInboundLot.inbound_item_id)
+        .join(SubcontractInboundMaster, SubcontractInboundMaster.id == SubcontractInboundItem.inbound_id)
+        .filter(
+            SubcontractInboundMaster.status == "RECEIVED",
+            SubcontractInboundLot.child_lot_no == lot_no,
+        )
+    )
+    if item_id:
+        sample_query = sample_query.filter(SubcontractInboundItem.item_id == item_id)
+    sample_used = sample_query.scalar() or 0.0
+
     run_query = (
         db.query(func.coalesce(func.sum(ProductionRunLotAllocation.allocated_qty), 0.0))
         .join(ProductionRunMaterial, ProductionRunMaterial.id == ProductionRunLotAllocation.material_id)
         .join(ProductionRun, ProductionRun.id == ProductionRunMaterial.run_id)
         .filter(ProductionRunLotAllocation.lot_no == lot_no, ProductionRun.status == "IN_PROGRESS")
     )
+    if item_id:
+        run_query = run_query.filter(ProductionRunMaterial.material_item_id == item_id)
     if current_run_id:
         run_query = run_query.filter(ProductionRun.id != current_run_id)
     reserved_run = run_query.scalar() or 0.0
-    return max(float(base_qty) - float(consumed_process) - float(consumed_relation) - float(reserved_subcontract) - float(reserved_run), 0.0)
+    return max(
+        float(base_qty)
+        - float(consumed_process)
+        - float(consumed_relation)
+        - float(packed)
+        - float(reserved_subcontract)
+        - float(sample_used)
+        - float(reserved_run),
+        0.0,
+    )
+
+
+def _allocate_material_fifo(db: Session, run: ProductionRun, material: ProductionRunMaterial):
+    required = float(material.required_qty or 0)
+    allocated = sum(float(x.allocated_qty or 0) for x in material.allocations)
+    remaining = max(required - allocated, 0.0)
+    if remaining <= 1e-9:
+        return [], 0.0
+
+    existing = {x.lot_no: x for x in material.allocations}
+    candidates = []
+    total_available = 0.0
+    for lot in _lot_rows(db, material.material_item_id):
+        current_alloc = float(existing[lot["lot_no"]].allocated_qty or 0) if lot["lot_no"] in existing else 0.0
+        available_total = _available_qty(
+            db,
+            lot["lot_no"],
+            lot["base_qty"],
+            current_run_id=run.id,
+            item_id=material.material_item_id,
+        )
+        additional_available = max(float(available_total) - current_alloc, 0.0)
+        if additional_available <= 1e-9:
+            continue
+        candidates.append((lot, additional_available))
+        total_available += additional_available
+
+    if total_available + 1e-9 < remaining:
+        shortage = remaining - total_available
+        raise HTTPException(
+            409,
+            f"{material.material_part_no} LOT 재고 부족: 필요 {remaining:g} / 사용가능 {total_available:g} / 부족 {shortage:g}",
+        )
+
+    assigned = []
+    to_assign = remaining
+    for lot, available in candidates:
+        if to_assign <= 1e-9:
+            break
+        qty = min(to_assign, available)
+        current = existing.get(lot["lot_no"])
+        if current:
+            current.allocated_qty = float(current.allocated_qty or 0) + qty
+        else:
+            current = ProductionRunLotAllocation(
+                lot_no=lot["lot_no"],
+                allocated_qty=qty,
+                source_type=lot["source_type"],
+                storage_location=lot["storage_location"],
+            )
+            material.allocations.append(current)
+            existing[lot["lot_no"]] = current
+        assigned.append((lot["lot_no"], qty))
+        to_assign -= qty
+    return assigned, remaining
 
 
 def _serialize_material(material: ProductionRunMaterial):
@@ -421,6 +517,7 @@ def material_lots(
             lot["lot_no"],
             lot["base_qty"],
             current_run_id=run.id,
+            item_id=material.material_item_id,
         )
         additional_available = max(float(available_before_current) - current_alloc, 0.0)
         already_allocated = current_alloc > 1e-9
@@ -493,47 +590,18 @@ def scan_material_lot(
     if scanned_lot is None:
         raise HTTPException(404, f"{material.material_part_no} 품번에 해당하는 LOT가 아닙니다.")
 
-    if any(x.lot_no.upper() == scanned.upper() for x in material.allocations):
-        raise HTTPException(409, f"{scanned} LOT는 이미 배정되어 있습니다.")
-
-    required = float(material.required_qty or 0)
-    allocated = sum(float(x.allocated_qty or 0) for x in material.allocations)
-    remaining = max(required - allocated, 0.0)
-    if remaining <= 1e-9:
+    assigned, requested_qty = _allocate_material_fifo(db, run, material)
+    if not assigned:
         raise HTTPException(409, f"{material.material_part_no}는 이미 필요수량이 모두 배정되었습니다.")
-
-    fifo_lot = None
-    fifo_available = 0.0
-    for lot in lots:
-        if any(x.lot_no == lot["lot_no"] for x in material.allocations):
-            continue
-        available = _available_qty(db, lot["lot_no"], lot["base_qty"], current_run_id=run.id)
-        if available > 1e-9:
-            fifo_lot = lot
-            fifo_available = available
-            break
-
-    if not fifo_lot:
-        raise HTTPException(409, "선입선출 기준으로 배정 가능한 LOT 재고가 없습니다.")
-
-    assign_qty = min(remaining, fifo_available)
-    material.allocations.append(
-        ProductionRunLotAllocation(
-            lot_no=fifo_lot["lot_no"],
-            allocated_qty=assign_qty,
-            source_type=fifo_lot["source_type"],
-            storage_location=fifo_lot["storage_location"],
-        )
-    )
     db.commit()
 
-    message = f"{fifo_lot['lot_no']}에 {assign_qty:g} 배정했습니다."
-    if fifo_lot["lot_no"].upper() != scanned.upper():
-        message = (
-            f"스캔 LOT {scanned}보다 선입 LOT {fifo_lot['lot_no']}를 "
-            f"우선 배정했습니다. ({assign_qty:g})"
-        )
-    return {"message": message, "material": _serialize_material(material)}
+    allocation_text = ", ".join(f"{lot_no} {qty:g}" for lot_no, qty in assigned)
+    first_lot = assigned[0][0]
+    if first_lot.upper() != scanned.upper():
+        message = f"스캔 LOT {scanned}를 확인하고 FIFO 기준으로 {allocation_text} 배정했습니다."
+    else:
+        message = f"FIFO 기준으로 {allocation_text} 배정했습니다."
+    return {"message": message, "material": _serialize_material(material), "assigned_qty": requested_qty}
 
 
 @router.get("/{run_id}")
@@ -643,37 +711,18 @@ def scan_lot(run_id: int, payload: ScanLotPayload, db: Session = Depends(get_db)
     if not matched_material or not matched_lot:
         raise HTTPException(404, "이 작업의 BOM 자재에 해당하는 LOT가 아닙니다.")
 
-    required = float(matched_material.required_qty or 0)
-    allocated = sum(float(x.allocated_qty or 0) for x in matched_material.allocations)
-    remaining = max(required - allocated, 0.0)
-    if remaining <= 1e-9:
+    assigned, requested_qty = _allocate_material_fifo(db, run, matched_material)
+    if not assigned:
         raise HTTPException(409, f"{matched_material.material_part_no}는 이미 필요수량이 모두 배정되었습니다.")
-
-    fifo_lot = None
-    fifo_available = 0.0
-    for lot in _lot_rows(db, matched_material.material_item_id):
-        if any(x.lot_no == lot["lot_no"] for x in matched_material.allocations):
-            continue
-        available = _available_qty(db, lot["lot_no"], lot["base_qty"], current_run_id=run.id)
-        if available > 1e-9:
-            fifo_lot = lot
-            fifo_available = available
-            break
-    if not fifo_lot:
-        raise HTTPException(409, "선입선출 기준으로 배정 가능한 LOT 재고가 없습니다.")
-
-    assign_qty = min(remaining, fifo_available)
-    matched_material.allocations.append(ProductionRunLotAllocation(
-        lot_no=fifo_lot["lot_no"],
-        allocated_qty=assign_qty,
-        source_type=fifo_lot["source_type"],
-        storage_location=fifo_lot["storage_location"],
-    ))
     db.commit()
-    message = f"{fifo_lot['lot_no']}에 {assign_qty:g} 배정했습니다."
-    if fifo_lot["lot_no"].upper() != scanned.upper():
-        message = f"스캔 LOT {scanned}보다 선입 LOT {fifo_lot['lot_no']}를 우선 배정했습니다. ({assign_qty:g})"
-    return {"message": message, "material": _serialize_material(matched_material)}
+
+    allocation_text = ", ".join(f"{lot_no} {qty:g}" for lot_no, qty in assigned)
+    first_lot = assigned[0][0]
+    if first_lot.upper() != scanned.upper():
+        message = f"스캔 LOT {scanned}를 확인하고 FIFO 기준으로 {allocation_text} 배정했습니다."
+    else:
+        message = f"FIFO 기준으로 {allocation_text} 배정했습니다."
+    return {"message": message, "material": _serialize_material(matched_material), "assigned_qty": requested_qty}
 
 
 @router.post("/{run_id}/complete")
