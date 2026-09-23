@@ -13,7 +13,7 @@ from routers import pages, manual, shipping, basic_info, basic_info_workers, bas
 
 # 초기 계정 데이터 생성 트리거
 init_default_accounts()
-# 구매입고 내부 LOT은 LR+YYMMDD+99+1자리 순번 규칙으로 발번합니다.
+# 구매입고 내부 LOT은 LR+YYMMDD+3자리(001~999) 순번 규칙으로 발번합니다.
 install_purchase_lot_format()
 # 기존 생산실적까지 포함해 생산 LOT가 빠진 건을 보강합니다.
 ensure_production_output_lots()
