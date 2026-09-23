@@ -59,13 +59,13 @@
     <div class="filter-card">
         <div class="filter-field"><label>시작일</label><input type="date" id="inboundStartDate"></div>
         <div class="filter-field"><label>종료일</label><input type="date" id="inboundEndDate"></div>
-        <div class="filter-field"><label>입고번호</label><input type="text" id="inboundNo" placeholder="IN- / I..."></div>
-        <div class="filter-field"><label>발주번호</label><input type="text" id="inboundPoNo" placeholder="PO- / SO-..."></div>
         <div class="filter-field"><label>거래처</label><input type="text" id="inboundPartner" placeholder="거래처명"></div>
         <div class="filter-field"><label>품번</label><input type="text" id="inboundPartNo" placeholder="품번"></div>
-        <div class="filter-field"><label>LOT</label><input type="text" id="inboundLot" placeholder="외주업체/원/내부 LOT"></div>
+        <div class="filter-field"><label>입고번호</label><input type="text" id="inboundNo" placeholder="입고번호"></div>
+        <div class="filter-field"><label>발주번호</label><input type="text" id="inboundPoNo" placeholder="발주번호"></div>
+        <div class="filter-field"><label>LOT</label><input type="text" id="inboundLot" placeholder="LOT 번호"></div>
         <div class="filter-field"><label>상태</label><select id="inboundStatus"><option value="">전체</option><option value="DRAFT">임시저장</option><option value="CONFIRMED">입고확정</option></select></div>
-        <button class="btn btn-primary" onclick="loadInboundInquiry()">조회</button>
+        <button class="btn btn-primary" onclick="loadInboundInquiry()">조회</button><button class="btn btn-light" onclick="resetInboundInquiry()">초기화</button>
         <button class="btn btn-light" onclick="resetInboundInquiry()">초기화</button>
     </div>
 
