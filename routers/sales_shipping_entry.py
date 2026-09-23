@@ -11,6 +11,7 @@ from core.security import get_current_user
 from models.models import ItemMasterModel
 from models.packing import PackingBox, PackingMaster
 from models.sales import SalesOrderItem, SalesOrderMaster, ShipmentBox, ShipmentItem, ShipmentMaster
+from services.sales_order_service import sync_order_status
 
 router = APIRouter(tags=["Sales Shipping Entry"])
 templates = Jinja2Templates(directory="templates")
@@ -49,25 +50,6 @@ def _next_no(db: Session, model, field, prefix: str, date_value: str) -> str:
         except (TypeError, ValueError):
             seq = 1
     return f"{base}{seq:03d}"
-
-
-def _sync_order_status(order: SalesOrderMaster):
-    for item in order.items:
-        shipped = float(item.shipped_qty or 0)
-        ordered = float(item.order_qty or 0)
-        if shipped >= ordered - 1e-9:
-            item.status = "COMPLETED"
-        elif shipped > 1e-9:
-            item.status = "PARTIAL"
-        else:
-            item.status = "WAITING"
-
-    if order.items and all(float(x.shipped_qty or 0) >= float(x.order_qty or 0) - 1e-9 for x in order.items):
-        order.status = "COMPLETED"
-    elif any(float(x.shipped_qty or 0) > 1e-9 for x in order.items):
-        order.status = "PARTIAL"
-    else:
-        order.status = "ORDERED"
 
 
 def _waiting_rows(db: Session, item_id: int):
@@ -363,7 +345,7 @@ def confirm_shipment(
         total_qty += shipment_qty
 
     for order in orders.values():
-        _sync_order_status(order)
+        sync_order_status(order)
     db.commit()
 
     return {
