@@ -239,7 +239,16 @@ def selectable_orders(process_code: str = Query(...), db: Session = Depends(get_
     result = []
     for order in orders:
         item = db.get(ItemMasterModel, order.item_id) if order.item_id else None
-        process_match = db.query(ItemBomModel.id).filter(ItemBomModel.parent_item_id == order.item_id, ItemBomModel.process_code == code).first()
+        # 작업지시 입력 화면과 동일하게, 해당 품목이 BOM의 자품번으로 등록된
+        # 공정을 우선 사용하고 품목마스터 생산공정을 보조 기준으로 사용합니다.
+        process_match = (
+            db.query(ItemBomModel.id)
+            .filter(
+                ItemBomModel.child_item_id == order.item_id,
+                ItemBomModel.process_code == code,
+            )
+            .first()
+        )
         if not process_match and (not item or (item.production_loc or "") != code):
             continue
         result.append({
@@ -253,6 +262,7 @@ def selectable_orders(process_code: str = Query(...), db: Session = Depends(get_
             "remaining_qty": max(float(order.order_qty or 0) - float(order.production_qty or 0), 0.0),
             "priority": order.priority,
             "status": order.status,
+            "status_name": {"WAITING": "대기", "IN_PROGRESS": "생산중"}.get(order.status, order.status),
         })
     return result
 
