@@ -55,6 +55,7 @@ async function saveEdit(){
   const lots=[...document.querySelectorAll('#lotBody tr[data-id]')].map(tr=>({id:Number(tr.dataset.id),supplier_lot_no:tr.querySelector('.supplier').value.trim()||null,inbound_qty:Number(tr.querySelector('.qty').value||0),sample_qty:Number(tr.querySelector('.sample').value||0)}));
   if(!inboundDate.value||!storageLocation.value){alert('입고일자와 저장위치를 확인하세요.');return;}
   if(lots.some(x=>x.inbound_qty<=0||x.sample_qty<0||x.sample_qty>x.inbound_qty)){alert('LOT별 입고수량/샘플수량을 확인하세요.');return;}
+  if(lots.some(x=>!x.supplier_lot_no)){alert('공급사 외주 LOT를 입력하세요.');return;}
   if(!confirm(`${loaded.inbound_no} 외주가공 입고를 수정하시겠습니까?`))return;
   saveBtn.disabled=true;
   try{const d=await api(`/api/subcontract/inbound-edit/${inboundId}`,{method:'PUT',body:JSON.stringify({inbound_date:inboundDate.value,storage_location:storageLocation.value,note:note.value.trim()||null,lots})});alert(d.message||'수정했습니다.');location.href='/purchase/inquiry/inbounds';}catch(e){message.className='msg warn';message.textContent=e.message;saveBtn.disabled=false;}
