@@ -16,7 +16,7 @@ from core.security import (
     parse_user_permissions,
 )
 # 실제 정의된 클래스명(ItemBomModel) 임포트 및 코드 호환용 별칭 정의
-from models.models import ItemMasterModel, ItemBomModel
+from models.models import ItemMasterModel, ItemBomModel, CommonCodeModel
 
 # 코드 내부 참조 호환성 유지용 별칭
 ItemBOMModel = ItemBomModel
@@ -70,13 +70,29 @@ async def get_bom_parent_items(
 
     query = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == "Y")
 
-    if material_type:
-        query = query.filter(ItemMasterModel.material_type == material_type.strip())
+    normalized_material_type = (material_type or "").strip().upper()
+    material_type_aliases = {
+        "완제품": "FINISHED",
+        "반제품": "SEMI",
+        "원재료": "RAW",
+    }
+    normalized_material_type = material_type_aliases.get(normalized_material_type, normalized_material_type)
+    if normalized_material_type:
+        query = query.filter(ItemMasterModel.material_type == normalized_material_type)
     if keyword:
         kw = f"%{keyword.strip()}%"
         query = query.filter((ItemMasterModel.part_no.ilike(kw)) | (ItemMasterModel.part_name.ilike(kw)))
 
     items = query.order_by(ItemMasterModel.part_no.asc()).all()
+    material_type_names = {
+        row.code: row.code_name
+        for row in db.query(CommonCodeModel)
+        .filter(
+            CommonCodeModel.group_code == "MATERIAL_TYPE",
+            CommonCodeModel.is_active == "Y",
+        )
+        .all()
+    }
 
     data = [
         {
@@ -85,7 +101,8 @@ async def get_bom_parent_items(
             "part_name": it.part_name,
             "vehicle_model": it.vehicle_model or "",
             "account_type": it.account_type,
-            "material_type": it.material_type,
+            "material_type": material_type_names.get(it.material_type, it.material_type or ""),
+            "material_type_code": it.material_type or "",
             "unit": it.unit,
             "weight": it.weight or 0.0,
             "production_loc": it.production_loc or ""
