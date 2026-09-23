@@ -41,6 +41,11 @@
 .po-footer { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:12px 0; }
 .po-message { font-size:13px; min-height:18px; }
 .po-vendor-selected { border-color:#16a34a !important; background:#f0fdf4 !important; }
+.po-inline{display:flex;gap:6px;align-items:center}.po-inline input{min-width:0;flex:1}.po-inline .po-btn{flex:0 0 auto}
+.po-modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:9999}.po-modal-backdrop[hidden]{display:none}
+.po-modal{width:min(1000px,96vw);max-height:86vh;background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(15,23,42,.3);display:flex;flex-direction:column}
+.po-modal-head,.po-modal-foot{padding:12px 16px;display:flex;align-items:center;gap:8px}.po-modal-head{border-bottom:1px solid #e2e8f0;justify-content:space-between}.po-modal-foot{border-top:1px solid #e2e8f0;justify-content:flex-end}
+.po-modal-body{padding:14px 16px;overflow:auto}.po-search-grid{display:grid;grid-template-columns:1fr 2fr;gap:10px 24px;margin-bottom:12px}.po-search-field{display:grid;grid-template-columns:80px minmax(0,1fr);gap:8px;align-items:center}.po-search-field label{font-size:12px;font-weight:700}.po-search-field input,.po-search-field select{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;background:#fff}.po-search-period{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center}.po-search-actions{display:flex;justify-content:flex-end}.po-search-table{width:100%;border-collapse:collapse;font-size:12px}.po-search-table th,.po-search-table td{border:1px solid #dbe2eb;padding:8px;text-align:center}.po-search-table th{background:#f8fafc}.po-search-table tbody tr{cursor:pointer}.po-search-table tbody tr:hover,.po-search-table tbody tr.selected{background:#eff6ff}
 @media(max-width:750px) { .po-header { grid-template-columns:1fr; } .po-field-wide { grid-column:1; } }
 </style>
 {% endblock %}
@@ -51,13 +56,13 @@
     <div class="po-header">
       <div class="po-field"><label for="po-date">발주일자</label><input id="po-date" type="date" required></div>
       <div class="po-field"><label for="po-vendor-query">거래처</label><div class="po-lookup">
-        <input id="po-vendor-query" list="po-vendor-options" autocomplete="off" placeholder="거래처 코드 또는 이름 입력" required>
-        <datalist id="po-vendor-options">{% for vendor in vendors %}<option value="{{ vendor.partner_code }} · {{ vendor.partner_name }}" data-id="{{ vendor.id }}" data-code="{{ vendor.partner_code }}" data-name="{{ vendor.partner_name }}" data-manager="{{ vendor.manager_name or '' }}"></option>{% endfor %}</datalist>
+        <input id="po-vendor-query" list="po-vendor-options" autocomplete="off" placeholder="거래처명 입력" required>
+        <datalist id="po-vendor-options">{% for vendor in vendors %}<option value="{{ vendor.partner_name }}" data-id="{{ vendor.id }}" data-code="{{ vendor.partner_code }}" data-name="{{ vendor.partner_name }}" data-manager="{{ vendor.manager_name or '' }}"></option>{% endfor %}</datalist>
         <div id="po-vendor-hint" class="po-lookup-hint">글자를 입력한 뒤 목록에서 거래처를 선택하세요.</div>
       </div></div>
       <div class="po-field"><label for="po-manager">담당자</label><input id="po-manager" maxlength="50"></div>
       <div class="po-field"><label for="po-requested-date">납기요청일</label><input id="po-requested-date" type="date"></div>
-      <div class="po-field"><label for="po-number">발주번호</label><input id="po-number" value="저장 시 자동 발번" readonly></div>
+      <div class="po-field"><label for="po-number">발주번호</label><div class="po-inline"><input id="po-number" autocomplete="off" placeholder="저장 시 자동 발번"><button class="po-btn" type="button" id="po-number-search">조회</button></div></div>
       <div class="po-field"><label for="po-state">상태</label><input id="po-state" value="발주완료" readonly></div>
       <div class="po-field po-field-wide"><label for="po-note">비고</label><textarea id="po-note" rows="2" maxlength="1000"></textarea></div>
     </div>
@@ -70,10 +75,30 @@
       <thead><tr><th>No.</th><th>품번 / 품명 검색</th><th>품명</th><th>규격</th><th>단위</th><th>발주수량</th><th>입고창고(선택)</th><th>저장위치</th><th>납기일</th><th>비고</th><th></th></tr></thead>
       <tbody id="po-lines"></tbody>
     </table></div>
-    <select id="po-warehouse-template" hidden><option value="">선택</option>{% for warehouse in warehouse_masters %}<option value="{{ warehouse.warehouse_code }}">{{ warehouse.warehouse_code }} · {{ warehouse.warehouse_name }}</option>{% endfor %}</select>
-    <select id="po-location-template" hidden><option value="">선택</option>{% for location in storage_locations %}<option value="{{ location.location_code }}">{{ location.location_code }} · {{ location.location_name }}</option>{% endfor %}</select>
+    <select id="po-warehouse-template" hidden><option value="">선택</option>{% for warehouse in warehouse_masters %}<option value="{{ warehouse.warehouse_code }}">{{ warehouse.warehouse_name }}</option>{% endfor %}</select>
+    <select id="po-location-template" hidden><option value="">선택</option>{% for location in storage_locations %}<option value="{{ location.location_code }}">{{ location.location_name }}</option>{% endfor %}</select>
     <div class="po-footer"><button class="po-btn" type="button" id="po-new">신규</button><button class="po-btn po-btn-primary" type="submit" id="po-save">저장</button><span id="po-message" class="po-message" role="status"></span></div>
   </form>
 </div>
+
+<div id="po-search-modal" class="po-modal-backdrop" hidden>
+  <div class="po-modal" role="dialog" aria-modal="true" aria-labelledby="po-search-title">
+    <div class="po-modal-head"><strong id="po-search-title">발주 조회</strong><button class="po-btn" type="button" id="po-search-close-x">닫기</button></div>
+    <div class="po-modal-body">
+      <div class="po-search-grid">
+        <div class="po-search-field"><label>발주번호</label><input id="po-search-number"></div>
+        <div class="po-search-field"><label>발주기간</label><div class="po-search-period"><input id="po-search-start" type="date"><span>~</span><input id="po-search-end" type="date"></div></div>
+        <div class="po-search-field"><label>거래처</label><input id="po-search-partner"></div>
+        <div class="po-search-field"><label>품번</label><input id="po-search-part"></div>
+        <div class="po-search-field"><label>상태</label><select id="po-search-status"><option value="">전체</option><option value="ORDERED">발주완료</option><option value="PARTIAL">부분입고</option><option value="COMPLETED">입고완료</option><option value="CANCELLED">취소</option></select></div>
+        <div class="po-search-actions"><button class="po-btn po-btn-primary" type="button" id="po-search-submit">조회</button></div>
+      </div>
+      <table class="po-search-table"><thead><tr><th>발주번호</th><th>거래처</th><th>발주일</th><th>상태</th><th>품목수</th></tr></thead><tbody id="po-search-body"><tr><td colspan="5">조회 중...</td></tr></tbody></table>
+      <div id="po-search-message" class="po-lookup-hint" style="margin-top:8px"></div>
+    </div>
+    <div class="po-modal-foot"><button class="po-btn po-btn-primary" type="button" id="po-search-apply" disabled>적용</button><button class="po-btn" type="button" id="po-search-close">닫기</button></div>
+  </div>
+</div>
+
 {% endblock %}
-{% block extra_script %}<script src="/static/purchase_orders.js?v=20260915-1"></script>{% endblock %}
+{% block extra_script %}<script src="/static/purchase_orders.js?v=20260923-2"></script>{% endblock %}
