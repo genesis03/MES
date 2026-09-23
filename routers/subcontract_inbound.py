@@ -307,6 +307,8 @@ def create_inbound(
             raise HTTPException(422, f"{source_lot.lot_no}의 입고수량은 잔여수량 {float(remaining):g}을 초과할 수 없습니다.")
         if sample_qty > inbound_qty:
             raise HTTPException(422, f"{source_lot.lot_no}의 샘플수량은 금회 입고수량을 초과할 수 없습니다.")
+        if not (row.supplier_lot_no or "").strip():
+            raise HTTPException(422, f"{source_lot.lot_no}의 공급사 외주 LOT를 입력해 주세요.")
         validated.append((row, source_item, source_lot, allocated, received, inbound_qty))
 
     inbound_no = _next_inbound_no(db, payload.inbound_date)
@@ -351,6 +353,8 @@ def create_inbound(
             item_rows[source_item.id] = inbound_item
             master.items.append(inbound_item)
 
+        net_stock_qty = max(inbound_qty - Decimal(str(row.sample_qty)), Decimal("0"))
+
         # 첫 입고가 전량이면 기존 LOT를 유지하고, 부분입고가 발생하면 입고분마다 LZ LOT를 새로 생성합니다.
         is_split = received > 0 or inbound_qty < allocated
         if is_split:
@@ -366,7 +370,7 @@ def create_inbound(
                 lot_no=child_lot_no,
                 item_id=source_item.item_id,
                 part_no=source_item.order_part_no,
-                lot_qty=float(inbound_qty),
+                lot_qty=float(net_stock_qty),
                 storage_location=payload.storage_location,
                 status="ACTIVE",
                 note=f"외주가공 부분입고 {inbound_no} / 원LOT {source_lot.lot_no}",
@@ -379,7 +383,7 @@ def create_inbound(
                     lot_no=child_lot_no,
                     item_id=source_item.item_id,
                     part_no=source_item.order_part_no,
-                    lot_qty=float(inbound_qty),
+                    lot_qty=float(net_stock_qty),
                     storage_location=payload.storage_location,
                     status="ACTIVE",
                     note=f"외주가공 전량입고 {inbound_no} / LOT 유지",
@@ -387,7 +391,7 @@ def create_inbound(
             else:
                 stock.item_id = source_item.item_id
                 stock.part_no = source_item.order_part_no
-                stock.lot_qty = float(inbound_qty)
+                stock.lot_qty = float(net_stock_qty)
                 stock.storage_location = payload.storage_location
                 stock.status = "ACTIVE"
                 stock.note = f"외주가공 전량입고 {inbound_no} / LOT 유지"
