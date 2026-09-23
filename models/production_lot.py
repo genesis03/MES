@@ -16,7 +16,7 @@ class ProductionLotModel(Base):
 
     id = Column(Integer, primary_key=True)
     lot_no = Column(String(100), unique=True, nullable=False, index=True)
-    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=False, index=True)
     part_no = Column(String(50), nullable=False, index=True)
     lot_qty = Column(Float, nullable=False)
     storage_location = Column(String(20), nullable=True)
