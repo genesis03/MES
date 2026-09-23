@@ -150,7 +150,8 @@
     const completed = source.inbound_status === "COMPLETED";
     state.viewInbound = selectedInbound || (completed ? source.inbound || null : null);
     const shownInbound = state.viewInbound;
-    $("si-number").value = shownInbound ? shownInbound.inbound_no : "입고 시 자동 발번";
+    $("si-number").value = shownInbound ? shownInbound.inbound_no : "";
+    $("si-number").placeholder = shownInbound ? "" : "입고 시 자동 발번";
     $("si-date").value = shownInbound ? shownInbound.inbound_date : todayLocal();
     $("si-status").value = shownInbound ? shownInbound.status_name : statusText(source.inbound_status);
     $("si-outbound-no").value = source.outbound_no || "";
@@ -405,12 +406,12 @@
     const inbound = await api(`/api/subcontract/inbound/${encodeURIComponent(inboundId)}`);
     const source = await api(`/api/subcontract/inbound/outbound/${encodeURIComponent(inbound.outbound_id)}`);
     renderSource(source, inbound);
-    $("si-inbound-search").value = inbound.inbound_no || "";
+    $("si-number").value = inbound.inbound_no || "";
     message(`입고번호 ${inbound.inbound_no} 조회 완료. 확정 LOT는 'LOT 조회'에서 확인할 수 있습니다.`);
   }
 
   async function searchInboundNo() {
-    const keyword = $("si-inbound-search").value.trim();
+    const keyword = $("si-number").value.trim();
     if (!keyword) return message("조회할 입고번호를 입력하세요.", true);
     try {
       const data = await api(`/api/subcontract/inbound/lookup?inbound_no=${encodeURIComponent(keyword)}`);
@@ -508,8 +509,8 @@
       loadOutboundList();
     });
     $("si-search-btn").addEventListener("click", loadOutboundList);
-    $("si-inbound-search-btn").addEventListener("click", searchInboundNo);
-    $("si-inbound-search").addEventListener("keydown", (e) => { if (e.key === "Enter") searchInboundNo(); });
+    $("si-number-search-btn").addEventListener("click", searchInboundNo);
+    $("si-number").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); searchInboundNo(); } });
     $("si-search").addEventListener("keydown", (e) => { if (e.key === "Enter") loadOutboundList(); });
     $("si-load-close").addEventListener("click", () => { $("si-load-modal").hidden = true; });
     $("si-load-apply").addEventListener("click", applySelectedOutbound);
