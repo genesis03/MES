@@ -39,21 +39,21 @@
   <div class="toolbar"><button class="btn btn-primary" id="saveBtn">저장</button></div>
 </div>
 
-<div class="lookup-backdrop" id="orderLookupModal">
-  <div class="lookup-modal">
-    <div class="lookup-head"><strong>수주 조회</strong><button type="button" class="btn btn-light" id="orderLookupClose">닫기</button></div>
-    <div class="lookup-body">
-      <div class="lookup-filters">
+<div class="lookup-backdrop mes-popup-backdrop" id="orderLookupModal">
+  <div class="lookup-modal mes-popup">
+    <div class="lookup-head mes-popup-head"><strong>수주 조회</strong><button type="button" class="btn btn-light" id="orderLookupClose">닫기</button></div>
+    <div class="lookup-body mes-popup-body">
+      <div class="lookup-filters mes-popup-filters">
         <div class="lookup-filter"><label>수주번호</label><input id="lookupOrderNo"></div>
         <div class="lookup-filter"><label>수주기간</label><div style="display:flex;gap:5px"><input id="lookupStart" type="date"><input id="lookupEnd" type="date"></div></div>
         <div class="lookup-filter"><label>판매처</label><input id="lookupCustomer"></div>
         <div class="lookup-filter"><label>상태</label><select id="lookupStatus"><option value="">전체</option><option value="ORDERED">수주완료</option><option value="PARTIAL">부분출고</option><option value="COMPLETED">출고완료</option><option value="CANCELLED">취소</option></select></div>
         <button type="button" class="btn btn-primary" id="lookupSearchBtn">조회</button>
       </div>
-      <table class="lookup-table"><thead><tr><th>수주번호</th><th>판매처</th><th>수주일</th><th>납기일</th><th>상태</th><th>품목수</th></tr></thead><tbody id="lookupBody"><tr><td colspan="6">조회해 주세요.</td></tr></tbody></table>
+      <table class="lookup-table mes-popup-table"><thead><tr><th>수주번호</th><th>판매처</th><th>수주일</th><th>납기일</th><th>상태</th><th>품목수</th></tr></thead><tbody id="lookupBody"><tr><td colspan="6">조회해 주세요.</td></tr></tbody></table>
       <div class="hint" id="lookupMessage" style="margin-top:8px"></div>
     </div>
-    <div class="lookup-foot"><button type="button" class="btn btn-primary" id="lookupApplyBtn" disabled>적용</button><button type="button" class="btn btn-light" id="lookupClose2">닫기</button></div>
+    <div class="lookup-foot mes-popup-foot"><button type="button" class="btn btn-primary" id="lookupApplyBtn" disabled>적용</button><button type="button" class="btn btn-light" id="lookupClose2">닫기</button></div>
   </div>
 </div>
 <script src="/static/sales_orders.js?v=20260923-2"></script>
