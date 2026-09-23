@@ -7,9 +7,16 @@
   let saving = false;
   let lotTarget = null;
   let lotCandidates = [];
+  let orderSearchPage = 1;
+  let orderSearchTotal = 0;
+  let selectedSearchOrderId = null;
 
   const today = () => {
     const d = new Date();
+    return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
+  };
+  const dateOffset = days => {
+    const d = new Date(); d.setDate(d.getDate() + days);
     return [d.getFullYear(), String(d.getMonth() + 1).padStart(2, '0'), String(d.getDate()).padStart(2, '0')].join('-');
   };
   const fmt = value => Number(value || 0).toLocaleString(undefined, {maximumFractionDigits: 6});
@@ -335,11 +342,85 @@
     } catch (error) { msg(error.message); }
   }
 
+  function closeOrderSearch() {
+    $('so-order-search-modal').hidden = true;
+    selectedSearchOrderId = null;
+  }
+
+  async function selectSearchOrder(orderIdValue) {
+    if (!orderIdValue) return;
+    try {
+      const data = await request(`/api/subcontract/orders/${orderIdValue}`);
+      loadOrderData(data);
+      closeOrderSearch();
+    } catch (error) { $('so-search-message').textContent = error.message; }
+  }
+
+  function renderOrderSearch(data) {
+    const items = data.items || [];
+    orderSearchTotal = Number(data.total || 0);
+    const pageSize = Number($('so-search-size').value || 25);
+    const totalPages = Math.max(1, Math.ceil(orderSearchTotal / pageSize));
+    if (orderSearchPage > totalPages) orderSearchPage = totalPages;
+    $('so-search-page').textContent = `${orderSearchPage} / ${totalPages}`;
+    $('so-search-prev').disabled = orderSearchPage <= 1;
+    $('so-search-next').disabled = orderSearchPage >= totalPages;
+    $('so-search-message').textContent = `조회 결과 ${orderSearchTotal}건`;
+    selectedSearchOrderId = null;
+    $('so-search-apply').disabled = true;
+    if (!items.length) {
+      $('so-search-body').innerHTML = '<tr><td colspan="6">조회된 외주가공 발주가 없습니다.</td></tr>';
+      return;
+    }
+    $('so-search-body').innerHTML = items.map(row => `<tr class="so-search-row" data-id="${Number(row.id)}"><td>${escapeHtml(row.order_no)}</td><td>${escapeHtml(row.partner_name)}</td><td>${escapeHtml(row.processing_type_name)}</td><td>${escapeHtml(row.order_date)}</td><td>${escapeHtml(row.status_name)}</td><td>${escapeHtml(row.updated_at)}</td></tr>`).join('');
+    document.querySelectorAll('.so-search-row').forEach(tr => {
+      tr.addEventListener('click', () => {
+        document.querySelectorAll('.so-search-row').forEach(x => x.classList.remove('selected'));
+        tr.classList.add('selected');
+        selectedSearchOrderId = Number(tr.dataset.id);
+        $('so-search-apply').disabled = false;
+      });
+      tr.addEventListener('dblclick', () => selectSearchOrder(Number(tr.dataset.id)));
+    });
+  }
+
+  async function loadOrderSearch() {
+    const pageSize = Number($('so-search-size').value || 25);
+    const params = new URLSearchParams({offset:String((orderSearchPage - 1) * pageSize), limit:String(pageSize)});
+    const filters = [
+      ['order_no','so-search-number'],
+      ['start_date','so-search-start'],
+      ['end_date','so-search-end'],
+      ['part_no','so-search-part']
+    ];
+    filters.forEach(([key,id]) => { const value = $(id).value.trim(); if (value) params.set(key, value); });
+    $('so-search-body').innerHTML = '<tr><td colspan="6">조회 중...</td></tr>';
+    $('so-search-message').textContent = '';
+    try {
+      const data = await request('/api/subcontract/orders/search?' + params.toString());
+      renderOrderSearch(data);
+    } catch (error) {
+      $('so-search-body').innerHTML = `<tr><td colspan="6" class="so-error">${escapeHtml(error.message)}</td></tr>`;
+      $('so-search-message').textContent = error.message;
+    }
+  }
+
+  function openOrderSearch() {
+    orderSearchPage = 1;
+    selectedSearchOrderId = null;
+    $('so-search-number').value = '';
+    $('so-search-part').value = '';
+    $('so-search-start').value = dateOffset(-7);
+    $('so-search-end').value = today();
+    $('so-order-search-modal').hidden = false;
+    loadOrderSearch();
+    setTimeout(() => $('so-search-number').focus(), 0);
+  }
+
   async function loadOrderByNumber() {
     const orderNo = $('so-number').value.trim();
     if (!orderNo) {
-      msg('조회할 발주번호를 입력하세요.');
-      $('so-number').focus();
+      openOrderSearch();
       return;
     }
     try {
@@ -352,11 +433,20 @@
   }
 
   function init() {
-    const required=['so-form','so-date','so-vendor','so-vendors','so-process','so-due-date','so-location','so-manager','so-number','so-number-search','so-status','so-note','so-add-row','so-lines','so-new','so-save','so-confirm','so-message','so-lot-modal','so-lot-close','so-lot-cancel','so-lot-apply','so-lot-body'];
+    const required=['so-form','so-date','so-vendor','so-vendors','so-process','so-due-date','so-location','so-manager','so-number','so-number-search','so-order-search-modal','so-order-search-x','so-search-number','so-search-start','so-search-end','so-search-part','so-search-submit','so-search-body','so-search-message','so-search-size','so-search-prev','so-search-page','so-search-next','so-search-apply','so-search-close','so-status','so-note','so-add-row','so-lines','so-new','so-save','so-confirm','so-message','so-lot-modal','so-lot-close','so-lot-cancel','so-lot-apply','so-lot-body'];
     const missing=required.filter(id=>!$(id)); if(missing.length){console.error('Subcontract order UI missing:',missing);return;}
     $('so-vendor').addEventListener('input',resolveVendor); $('so-vendor').addEventListener('change',resolveVendor);
     $('so-number-search').addEventListener('click',loadOrderByNumber);
-    $('so-number').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();loadOrderByNumber();}});
+    $('so-number').addEventListener('keydown',event=>{if(event.key==='Enter' && $('so-number').value.trim()){event.preventDefault();loadOrderByNumber();}});
+    $('so-order-search-x').addEventListener('click',closeOrderSearch);
+    $('so-search-close').addEventListener('click',closeOrderSearch);
+    $('so-order-search-modal').addEventListener('click',event=>{if(event.target===$('so-order-search-modal'))closeOrderSearch();});
+    $('so-search-submit').addEventListener('click',()=>{orderSearchPage=1;loadOrderSearch();});
+    ['so-search-number','so-search-start','so-search-end','so-search-part'].forEach(id => $(id).addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();orderSearchPage=1;loadOrderSearch();}}));
+    $('so-search-size').addEventListener('change',()=>{orderSearchPage=1;loadOrderSearch();});
+    $('so-search-prev').addEventListener('click',()=>{if(orderSearchPage>1){orderSearchPage-=1;loadOrderSearch();}});
+    $('so-search-next').addEventListener('click',()=>{const size=Number($('so-search-size').value||25);if(orderSearchPage<Math.max(1,Math.ceil(orderSearchTotal/size))){orderSearchPage+=1;loadOrderSearch();}});
+    $('so-search-apply').addEventListener('click',()=>selectSearchOrder(selectedSearchOrderId));
     $('so-process').addEventListener('change',()=>rows.forEach(row=>{if(!row.process.value)row.process.value=$('so-process').value;if(row.part)resolveBomOutput(row);}));
     $('so-due-date').addEventListener('change',()=>rows.forEach(row=>{if(!row.date.value)row.date.value=$('so-due-date').value;}));
     $('so-add-row').addEventListener('click',()=>addRow(null,true)); $('so-new').addEventListener('click',reset); $('so-form').addEventListener('submit',save); $('so-confirm').addEventListener('click',confirmOrder);
