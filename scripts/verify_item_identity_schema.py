@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sqlalchemy import inspect, text
 
 from core.database import engine
-from models.item_identity_migration import IDENTITY_COLUMNS
+from models.item_identity_migration import IDENTITY_COLUMNS, ITEM_ID_NOT_NULL_COLUMNS
 
 
 def main() -> int:
@@ -26,6 +26,7 @@ def main() -> int:
     legacy_part_fk = []
     missing_item_columns = []
     missing_item_indexes = []
+    nullable_required_columns = []
 
     with engine.connect() as conn:
         inspector = inspect(conn)
@@ -50,6 +51,16 @@ def main() -> int:
             }
             if id_column not in index_columns:
                 missing_item_indexes.append(f"{table_name}.{id_column}")
+
+        for table_name, column_name in ITEM_ID_NOT_NULL_COLUMNS:
+            if table_name not in tables:
+                continue
+            table_columns = {row["name"]: row for row in inspector.get_columns(table_name)}
+            column = table_columns.get(column_name)
+            if column is None:
+                continue
+            if bool(column.get("nullable", True)):
+                nullable_required_columns.append(f"{table_name}.{column_name}")
 
         for table_name in sorted(tables):
             fk_rows = conn.execute(
@@ -81,6 +92,13 @@ def main() -> int:
     else:
         print("[OK] item_id 인덱스 누락 없음")
 
+    if nullable_required_columns:
+        print("[확인필요] 필수 item_id 컬럼 nullable 잔여")
+        for value in nullable_required_columns:
+            print(" -", value)
+    else:
+        print("[OK] 필수 item_id 컬럼 NOT NULL 적용 완료")
+
     if legacy_part_fk:
         print("[전환잔여] item_master.part_no 물리 FK")
         for value in legacy_part_fk:
@@ -92,10 +110,11 @@ def main() -> int:
     print(
         f"컬럼누락={len(missing_item_columns)} / "
         f"인덱스누락={len(missing_item_indexes)} / "
+        f"nullable잔여={len(nullable_required_columns)} / "
         f"part_no FK잔여={len(legacy_part_fk)}"
     )
 
-    return 1 if missing_item_columns or missing_item_indexes or legacy_part_fk else 0
+    return 1 if missing_item_columns or missing_item_indexes or nullable_required_columns or legacy_part_fk else 0
 
 
 if __name__ == "__main__":
