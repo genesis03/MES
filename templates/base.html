@@ -219,22 +219,7 @@
             </li>
             {% endif %}
 
-            <!-- 5. 재고 관리 (구 입고관리) -->
-            {% if user.role == "ADMIN" or (user.perms and user.perms.inbound and user.perms.inbound.enabled) %}
-            <li class="menu-item{% if request.url.path.startswith('/inventory/') %} open{% endif %}" id="inboundMenu">
-                <div class="menu-title" onclick="toggleAccordion('inboundMenu')">
-                    <span>재고관리</span>
-                    <span class="arrow-icon">▼</span>
-                </div>
-                <ul class="submenu">
-                    <li class="submenu-item"><a href="/inventory/lots" id="nav-inventory-lots">LOT 재고 현황</a></li>
-                    <li class="submenu-item"><a href="/inventory/lot-trace" id="nav-inventory-lot-trace">LOT 추적</a></li>
-                    <li class="submenu-item"><a href="/inventory/lot-usage-trace" id="nav-inventory-lot-usage-trace">LOT 사용처 추적</a></li>
-                </ul>
-            </li>
-            {% endif %}
-
-            <!-- 6. 출고관리 -->
+            <!-- 5. 출고관리 -->
             {% if user.role == "ADMIN" or (user.perms and user.perms.shipping and user.perms.shipping.enabled) %}
             <li class="menu-item{% if request.url.path.startswith('/shipping') or request.url.path == '/sales/shipping' %} open{% endif %}" id="shippingMenu">
                 <div class="menu-title" onclick="toggleAccordion('shippingMenu')">
@@ -248,6 +233,21 @@
                     {% if user.role == "ADMIN" or user.perms.shipping.menus.print != "NONE" %}<li class="submenu-item"><a href="/shipping/print" id="nav-print">바코드 출력 (파일 일괄)</a></li>{% endif %}
                     {% if user.role == "ADMIN" or user.perms.shipping.menus.manual != "NONE" %}<li class="submenu-item"><a href="/shipping/manual" id="nav-manual">바코드 출력 (수기 개별)</a></li>{% endif %}
                     {% if user.role == "ADMIN" or user.perms.shipping.menus.verify != "NONE" %}<li class="submenu-item"><a href="/shipping/verify" id="nav-verify">출하 바코드 검증</a></li>{% endif %}
+                </ul>
+            </li>
+            {% endif %}
+
+            <!-- 6. 재고 관리 (구 입고관리) -->
+            {% if user.role == "ADMIN" or (user.perms and user.perms.inbound and user.perms.inbound.enabled) %}
+            <li class="menu-item{% if request.url.path.startswith('/inventory/') %} open{% endif %}" id="inboundMenu">
+                <div class="menu-title" onclick="toggleAccordion('inboundMenu')">
+                    <span>재고관리</span>
+                    <span class="arrow-icon">▼</span>
+                </div>
+                <ul class="submenu">
+                    <li class="submenu-item"><a href="/inventory/lots" id="nav-inventory-lots">LOT 재고 현황</a></li>
+                    <li class="submenu-item"><a href="/inventory/lot-trace" id="nav-inventory-lot-trace">LOT 추적</a></li>
+                    <li class="submenu-item"><a href="/inventory/lot-usage-trace" id="nav-inventory-lot-usage-trace">LOT 사용처 추적</a></li>
                 </ul>
             </li>
             {% endif %}
