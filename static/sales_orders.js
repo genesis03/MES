@@ -208,7 +208,7 @@ function addRow(data = null) {
 
 function setReadOnlyMode(message) {
   readOnlyOrder = true;
-  document.querySelectorAll('#orderDate,#deliveryDueDate,#customerSearch,#orderType,#transactionType,#managerName,#note,#itemBody input,#itemBody button,#addRowBtn').forEach(el => {
+  document.querySelectorAll('#orderDate,#deliveryDueDate,#customerSearch,#orderType,#transactionType,#managerName,#poNo,#note,#itemBody input,#itemBody button,#addRowBtn,#applyDueDateBtn').forEach(el => {
     el.disabled = true;
   });
   $('saveBtn').disabled = true;
@@ -231,6 +231,7 @@ async function loadOrder(orderId) {
   $('orderType').value = order.order_type || 'NORMAL';
   $('transactionType').value = order.transaction_type || 'PAID';
   $('managerName').value = order.manager_name || '';
+  $('poNo').value = order.po_no || '';
   $('note').value = order.note || '';
 
   const customer = customers.find(x => Number(x.id) === Number(order.customer_id));
@@ -293,6 +294,7 @@ async function saveOrder() {
         order_type: $('orderType').value,
         transaction_type: $('transactionType').value,
         manager_name: $('managerName').value.trim() || null,
+        po_no: $('poNo').value.trim() || null,
         note: $('note').value.trim() || null,
         items: items.map(x => ({part_no: x.part_no, order_qty: x.order_qty, delivery_date: x.delivery_date}))
       })
@@ -319,6 +321,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('#itemBody .delivery-date').forEach(el => {
       if (!el.value) el.value = $('deliveryDueDate').value;
     });
+  });
+  $('applyDueDateBtn').addEventListener('click', () => {
+    const dueDate = $('deliveryDueDate').value;
+    if (!dueDate) return alert('상단 납기예정일을 먼저 입력해 주세요.');
+    document.querySelectorAll('#itemBody .delivery-date').forEach(el => { el.value = dueDate; });
   });
 
   let customerTimer = null;
