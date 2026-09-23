@@ -115,7 +115,8 @@
       const completed = s.available <= 0;
       const status = completed ? "입고완료" : (s.received > 0 ? "부분입고" : "입고대기");
       const cls = completed ? "st-done" : (s.received > 0 ? "st-partial" : "st-wait");
-      const viewOnly = completed && !!state.viewInbound;
+      const viewOnly = !!state.viewInbound && (state.viewInbound.items || []).some((x) => Number(x.outbound_item_id) === Number(item.outbound_item_id));
+      const buttonDisabled = state.viewInbound ? !viewOnly : completed;
       return `<tr>
         <td>${index + 1}</td>
         <td class="left">${esc(item.part_no)}</td>
@@ -128,14 +129,15 @@
         <td class="si-item-current">${s.current ? fmt(s.current) : "-"}</td>
         <td>${s.enteredLots}/${item.lots.length}</td>
         <td class="${cls}">${status}</td>
-        <td><button type="button" class="si-btn si-lot-btn" data-item-id="${item.outbound_item_id}"${completed && !viewOnly ? " disabled" : ""}>${viewOnly ? "LOT 조회" : "LOT 입고"}</button></td>
+        <td><button type="button" class="si-btn si-lot-btn" data-item-id="${item.outbound_item_id}"${buttonDisabled ? " disabled" : ""}>${viewOnly ? "LOT 조회" : "LOT 입고"}</button></td>
       </tr>`;
     });
 
     $("si-items").innerHTML = rows.length ? rows.join("") : `<tr><td colspan="12">입고할 품목이 없습니다.</td></tr>`;
     document.querySelectorAll(".si-lot-btn").forEach((btn) => btn.addEventListener("click", () => {
       const itemId = Number(btn.dataset.itemId);
-      openLotPopup(itemId, state.viewInbound && itemStats(itemById(itemId)).available <= 0 ? state.viewInbound : null);
+      const viewOnly = !!state.viewInbound && (state.viewInbound.items || []).some((x) => Number(x.outbound_item_id) === itemId);
+      openLotPopup(itemId, viewOnly ? state.viewInbound : null);
     }));
     recomputeTotals();
   }
@@ -159,7 +161,8 @@
     $("si-location").value = shownInbound?.storage_location || source.external_storage_location || "";
     $("si-date").disabled = !!shownInbound;
     $("si-location").disabled = !!shownInbound;
-    $("si-cancel").disabled = !latestActiveInbound();
+    const latestInbound = latestActiveInbound();
+    $("si-cancel").disabled = !latestInbound || (!!shownInbound && Number(shownInbound.id) !== Number(latestInbound.id));
     renderItems();
   }
 
