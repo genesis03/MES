@@ -27,7 +27,7 @@
     <div class="si-field"><label>외주발주번호</label><input id="si-order-no" readonly></div>
     <div class="si-field"><label>발주처</label><input id="si-partner" readonly></div>
     <div class="si-field"><label>가공유형</label><input id="si-process" readonly></div>
-    <div class="si-field"><label>입고 저장위치</label><select id="si-location"><option value="">선택</option>{% for row in storage_locations %}<option value="{{ row.location_code }}">{{ row.location_code }}{% if row.location_name %} - {{ row.location_name }}{% endif %}</option>{% endfor %}</select></div>
+    <div class="si-field"><label>입고 저장위치</label><select id="si-location"><option value="">선택</option>{% for row in storage_locations %}<option value="{{ row.location_code }}">{{ row.location_name or row.location_code }}</option>{% endfor %}</select></div>
     <div class="si-field"><label>담당자</label><input id="si-manager" readonly></div>
   </div>
 
@@ -84,4 +84,4 @@
   </div>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/subcontract_inbound.js?v=20260914-3"></script><script src="/static/internal_label_buttons.js?v=20260916-1"></script>{% endblock %}
+{% block extra_script %}<script src="/static/subcontract_inbound.js?v=20260923-1"></script><script src="/static/internal_label_buttons.js?v=20260916-1"></script>{% endblock %}
