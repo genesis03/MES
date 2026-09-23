@@ -20,7 +20,7 @@ install_purchase_lot_format()
 ensure_production_output_lots()
 # 과거 출고취소 건에 남은 외주 LOT 예약을 해제해 가용재고를 복원합니다.
 repair_cancelled_subcontract_reservations()
-# 외주입고 샘플 사용수량은 LOT 재고 기준수량에서 제외합니다.
+# 외주입고 LOT는 최초수량을 유지하고 샘플수량은 사용수량으로 계산하도록 과거 데이터를 보정합니다.
 repair_subcontract_inbound_sample_stock()
 
 app = FastAPI(title="출하 바코드 관리 시스템")
