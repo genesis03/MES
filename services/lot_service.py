@@ -8,6 +8,8 @@ LOT_PREFIXES = {
     "INBOUND": "L",
     "COMPLEX_LATHE": "LX",
     "MACHINING": "LB",
+    "TAPPING": "LB",
+    "SERRATION": "LD",
     "SILVER_PLATING": "LZ",
     "OUTSOURCE_CNC": "LC",
     "ASSEMBLY": "LA",
@@ -39,31 +41,38 @@ def next_lot_no(db, prefix: str, work_date: str, equipment_no: int | str | None 
     """회사 표준 LOT 번호를 발번합니다.
 
     형식: 공정Prefix + YYYYMMDD + 설비번호 2자리 + 일일순번 2자리
-    예: LZ202609140101
-    순번은 동일 일자/공정/설비 기준 01~99입니다.
+    예: LX202609230201
+
+    마지막 2자리 순번은 동일 작업일 + 동일 Prefix 전체 설비가 공유합니다.
+    예:
+      LX...0201 이후 LX...0101 재사용 금지 → 다음 LX는 ...02
+      LX...0201과 LB...0101은 Prefix가 다르므로 허용
     """
     base = lot_base(prefix, work_date, equipment_no)
+    date_text = (work_date or "").replace("-", "")
+    date_prefix = f"{prefix}{date_text}"
     reserved = set(reserved or ())
 
     existing = {
         row[0]
         for row in db.query(ProductionLotModel.lot_no)
-        .filter(ProductionLotModel.lot_no.like(base + "%"))
+        .filter(ProductionLotModel.lot_no.like(date_prefix + "%"))
         .all()
         if row[0]
     }
     existing.update(
         row[0]
         for row in db.query(PurchaseInboundItem.internal_lot_no)
-        .filter(PurchaseInboundItem.internal_lot_no.like(base + "%"))
+        .filter(PurchaseInboundItem.internal_lot_no.like(date_prefix + "%"))
         .all()
         if row[0]
     )
     existing.update(reserved)
 
     used = set()
+    expected_length = len(date_prefix) + 4  # 설비번호 2자리 + 순번 2자리
     for lot_no in existing:
-        if lot_no.startswith(base) and len(lot_no) == len(base) + 2:
+        if lot_no.startswith(date_prefix) and len(lot_no) == expected_length:
             suffix = lot_no[-2:]
             if suffix.isdigit():
                 used.add(int(suffix))
@@ -72,4 +81,7 @@ def next_lot_no(db, prefix: str, work_date: str, equipment_no: int | str | None 
         if sequence not in used:
             return f"{base}{sequence:02d}"
 
-    raise HTTPException(409, f"{base}의 일일 LOT 순번 01~99를 모두 사용했습니다.")
+    raise HTTPException(
+        409,
+        f"{date_prefix}의 동일 공정 일일 LOT 순번 01~99를 모두 사용했습니다.",
+    )
