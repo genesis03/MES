@@ -238,7 +238,7 @@ def update_inbound(
         if lot.child_lot_no:
             stock = db.query(ProductionLotModel).filter(ProductionLotModel.lot_no == lot.child_lot_no).one_or_none()
             if stock is not None:
-                stock.lot_qty = max(float(row.inbound_qty) - float(row.sample_qty), 0.0)
+                stock.lot_qty = float(row.inbound_qty)
                 stock.storage_location = payload.storage_location
                 stock.status = "ACTIVE"
             if lot.child_lot_no != lot.source_lot_no:
