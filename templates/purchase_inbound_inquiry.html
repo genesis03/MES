@@ -102,7 +102,7 @@ function updateInboundSelection(){
 }
 function toggleInboundSelection(id){if(selectedInboundIds.has(id))selectedInboundIds.delete(id);else selectedInboundIds.add(id);updateInboundSelection();}
 function toggleAllInbounds(){const ids=[...new Set(currentInboundRows.filter(row=>row.source_type!=='SUBCONTRACT').map(row=>Number(row.inbound_id)))];const allSelected=ids.length>0&&ids.every(id=>selectedInboundIds.has(id));ids.forEach(id=>allSelected?selectedInboundIds.delete(id):selectedInboundIds.add(id));updateInboundSelection();}
-function inboundEditUrl(row){return row.source_type==='SUBCONTRACT'?'/subcontract/inbound/edit/'+encodeURIComponent(row.inbound_id):'/purchase/inbound?edit='+encodeURIComponent(row.inbound_id);}
+function inboundEditUrl(row){return row.source_type==='SUBCONTRACT'?'/subcontract/inbound?inbound_id='+encodeURIComponent(row.inbound_id):'/purchase/inbound?edit='+encodeURIComponent(row.inbound_id);}
 
 async function deleteSelectedInbounds(){
     const ids=[...selectedInboundIds];if(!ids.length)return;
@@ -152,8 +152,8 @@ async function loadInboundInquiry(){
         document.getElementById('inboundCount').textContent=rows.length.toLocaleString();
         renderInboundRows(rows);
         updateInboundSelection();
-        if(inboundType==='SUBCONTRACT')notice.textContent='외주가공 입고는 입고번호를 클릭하면 수정 화면으로 이동합니다.';
-        else if(inboundType==='ALL')notice.textContent='일반구매와 외주가공 모두 입고번호를 클릭해 해당 입력/수정 화면으로 이동합니다.';
+        if(inboundType==='SUBCONTRACT')notice.textContent='외주가공 입고번호를 클릭하면 외주가공 입고 처리 화면에서 해당 입고 건을 조회합니다.';
+        else if(inboundType==='ALL')notice.textContent='일반구매는 입력/수정 화면, 외주가공은 외주가공 입고 처리 화면으로 이동합니다.';
     }catch(e){body.innerHTML=`<tr><td colspan="19" class="empty" style="color:#dc2626;">${escInbound(e.message)}</td></tr>`;}
 }
 
