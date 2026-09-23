@@ -397,3 +397,288 @@ def ensure_item_part_no_fk_removed(engine) -> None:
             "[item_id] item_master.part_no 물리 FK 제거 완료: "
             + ", ".join(legacy_tables)
         )
+
+
+# 실제 업무 생성 경로와 운영 DB 검증을 모두 통과한 item_id 계열만
+# 물리 NOT NULL 대상으로 강제합니다. production_lots는 과거 호환 때문에 제외합니다.
+ITEM_ID_NOT_NULL_COLUMNS = (
+    ("purchase_order_items", "item_id"),
+    ("purchase_inbound_items", "item_id"),
+    ("production_plans", "item_id"),
+    ("production_work_orders", "item_id"),
+    ("production_run_materials", "material_item_id"),
+    ("lot_consumptions", "item_id"),
+    ("packing_masters", "item_id"),
+    ("sales_order_items", "item_id"),
+    ("shipment_items", "item_id"),
+    ("subcontract_order_items", "previous_item_id"),
+    ("subcontract_order_items", "item_id"),
+    ("subcontract_outbound_items", "previous_item_id"),
+    ("subcontract_outbound_items", "item_id"),
+    ("subcontract_inbound_items", "previous_item_id"),
+    ("subcontract_inbound_items", "item_id"),
+)
+
+
+def _rewrite_create_sql_with_not_null(
+    create_sql: str,
+    table_name: str,
+    temp_name: str,
+    columns: set[str],
+) -> str:
+    open_pos = create_sql.find("(")
+    close_pos = create_sql.rfind(")")
+    if open_pos < 0 or close_pos <= open_pos:
+        raise RuntimeError(f"{table_name}: CREATE TABLE SQL 형식을 해석할 수 없습니다.")
+
+    head = create_sql[:open_pos]
+    body = create_sql[open_pos + 1:close_pos]
+    tail = create_sql[close_pos + 1:]
+
+    defs = _split_sql_definitions(body)
+    changed = set()
+    rewritten_defs = []
+    for definition in defs:
+        name_match = re.match(
+            r'^\s*(?:"([^"]+)"|\x60([^\x60]+)\x60|\[([^\]]+)\]|([A-Za-z_][A-Za-z0-9_]*))\s+',
+            definition,
+        )
+        column_name = next((value for value in (name_match.groups() if name_match else ()) if value), None)
+        if column_name in columns:
+            if "not null" not in definition.lower():
+                ident = (
+                    r'(?:"' + re.escape(column_name) + r'"|\x60' + re.escape(column_name)
+                    + r'\x60|\[' + re.escape(column_name) + r'\]|' + re.escape(column_name) + r')'
+                )
+                type_pattern = re.compile(
+                    r'^(\s*' + ident + r'\s+[A-Za-z0-9_]+(?:\s*\([^)]*\))?)',
+                    flags=re.IGNORECASE,
+                )
+                definition, count = type_pattern.subn(r'\1 NOT NULL', definition, count=1)
+                if count != 1:
+                    raise RuntimeError(
+                        f"{table_name}.{column_name}: NOT NULL 정의를 만들 수 없습니다."
+                    )
+            changed.add(column_name)
+        rewritten_defs.append(definition)
+
+    missing = columns - changed
+    if missing:
+        raise RuntimeError(
+            f"{table_name}: NOT NULL 대상 컬럼 정의를 찾지 못했습니다: "
+            + ", ".join(sorted(missing))
+        )
+
+    table_pattern = re.compile(
+        r'^(\s*CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?)'
+        + r'(?:"' + re.escape(table_name) + r'"|\x60' + re.escape(table_name)
+        + r'\x60|\[' + re.escape(table_name) + r'\]|' + re.escape(table_name) + r')',
+        flags=re.IGNORECASE,
+    )
+    new_head, count = table_pattern.subn(
+        lambda match: match.group(1) + _quote(temp_name),
+        head,
+        count=1,
+    )
+    if count != 1:
+        raise RuntimeError(f"{table_name}: 임시 테이블 CREATE SQL을 만들 수 없습니다.")
+
+    return new_head + "(" + ",\n".join(rewritten_defs) + ")" + tail
+
+
+def _backup_sqlite_database_for_not_null(conn, engine) -> Path | None:
+    database = engine.url.database
+    if not database or database == ":memory:":
+        return None
+
+    source_path = Path(database).resolve()
+    if not source_path.exists():
+        return None
+
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = source_path.with_name(
+        source_path.name + f".pre_item_id_not_null_{stamp}.bak"
+    )
+    driver = conn.connection.driver_connection
+    with sqlite3.connect(str(backup_path)) as backup:
+        driver.backup(backup)
+    return backup_path
+
+
+def ensure_item_identity_not_null(engine) -> None:
+    """검증 완료된 item_id 계열 컬럼을 실제 DB에서 NOT NULL로 강제합니다.
+
+    NULL 데이터가 단 1건이라도 있으면 변경하지 않습니다.
+    SQLite는 변경 전 DB 전체 백업 후 대상 테이블만 재구성하고,
+    PostgreSQL은 컬럼별 SET NOT NULL을 적용합니다.
+    """
+    grouped: dict[str, set[str]] = {}
+    for table_name, column_name in ITEM_ID_NOT_NULL_COLUMNS:
+        grouped.setdefault(table_name, set()).add(column_name)
+
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as conn:
+            tables = set(inspect(conn).get_table_names())
+            for table_name, columns in grouped.items():
+                if table_name not in tables:
+                    continue
+                existing = {col["name"]: col for col in inspect(conn).get_columns(table_name)}
+                for column_name in columns:
+                    if column_name not in existing:
+                        raise RuntimeError(f"{table_name}.{column_name}: 컬럼이 없습니다.")
+                    unresolved = int(conn.execute(text(
+                        f"SELECT COUNT(*) FROM {_quote(table_name)} "
+                        f"WHERE {_quote(column_name)} IS NULL"
+                    )).scalar_one() or 0)
+                    if unresolved:
+                        raise RuntimeError(
+                            f"{table_name}.{column_name}: NULL {unresolved}건이 있어 NOT NULL 전환을 중단했습니다."
+                        )
+                    if existing[column_name].get("nullable", True):
+                        conn.execute(text(
+                            f"ALTER TABLE {_quote(table_name)} "
+                            f"ALTER COLUMN {_quote(column_name)} SET NOT NULL"
+                        ))
+        return
+
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.connect() as conn:
+        tables = set(inspect(conn).get_table_names())
+        pending: dict[str, set[str]] = {}
+
+        for table_name, columns in grouped.items():
+            if table_name not in tables:
+                continue
+            info_rows = conn.exec_driver_sql(
+                f"PRAGMA table_info({_quote(table_name)})"
+            ).mappings().all()
+            info = {str(row["name"]): row for row in info_rows}
+            for column_name in columns:
+                if column_name not in info:
+                    raise RuntimeError(f"{table_name}.{column_name}: 컬럼이 없습니다.")
+                unresolved = int(conn.execute(text(
+                    f"SELECT COUNT(*) FROM {_quote(table_name)} "
+                    f"WHERE {_quote(column_name)} IS NULL"
+                )).scalar_one() or 0)
+                if unresolved:
+                    raise RuntimeError(
+                        f"{table_name}.{column_name}: NULL {unresolved}건이 있어 NOT NULL 전환을 중단했습니다."
+                    )
+                if int(info[column_name].get("notnull") or 0) == 0:
+                    pending.setdefault(table_name, set()).add(column_name)
+
+        if not pending:
+            return
+
+        backup_path = _backup_sqlite_database_for_not_null(conn, engine)
+
+        conn.commit()
+        conn.exec_driver_sql("PRAGMA foreign_keys=OFF")
+        conn.commit()
+        if int(conn.exec_driver_sql("PRAGMA foreign_keys").scalar_one() or 0) != 0:
+            raise RuntimeError("SQLite foreign_keys 비활성화에 실패해 NOT NULL 전환을 중단했습니다.")
+        conn.commit()
+
+        transaction = conn.begin()
+        try:
+            for table_name, columns in pending.items():
+                table_q = _quote(table_name)
+                create_sql = conn.execute(
+                    text("SELECT sql FROM sqlite_master WHERE type='table' AND name=:name"),
+                    {"name": table_name},
+                ).scalar_one_or_none()
+                if not create_sql:
+                    raise RuntimeError(f"{table_name}: CREATE TABLE SQL을 찾을 수 없습니다.")
+
+                row_count_before = int(
+                    conn.execute(text(f"SELECT COUNT(*) FROM {table_q}")).scalar_one() or 0
+                )
+                dependent_sql = [
+                    row[0]
+                    for row in conn.execute(
+                        text(
+                            """
+                            SELECT sql
+                              FROM sqlite_master
+                             WHERE tbl_name=:name
+                               AND type IN ('index','trigger')
+                               AND sql IS NOT NULL
+                             ORDER BY type, name
+                            """
+                        ),
+                        {"name": table_name},
+                    ).all()
+                    if row[0]
+                ]
+
+                temp_name = f"__item_id_not_null_{table_name}"
+                conn.execute(text(f"DROP TABLE IF EXISTS {_quote(temp_name)}"))
+                rewritten = _rewrite_create_sql_with_not_null(
+                    create_sql, table_name, temp_name, columns
+                )
+                conn.exec_driver_sql(rewritten)
+
+                column_names = [row["name"] for row in inspect(conn).get_columns(table_name)]
+                column_list = ", ".join(_quote(name) for name in column_names)
+                conn.execute(text(
+                    f"INSERT INTO {_quote(temp_name)} ({column_list}) "
+                    f"SELECT {column_list} FROM {table_q}"
+                ))
+
+                row_count_after = int(
+                    conn.execute(text(f"SELECT COUNT(*) FROM {_quote(temp_name)}")).scalar_one()
+                    or 0
+                )
+                if row_count_after != row_count_before:
+                    raise RuntimeError(
+                        f"{table_name}: NOT NULL 전환 전후 행수가 다릅니다. "
+                        f"{row_count_before} -> {row_count_after}"
+                    )
+
+                conn.execute(text(f"DROP TABLE {table_q}"))
+                conn.execute(text(
+                    f"ALTER TABLE {_quote(temp_name)} RENAME TO {table_q}"
+                ))
+                for sql in dependent_sql:
+                    conn.exec_driver_sql(sql)
+
+            transaction.commit()
+        except Exception:
+            transaction.rollback()
+            raise
+        finally:
+            conn.exec_driver_sql("PRAGMA foreign_keys=ON")
+            conn.commit()
+
+        fk_errors = conn.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+        if fk_errors:
+            raise RuntimeError(
+                f"item_id NOT NULL 전환 후 FK 무결성 오류 {len(fk_errors)}건이 발견되었습니다."
+            )
+
+        for table_name, columns in pending.items():
+            info_rows = conn.exec_driver_sql(
+                f"PRAGMA table_info({_quote(table_name)})"
+            ).mappings().all()
+            info = {str(row["name"]): row for row in info_rows}
+            failed = [
+                column_name for column_name in columns
+                if int(info.get(column_name, {}).get("notnull") or 0) != 1
+            ]
+            if failed:
+                raise RuntimeError(
+                    f"{table_name}: NOT NULL 적용 확인 실패: " + ", ".join(failed)
+                )
+
+        if backup_path:
+            print(f"[item_id] NOT NULL 전환 전 백업: {backup_path}")
+        print(
+            "[item_id] NOT NULL 전환 완료: "
+            + ", ".join(
+                f"{table}.{column}"
+                for table, columns in pending.items()
+                for column in sorted(columns)
+            )
+        )
