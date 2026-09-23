@@ -37,7 +37,7 @@ function chooseCustomer(row) {
   if (!row) return;
   $('customerId').value = row.id;
   $('customerSearch').value = row.partner_name;
-  $('selectedCustomer').textContent = `${row.partner_code} | ${row.partner_name}`;
+  $('selectedCustomer').textContent = row.partner_name;
   closeCustomerSuggestions();
 }
 
@@ -50,7 +50,7 @@ function renderCustomerSuggestions() {
   }
   box.innerHTML = customerCandidates.map((x, i) => `
     <div class="customer-suggestion${i === customerActiveIndex ? ' active' : ''}" data-index="${i}">
-      <span class="code">${esc(x.partner_code)}</span><span class="name">${esc(x.partner_name)}</span>
+      <span class="name">${esc(x.partner_name)}</span>
     </div>`).join('');
   box.querySelectorAll('.customer-suggestion[data-index]').forEach(el => {
     el.addEventListener('mousedown', e => {
