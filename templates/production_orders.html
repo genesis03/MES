@@ -6,7 +6,7 @@
     .page-head{display:flex;justify-content:space-between;align-items:end;margin-bottom:14px}
     .page-head h1{font-size:23px;margin-bottom:4px}.page-head p{font-size:12.5px;color:#64748b}
     .panel{background:#fff;border:1px solid #dbe3ec;border-radius:4px;margin-bottom:14px;overflow:hidden}
-    .toolbar{display:grid;grid-template-columns:145px 145px 170px 220px 170px 120px 150px 110px auto auto;gap:10px;align-items:end;padding:14px;border-top:1px solid #59a5d8}
+    .toolbar{display:grid;grid-template-columns:145px 145px minmax(220px,1fr) 170px 120px 150px 110px auto auto;gap:10px;align-items:end;padding:14px;border-top:1px solid #59a5d8}
     label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px}
     input,select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:3px;padding:0 8px;background:#fff;font-size:12.5px}
     .btn{height:34px;border:0;border-radius:3px;padding:0 18px;font-size:12px;font-weight:700;color:#fff;cursor:pointer;white-space:nowrap}
@@ -33,8 +33,7 @@
     <div class="toolbar">
         <div><label>지시일자 *</label><input type="date" id="orderDate"></div>
         <div><label>생산예정일</label><input type="date" id="scheduledDate"></div>
-        <div><label>품번</label><input type="text" id="searchPartNo" placeholder="품번"></div>
-        <div><label>품명</label><input type="text" id="searchPartName" placeholder="품명"></div>
+        <div><label>품번 / 품명</label><input type="text" id="searchKeyword" placeholder="품번 또는 품명 입력"></div>
         <div><label>배정 수량 일괄 적용</label><input type="number" id="bulkQty" min="0" step="0.001" value="0"></div>
         <button class="btn apply" onclick="applyQty()">일괄 적용</button>
         <div><label>우선순위 일괄 적용</label><select id="bulkPriority"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option></select></div>
@@ -60,12 +59,12 @@
 {% block extra_script %}
 <script>
 let rows=[];const today=new Date().toISOString().slice(0,10);
-document.addEventListener('DOMContentLoaded',()=>{orderDate.value=today;});
+document.addEventListener('DOMContentLoaded',()=>{orderDate.value=today;searchKeyword.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadItems();}});});
 function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function fmt(v){return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:3});}
 function setMsg(t,ok=false){msg.textContent=t;msg.className='msg '+(ok?'ok':'err');}
 async function loadItems(){
-    const q=new URLSearchParams();if(searchPartNo.value.trim())q.set('part_no',searchPartNo.value.trim());if(searchPartName.value.trim())q.set('part_name',searchPartName.value.trim());
+    const q=new URLSearchParams();if(searchKeyword.value.trim())q.set('keyword',searchKeyword.value.trim());
     const r=await fetch('/api/production/order-items/search?'+q.toString());const d=await r.json();if(!r.ok){setMsg(d.detail||'조회에 실패했습니다.');return;}
     rows=d;checkAll.checked=false;renderRows();setMsg(`${rows.length}건 조회되었습니다.`,true);
 }
