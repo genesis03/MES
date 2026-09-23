@@ -13,6 +13,8 @@
   <h1>외주 가공 입고 처리</h1>
   <div class="si-actions">
     <button id="si-load" class="si-btn" type="button">출고건 불러오기</button>
+    <input id="si-inbound-search" style="width:170px;padding:7px 9px;border:1px solid #cbd5e1;border-radius:4px" placeholder="입고번호 검색">
+    <button id="si-inbound-search-btn" class="si-btn" type="button">입고 조회</button>
     <button id="si-confirm" class="si-btn si-primary" type="button" disabled>입고 확정</button>
     <button id="si-cancel" class="si-btn si-danger" type="button" disabled>최근 입고 취소</button>
     <button id="si-label" class="si-btn" type="button" disabled>라벨 출력</button>
@@ -53,7 +55,7 @@
 
 <div id="si-lot-modal" class="si-modal-bg" hidden>
   <div class="si-modal wide">
-    <div class="si-scan-wrap">
+    <div id="si-scan-wrap" class="si-scan-wrap">
       <div class="si-scan-title">LOT No 스캔</div>
       <div class="si-scan-line"><label>LOT No</label><input id="si-lot-scan" autocomplete="off" placeholder="바코드 스캔 또는 LOT 번호 입력 후 Enter"></div>
       <div id="si-scan-error" class="si-scan-error"></div>
@@ -84,4 +86,4 @@
   </div>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/subcontract_inbound.js?v=20260923-1"></script><script src="/static/internal_label_buttons.js?v=20260916-1"></script>{% endblock %}
+{% block extra_script %}<script src="/static/subcontract_inbound.js?v=20260923-2"></script><script src="/static/internal_label_buttons.js?v=20260916-1"></script>{% endblock %}
