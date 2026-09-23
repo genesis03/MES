@@ -83,7 +83,7 @@ def _lot_rows(db: Session, item_id: int):
     rows = []
     item = db.get(ItemMasterModel, item_id) if item_id else None
     purchases = (
-        db.query(PurchaseInboundItem)
+        db.query(PurchaseInboundItem, PurchaseInboundMaster)
         .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
         .filter(
             PurchaseInboundMaster.status == "CONFIRMED",
@@ -93,7 +93,7 @@ def _lot_rows(db: Session, item_id: int):
         )
         .all()
     )
-    for row in purchases:
+    for row, master in purchases:
         rows.append({
             "lot_no": row.internal_lot_no,
             "item_id": row.item_id,
@@ -101,6 +101,8 @@ def _lot_rows(db: Session, item_id: int):
             "base_qty": float(row.inbound_qty or 0),
             "storage_location": row.storage_location or "",
             "source_type": "PURCHASE",
+            "fifo_at": master.created_at,
+            "fifo_id": row.id,
         })
     productions = (
         db.query(ProductionLotModel)
@@ -115,8 +117,10 @@ def _lot_rows(db: Session, item_id: int):
             "base_qty": float(row.lot_qty or 0),
             "storage_location": row.storage_location or "",
             "source_type": "PRODUCTION",
+            "fifo_at": row.created_at,
+            "fifo_id": row.id,
         })
-    rows.sort(key=lambda x: x["lot_no"])
+    rows.sort(key=lambda x: (x["fifo_at"] or datetime.min, x["fifo_id"], x["lot_no"]))
     return rows
 
 
@@ -185,17 +189,31 @@ def _available_qty(
     )
 
 
-def _allocate_material_fifo(db: Session, run: ProductionRun, material: ProductionRunMaterial):
+def _allocate_material_fifo(
+    db: Session,
+    run: ProductionRun,
+    material: ProductionRunMaterial,
+    scanned_lot_no: str,
+):
     required = float(material.required_qty or 0)
     allocated = sum(float(x.allocated_qty or 0) for x in material.allocations)
     remaining = max(required - allocated, 0.0)
     if remaining <= 1e-9:
         return [], 0.0
 
+    lots = _lot_rows(db, material.material_item_id)
+    scanned_index = next(
+        (index for index, lot in enumerate(lots) if lot["lot_no"].upper() == scanned_lot_no.upper()),
+        None,
+    )
+    if scanned_index is None:
+        raise HTTPException(404, f"{material.material_part_no} 품번에 해당하는 LOT가 아닙니다.")
+
+    # 스캔 LOT는 FIFO 상한입니다. 스캔 LOT보다 후행인 LOT는 다음 스캔 전까지 자동 배정하지 않습니다.
+    allowed_lots = lots[: scanned_index + 1]
     existing = {x.lot_no: x for x in material.allocations}
     candidates = []
-    total_available = 0.0
-    for lot in _lot_rows(db, material.material_item_id):
+    for lot in allowed_lots:
         current_alloc = float(existing[lot["lot_no"]].allocated_qty or 0) if lot["lot_no"] in existing else 0.0
         available_total = _available_qty(
             db,
@@ -205,16 +223,13 @@ def _allocate_material_fifo(db: Session, run: ProductionRun, material: Productio
             item_id=material.material_item_id,
         )
         additional_available = max(float(available_total) - current_alloc, 0.0)
-        if additional_available <= 1e-9:
-            continue
-        candidates.append((lot, additional_available))
-        total_available += additional_available
+        if additional_available > 1e-9:
+            candidates.append((lot, additional_available))
 
-    if total_available + 1e-9 < remaining:
-        shortage = remaining - total_available
+    if not candidates:
         raise HTTPException(
             409,
-            f"{material.material_part_no} LOT 재고 부족: 필요 {remaining:g} / 사용가능 {total_available:g} / 부족 {shortage:g}",
+            f"{material.material_part_no}의 스캔 LOT {scanned_lot_no}까지 배정 가능한 잔여수량이 없습니다.",
         )
 
     assigned = []
@@ -237,7 +252,7 @@ def _allocate_material_fifo(db: Session, run: ProductionRun, material: Productio
             existing[lot["lot_no"]] = current
         assigned.append((lot["lot_no"], qty))
         to_assign -= qty
-    return assigned, remaining
+    return assigned, sum(qty for _, qty in assigned)
 
 
 def _serialize_material(material: ProductionRunMaterial):
@@ -590,7 +605,7 @@ def scan_material_lot(
     if scanned_lot is None:
         raise HTTPException(404, f"{material.material_part_no} 품번에 해당하는 LOT가 아닙니다.")
 
-    assigned, requested_qty = _allocate_material_fifo(db, run, material)
+    assigned, assigned_qty = _allocate_material_fifo(db, run, material, scanned)
     if not assigned:
         raise HTTPException(409, f"{material.material_part_no}는 이미 필요수량이 모두 배정되었습니다.")
     db.commit()
@@ -598,10 +613,10 @@ def scan_material_lot(
     allocation_text = ", ".join(f"{lot_no} {qty:g}" for lot_no, qty in assigned)
     first_lot = assigned[0][0]
     if first_lot.upper() != scanned.upper():
-        message = f"스캔 LOT {scanned}를 확인하고 FIFO 기준으로 {allocation_text} 배정했습니다."
+        message = f"스캔 LOT {scanned}까지의 선행 LOT를 FIFO 기준으로 {allocation_text} 배정했습니다."
     else:
-        message = f"FIFO 기준으로 {allocation_text} 배정했습니다."
-    return {"message": message, "material": _serialize_material(material), "assigned_qty": requested_qty}
+        message = f"스캔 LOT {scanned}까지 FIFO 기준으로 {allocation_text} 배정했습니다."
+    return {"message": message, "material": _serialize_material(material), "assigned_qty": assigned_qty}
 
 
 @router.get("/{run_id}")
@@ -711,7 +726,7 @@ def scan_lot(run_id: int, payload: ScanLotPayload, db: Session = Depends(get_db)
     if not matched_material or not matched_lot:
         raise HTTPException(404, "이 작업의 BOM 자재에 해당하는 LOT가 아닙니다.")
 
-    assigned, requested_qty = _allocate_material_fifo(db, run, matched_material)
+    assigned, assigned_qty = _allocate_material_fifo(db, run, matched_material, scanned)
     if not assigned:
         raise HTTPException(409, f"{matched_material.material_part_no}는 이미 필요수량이 모두 배정되었습니다.")
     db.commit()
@@ -722,7 +737,7 @@ def scan_lot(run_id: int, payload: ScanLotPayload, db: Session = Depends(get_db)
         message = f"스캔 LOT {scanned}를 확인하고 FIFO 기준으로 {allocation_text} 배정했습니다."
     else:
         message = f"FIFO 기준으로 {allocation_text} 배정했습니다."
-    return {"message": message, "material": _serialize_material(matched_material), "assigned_qty": requested_qty}
+    return {"message": message, "material": _serialize_material(matched_material), "assigned_qty": assigned_qty}
 
 
 @router.post("/{run_id}/complete")
