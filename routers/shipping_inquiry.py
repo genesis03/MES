@@ -9,6 +9,7 @@ from core.security import get_current_user
 from models.lot_relation import LotRelationModel
 from models.models import ItemMasterModel, ShippingMasterModel
 from models.sales import SalesOrderMaster, ShipmentItem, ShipmentMaster
+from services.sales_order_service import sync_order_status
 
 router = APIRouter(tags=["Shipping Inquiry"])
 templates = Jinja2Templates(directory="templates")
@@ -17,29 +18,6 @@ templates = Jinja2Templates(directory="templates")
 class ShipmentUpdateInput(BaseModel):
     shipment_date: str = Field(min_length=10, max_length=10)
     note: str | None = Field(default=None, max_length=1000)
-
-
-def _sync_order_status(order: SalesOrderMaster):
-    if not order.items:
-        order.status = "ORDERED"
-        return
-
-    for item in order.items:
-        shipped = float(item.shipped_qty or 0)
-        ordered = float(item.order_qty or 0)
-        if shipped >= ordered - 1e-9:
-            item.status = "COMPLETED"
-        elif shipped > 1e-9:
-            item.status = "PARTIAL"
-        else:
-            item.status = "WAITING"
-
-    if all(float(x.shipped_qty or 0) >= float(x.order_qty or 0) - 1e-9 for x in order.items):
-        order.status = "COMPLETED"
-    elif any(float(x.shipped_qty or 0) > 1e-9 for x in order.items):
-        order.status = "PARTIAL"
-    else:
-        order.status = "ORDERED"
 
 
 def _serialize_shipment(db: Session, row: ShipmentMaster, detail: bool = False):
@@ -323,7 +301,7 @@ def delete_shipment(shipment_id: int, db: Session = Depends(get_db), current_use
             affected_orders[sales_item.order.id] = sales_item.order
 
     for order in affected_orders.values():
-        _sync_order_status(order)
+        sync_order_status(order)
 
     shipment_no = shipment.shipment_no
     db.delete(shipment)
