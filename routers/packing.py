@@ -345,6 +345,101 @@ def create_packing(payload: PackingCreateInput, db: Session = Depends(get_db), c
     }
 
 
+def _legacy_shipping_uses_lot(db: Session, package_lot_no: str) -> bool:
+    if not package_lot_no:
+        return False
+    return bool(
+        db.query(ShippingMasterModel.id)
+        .filter(ShippingMasterModel.row_json.contains(package_lot_no, autoescape=True))
+        .first()
+    )
+
+
+def _latest_waiting_box(db: Session, item_id: int) -> PackingBox | None:
+    rows = (
+        db.query(PackingBox)
+        .join(PackingMaster, PackingMaster.id == PackingBox.packing_id)
+        .outerjoin(ShipmentBox, ShipmentBox.packing_box_id == PackingBox.id)
+        .filter(
+            PackingMaster.status == "PACKED",
+            PackingMaster.item_id == item_id,
+            ShipmentBox.id.is_(None),
+        )
+        .order_by(
+            PackingMaster.packing_date.desc(),
+            PackingBox.package_lot_no.desc(),
+            PackingBox.id.desc(),
+        )
+        .all()
+    )
+    for box in rows:
+        if not _legacy_shipping_uses_lot(db, box.package_lot_no):
+            return box
+    return None
+
+
+def _release_packing_allocation(db: Session, master: PackingMaster, qty: float) -> None:
+    remaining = float(qty or 0)
+    for allocation in reversed(list(master.allocations)):
+        if remaining <= 1e-9:
+            break
+        allocated = float(allocation.allocated_qty or 0)
+        release_qty = min(allocated, remaining)
+        allocation.allocated_qty = allocated - release_qty
+        remaining -= release_qty
+        if allocation.allocated_qty <= 1e-9:
+            db.delete(allocation)
+    if remaining > 1e-6:
+        raise HTTPException(409, "포장 원 LOT 배정수량이 맞지 않아 취소할 수 없습니다. 관리자 확인이 필요합니다.")
+
+
+def _cancel_one_box(db: Session, box: PackingBox, current_user) -> dict:
+    master = box.master
+    if not master or master.status != "PACKED":
+        raise HTTPException(409, "취소 가능한 포장 LOT가 아닙니다.")
+
+    if db.query(ShipmentBox.id).filter(ShipmentBox.packing_box_id == box.id).first():
+        raise HTTPException(409, f"이미 출고에 사용된 포장 LOT는 취소할 수 없습니다: {box.package_lot_no}")
+    if _legacy_shipping_uses_lot(db, box.package_lot_no):
+        raise HTTPException(409, f"출고 이력에서 사용된 포장 LOT는 취소할 수 없습니다: {box.package_lot_no}")
+
+    latest = _latest_waiting_box(db, master.item_id)
+    if not latest:
+        raise HTTPException(409, "취소 가능한 미출고 포장 LOT가 없습니다.")
+    if latest.id != box.id:
+        raise HTTPException(
+            409,
+            f"가장 후 포장 LOT {latest.package_lot_no}부터 순서대로 취소해야 합니다.",
+        )
+
+    cancel_qty = float(box.box_qty or 0)
+    cancelled_lot_no = box.package_lot_no
+    _release_packing_allocation(db, master, cancel_qty)
+
+    remaining_box_count = (
+        db.query(func.count(PackingBox.id))
+        .filter(PackingBox.packing_id == master.id, PackingBox.id != box.id)
+        .scalar()
+        or 0
+    )
+    master.box_count = int(remaining_box_count)
+    master.total_qty = max(float(master.total_qty or 0) - cancel_qty, 0.0)
+    db.delete(box)
+
+    if remaining_box_count == 0:
+        master.status = "CANCELLED"
+        master.cancelled_by = _username(current_user)
+        master.cancelled_at = datetime.now()
+
+    db.commit()
+    return {
+        "message": f"{cancelled_lot_no} 포장 LOT 1건을 취소했습니다. 원 생산 LOT {cancel_qty:g}이 복원되었습니다.",
+        "cancelled_lot_no": cancelled_lot_no,
+        "cancelled_qty": cancel_qty,
+        "packing_cancelled": remaining_box_count == 0,
+    }
+
+
 @router.get("/api/packing/records")
 def packing_records(
     part_no: Optional[str] = Query(None, max_length=50),
@@ -366,9 +461,20 @@ def packing_records(
             .all()
         }
 
+    latest_by_item: dict[int, int] = {}
+    for master in rows:
+        if master.item_id not in latest_by_item:
+            latest = _latest_waiting_box(db, master.item_id)
+            if latest:
+                latest_by_item[master.item_id] = latest.id
+
     result = []
     for master in rows:
-        waiting_boxes = [box for box in master.boxes if box.id not in shipped_box_ids]
+        waiting_boxes = [
+            box
+            for box in master.boxes
+            if box.id not in shipped_box_ids and not _legacy_shipping_uses_lot(db, box.package_lot_no)
+        ]
         if not waiting_boxes:
             continue
         result.append({
@@ -382,25 +488,42 @@ def packing_records(
             "box_count": len(waiting_boxes),
             "box_qty": float(master.box_qty or 0),
             "waiting_lots": [box.package_lot_no for box in waiting_boxes],
+            "waiting_boxes": [
+                {
+                    "id": box.id,
+                    "package_lot_no": box.package_lot_no,
+                    "box_qty": float(box.box_qty or 0),
+                    "can_cancel": latest_by_item.get(master.item_id) == box.id,
+                }
+                for box in waiting_boxes
+            ],
         })
     return result
 
 
+@router.post("/api/packing/boxes/{box_id}/cancel")
+def cancel_packing_box(box_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    box = db.get(PackingBox, box_id)
+    if not box:
+        raise HTTPException(404, "포장 LOT를 찾을 수 없습니다.")
+    return _cancel_one_box(db, box, current_user)
+
+
 @router.post("/api/packing/{packing_id}/cancel")
 def cancel_packing(packing_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    """기존 화면/캐시 호환용. 전체취소하지 않고 해당 포장묶음의 가장 후 미출고 LOT 1건만 취소합니다."""
     master = db.get(PackingMaster, packing_id)
     if not master:
         raise HTTPException(404, "포장 내역을 찾을 수 없습니다.")
     if master.status == "CANCELLED":
         return {"message": "이미 취소된 포장입니다."}
 
-    waiting_lots = [x.package_lot_no for x in master.boxes if x.package_lot_no]
-    for waiting_lot in waiting_lots:
-        if db.query(ShippingMasterModel.id).filter(ShippingMasterModel.row_json.contains(waiting_lot, autoescape=True)).first():
-            raise HTTPException(409, f"출고 이력에서 사용된 출고대기LOT가 있어 취소할 수 없습니다: {waiting_lot}")
-
-    master.status = "CANCELLED"
-    master.cancelled_by = _username(current_user)
-    master.cancelled_at = datetime.now()
-    db.commit()
-    return {"message": "포장을 취소했습니다. 원 생산 LOT 잔량이 복원됩니다."}
+    candidates = [
+        box for box in master.boxes
+        if not db.query(ShipmentBox.id).filter(ShipmentBox.packing_box_id == box.id).first()
+        and not _legacy_shipping_uses_lot(db, box.package_lot_no)
+    ]
+    if not candidates:
+        raise HTTPException(409, "이 포장묶음에는 취소 가능한 미출고 포장 LOT가 없습니다.")
+    box = sorted(candidates, key=lambda x: (x.package_lot_no, x.id), reverse=True)[0]
+    return _cancel_one_box(db, box, current_user)
