@@ -420,6 +420,23 @@ def update_subcontract_order(
     return _serialize_order(master)
 
 
+@router.get("/orders/by-number")
+def get_subcontract_order_by_number(
+    order_no: str = Query(..., min_length=1, max_length=50),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    normalized = order_no.strip()
+    master = (
+        db.query(SubcontractOrderMaster)
+        .filter(SubcontractOrderMaster.order_no == normalized)
+        .first()
+    )
+    if master is None:
+        raise HTTPException(404, "해당 발주번호의 외주가공 발주를 찾을 수 없습니다.")
+    return _serialize_order(master)
+
+
 @router.get("/orders/{order_id}")
 def get_subcontract_order(
     order_id: int,
