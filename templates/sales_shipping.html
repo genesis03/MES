@@ -50,7 +50,7 @@
     <strong>수주 품목 / LOT 배정</strong>
     <div class="ship-actions">
       <button class="btn btn-light" id="reloadBtn">새로고침</button>
-      <button class="btn btn-success" id="confirmBtn" disabled>출고 처리</button>
+      <button class="btn btn-success" id="confirmBtn" disabled>확정</button>
     </div>
   </div>
   <div class="ship-table-wrap">
@@ -79,10 +79,10 @@
   <div class="modal-head"><h3>수주번호 조회</h3><button class="btn btn-light" id="orderLookupClose">닫기</button></div>
   <div class="lookup-body">
     <div class="lookup-filters">
-      <div class="lookup-filter"><label>수주번호</label><input id="orderLookupNo"></div>
-      <div class="lookup-filter"><label>품번</label><input id="orderLookupPart"></div>
-      <div class="lookup-filter"><label>수주처</label><input id="orderLookupCustomer"></div>
       <div class="lookup-filter"><label>수주일자</label><div style="display:flex;gap:5px"><input type="date" id="orderLookupStart"><input type="date" id="orderLookupEnd"></div></div>
+      <div class="lookup-filter"><label>수주처</label><input id="orderLookupCustomer"></div>
+      <div class="lookup-filter"><label>품번</label><input id="orderLookupPart"></div>
+      <div class="lookup-filter"><label>수주번호</label><input id="orderLookupNo"></div>
       <button class="btn btn-primary" id="orderLookupSearch">조회</button>
     </div>
     <div class="help" style="margin:0 0 10px">※ 체크박스로 수주를 여러 건 선택할 수 있습니다. 같은 판매처의 수주만 함께 선택할 수 있습니다.</div>
