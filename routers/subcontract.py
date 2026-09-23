@@ -420,6 +420,66 @@ def update_subcontract_order(
     return _serialize_order(master)
 
 
+@router.get("/orders/search")
+def search_subcontract_orders(
+    order_no: str | None = Query(None, max_length=50),
+    start_date: str | None = Query(None, max_length=10),
+    end_date: str | None = Query(None, max_length=10),
+    part_no: str | None = Query(None, max_length=80),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    query = db.query(SubcontractOrderMaster)
+    if order_no and order_no.strip():
+        query = query.filter(SubcontractOrderMaster.order_no.contains(order_no.strip(), autoescape=True))
+    if start_date:
+        query = query.filter(SubcontractOrderMaster.order_date >= start_date)
+    if end_date:
+        query = query.filter(SubcontractOrderMaster.order_date <= end_date)
+    if part_no and part_no.strip():
+        keyword = part_no.strip()
+        query = (
+            query.join(SubcontractOrderItem, SubcontractOrderItem.order_id == SubcontractOrderMaster.id)
+            .filter(
+                (SubcontractOrderItem.order_part_no.contains(keyword, autoescape=True))
+                | (SubcontractOrderItem.previous_part_no.contains(keyword, autoescape=True))
+            )
+            .distinct()
+        )
+
+    total = query.count()
+    masters = (
+        query.order_by(SubcontractOrderMaster.order_date.desc(), SubcontractOrderMaster.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    status_names = {
+        "DRAFT": "작성중",
+        "LOT_ALLOCATING": "LOT배정중",
+        "ORDERED": "발주완료",
+        "CANCELLED": "취소",
+    }
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": master.id,
+                "order_no": master.order_no,
+                "partner_name": master.partner_name,
+                "processing_type_name": master.processing_type_name,
+                "order_date": master.order_date,
+                "status": master.status,
+                "status_name": status_names.get(master.status, master.status),
+                "updated_at": master.updated_at.strftime("%Y-%m-%d %H:%M:%S") if master.updated_at else "",
+            }
+            for master in masters
+        ],
+    }
+
+
 @router.get("/orders/by-number")
 def get_subcontract_order_by_number(
     order_no: str = Query(..., min_length=1, max_length=50),
