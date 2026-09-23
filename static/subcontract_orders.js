@@ -437,7 +437,7 @@
     const missing=required.filter(id=>!$(id)); if(missing.length){console.error('Subcontract order UI missing:',missing);return;}
     $('so-vendor').addEventListener('input',resolveVendor); $('so-vendor').addEventListener('change',resolveVendor);
     $('so-number-search').addEventListener('click',loadOrderByNumber);
-    $('so-number').addEventListener('keydown',event=>{if(event.key==='Enter' && $('so-number').value.trim()){event.preventDefault();loadOrderByNumber();}});
+    $('so-number').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();loadOrderByNumber();}});
     $('so-order-search-x').addEventListener('click',closeOrderSearch);
     $('so-search-close').addEventListener('click',closeOrderSearch);
     $('so-order-search-modal').addEventListener('click',event=>{if(event.target===$('so-order-search-modal'))closeOrderSearch();});
