@@ -322,10 +322,10 @@
         <div class="search-section">
             <select id="searchMaterialType" class="search-select" onchange="loadParentItems()">
                 <option value="">전체 유형</option>
-                <option value="완제품">완제품</option>
-                <option value="반제품">반제품</option>
+                <option value="FINISHED">완제품</option>
+                <option value="SEMI">반제품</option>
             </select>
-            <input type="text" id="searchKeyword" class="search-input" placeholder="품번 검색" onkeydown="if(event.key==='Enter') loadParentItems()">
+            <input type="text" id="searchKeyword" class="search-input" placeholder="품번 / 품명 검색" onkeydown="if(event.key==='Enter') loadParentItems()">
             <button class="btn-search" onclick="loadParentItems()">검색</button>
         </div>
 
