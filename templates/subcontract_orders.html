@@ -26,25 +26,25 @@
   </form>
 </div>
 
-<div id="so-order-search-modal" class="so-modal-backdrop" hidden>
-  <div class="so-modal so-order-search" role="dialog" aria-modal="true" aria-labelledby="so-order-search-title">
-    <div class="so-modal-head"><strong id="so-order-search-title">외주 가공 발주 조회</strong><button type="button" class="so-btn" id="so-order-search-x">닫기</button></div>
-    <div class="so-modal-body">
-      <div class="so-search-grid">
+<div id="so-order-search-modal" class="so-modal-backdrop mes-popup-backdrop" hidden>
+  <div class="so-modal mes-popup so-order-search" role="dialog" aria-modal="true" aria-labelledby="so-order-search-title">
+    <div class="so-modal-head mes-popup-head"><strong id="so-order-search-title">외주 가공 발주 조회</strong><button type="button" class="so-btn" id="so-order-search-x">닫기</button></div>
+    <div class="so-modal-body mes-popup-body">
+      <div class="so-search-grid mes-popup-filters">
         <div class="so-search-field"><label for="so-search-number">발주번호</label><input id="so-search-number" type="text" autocomplete="off"></div>
         <div class="so-search-field"><label>발주기간</label><div class="so-search-period"><input id="so-search-start" type="date"><span>~</span><input id="so-search-end" type="date"></div></div>
         <div class="so-search-field"><label for="so-search-part">품번</label><input id="so-search-part" type="text" autocomplete="off"></div>
         <div class="so-search-actions"><button type="button" class="so-btn so-primary" id="so-search-submit">조회</button></div>
       </div>
       <div class="so-grid-wrap">
-        <table class="so-search-table">
+        <table class="so-search-table mes-popup-table">
           <thead><tr><th>발주번호</th><th>발주처</th><th>가공유형</th><th>발주일</th><th>발주상태</th><th>최종 수정일</th></tr></thead>
           <tbody id="so-search-body"><tr><td colspan="6">조회 중...</td></tr></tbody>
         </table>
       </div>
       <div id="so-search-message" class="so-hint" style="margin-top:8px"></div>
     </div>
-    <div class="so-modal-foot">
+    <div class="so-modal-foot mes-popup-foot">
       <div class="so-search-pager">
         <div class="so-search-pager-group"><span>페이지당</span><select id="so-search-size"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></div>
         <div class="so-search-pager-group"><button type="button" class="so-btn" id="so-search-prev">이전</button><span id="so-search-page">1 / 1</span><button type="button" class="so-btn" id="so-search-next">다음</button><button type="button" class="so-btn so-primary" id="so-search-apply" disabled>적용</button><button type="button" class="so-btn" id="so-search-close">닫기</button></div>
@@ -53,16 +53,16 @@
   </div>
 </div>
 
-<div id="so-lot-modal" class="so-modal-backdrop" hidden>
-  <div class="so-modal" role="dialog" aria-modal="true" aria-labelledby="so-lot-title">
-    <div class="so-modal-head"><div><strong id="so-lot-title">LOT 배정</strong><div class="so-hint">출고 LOT는 쪼개지 않고 LOT 전체수량을 배정합니다.</div></div><button type="button" class="so-btn" id="so-lot-close">닫기</button></div>
-    <div class="so-modal-body">
+<div id="so-lot-modal" class="so-modal-backdrop mes-popup-backdrop" hidden>
+  <div class="so-modal mes-popup" role="dialog" aria-modal="true" aria-labelledby="so-lot-title">
+    <div class="so-modal-head mes-popup-head"><div><strong id="so-lot-title">LOT 배정</strong><div class="so-hint">출고 LOT는 쪼개지 않고 LOT 전체수량을 배정합니다.</div></div><button type="button" class="so-btn" id="so-lot-close">닫기</button></div>
+    <div class="so-modal-body mes-popup-body">
       <div class="so-modal-summary"><div class="so-card">이전 품번<br><strong id="so-lot-part">-</strong></div><div class="so-card">발주수량<br><strong id="so-lot-required">0</strong></div><div class="so-card">선택 LOT 합계<br><strong id="so-lot-selected">0</strong></div><div class="so-card">차이<br><strong id="so-lot-balance">0</strong></div></div>
       <div class="so-lot-scan"><label for="so-lot-scan-input">LOT 스캔/입력</label><input id="so-lot-scan-input" type="text" autocomplete="off" placeholder="바코드를 스캔하거나 LOT 번호 입력 후 Enter"><span id="so-lot-scan-message" class="so-hint">스캔하면 해당 LOT가 자동 선택됩니다.</span></div>
       <div id="so-lot-source-note" class="so-hint" style="margin-bottom:8px"></div>
       <table class="so-lot-table"><thead><tr><th style="width:50px">선택</th><th>LOT NO</th><th>LOT 전체수량</th><th>저장위치</th></tr></thead><tbody id="so-lot-body"><tr><td colspan="4">조회 중...</td></tr></tbody></table>
     </div>
-    <div class="so-modal-foot"><button type="button" class="so-btn" id="so-lot-cancel">취소</button><button type="button" class="so-btn so-primary" id="so-lot-apply">적용</button></div>
+    <div class="so-modal-foot mes-popup-foot"><button type="button" class="so-btn" id="so-lot-cancel">취소</button><button type="button" class="so-btn so-primary" id="so-lot-apply">적용</button></div>
   </div>
 </div>
 {% endblock %}
