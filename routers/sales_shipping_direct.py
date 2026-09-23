@@ -10,7 +10,8 @@ from models.lot_relation import LotRelationModel
 from models.models import ItemMasterModel
 from models.sales import SalesOrderItem, SalesOrderMaster, ShipmentDirectLot, ShipmentItem, ShipmentMaster
 from routers.packing import _lots
-from routers.sales_shipping_entry import _next_no, _sync_order_status, _username
+from routers.sales_shipping_entry import _next_no, _username
+from services.sales_order_service import sync_order_status
 from services.shipping_lot_service import next_shipping_lot_no
 
 router = APIRouter(tags=["Sales Shipping Direct"])
@@ -342,7 +343,7 @@ def direct_confirm(
         total_qty += shipment_qty
 
     for order in orders.values():
-        _sync_order_status(order)
+        sync_order_status(order)
 
     db.commit()
     return {
