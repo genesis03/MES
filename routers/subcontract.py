@@ -288,6 +288,61 @@ def subcontract_bom_output(
     }
 
 
+@router.get("/bom-input")
+def subcontract_bom_input(
+    order_part_no: str = Query(..., min_length=1, max_length=80),
+    process_code: str = Query(..., min_length=1, max_length=50),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    output = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == order_part_no.strip()).first()
+    if output is None:
+        raise HTTPException(404, "품목 마스터에서 발주 품번을 찾을 수 없습니다.")
+
+    processing = _processing(db, process_code)
+    base_query = db.query(ItemBomModel).filter(ItemBomModel.parent_item_id == output.id)
+    process_rows = (
+        base_query
+        .filter(ItemBomModel.process_code == processing.process_code)
+        .order_by(ItemBomModel.sort_order, ItemBomModel.id)
+        .all()
+    )
+    candidates = process_rows
+    if not candidates:
+        all_rows = base_query.order_by(ItemBomModel.sort_order, ItemBomModel.id).all()
+        if len(all_rows) == 1:
+            candidates = all_rows
+
+    candidates = [row for row in candidates if row.child_item_id]
+    if not candidates:
+        raise HTTPException(
+            422,
+            f"{output.part_no}의 {processing.process_name} 이전 품번을 BOM에서 찾을 수 없습니다.",
+        )
+    if len(candidates) > 1:
+        raise HTTPException(
+            422,
+            f"{output.part_no}의 {processing.process_name} 이전 품번이 BOM에 여러 건입니다. BOM을 확인하세요.",
+        )
+
+    bom = candidates[0]
+    previous = db.get(ItemMasterModel, bom.child_item_id)
+    if previous is None:
+        raise HTTPException(422, "BOM의 이전 품번이 품목 마스터와 연결되지 않았습니다.")
+
+    return {
+        "order_part_no": output.part_no,
+        "order_part_name": output.part_name or "",
+        "previous_part_no": previous.part_no,
+        "previous_part_name": previous.part_name or "",
+        "previous_item_id": previous.id,
+        "spec": output.spec or "",
+        "unit": output.unit or previous.unit or "EA",
+        "process_code": processing.process_code,
+        "process_name": processing.process_name,
+    }
+
+
 @router.get("/stock")
 def subcontract_stock(
     part_no: str = Query(..., min_length=1, max_length=50),
