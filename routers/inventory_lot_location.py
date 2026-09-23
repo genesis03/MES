@@ -135,7 +135,15 @@ def inventory_lots_with_current_location(
             "storage_location": _storage_display(_current_storage(db, item.internal_lot_no, item.storage_location), names),
         })
 
-    production_rows = db.query(ProductionLotModel).filter(ProductionLotModel.item_id.in_(item_ids)).order_by(ProductionLotModel.created_at.desc(), ProductionLotModel.id.desc()).all()
+    production_rows = (
+        db.query(ProductionLotModel)
+        .filter(
+            ProductionLotModel.item_id.in_(item_ids),
+            ProductionLotModel.status == "ACTIVE",
+        )
+        .order_by(ProductionLotModel.created_at.desc(), ProductionLotModel.id.desc())
+        .all()
+    )
     for lot in production_rows:
         qty = float(lot.lot_qty or 0)
         used = _used_qty(db, lot.lot_no, lot.item_id)
