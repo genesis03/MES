@@ -115,6 +115,52 @@
 
         .main-content { flex: 1; padding: 30px; overflow-y: auto; }
 
+        /* MES 공통 화면 규격 */
+        .main-content h1, .main-content h2 {
+            color:#1e293b;
+            font-size:22px;
+            line-height:1.3;
+            font-weight:800;
+            letter-spacing:-0.3px;
+        }
+        .main-content input:not([type="checkbox"]):not([type="radio"]),
+        .main-content select,
+        .main-content textarea {
+            font-family:inherit;
+            font-size:13px;
+            border-color:#cbd5e1;
+            border-radius:4px;
+        }
+        .main-content button,
+        .main-content .btn {
+            font-family:inherit;
+            border-radius:4px;
+            font-size:12px;
+            font-weight:700;
+        }
+        .main-content table {
+            font-size:12px;
+        }
+        .main-content table th {
+            background:#f8fafc;
+            color:#475569;
+            font-weight:700;
+        }
+        .main-content table td {
+            color:#334155;
+        }
+        .main-content .card,
+        .main-content .panel,
+        .main-content .po-box,
+        .main-content .pi-box,
+        .main-content .so-box,
+        .main-content .ship-card,
+        .main-content .filter-card {
+            border-color:#dbe3ec;
+            border-radius:6px;
+            box-shadow:none;
+        }
+
         @media print {
             .sidebar, .no-print { display: none !important; }
             body { background: #ffffff; display: block; }
