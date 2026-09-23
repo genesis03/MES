@@ -2,7 +2,8 @@ const $ = (id) => document.getElementById(id);
 let customers = [];
 let customerCandidates = [];
 let customerActiveIndex = -1;
-const editingOrderId = Number(new URLSearchParams(location.search).get('order_id') || 0);
+let editingOrderId = Number(new URLSearchParams(location.search).get('order_id') || 0);
+let selectedLookupOrderId = 0;
 let editingOrder = null;
 let readOnlyOrder = false;
 
@@ -224,8 +225,10 @@ function setReadOnlyMode(message) {
 
 async function loadOrder(orderId) {
   const order = await getJson('/api/sales/orders/' + encodeURIComponent(orderId));
+  editingOrderId = Number(orderId);
   editingOrder = order;
   $('pageTitle').textContent = `수주 입력 · ${order.order_no}`;
+  $('orderNumber').value = order.order_no || '';
   $('orderDate').value = order.order_date || '';
   $('deliveryDueDate').value = order.delivery_due_date || '';
   $('orderType').value = order.order_type || 'NORMAL';
@@ -248,12 +251,60 @@ async function loadOrder(orderId) {
   if (!(order.items || []).length) addRow();
 
   if (order.editable) {
-    $('saveBtn').textContent = '수주 수정 저장';
+    $('saveBtn').textContent = '저장';
   } else {
     setReadOnlyMode('이미 출고 이력이 있는 수주입니다. 조회만 가능하며 수정은 할 수 없습니다.');
   }
 }
 
+
+
+function closeOrderLookup() {
+  $('orderLookupModal').classList.remove('show');
+  selectedLookupOrderId = 0;
+}
+async function loadOrderLookup() {
+  const p = new URLSearchParams({limit:'2000'});
+  if ($('lookupOrderNo').value.trim()) p.set('order_no',$('lookupOrderNo').value.trim());
+  if ($('lookupStart').value) p.set('start_date',$('lookupStart').value);
+  if ($('lookupEnd').value) p.set('end_date',$('lookupEnd').value);
+  if ($('lookupStatus').value) p.set('status',$('lookupStatus').value);
+  const customerKeyword = normalizeText($('lookupCustomer').value);
+  try {
+    let rows = await getJson('/api/sales/orders?' + p.toString());
+    if (customerKeyword) rows = rows.filter(x => normalizeText(x.customer_name).includes(customerKeyword));
+    selectedLookupOrderId = 0;
+    $('lookupApplyBtn').disabled = true;
+    $('lookupMessage').textContent = `조회 결과 ${rows.length}건`;
+    $('lookupBody').innerHTML = rows.length ? rows.map(x => `<tr data-id="${Number(x.id)}"><td>${esc(x.order_no)}</td><td>${esc(x.customer_name)}</td><td>${esc(x.order_date)}</td><td>${esc(x.delivery_due_date||'')}</td><td>${esc(x.status_name||x.status||'')}</td><td>${(x.items||[]).length}</td></tr>`).join('') : '<tr><td colspan="6">조회된 수주가 없습니다.</td></tr>';
+    $('lookupBody').querySelectorAll('tr[data-id]').forEach(tr => {
+      tr.addEventListener('click',()=>{ $('lookupBody').querySelectorAll('tr').forEach(x=>x.classList.remove('selected')); tr.classList.add('selected'); selectedLookupOrderId=Number(tr.dataset.id); $('lookupApplyBtn').disabled=false; });
+      tr.addEventListener('dblclick',async()=>{ await loadOrder(Number(tr.dataset.id)); closeOrderLookup(); });
+    });
+  } catch(e) {
+    $('lookupMessage').textContent = e.message;
+    $('lookupBody').innerHTML = '<tr><td colspan="6">조회 실패</td></tr>';
+  }
+}
+function openOrderLookup() {
+  $('lookupOrderNo').value='';
+  $('lookupStart').value='';
+  $('lookupEnd').value=today();
+  $('lookupCustomer').value='';
+  $('lookupStatus').value='';
+  $('orderLookupModal').classList.add('show');
+  loadOrderLookup();
+}
+async function loadOrderByNumber() {
+  const no = $('orderNumber').value.trim();
+  if (!no) { openOrderLookup(); return; }
+  try {
+    const rows = await getJson('/api/sales/orders?' + new URLSearchParams({order_no:no,limit:'2000'}));
+    const exact = rows.find(x => String(x.order_no||'').toUpperCase() === no.toUpperCase());
+    if (!exact) throw new Error('해당 수주번호를 찾을 수 없습니다.');
+    await loadOrder(exact.id);
+  } catch(e) { alert(e.message); }
+}
 
 function validateOrder(items) {
   const orderDate = $('orderDate').value;
@@ -315,6 +366,14 @@ document.addEventListener('click', e => {
 
 document.addEventListener('DOMContentLoaded', () => {
   if (!editingOrderId) $('orderDate').value = today();
+  $('orderNumberLookupBtn').addEventListener('click', loadOrderByNumber);
+  $('orderNumber').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); loadOrderByNumber(); } });
+  $('orderLookupClose').addEventListener('click', closeOrderLookup);
+  $('lookupClose2').addEventListener('click', closeOrderLookup);
+  $('lookupSearchBtn').addEventListener('click', loadOrderLookup);
+  $('lookupApplyBtn').addEventListener('click', async()=>{ if(selectedLookupOrderId){ await loadOrder(selectedLookupOrderId); closeOrderLookup(); } });
+  ['lookupOrderNo','lookupStart','lookupEnd','lookupCustomer'].forEach(id => $(id).addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();loadOrderLookup();} }));
+  $('orderLookupModal').addEventListener('click',e=>{if(e.target===$('orderLookupModal'))closeOrderLookup();});
   $('addRowBtn').addEventListener('click', addRow);
   $('saveBtn').addEventListener('click', saveOrder);
   $('deliveryDueDate').addEventListener('change', () => {
