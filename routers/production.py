@@ -278,12 +278,22 @@ def production_items(keyword: Optional[str] = Query(None), db: Session = Depends
 
 
 @router.get("/order-items/search")
-def search_order_items(part_no: Optional[str] = Query(None), part_name: Optional[str] = Query(None), db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+def search_order_items(
+    keyword: Optional[str] = Query(None, max_length=100),
+    part_no: Optional[str] = Query(None),
+    part_name: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
     query = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == "Y")
-    if part_no:
-        query = query.filter(ItemMasterModel.part_no.ilike(f"%{part_no.strip()}%"))
-    if part_name:
-        query = query.filter(ItemMasterModel.part_name.ilike(f"%{part_name.strip()}%"))
+    if keyword and keyword.strip():
+        value = f"%{keyword.strip()}%"
+        query = query.filter((ItemMasterModel.part_no.ilike(value)) | (ItemMasterModel.part_name.ilike(value)))
+    else:
+        if part_no:
+            query = query.filter(ItemMasterModel.part_no.ilike(f"%{part_no.strip()}%"))
+        if part_name:
+            query = query.filter(ItemMasterModel.part_name.ilike(f"%{part_name.strip()}%"))
     items = query.order_by(ItemMasterModel.part_no.asc()).limit(500).all()
     if not items:
         return []
