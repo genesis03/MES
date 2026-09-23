@@ -15,7 +15,7 @@ class LotConsumptionModel(Base):
 
     id = Column(Integer, primary_key=True)
     lot_no = Column(String(100), nullable=False, index=True)
-    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=True, index=True)
+    item_id = Column(Integer, ForeignKey("item_master.id"), nullable=False, index=True)
     part_no = Column(String(80), nullable=False, index=True)
     work_order_id = Column(Integer, ForeignKey("production_work_orders.id"), nullable=False, index=True)
     performance_id = Column(Integer, ForeignKey("production_performances.id"), nullable=False, index=True)
