@@ -8,7 +8,8 @@ from core.database import get_db
 from core.security import get_current_user
 from models.packing import PackingBox, PackingMaster
 from models.sales import SalesOrderItem, SalesOrderMaster, ShipmentBox, ShipmentItem, ShipmentMaster
-from routers.sales_shipping_entry import _next_no, _sync_order_status, _username, _waiting_rows
+from routers.sales_shipping_entry import _next_no, _username, _waiting_rows
+from services.sales_order_service import sync_order_status
 
 router = APIRouter(tags=["Sales Shipping Partial Confirm"])
 
@@ -146,7 +147,7 @@ def confirm_shipment_with_requested_qty(
         total_qty += shipment_qty
 
     for order in orders.values():
-        _sync_order_status(order)
+        sync_order_status(order)
     db.commit()
 
     return {
