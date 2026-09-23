@@ -10,6 +10,7 @@ LOT_PREFIXES = {
     "MACHINING": "LB",
     "TAPPING": "LB",
     "SERRATION": "LD",
+    "OUTSOURCE": "LZ",
     "SILVER_PLATING": "LZ",
     "OUTSOURCE_CNC": "LC",
     "ASSEMBLY": "LA",
