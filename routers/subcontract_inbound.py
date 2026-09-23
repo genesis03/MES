@@ -244,6 +244,40 @@ def inbound_outbound_list(
     return {"total": len(result), "items": result}
 
 
+@router.get("/lookup")
+def lookup_inbound(
+    inbound_no: str = Query(..., min_length=1, max_length=20),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    keyword = inbound_no.strip()
+    rows = (
+        db.query(SubcontractInboundMaster)
+        .filter(SubcontractInboundMaster.inbound_no.contains(keyword, autoescape=True))
+        .order_by(SubcontractInboundMaster.inbound_date.desc(), SubcontractInboundMaster.id.desc())
+        .limit(20)
+        .all()
+    )
+    return {
+        "total": len(rows),
+        "items": [
+            {
+                "id": row.id,
+                "inbound_no": row.inbound_no,
+                "inbound_date": row.inbound_date,
+                "outbound_id": row.outbound_id,
+                "outbound_no": row.outbound_no,
+                "order_no": row.order_no,
+                "partner_name": row.partner_name,
+                "processing_type_name": row.processing_type_name,
+                "status": row.status,
+                "status_name": "입고완료" if row.status == "RECEIVED" else "입고취소",
+            }
+            for row in rows
+        ],
+    }
+
+
 @router.get("/outbound/{outbound_id}")
 def get_inbound_source(
     outbound_id: int,
