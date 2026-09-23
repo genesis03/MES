@@ -8,7 +8,7 @@ from core.database import get_db
 from core.security import get_current_user
 from models.lot_relation import LotRelationModel
 from models.models import ItemMasterModel, ShippingMasterModel
-from models.sales import SalesOrderMaster, ShipmentMaster
+from models.sales import SalesOrderMaster, ShipmentItem, ShipmentMaster
 
 router = APIRouter(tags=["Shipping Inquiry"])
 templates = Jinja2Templates(directory="templates")
@@ -168,9 +168,11 @@ def shipping_inquiry_page(request: Request, current_user=Depends(get_current_use
 def shipping_inquiry(
     start_date: str | None = Query(None, max_length=10),
     end_date: str | None = Query(None, max_length=10),
+    customer_id: int | None = Query(None, gt=0),
     customer_name: str | None = Query(None, max_length=100),
-    part_no: str | None = Query(None, max_length=50),
+    item_id: list[int] | None = Query(None),
     shipment_no: str | None = Query(None, max_length=30),
+    limit: int = Query(1000, ge=1, le=2000),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -179,19 +181,26 @@ def shipping_inquiry(
         query = query.filter(ShipmentMaster.shipment_date >= start_date)
     if end_date:
         query = query.filter(ShipmentMaster.shipment_date <= end_date)
-    if customer_name and customer_name.strip():
+    if customer_id:
+        query = query.filter(ShipmentMaster.customer_id == customer_id)
+    elif customer_name and customer_name.strip():
+        # 구버전 호출 호환용. 화면은 판매처 master id를 사용합니다.
         query = query.filter(ShipmentMaster.customer_name.contains(customer_name.strip(), autoescape=True))
     if shipment_no and shipment_no.strip():
         query = query.filter(ShipmentMaster.shipment_no.contains(shipment_no.strip(), autoescape=True))
 
-    rows = query.order_by(ShipmentMaster.shipment_date.desc(), ShipmentMaster.id.desc()).limit(1000).all()
-    result = []
-    keyword = (part_no or "").strip().lower()
-    for row in rows:
-        data = _serialize_shipment(db, row)
-        if keyword and not any(keyword in str(value or "").lower() for value in data["part_nos"]):
-            continue
-        result.append(data)
+    selected_item_ids = sorted({value for value in (item_id or []) if value > 0})
+    if selected_item_ids:
+        query = query.filter(
+            ShipmentMaster.items.any(ShipmentItem.item_id.in_(selected_item_ids))
+        )
+
+    rows = (
+        query.order_by(ShipmentMaster.shipment_date.desc(), ShipmentMaster.id.desc())
+        .limit(limit)
+        .all()
+    )
+    result = [_serialize_shipment(db, row) for row in rows]
     return {"items": result, "total": len(result)}
 
 
