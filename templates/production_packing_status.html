@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}포장현황{% endblock %}
+
+{% block extra_head %}
+<style>
+.packing-status-page h1{font-size:20px;margin:0 0 14px}
+.ps-filter{display:grid;grid-template-columns:180px 180px 220px 220px auto;gap:12px;align-items:end;background:#fff;border:1px solid #dbe3ec;border-radius:6px;padding:14px;margin-bottom:14px}
+.ps-field label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:5px}
+.ps-field input{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px}
+.ps-period{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:center}
+.ps-actions{display:flex;gap:6px;align-items:center}
+.ps-btn{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 18px;background:#fff;font-size:12px;font-weight:700;cursor:pointer}
+.ps-btn.primary{background:#2297d6;border-color:#2297d6;color:#fff}
+.ps-table-wrap{background:#fff;border:1px solid #dbe3ec;border-radius:6px;overflow:auto;min-height:420px}
+.ps-table{width:100%;border-collapse:collapse;min-width:1180px;font-size:12px}
+.ps-table th,.ps-table td{border:1px solid #dbe2eb;padding:9px 8px;text-align:center;white-space:nowrap}
+.ps-table th{background:#f8fafc;color:#64748b;font-weight:700;position:sticky;top:0;z-index:1}
+.ps-table td.left{text-align:left}
+.ps-table td.num{text-align:right}
+.ps-empty{height:330px;color:#94a3b8;text-align:center}
+.ps-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 2px 0;font-size:12px;color:#64748b}
+@media(max-width:1100px){.ps-filter{grid-template-columns:1fr 1fr}.ps-actions{grid-column:1/-1}}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="packing-status-page">
+  <h1>포장현황</h1>
+
+  <div class="ps-filter">
+    <div class="ps-field" style="grid-column:span 2">
+      <label>포장기간</label>
+      <div class="ps-period">
+        <input type="date" id="startDate">
+        <span>~</span>
+        <input type="date" id="endDate">
+      </div>
+    </div>
+    <div class="ps-field">
+      <label>품번</label>
+      <input id="partNo" autocomplete="off" placeholder="품번 / 품명 검색">
+    </div>
+    <div class="ps-field">
+      <label>LOT 번호</label>
+      <input id="lotNo" autocomplete="off" placeholder="LOT 번호">
+    </div>
+    <div class="ps-actions">
+      <button class="ps-btn primary" type="button" id="searchBtn">조회</button>
+      <button class="ps-btn" type="button" id="resetBtn">초기화</button>
+    </div>
+  </div>
+
+  <div class="ps-table-wrap">
+    <table class="ps-table">
+      <thead>
+        <tr>
+          <th>품번</th>
+          <th>품명</th>
+          <th>LOT 번호</th>
+          <th>포장일자</th>
+          <th>포장수량</th>
+          <th>출고수량</th>
+          <th>출고일</th>
+          <th>거래처</th>
+        </tr>
+      </thead>
+      <tbody id="resultBody">
+        <tr><td colspan="8" class="ps-empty">조회해 주세요.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="ps-summary"><span id="resultCount">0건</span><span>취소된 포장 LOT는 조회 대상에서 제외됩니다.</span></div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:3});
+function localDate(offsetDays=0){
+  const d=new Date(); d.setDate(d.getDate()+offsetDays);
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+async function loadRows(){
+  const params=new URLSearchParams();
+  if($('startDate').value) params.set('start_date',$('startDate').value);
+  if($('endDate').value) params.set('end_date',$('endDate').value);
+  if($('partNo').value.trim()) params.set('part_no',$('partNo').value.trim());
+  if($('lotNo').value.trim()) params.set('lot_no',$('lotNo').value.trim());
+  $('resultBody').innerHTML='<tr><td colspan="8" class="ps-empty">조회 중...</td></tr>';
+  try{
+    const r=await fetch('/api/packing/status?'+params.toString());
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.detail||'조회에 실패했습니다.');
+    const rows=d.items||[];
+    $('resultCount').textContent=rows.length.toLocaleString()+'건';
+    $('resultBody').innerHTML=rows.length?rows.map(x=>`
+      <tr>
+        <td>${esc(x.part_no)}</td>
+        <td class="left">${esc(x.part_name)}</td>
+        <td>${esc(x.lot_no)}</td>
+        <td>${esc(x.packing_date)}</td>
+        <td class="num">${fmt(x.packing_qty)}</td>
+        <td class="num">${x.shipment_qty?fmt(x.shipment_qty):''}</td>
+        <td>${esc(x.shipment_date||'')}</td>
+        <td class="left">${esc(x.customer_name||'')}</td>
+      </tr>`).join(''):'<tr><td colspan="8" class="ps-empty">조회된 포장현황이 없습니다.</td></tr>';
+  }catch(e){
+    $('resultCount').textContent='0건';
+    $('resultBody').innerHTML=`<tr><td colspan="8" class="ps-empty">${esc(e.message)}</td></tr>`;
+  }
+}
+function resetFilters(){
+  $('startDate').value=localDate(-7);
+  $('endDate').value=localDate(0);
+  $('partNo').value='';
+  $('lotNo').value='';
+  loadRows();
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  $('startDate').value=localDate(-7);
+  $('endDate').value=localDate(0);
+  $('searchBtn').addEventListener('click',loadRows);
+  $('resetBtn').addEventListener('click',resetFilters);
+  ['partNo','lotNo','startDate','endDate'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadRows();}}));
+  loadRows();
+});
+</script>
+{% endblock %}
