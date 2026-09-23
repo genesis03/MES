@@ -42,24 +42,36 @@
     return node;
   }
 
-  async function resolveBomOutput(row) {
-    if (!row.part?.part_no || !row.process.value) {
-      row.orderPart.value = '';
+  async function resolveBomInput(row) {
+    if (!row.outputPart?.part_no || !row.process.value) {
+      row.sourcePart = null;
+      row.previous.value = '';
+      row.stock.value = '';
       return;
     }
-    row.orderPart.value = 'BOM 조회중';
+    row.previous.value = 'BOM 조회중';
+    row.stock.value = '';
     try {
-      const data = await request('/api/subcontract/bom-output?' + new URLSearchParams({
-        previous_part_no: row.part.part_no,
+      const selectedOutputNo = row.outputPart.part_no;
+      const data = await request('/api/subcontract/bom-input?' + new URLSearchParams({
+        order_part_no: selectedOutputNo,
         process_code: row.process.value
       }));
-      if (!rows.includes(row) || row.part?.part_no !== data.previous_part_no) return;
-      row.orderPart.value = data.order_part_no || '';
+      if (!rows.includes(row) || row.outputPart?.part_no !== data.order_part_no) return;
+      row.sourcePart = {
+        item_id: data.previous_item_id,
+        part_no: data.previous_part_no,
+        part_name: data.previous_part_name || ''
+      };
+      row.previous.value = data.previous_part_no || '';
       row.orderName.value = data.order_part_name || '';
       row.spec.value = data.spec || '';
       row.unit.value = data.unit || '';
+      await loadStock(row);
     } catch (error) {
-      row.orderPart.value = '';
+      row.sourcePart = null;
+      row.previous.value = '';
+      row.stock.value = '';
       msg(error.message);
     }
   }
@@ -91,7 +103,7 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.textContent = [part.part_no, part.part_name, part.spec].filter(Boolean).join(' · ');
-      button.addEventListener('mousedown', event => { event.preventDefault(); selectPreviousPart(row, part); });
+      button.addEventListener('mousedown', event => { event.preventDefault(); selectOutputPart(row, part); });
       row.suggestions.append(button);
     });
   }
@@ -103,10 +115,10 @@
   }
 
   async function loadStock(row) {
-    if (!row.part?.part_no) { row.stock.value = ''; return; }
+    if (!row.sourcePart?.part_no) { row.stock.value = ''; return; }
     row.stock.value = '조회중';
     try {
-      const params = new URLSearchParams({part_no: row.part.part_no});
+      const params = new URLSearchParams({part_no: row.sourcePart.part_no});
       if (row.itemId) params.set('order_item_id', String(row.itemId));
       const data = await request('/api/subcontract/stock?' + params.toString());
       row.stock.value = fmt(data.stock_qty);
@@ -117,18 +129,18 @@
     }
   }
 
-  function selectPreviousPart(row, part) {
-    row.part = part;
-    row.previous.value = part.part_no;
-    row.name = part.part_name || '';
+  function selectOutputPart(row, part) {
+    row.outputPart = part;
+    row.orderPart.value = part.part_no;
+    row.orderName.value = part.part_name || '';
     row.spec.value = part.spec || '';
     row.unit.value = part.unit || '';
-    row.orderPart.value = '';
-    row.orderName.value = '';
+    row.sourcePart = null;
+    row.previous.value = '';
+    row.stock.value = '';
     row.suggestions.replaceChildren();
     if (!row.date.value) row.date.value = $('so-due-date').value;
-    resolveBomOutput(row);
-    loadStock(row);
+    resolveBomInput(row);
   }
 
   function allocationStatus(row) {
@@ -146,12 +158,16 @@
   function addRow(item = null, focus = false) {
     const tr = document.createElement('tr');
     const seq = cell(tr, String(rows.length + 1)); seq.className = 'so-seq';
-    const previous = input('text', '이전 품번'); previous.autocomplete = 'off'; previous.placeholder = '품번 검색';
+
+    const orderPart = input('text', '발주 품번');
+    orderPart.autocomplete = 'off';
+    orderPart.placeholder = '생성할 품번 검색';
     const suggestions = document.createElement('div'); suggestions.className = 'so-suggestions';
-    const prevCell = cell(tr); prevCell.append(previous, suggestions);
-    const stock = input('text', '이전품 재고'); stock.readOnly = true; cell(tr).append(stock);
-    const orderPart = input('text', '발주 품번'); orderPart.readOnly = true; cell(tr).append(orderPart);
+    const orderPartCell = cell(tr); orderPartCell.append(orderPart, suggestions);
+
     const orderName = input('text', '발주 품명'); orderName.readOnly = true; cell(tr).append(orderName);
+    const previous = input('text', '이전 품번'); previous.readOnly = true; cell(tr).append(previous);
+    const stock = input('text', '이전품 재고'); stock.readOnly = true; cell(tr).append(stock);
     const spec = input('text', '규격'); spec.readOnly = true; cell(tr).append(spec);
     const process = cloneProcessSelect(item?.processing_type_code || ''); cell(tr).append(process);
     const unit = input('text', '단위'); unit.readOnly = true; cell(tr).append(unit);
@@ -163,15 +179,29 @@
     const lotBtn = document.createElement('button'); lotBtn.type = 'button'; lotBtn.className = 'so-btn'; lotBtn.textContent = 'LOT 배정'; lotBtn.disabled = true; cell(tr).append(lotBtn);
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'so-remove'; remove.textContent = '×'; cell(tr).append(remove);
 
-    const row = {tr, seq, previous, suggestions, stock, orderPart, orderName, spec, process, unit, qty, date, allocated, allocationStatus, note, lotBtn, remove, part:null, name:'', version:0, timer:null, itemId:null, allocations:[], allocatedQty:0};
+    const row = {
+      tr, seq, previous, suggestions, stock, orderPart, orderName, spec, process, unit, qty, date,
+      allocated, allocationStatus, note, lotBtn, remove,
+      sourcePart:null, outputPart:null, version:0, timer:null, itemId:null, allocations:[], allocatedQty:0
+    };
     rows.push(row); $('so-lines').append(tr);
 
-    previous.addEventListener('input', () => {
-      clearTimeout(row.timer); row.version += 1; row.part = null; row.stock.value = ''; row.orderPart.value = ''; row.orderName.value = ''; row.spec.value = ''; row.unit.value = ''; row.suggestions.replaceChildren();
-      const keyword = previous.value.trim(); const version = row.version;
+    orderPart.addEventListener('input', () => {
+      clearTimeout(row.timer);
+      row.version += 1;
+      row.outputPart = null;
+      row.sourcePart = null;
+      row.orderName.value = '';
+      row.previous.value = '';
+      row.stock.value = '';
+      row.spec.value = '';
+      row.unit.value = '';
+      row.suggestions.replaceChildren();
+      const keyword = orderPart.value.trim();
+      const version = row.version;
       if (keyword) row.timer = setTimeout(() => searchPart(row, keyword, version).catch(error => { msg(error.message); }), 180);
     });
-    process.addEventListener('change', () => { if (row.part) resolveBomOutput(row); });
+    process.addEventListener('change', () => { if (row.outputPart) resolveBomInput(row); });
     qty.addEventListener('input', () => { allocationStatus(row); updateConfirmState(); });
     lotBtn.addEventListener('click', () => openLotModal(row));
     remove.addEventListener('click', () => {
@@ -181,10 +211,16 @@
 
     if (item) {
       row.itemId = item.id || null;
-      row.part = {part_no:item.previous_part_no, part_name:item.order_part_name || '', spec:item.spec || '', unit:item.unit || ''};
-      previous.value = item.previous_part_no || '';
+      row.outputPart = {
+        part_no:item.order_part_no,
+        part_name:item.order_part_name || '',
+        spec:item.spec || '',
+        unit:item.unit || ''
+      };
+      row.sourcePart = {part_no:item.previous_part_no};
       orderPart.value = item.order_part_no || '';
       orderName.value = item.order_part_name || '';
+      previous.value = item.previous_part_no || '';
       spec.value = item.spec || '';
       process.value = item.processing_type_code || '';
       unit.value = item.unit || '';
@@ -197,7 +233,7 @@
       allocationStatus(row);
       loadStock(row);
     }
-    if (focus) previous.focus();
+    if (focus) orderPart.focus();
     return row;
   }
 
@@ -221,7 +257,8 @@
       const row = rows[index]; if (!row) return;
       row.itemId = item.id;
       row.previous.value = item.previous_part_no || '';
-      row.part = {part_no:item.previous_part_no, part_name:item.order_part_name || '', spec:item.spec || '', unit:item.unit || ''};
+      row.sourcePart = {part_no:item.previous_part_no};
+      row.outputPart = {part_no:item.order_part_no, part_name:item.order_part_name || '', spec:item.spec || '', unit:item.unit || ''};
       row.orderPart.value = item.order_part_no || '';
       row.orderName.value = item.order_part_name || '';
       row.spec.value = item.spec || '';
@@ -254,11 +291,11 @@
     if (!$('so-location').value) throw new Error('외주 저장위치를 선택하세요.');
     const used = usedRows(); if (!used.length) throw new Error('발주 품목을 한 행 이상 입력하세요.');
     const items = used.map(row => {
-      if (!row.part) throw new Error(`${row.seq.textContent}행의 이전 품번을 검색 결과에서 선택하세요.`);
+      if (!row.outputPart) throw new Error(`${row.seq.textContent}행의 발주 품번을 검색 결과에서 선택하세요.`);
       if (!row.process.value) throw new Error(`${row.seq.textContent}행의 가공유형을 선택하세요.`);
-      if (!row.orderPart.value.trim() || row.orderPart.value === 'BOM 조회중') throw new Error(`${row.seq.textContent}행의 BOM 발주 품번을 확인하세요.`);
+      if (!row.sourcePart?.part_no) throw new Error(`${row.seq.textContent}행의 이전 품번을 BOM에서 확인할 수 없습니다.`);
       const qty = Number(row.qty.value); if (!Number.isFinite(qty) || qty <= 0) throw new Error(`${row.seq.textContent}행의 발주수량을 확인하세요.`);
-      return {previous_part_no:row.part.part_no, processing_type_code:row.process.value, order_part_no:row.orderPart.value.trim(), order_qty:qty, delivery_date:row.date.value || null, note:row.note.value.trim() || null};
+      return {previous_part_no:row.sourcePart.part_no, processing_type_code:row.process.value, order_part_no:row.outputPart.part_no, order_qty:qty, delivery_date:row.date.value || null, note:row.note.value.trim() || null};
     });
     return {order_date:$('so-date').value, partner_id:vendor.id, partner_name:vendor.name, processing_type_code:$('so-process').value, delivery_due_date:$('so-due-date').value || null, external_storage_location:$('so-location').value, manager_name:$('so-manager').value.trim() || null, note:$('so-note').value.trim() || null, items};
   }
@@ -295,9 +332,9 @@
 
   async function openLotModal(row) {
     if (!orderId || !row.itemId) { msg('발주 내용을 먼저 저장하세요.'); return; }
-    lotTarget = row; $('so-lot-modal').hidden = false; $('so-lot-part').textContent = row.part?.part_no || row.previous.value; $('so-lot-required').textContent = fmt(row.qty.value); $('so-lot-selected').textContent = '0'; $('so-lot-balance').textContent = fmt(row.qty.value); $('so-lot-body').innerHTML = '<tr><td colspan="4">조회 중...</td></tr>';
+    lotTarget = row; $('so-lot-modal').hidden = false; $('so-lot-part').textContent = row.sourcePart?.part_no || row.previous.value; $('so-lot-required').textContent = fmt(row.qty.value); $('so-lot-selected').textContent = '0'; $('so-lot-balance').textContent = fmt(row.qty.value); $('so-lot-body').innerHTML = '<tr><td colspan="4">조회 중...</td></tr>';
     try {
-      const data = await request('/api/subcontract/stock?' + new URLSearchParams({part_no:row.part.part_no, order_item_id:String(row.itemId)}));
+      const data = await request('/api/subcontract/stock?' + new URLSearchParams({part_no:row.sourcePart.part_no, order_item_id:String(row.itemId)}));
       lotCandidates = data.lots || []; $('so-lot-source-note').textContent = data.source_note || '';
       if (!lotCandidates.length) { $('so-lot-body').innerHTML = '<tr><td colspan="4">사용 가능한 LOT이 없습니다. 생산/재고 LOT 원장 연동 상태를 확인하세요.</td></tr>'; return; }
       const selected = new Set((row.allocations || []).map(x => x.lot_no));
@@ -447,7 +484,7 @@
     $('so-search-prev').addEventListener('click',()=>{if(orderSearchPage>1){orderSearchPage-=1;loadOrderSearch();}});
     $('so-search-next').addEventListener('click',()=>{const size=Number($('so-search-size').value||25);if(orderSearchPage<Math.max(1,Math.ceil(orderSearchTotal/size))){orderSearchPage+=1;loadOrderSearch();}});
     $('so-search-apply').addEventListener('click',()=>selectSearchOrder(selectedSearchOrderId));
-    $('so-process').addEventListener('change',()=>rows.forEach(row=>{if(!row.process.value)row.process.value=$('so-process').value;if(row.part)resolveBomOutput(row);}));
+    $('so-process').addEventListener('change',()=>rows.forEach(row=>{if(!row.process.value)row.process.value=$('so-process').value;if(row.outputPart)resolveBomInput(row);}));
     $('so-due-date').addEventListener('change',()=>rows.forEach(row=>{if(!row.date.value)row.date.value=$('so-due-date').value;}));
     $('so-add-row').addEventListener('click',()=>addRow(null,true)); $('so-new').addEventListener('click',reset); $('so-form').addEventListener('submit',save); $('so-confirm').addEventListener('click',confirmOrder);
     $('so-lot-close').addEventListener('click',closeLotModal); $('so-lot-cancel').addEventListener('click',closeLotModal); $('so-lot-apply').addEventListener('click',applyLots); $('so-lot-modal').addEventListener('click',event=>{if(event.target===$('so-lot-modal'))closeLotModal();});
