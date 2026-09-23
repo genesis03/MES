@@ -47,7 +47,7 @@
     $('ob-order-no').value = data.order_no || '';
     $('ob-partner').value = data.partner_name || '';
     $('ob-process').value = data.processing_type_name || '';
-    $('ob-location').value = data.external_storage_location || '';
+    $('ob-location').value = data.external_storage_location_name || data.external_storage_location || '';
     $('ob-manager').value = data.manager_name || '';
     $('ob-order-date').value = data.order_date || '';
 
@@ -81,7 +81,7 @@
     $('ob-order-no').value = data.order_no || '';
     $('ob-partner').value = data.partner_name || '';
     $('ob-process').value = data.processing_type_name || '';
-    $('ob-location').value = data.external_storage_location || '';
+    $('ob-location').value = data.external_storage_location_name || data.external_storage_location || '';
     $('ob-manager').value = data.manager_name || '';
     $('ob-order-date').value = data.order_date || '';
     $('ob-date').disabled = true;
