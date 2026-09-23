@@ -15,6 +15,7 @@ def ensure_sales_policy_columns(engine) -> None:
         additions = {
             "order_type": "order_type VARCHAR(20) NOT NULL DEFAULT 'NORMAL'",
             "transaction_type": "transaction_type VARCHAR(20) NOT NULL DEFAULT 'PAID'",
+            "po_no": "po_no VARCHAR(100)",
         }
         for name, column_sql in additions.items():
             if name not in columns:
