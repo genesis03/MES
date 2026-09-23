@@ -111,8 +111,12 @@ def _validate_order_payload(db: Session, payload: SalesOrderCreateInput):
         raise HTTPException(404, "사용 가능한 판매처를 찾을 수 없습니다.")
 
     part_nos = [row.part_no.strip() for row in payload.items]
-    if len(set(part_nos)) != len(part_nos):
-        raise HTTPException(409, "동일 품번은 수주 한 건에 중복 입력할 수 없습니다.")
+    item_keys = [
+        (row.part_no.strip(), row.delivery_date or payload.delivery_due_date or "")
+        for row in payload.items
+    ]
+    if len(set(item_keys)) != len(item_keys):
+        raise HTTPException(409, "동일 품번과 동일 납기일은 한 수주에 중복 입력할 수 없습니다.")
 
     item_rows = db.query(ItemMasterModel).filter(
         ItemMasterModel.part_no.in_(part_nos),
