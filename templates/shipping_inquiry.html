@@ -2,7 +2,7 @@
 {% block title %}출고 내역 조회{% endblock %}
 {% block extra_head %}
 <style>
-.page{font-size:13px}.page h1{font-size:21px;margin:0 0 16px}.filters{display:grid;grid-template-columns:150px 150px 180px 180px 180px auto;gap:10px;align-items:end;background:#fff;border:1px solid #dbe3ec;border-radius:6px;padding:14px;margin-bottom:14px}.field label{display:block;font-weight:700;margin-bottom:5px}.field input{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px}.btn{border:0;border-radius:4px;padding:8px 15px;font-weight:800;cursor:pointer}.btn-sm{padding:5px 10px}.blue{background:#2563eb;color:white}.red{background:#dc2626;color:white}.gray{background:#e2e8f0;color:#334155}.table-wrap{background:#fff;border:1px solid #dbe3ec;border-radius:6px;overflow:auto}.tbl{width:100%;border-collapse:collapse}.tbl th,.tbl td{border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;padding:8px;text-align:center;white-space:nowrap}.tbl th{background:#f8fafc}.tbl tbody tr:hover{background:#eff6ff}.num{text-align:right!important}.left{text-align:left!important}.empty{padding:50px!important;color:#94a3b8}.summary{padding:9px 12px;background:#f8fafc;font-weight:700}.msg{margin:8px 0;min-height:18px}.ok{color:#15803d}.err{color:#b91c1c}.toolbar{display:flex;justify-content:flex-end;gap:8px;margin:10px 0}.doc-link{color:#1d4ed8;font-weight:800;text-decoration:underline}.row-check{width:15px;height:15px;cursor:pointer}.flag{display:inline-block;padding:2px 7px;border-radius:999px;background:#fff7ed;color:#c2410c;font-size:11px;font-weight:800}
+.page{font-size:13px}.page h1{font-size:21px;margin:0 0 16px}.filters{display:grid;grid-template-columns:150px 150px 180px 180px 180px auto;gap:10px;align-items:end;background:#fff;border:1px solid #dbe3ec;border-radius:6px;padding:14px;margin-bottom:14px}.field label{display:block;font-weight:700;margin-bottom:5px}.field input,.field select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;background:#fff}.btn{border:0;border-radius:4px;padding:8px 15px;font-weight:800;cursor:pointer}.btn-sm{padding:5px 10px}.blue{background:#2563eb;color:white}.red{background:#dc2626;color:white}.gray{background:#e2e8f0;color:#334155}.table-wrap{background:#fff;border:1px solid #dbe3ec;border-radius:6px;overflow:auto}.tbl{width:100%;border-collapse:collapse}.tbl th,.tbl td{border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;padding:8px;text-align:center;white-space:nowrap}.tbl th{background:#f8fafc}.tbl tbody tr:hover{background:#eff6ff}.num{text-align:right!important}.left{text-align:left!important}.empty{padding:50px!important;color:#94a3b8}.summary{padding:9px 12px;background:#f8fafc;font-weight:700}.msg{margin:8px 0;min-height:18px}.ok{color:#15803d}.err{color:#b91c1c}.toolbar{display:flex;justify-content:flex-end;gap:8px;margin:10px 0}.doc-link{color:#1d4ed8;font-weight:800;text-decoration:underline}.row-check{width:15px;height:15px;cursor:pointer}.flag{display:inline-block;padding:2px 7px;border-radius:999px;background:#fff7ed;color:#c2410c;font-size:11px;font-weight:800}.part-picker{position:relative}.picker-box{min-height:34px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:3px 7px}.picker-box:focus-within{border-color:#2563eb;box-shadow:0 0 0 1px #2563eb}.picker-box input{border:0;outline:0;height:26px;min-width:100px;flex:1;padding:0}.chip{display:inline-flex;align-items:center;gap:5px;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:14px;padding:3px 8px;font-size:12px;font-weight:700}.chip button{border:0;background:transparent;color:#64748b;cursor:pointer;font-size:14px;line-height:1;padding:0}.suggestions{position:absolute;z-index:50;left:0;right:0;top:38px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;box-shadow:0 6px 18px rgba(15,23,42,.12);max-height:260px;overflow:auto;display:none}.suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12.5px}.suggestion:hover,.suggestion.active{background:#eff6ff}.suggestion .pn{font-weight:800;color:#1e3a8a}.suggestion .name{margin-left:10px;color:#64748b}
 </style>
 {% endblock %}
 {% block content %}
@@ -12,8 +12,8 @@
     <div class="field"><label>출고일자 From</label><input id="startDate" type="date"></div>
     <div class="field"><label>출고일자 To</label><input id="endDate" type="date"></div>
     <div class="field"><label>출고번호</label><input id="shipmentNo" placeholder="SH..."></div>
-    <div class="field"><label>판매처</label><input id="customerName"></div>
-    <div class="field"><label>품번</label><input id="partNo"></div>
+    <div class="field"><label>판매처</label><select id="customerId"><option value="">전체</option></select></div>
+    <div class="field"><label>품번</label><div class="part-picker"><div class="picker-box"><div id="chips" style="display:contents"></div><input id="partSearch" placeholder="품번 입력" autocomplete="off"></div><div id="suggestions" class="suggestions"></div></div></div>
     <div><button class="btn blue" onclick="loadRows()">조회</button></div>
   </div>
   <div id="msg" class="msg"></div>
@@ -30,12 +30,42 @@
 {% endblock %}
 {% block extra_script %}
 <script>
-let rows=[], selectedIds=new Set();
+let rows=[], selectedIds=new Set(), selectedParts=[], candidateRows=[], activeIndex=-1, searchTimer=null;
 const $=id=>document.getElementById(id);const n=v=>Number(v||0);
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function showMsg(t,ok=false){$('msg').textContent=t||'';$('msg').className='msg '+(ok?'ok':'err');}
 async function jf(url,opt){const r=await fetch(url,opt);let d={};try{d=await r.json()}catch(_){ }if(!r.ok)throw new Error(d.detail||'처리 실패');return d;}
-function qs(){const p=new URLSearchParams();[['start_date','startDate'],['end_date','endDate'],['shipment_no','shipmentNo'],['customer_name','customerName'],['part_no','partNo']].forEach(([k,id])=>{const v=$(id).value.trim();if(v)p.set(k,v)});return p.toString();}
+
+async function loadCustomers(){
+  const d=await jf('/api/sales/customers');
+  $('customerId').innerHTML='<option value="">전체</option>'+(d||[]).map(x=>`<option value="${x.id}">${esc(x.partner_name)}${x.partner_code?' ('+esc(x.partner_code)+')':''}</option>`).join('');
+}
+function renderChips(){
+  $('chips').innerHTML=selectedParts.map((x,i)=>`<span class="chip" title="${esc(x.part_name||'')}">${esc(x.part_no)}<button type="button" data-rm="${i}">×</button></span>`).join('');
+  $('chips').querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>{selectedParts.splice(Number(b.dataset.rm),1);renderChips();$('partSearch').focus();}));
+}
+function hideSuggestions(){$('suggestions').style.display='none';$('suggestions').innerHTML='';candidateRows=[];activeIndex=-1;}
+function addPart(row){if(!row||!row.item_id)return;if(!selectedParts.some(x=>Number(x.item_id)===Number(row.item_id)))selectedParts.push(row);renderChips();$('partSearch').value='';hideSuggestions();$('partSearch').focus();}
+function renderSuggestions(){
+  const box=$('suggestions');
+  if(!candidateRows.length){box.innerHTML='<div class="suggestion" style="color:#94a3b8">일치하는 품번이 없습니다.</div>';box.style.display='block';return;}
+  box.innerHTML=candidateRows.map((x,i)=>`<div class="suggestion${i===activeIndex?' active':''}" data-pi="${i}"><span class="pn">${esc(x.part_no)}</span><span class="name">${esc(x.part_name||'')}</span></div>`).join('');
+  box.style.display='block';
+  box.querySelectorAll('[data-pi]').forEach(el=>el.addEventListener('mousedown',e=>{e.preventDefault();addPart(candidateRows[Number(el.dataset.pi)]);}));
+}
+async function searchParts(){
+  const q=$('partSearch').value.trim();if(!q){hideSuggestions();return;}
+  try{
+    const d=await jf('/api/sales/items?q='+encodeURIComponent(q)+'&limit=30');
+    candidateRows=(d||[]).filter(x=>!selectedParts.some(s=>Number(s.item_id)===Number(x.item_id)));activeIndex=-1;renderSuggestions();
+  }catch(e){$('suggestions').innerHTML=`<div class="suggestion" style="color:#b91c1c">${esc(e.message)}</div>`;$('suggestions').style.display='block';}
+}
+function qs(){
+  const p=new URLSearchParams();
+  [['start_date','startDate'],['end_date','endDate'],['shipment_no','shipmentNo'],['customer_id','customerId']].forEach(([k,id])=>{const v=$(id).value.trim();if(v)p.set(k,v)});
+  selectedParts.forEach(x=>p.append('item_id',String(x.item_id)));
+  return p.toString();
+}
 function updateSelection(){
   document.querySelectorAll('.row-check').forEach(ch=>ch.checked=selectedIds.has(Number(ch.value)));
   $('deleteSelectedBtn').disabled=selectedIds.size===0;
@@ -59,12 +89,14 @@ async function deleteSelected(){
   if(!selectedIds.size){showMsg('삭제할 출고 내역을 선택하세요.');return;}
   const selectedRows=rows.filter(x=>selectedIds.has(x.id));
   if(!confirm(`${selectedRows.length}건의 출고 내역을 삭제하시겠습니까?\n연결된 수주의 출고수량과 LOT 사용상태가 복원됩니다.`))return;
-  try{
-    for(const row of selectedRows){await jf('/api/shipping/inquiry/'+row.id,{method:'DELETE'});}
-    showMsg(`${selectedRows.length}건의 출고 내역을 삭제했습니다.`,true);
-    await loadRows();
-  }catch(e){showMsg(e.message)}
+  try{for(const row of selectedRows){await jf('/api/shipping/inquiry/'+row.id,{method:'DELETE'});}showMsg(`${selectedRows.length}건의 출고 내역을 삭제했습니다.`,true);await loadRows();}catch(e){showMsg(e.message)}
 }
-document.addEventListener('DOMContentLoaded',()=>{const today=new Date().toISOString().slice(0,10);$('endDate').value=today;loadRows();});
+document.addEventListener('DOMContentLoaded',async()=>{
+  const today=new Date().toISOString().slice(0,10);$('endDate').value=today;
+  $('partSearch').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(searchParts,180);});
+  $('partSearch').addEventListener('keydown',e=>{if(e.key==='ArrowDown'&&candidateRows.length){e.preventDefault();activeIndex=Math.min(activeIndex+1,candidateRows.length-1);renderSuggestions();}else if(e.key==='ArrowUp'&&candidateRows.length){e.preventDefault();activeIndex=Math.max(activeIndex-1,0);renderSuggestions();}else if(e.key==='Enter'){e.preventDefault();if(candidateRows.length)addPart(candidateRows[activeIndex>=0?activeIndex:0]);else loadRows();}else if(e.key==='Backspace'&&!$('partSearch').value&&selectedParts.length){selectedParts.pop();renderChips();}else if(e.key==='Escape')hideSuggestions();});
+  document.addEventListener('click',e=>{if(!e.target.closest('.part-picker'))hideSuggestions();});
+  try{await loadCustomers();await loadRows();}catch(e){showMsg(e.message);}
+});
 </script>
 {% endblock %}
