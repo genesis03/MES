@@ -36,7 +36,18 @@ def _used_qty(db: Session, lot_no: str, item_id: int | None = None) -> float:
     if item_id:
         subcontract_query = subcontract_query.filter(SubcontractOrderItem.previous_item_id == item_id)
     subcontract_reserved = subcontract_query.scalar() or 0.0
-    return float(consumed) + float(related) + float(packed) + float(subcontract_reserved)
+    sample_used = (
+        db.query(func.coalesce(func.sum(SubcontractInboundLot.sample_qty), 0.0))
+        .join(SubcontractInboundItem, SubcontractInboundItem.id == SubcontractInboundLot.inbound_item_id)
+        .join(SubcontractInboundMaster, SubcontractInboundMaster.id == SubcontractInboundItem.inbound_id)
+        .filter(
+            SubcontractInboundMaster.status == "RECEIVED",
+            SubcontractInboundLot.child_lot_no == lot_no,
+        )
+        .scalar()
+        or 0.0
+    )
+    return float(consumed) + float(related) + float(packed) + float(subcontract_reserved) + float(sample_used)
 
 
 def _storage_map(db: Session) -> dict[str, str]:
