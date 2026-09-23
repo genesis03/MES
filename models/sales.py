@@ -21,6 +21,7 @@ class SalesOrderMaster(Base):
     order_type = Column(String(20), nullable=False, default="NORMAL", index=True)  # NORMAL/SAMPLE/DEVELOPMENT
     transaction_type = Column(String(20), nullable=False, default="PAID", index=True)  # PAID/FREE
     manager_name = Column(String(50), nullable=True)
+    po_no = Column(String(100), nullable=True, index=True)
     note = Column(Text, nullable=True)
     created_by = Column(String(50), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
