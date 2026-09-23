@@ -16,7 +16,7 @@ from models.models import ItemBomModel, ItemMasterModel, ShippingMasterModel
 from models.packing import PackingBox, PackingLotAllocation, PackingMaster
 from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunLotAllocation, ProductionRunMaterial
-from models.sales import ShipmentBox
+from models.sales import ShipmentBox, ShipmentItem, ShipmentMaster
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from services.shipping_lot_service import next_shipping_lot_no
 
@@ -214,6 +214,92 @@ def _preview(db: Session, finished_item_id: int, scanned_lot_no: str, target_qty
 @router.get("/production/packing", response_class=HTMLResponse)
 def packing_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(request=request, name="production_packing.html", context={"request": request, "user": current_user})
+
+
+@router.get("/production/packing/status", response_class=HTMLResponse)
+def packing_status_page(request: Request, current_user=Depends(get_current_user)):
+    return templates.TemplateResponse(
+        request=request,
+        name="production_packing_status.html",
+        context={"request": request, "user": current_user},
+    )
+
+
+@router.get("/api/packing/status")
+def packing_status(
+    start_date: Optional[str] = Query(None, max_length=10),
+    end_date: Optional[str] = Query(None, max_length=10),
+    part_no: Optional[str] = Query(None, max_length=50),
+    lot_no: Optional[str] = Query(None, max_length=60),
+    limit: int = Query(2000, ge=1, le=5000),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    query = (
+        db.query(PackingBox, PackingMaster)
+        .join(PackingMaster, PackingMaster.id == PackingBox.packing_id)
+        .filter(PackingMaster.status == "PACKED")
+    )
+    if start_date:
+        query = query.filter(PackingMaster.packing_date >= start_date)
+    if end_date:
+        query = query.filter(PackingMaster.packing_date <= end_date)
+    if part_no and part_no.strip():
+        value = f"%{part_no.strip()}%"
+        query = query.filter(
+            (PackingMaster.part_no.ilike(value))
+            | (PackingMaster.part_name.ilike(value))
+        )
+    if lot_no and lot_no.strip():
+        query = query.filter(PackingBox.package_lot_no.ilike(f"%{lot_no.strip()}%"))
+
+    rows = (
+        query.order_by(
+            PackingMaster.packing_date.desc(),
+            PackingBox.package_lot_no.desc(),
+            PackingBox.id.desc(),
+        )
+        .limit(limit)
+        .all()
+    )
+
+    box_ids = [box.id for box, _ in rows]
+    shipped_by_box: dict[int, tuple[ShipmentBox, ShipmentMaster]] = {}
+    if box_ids:
+        shipped_rows = (
+            db.query(ShipmentBox, ShipmentMaster)
+            .join(ShipmentItem, ShipmentItem.id == ShipmentBox.shipment_item_id)
+            .join(ShipmentMaster, ShipmentMaster.id == ShipmentItem.shipment_id)
+            .filter(
+                ShipmentBox.packing_box_id.in_(box_ids),
+                ShipmentMaster.status == "CONFIRMED",
+            )
+            .all()
+        )
+        shipped_by_box = {
+            int(shipment_box.packing_box_id): (shipment_box, shipment)
+            for shipment_box, shipment in shipped_rows
+        }
+
+    return {
+        "items": [
+            {
+                "packing_box_id": box.id,
+                "part_no": master.part_no,
+                "part_name": master.part_name or "",
+                "lot_no": box.package_lot_no,
+                "packing_date": master.packing_date,
+                "packing_qty": float(box.box_qty or 0),
+                "shipment_qty": float(shipped_by_box[box.id][0].shipped_qty or 0)
+                if box.id in shipped_by_box else 0.0,
+                "shipment_date": shipped_by_box[box.id][1].shipment_date
+                if box.id in shipped_by_box else "",
+                "customer_name": shipped_by_box[box.id][1].customer_name
+                if box.id in shipped_by_box else "",
+            }
+            for box, master in rows
+        ]
+    }
 
 
 @router.get("/api/packing/items")
