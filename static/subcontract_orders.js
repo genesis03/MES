@@ -80,7 +80,7 @@
       vendor = matches[0];
       $('so-vendor').value = vendor.value;
       $('so-vendor').classList.add('so-vendor-selected');
-      $('so-vendor-hint').textContent = `선택됨: ${vendor.code} / ${vendor.name}`;
+      $('so-vendor-hint').textContent = `선택됨: ${vendor.name}`;
       if (!$('so-manager').value.trim()) $('so-manager').value = vendor.manager;
     } else $('so-vendor-hint').textContent = '목록에서 발주처를 선택하세요.';
   }
