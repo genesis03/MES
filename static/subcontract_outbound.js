@@ -26,7 +26,7 @@
 
   function resetView() {
     currentOrder = null; selectedOrderId = null; currentOutbound = null; selectedOutboundId = null;
-    $('ob-number').value = '출고 시 자동 발번'; $('ob-date').value = today(); $('ob-status').value = '발주를 불러오세요';
+    $('ob-number').value = ''; $('ob-date').value = today(); $('ob-status').value = '발주를 불러오세요';
     $('ob-order-no').value=''; $('ob-partner').value=''; $('ob-process').value=''; $('ob-location').value=''; $('ob-manager').value=''; $('ob-order-date').value='';
     $('ob-items').innerHTML='<tr><td colspan="10">외주가공 발주를 불러오세요.</td></tr>';
     $('ob-confirm').disabled=true; $('ob-cancel').disabled=true; $('ob-slip').disabled=true; $('ob-label').disabled=true;
@@ -47,7 +47,7 @@
     $('ob-order-no').value = data.order_no || '';
     $('ob-partner').value = data.partner_name || '';
     $('ob-process').value = data.processing_type_name || '';
-    $('ob-location').value = data.external_storage_location_name || data.external_storage_location || '';
+    $('ob-location').value = data.external_storage_location_name || '';
     $('ob-manager').value = data.manager_name || '';
     $('ob-order-date').value = data.order_date || '';
 
@@ -61,7 +61,7 @@
       $('ob-slip').disabled = false; $('ob-label').disabled = false;
       renderItems(currentOutbound.items);
     } else {
-      $('ob-number').value = '출고 시 자동 발번';
+      $('ob-number').value = '';
       $('ob-date').value = today();
       $('ob-status').value = '출고대기';
       $('ob-date').disabled = false;
@@ -81,7 +81,7 @@
     $('ob-order-no').value = data.order_no || '';
     $('ob-partner').value = data.partner_name || '';
     $('ob-process').value = data.processing_type_name || '';
-    $('ob-location').value = data.external_storage_location_name || data.external_storage_location || '';
+    $('ob-location').value = data.external_storage_location_name || '';
     $('ob-manager').value = data.manager_name || '';
     $('ob-order-date').value = data.order_date || '';
     $('ob-date').disabled = true;
@@ -174,6 +174,22 @@
   }
   function closeHistoryModal(){ $('ob-history-modal').hidden=true; }
 
+  async function loadOutboundByNumber(){
+    const outboundNo=$('ob-number').value.trim();
+    if(!outboundNo){ openHistoryModal(); return; }
+    try{
+      $('ob-h-outbound-no').value=outboundNo;
+      $('ob-h-order-no').value='';
+      $('ob-h-partner').value='';
+      $('ob-h-start').value='';
+      $('ob-h-end').value='';
+      await loadOutboundHistory();
+      const exact=outboundRows.find(x=>String(x.outbound_no||'').toUpperCase()===outboundNo.toUpperCase());
+      if(!exact) throw new Error('해당 출고번호를 찾을 수 없습니다.');
+      await loadHistoricalOutbound(exact.outbound_id);
+    }catch(e){msg(e.message);}
+  }
+
   async function createOutbound(){
     if(!currentOrder) return;
     const outboundDate=$('ob-date').value; if(!outboundDate){msg('출고일자를 입력하세요.');return;}
@@ -212,8 +228,10 @@
   }
 
   function init(){
-    const ids=['ob-load','ob-load-outbound','ob-confirm','ob-cancel','ob-slip','ob-label','ob-message','ob-number','ob-date','ob-status','ob-order-no','ob-partner','ob-process','ob-location','ob-manager','ob-order-date','ob-items','ob-modal','ob-search','ob-search-btn','ob-orders','ob-modal-close','ob-modal-apply','ob-history-modal','ob-h-outbound-no','ob-h-order-no','ob-h-partner','ob-h-start','ob-h-end','ob-history-search','ob-history-rows','ob-history-message','ob-history-close','ob-history-apply'];
+    const ids=['ob-load','ob-load-outbound','ob-confirm','ob-cancel','ob-slip','ob-label','ob-message','ob-number','ob-number-search','ob-date','ob-status','ob-order-no','ob-partner','ob-process','ob-location','ob-manager','ob-order-date','ob-items','ob-modal','ob-search','ob-search-btn','ob-orders','ob-modal-close','ob-modal-apply','ob-history-modal','ob-h-outbound-no','ob-h-order-no','ob-h-partner','ob-h-start','ob-h-end','ob-history-search','ob-history-rows','ob-history-message','ob-history-close','ob-history-apply'];
     const missing=ids.filter(id=>!$(id)); if(missing.length){console.error('Outbound UI missing',missing);return;}
+    $('ob-number-search').addEventListener('click',loadOutboundByNumber);
+    $('ob-number').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadOutboundByNumber();}});
     $('ob-load').addEventListener('click',openModal);
     $('ob-load-outbound').addEventListener('click',openHistoryModal);
     $('ob-search-btn').addEventListener('click',loadOrderList);
