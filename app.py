@@ -48,11 +48,11 @@ def _menu_level(value) -> str:
 
 @app.middleware("http")
 async def enforce_menu_write_permission(request: Request, call_next):
-    """일반 계정의 READ 메뉴에서 저장/수정/삭제 계열 요청을 서버에서도 차단합니다."""
-    if DEV_BYPASS_AUTH or request.method.upper() in {"GET", "HEAD", "OPTIONS"}:
+    """일반 계정의 메뉴 접근 및 READ/WRITE 권한을 서버에서도 검사합니다."""
+    if DEV_BYPASS_AUTH:
         return await call_next(request)
 
-    req_path = request.url.path
+    req_path = request.url.path.rstrip("/") or "/"
     if req_path.startswith("/static/") or req_path in {"/login", "/logout", "/api/login", "/api/logout"}:
         return await call_next(request)
 
@@ -72,30 +72,46 @@ async def enforce_menu_write_permission(request: Request, call_next):
         if not isinstance(menu_access, dict) or not menu_access:
             return await call_next(request)
 
-        source_path = (request.headers.get("X-MES-Menu-Path") or "").strip()
-        if not source_path:
-            referer = request.headers.get("referer") or ""
-            if referer:
-                source_path = urlparse(referer).path
-
-        source_path = source_path.rstrip("/") or "/"
         normalized = {
             (str(path).rstrip("/") or "/"): _menu_level(level)
             for path, level in menu_access.items()
             if str(path or "").strip()
         }
-        matched = next(
-            (
-                path for path in sorted(normalized, key=len, reverse=True)
-                if source_path == path or (path != "/" and source_path.startswith(path + "/"))
-            ),
-            None,
-        )
-        if matched and normalized[matched] != "WRITE":
-            return JSONResponse(
-                status_code=403,
-                content={"detail": "읽기 전용 권한입니다. 저장/수정/삭제/확정 작업을 할 수 없습니다."},
+
+        def match_menu(path_value: str):
+            path_value = (path_value or "").rstrip("/") or "/"
+            return next(
+                (
+                    path for path in sorted(normalized, key=len, reverse=True)
+                    if path_value == path or (path != "/" and path_value.startswith(path + "/"))
+                ),
+                None,
             )
+
+        method = request.method.upper()
+
+        # 화면 URL 직접 접근: NONE이면 차단
+        if method in {"GET", "HEAD"} and not req_path.startswith("/api/"):
+            matched = match_menu(req_path)
+            if matched and normalized[matched] == "NONE":
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "해당 메뉴에 대한 접근 권한이 없습니다."},
+                )
+
+        # 쓰기 요청: 호출한 화면이 WRITE가 아니면 차단
+        if method in {"POST", "PUT", "PATCH", "DELETE"}:
+            source_path = (request.headers.get("X-MES-Menu-Path") or "").strip()
+            if not source_path:
+                referer = request.headers.get("referer") or ""
+                if referer:
+                    source_path = urlparse(referer).path
+            matched = match_menu(source_path)
+            if matched and normalized[matched] != "WRITE":
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "읽기 전용 권한입니다. 저장/수정/삭제/확정 작업을 할 수 없습니다."},
+                )
     finally:
         db.close()
 
