@@ -1,10 +1,21 @@
-from fastapi import FastAPI
+from urllib.parse import urlparse
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from core.config import BASE_DIR
+from core.database import SessionLocal
 import models  # 기존 테이블 자동 생성 트리거
 import models.partner  # 신규 거래처 테이블 자동 생성 트리거
-from core.security import init_default_accounts
+from models.models import UserModel
+from core.security import (
+    DEV_BYPASS_AUTH,
+    check_admin_permission,
+    init_default_accounts,
+    parse_user_permissions,
+    verify_session_token,
+)
 from services.purchase_lot_format import install_purchase_lot_format
 from services.production_lot_service import ensure_production_output_lots
 from services.subcontract_reservation_repair import repair_cancelled_subcontract_reservations
@@ -24,6 +35,72 @@ repair_cancelled_subcontract_reservations()
 repair_subcontract_inbound_sample_stock()
 
 app = FastAPI(title="출하 바코드 관리 시스템")
+
+
+def _menu_level(value) -> str:
+    if value is True:
+        return "READ"
+    if value is False or value is None:
+        return "NONE"
+    level = str(value).strip().upper()
+    return level if level in {"NONE", "READ", "WRITE"} else "NONE"
+
+
+@app.middleware("http")
+async def enforce_menu_write_permission(request: Request, call_next):
+    """일반 계정의 READ 메뉴에서 저장/수정/삭제 계열 요청을 서버에서도 차단합니다."""
+    if DEV_BYPASS_AUTH or request.method.upper() in {"GET", "HEAD", "OPTIONS"}:
+        return await call_next(request)
+
+    req_path = request.url.path
+    if req_path.startswith("/static/") or req_path in {"/login", "/logout", "/api/login", "/api/logout"}:
+        return await call_next(request)
+
+    token = request.cookies.get("session_token")
+    username = verify_session_token(token) if token else None
+    if not username:
+        return await call_next(request)
+
+    db = SessionLocal()
+    try:
+        user = db.query(UserModel).filter(UserModel.username == username).first()
+        if not user or check_admin_permission(user):
+            return await call_next(request)
+
+        perms = parse_user_permissions(user)
+        menu_access = perms.get("menu_access")
+        if not isinstance(menu_access, dict) or not menu_access:
+            return await call_next(request)
+
+        source_path = (request.headers.get("X-MES-Menu-Path") or "").strip()
+        if not source_path:
+            referer = request.headers.get("referer") or ""
+            if referer:
+                source_path = urlparse(referer).path
+
+        source_path = source_path.rstrip("/") or "/"
+        normalized = {
+            (str(path).rstrip("/") or "/"): _menu_level(level)
+            for path, level in menu_access.items()
+            if str(path or "").strip()
+        }
+        matched = next(
+            (
+                path for path in sorted(normalized, key=len, reverse=True)
+                if source_path == path or (path != "/" and source_path.startswith(path + "/"))
+            ),
+            None,
+        )
+        if matched and normalized[matched] != "WRITE":
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "읽기 전용 권한입니다. 저장/수정/삭제/확정 작업을 할 수 없습니다."},
+            )
+    finally:
+        db.close()
+
+    return await call_next(request)
+
 
 # 정적 파일 경로 마운트
 static_dir = BASE_DIR / "static"
