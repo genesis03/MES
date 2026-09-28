@@ -407,6 +407,12 @@ async function openShipmentLookup(){
   $('shipmentLookupKeyword').focus();
 }
 
+function resetShipmentLookup(){
+  $('shipmentLookupKeyword').value = '';
+  $('shipmentLookupBody').innerHTML = '<tr><td colspan="7" class="empty">조회해 주세요.</td></tr>';
+  $('shipmentLookupKeyword').focus();
+}
+
 function closeShipmentLookup(){
   $('shipmentLookupModal').classList.remove('show');
 }
@@ -508,6 +514,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     }
   });
   $('shipmentLookupSearchBtn').addEventListener('click',()=>searchShipmentLookup(false).catch(e=>alert(e.message)));
+  $('shipmentLookupResetBtn').addEventListener('click', resetShipmentLookup);
   $('shipmentLookupKeyword').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); searchShipmentLookup(false).catch(err=>alert(err.message)); } });
   $('shipmentLookupClose').addEventListener('click', closeShipmentLookup);
   $('shipmentLookupModal').addEventListener('click', e => { if(e.target === $('shipmentLookupModal')) closeShipmentLookup(); });
