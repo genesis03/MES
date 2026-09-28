@@ -243,8 +243,8 @@
             {% if user %}
 
             <!-- 1. 기초 정보 (PLM 기준정보) -->
-            {% if user.role == "ADMIN" or (user.perms and user.perms.basic_info and user.perms.basic_info.enabled) %}
-            <li class="menu-item{% if request.url.path.startswith('/basic-info/') %} open{% endif %}" id="basicInfoMenu">
+            {% if user.role == "ADMIN" or (user.perms and user.perms.basic_info and user.perms.basic_info.enabled) or (user.perms and user.perms.menu_access) %}
+            <li class="menu-item{% if request.url.path.startswith('/basic-info/') %} open{% endif %}" id="basicInfoMenu" data-perm-key="basic_info">
                 <div class="menu-title" onclick="toggleAccordion('basicInfoMenu')">
                     <span>기초 정보</span>
                     <span class="arrow-icon">▼</span>
@@ -262,8 +262,8 @@
             {% endif %}
 
             <!-- 2. 영업관리 -->
-            {% if user.role == "ADMIN" or (user.perms and user.perms.sales and user.perms.sales.enabled) %}
-            <li class="menu-item{% if request.url.path.startswith('/sales/orders') or request.url.path.startswith('/sales/unsold') %} open{% endif %}" id="salesMenu">
+            {% if user.role == "ADMIN" or (user.perms and user.perms.sales and user.perms.sales.enabled) or (user.perms and user.perms.menu_access) %}
+            <li class="menu-item{% if request.url.path.startswith('/sales/orders') or request.url.path.startswith('/sales/unsold') %} open{% endif %}" id="salesMenu" data-perm-key="sales">
                 <div class="menu-title" onclick="toggleAccordion('salesMenu')">
                     <span>영업관리</span>
                     <span class="arrow-icon">▼</span>
@@ -277,8 +277,8 @@
             {% endif %}
 
             <!-- 3. 구매관리 -->
-            {% if user.role == "ADMIN" or (user.perms and user.perms.purchase and user.perms.purchase.enabled) %}
-            <li class="menu-item{% if request.url.path.startswith('/purchase') or request.url.path.startswith('/subcontract/') %} open{% endif %}" id="purchaseMenu">
+            {% if user.role == "ADMIN" or (user.perms and user.perms.purchase and user.perms.purchase.enabled) or (user.perms and user.perms.menu_access) %}
+            <li class="menu-item{% if request.url.path.startswith('/purchase') or request.url.path.startswith('/subcontract/') %} open{% endif %}" id="purchaseMenu" data-perm-key="purchase">
                 <div class="menu-title" onclick="toggleAccordion('purchaseMenu')">
                     <span>구매관리</span>
                     <span class="arrow-icon">▼</span>
@@ -299,8 +299,8 @@
             {% endif %}
 
             <!-- 4. 생산관리 -->
-            {% if user.role == "ADMIN" or (user.perms and user.perms.production and user.perms.production.enabled) %}
-            <li class="menu-item{% if request.url.path.startswith('/production/') %} open{% endif %}" id="productionMenu">
+            {% if user.role == "ADMIN" or (user.perms and user.perms.production and user.perms.production.enabled) or (user.perms and user.perms.menu_access) %}
+            <li class="menu-item{% if request.url.path.startswith('/production/') %} open{% endif %}" id="productionMenu" data-perm-key="production">
                 <div class="menu-title" onclick="toggleAccordion('productionMenu')">
                     <span>생산관리</span>
                     <span class="arrow-icon">▼</span>
@@ -323,8 +323,8 @@
             {% endif %}
 
             <!-- 5. 출고관리 -->
-            {% if user.role == "ADMIN" or (user.perms and user.perms.shipping and user.perms.shipping.enabled) %}
-            <li class="menu-item{% if request.url.path.startswith('/shipping') or request.url.path == '/sales/shipping' %} open{% endif %}" id="shippingMenu">
+            {% if user.role == "ADMIN" or (user.perms and user.perms.shipping and user.perms.shipping.enabled) or (user.perms and user.perms.menu_access) %}
+            <li class="menu-item{% if request.url.path.startswith('/shipping') or request.url.path == '/sales/shipping' %} open{% endif %}" id="shippingMenu" data-perm-key="shipping">
                 <div class="menu-title" onclick="toggleAccordion('shippingMenu')">
                     <span>출고관리</span><span class="arrow-icon">▼</span>
                 </div>
@@ -332,17 +332,17 @@
                     <li class="submenu-item"><a href="/sales/shipping" id="nav-sales-shipping">출고 입력</a></li>
                     <li class="submenu-item"><a href="/shipping/inquiry" id="nav-shipping-inquiry">출고 내역 조회</a></li>
                     <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
-                    {% if user.role == "ADMIN" or user.perms.shipping.menus.history != "NONE" %}<li class="submenu-item"><a href="/shipping/history" id="nav-history">출고 내역 및 LOT 계산</a></li>{% endif %}
-                    {% if user.role == "ADMIN" or user.perms.shipping.menus.print != "NONE" %}<li class="submenu-item"><a href="/shipping/print" id="nav-print">바코드 출력 (파일 일괄)</a></li>{% endif %}
+                    {% if user.role == "ADMIN" or user.perms.shipping.menus.history != "NONE" or (user.perms.menu_access and user.perms.menu_access.get("/shipping/history")) %}<li class="submenu-item"><a href="/shipping/history" id="nav-history">출고 내역 및 LOT 계산</a></li>{% endif %}
+                    {% if user.role == "ADMIN" or user.perms.shipping.menus.print != "NONE" or (user.perms.menu_access and user.perms.menu_access.get("/shipping/print")) %}<li class="submenu-item"><a href="/shipping/print" id="nav-print">바코드 출력 (파일 일괄)</a></li>{% endif %}
                     {% if user.role == "ADMIN" or user.perms.shipping.menus.manual != "NONE" %}<li class="submenu-item"><a href="/shipping/manual" id="nav-manual">바코드 출력 (수기 개별)</a></li>{% endif %}
-                    {% if user.role == "ADMIN" or user.perms.shipping.menus.verify != "NONE" %}<li class="submenu-item"><a href="/shipping/verify" id="nav-verify">출하 바코드 검증</a></li>{% endif %}
+                    {% if user.role == "ADMIN" or user.perms.shipping.menus.verify != "NONE" or (user.perms.menu_access and user.perms.menu_access.get("/shipping/verify")) %}<li class="submenu-item"><a href="/shipping/verify" id="nav-verify">출하 바코드 검증</a></li>{% endif %}
                 </ul>
             </li>
             {% endif %}
 
             <!-- 6. 재고 관리 (구 입고관리) -->
-            {% if user.role == "ADMIN" or (user.perms and user.perms.inbound and user.perms.inbound.enabled) %}
-            <li class="menu-item{% if request.url.path.startswith('/inventory/') %} open{% endif %}" id="inboundMenu">
+            {% if user.role == "ADMIN" or (user.perms and user.perms.inbound and user.perms.inbound.enabled) or (user.perms and user.perms.menu_access) %}
+            <li class="menu-item{% if request.url.path.startswith('/inventory/') %} open{% endif %}" id="inboundMenu" data-perm-key="inbound">
                 <div class="menu-title" onclick="toggleAccordion('inboundMenu')">
                     <span>재고관리</span>
                     <span class="arrow-icon">▼</span>
@@ -356,8 +356,8 @@
             {% endif %}
 
             <!-- 7. 품질관리 -->
-            {% if user.role == "ADMIN" or (user.perms and user.perms.quality and user.perms.quality.enabled) %}
-            <li class="menu-item{% if request.url.path.startswith('/quality/') %} open{% endif %}" id="qualityMenu">
+            {% if user.role == "ADMIN" or (user.perms and user.perms.quality and user.perms.quality.enabled) or (user.perms and user.perms.menu_access) %}
+            <li class="menu-item{% if request.url.path.startswith('/quality/') %} open{% endif %}" id="qualityMenu" data-perm-key="quality">
                 <div class="menu-title" onclick="toggleAccordion('qualityMenu')"><span>품질관리</span><span class="arrow-icon">▼</span></div>
                 <ul class="submenu">
                     <li class="submenu-item"><a href="/quality/inspection-items" id="nav-quality-inspection-items">검사항목 MASTER</a></li>
@@ -370,7 +370,7 @@
 
             <!-- 8. 관리자 메뉴 (공정 및 저장위치 관리 매핑) -->
             {% if user.role == "ADMIN" %}
-            <li class="menu-item{% if request.url.path.startswith('/admin/') %} open{% endif %}" id="adminMenu">
+            <li class="menu-item{% if request.url.path.startswith('/admin/') %} open{% endif %}" id="adminMenu" data-perm-key="admin">
                 <div class="menu-title" onclick="toggleAccordion('adminMenu')"><span>관리자 메뉴</span><span class="arrow-icon">▼</span></div>
                 <ul class="submenu">
                     <li class="submenu-item"><a href="/admin/users" id="nav-admin-users">계정 관리</a></li>
@@ -397,7 +397,26 @@
             if (!wasOpen) el.classList.add('open');
         }
 
+        function applyMenuAccess() {
+            {% if user and user.role != "ADMIN" %}
+            const menuAccess = {{ (user.perms.menu_access if user.perms and user.perms.menu_access else {}) | tojson }};
+            if (!menuAccess || Object.keys(menuAccess).length === 0) return;
+
+            document.querySelectorAll('.sidebar-menu > .menu-item[data-perm-key]').forEach(menu => {
+                if (menu.dataset.permKey === 'admin') return;
+                const links = Array.from(menu.querySelectorAll('.submenu a[href]'));
+                links.forEach(link => {
+                    const allowed = menuAccess[link.getAttribute('href')] === true;
+                    link.style.display = allowed ? '' : 'none';
+                });
+                const hasVisible = links.some(link => link.style.display !== 'none');
+                menu.style.display = hasVisible ? '' : 'none';
+            });
+            {% endif %}
+        }
+
         document.addEventListener("DOMContentLoaded", function() {
+            applyMenuAccess();
             const currentPath = window.location.pathname;
             const routeMap = {
                 "/": "nav-history",
