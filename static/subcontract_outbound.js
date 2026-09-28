@@ -164,6 +164,14 @@
   }
 
   function openModal(){ $('ob-modal').hidden=false; $('ob-search').value=''; loadOrderList(); setTimeout(()=>$('ob-search').focus(),0); }
+  function resetOrderSearch(){
+    $('ob-search').value='';
+    selectedOrderId=null;
+    $('ob-modal-apply').disabled=true;
+    loadOrderList();
+    $('ob-search').focus();
+  }
+
   function closeModal(){ $('ob-modal').hidden=true; }
   function openHistoryModal(){
     $('ob-history-modal').hidden=false;
@@ -172,6 +180,14 @@
     loadOutboundHistory();
     setTimeout(()=>$('ob-h-outbound-no').focus(),0);
   }
+  function resetHistorySearch(){
+    ['ob-h-outbound-no','ob-h-order-no','ob-h-partner','ob-h-start','ob-h-end'].forEach(id=>$(id).value='');
+    selectedOutboundId=null;
+    $('ob-history-apply').disabled=true;
+    loadOutboundHistory();
+    $('ob-h-outbound-no').focus();
+  }
+
   function closeHistoryModal(){ $('ob-history-modal').hidden=true; }
 
   async function loadOutboundByNumber(){
@@ -235,11 +251,13 @@
     $('ob-load').addEventListener('click',openModal);
     $('ob-load-outbound').addEventListener('click',openHistoryModal);
     $('ob-search-btn').addEventListener('click',loadOrderList);
+    $('ob-search-reset').addEventListener('click',resetOrderSearch);
     $('ob-search').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadOrderList();}});
     $('ob-modal-close').addEventListener('click',closeModal);
     $('ob-modal-apply').addEventListener('click',()=>{if(!selectedOrderId)return;const id=selectedOrderId;closeModal();loadOrder(id);});
     $('ob-modal').addEventListener('click',e=>{if(e.target===$('ob-modal'))closeModal();});
     $('ob-history-search').addEventListener('click',loadOutboundHistory);
+    $('ob-history-reset').addEventListener('click',resetHistorySearch);
     ['ob-h-outbound-no','ob-h-order-no','ob-h-partner','ob-h-start','ob-h-end'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadOutboundHistory();}}));
     $('ob-history-close').addEventListener('click',closeHistoryModal);
     $('ob-history-apply').addEventListener('click',()=>{if(!selectedOutboundId)return;const id=selectedOutboundId;closeHistoryModal();loadHistoricalOutbound(id);});
