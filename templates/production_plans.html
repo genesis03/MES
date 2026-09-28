@@ -33,8 +33,8 @@
     <div class="grid" style="grid-template-columns:160px 160px minmax(220px,1fr) auto;">
         <div><label>시작일</label><input type="date" id="startDate"></div>
         <div><label>종료일</label><input type="date" id="endDate"></div>
-        <div><label>품번</label><input type="text" id="searchPartNo" placeholder="품번 일부 입력"></div>
-        <div><button class="btn primary" onclick="loadPlans()">조회</button></div>
+        <div><label>품번</label><input type="text" id="searchPartNo" placeholder="품번 입력"></div>
+        <div style="display:flex;gap:6px"><button class="btn primary" onclick="loadPlans()">조회</button><button class="btn secondary" onclick="resetPlanSearch()">초기화</button></div>
     </div>
 </div>
 
@@ -81,6 +81,7 @@ async function searchParts(){
 function setMsg(t,ok=false){const e=document.getElementById('msg');e.textContent=t;e.className='msg '+(ok?'ok':'err');}
 function resetForm(){document.getElementById('planDate').value=today;partNo.value='';partSearch.value='';document.getElementById('planQty').value='';document.getElementById('note').value='';closePartSuggestions();setMsg('');}
 async function savePlan(){const payload={plan_date:planDate.value,part_no:partNo.value,plan_qty:Number(planQty.value),note:note.value};if(!payload.plan_date||!payload.part_no||!payload.plan_qty){setMsg('계획일자, 품번, 계획수량을 입력해 주세요. 품번은 검색 결과에서 선택해야 합니다.');return;}const r=await fetch('/api/production/plans',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const d=await r.json();if(!r.ok){setMsg(d.detail||'등록에 실패했습니다.');return;}setMsg(d.message,true);resetForm();await loadPlans();}
+function resetPlanSearch(){startDate.value='';endDate.value='';searchPartNo.value='';loadPlans();}
 async function loadPlans(){const q=new URLSearchParams();if(startDate.value)q.set('start_date',startDate.value);if(endDate.value)q.set('end_date',endDate.value);if(searchPartNo.value.trim())q.set('part_no',searchPartNo.value.trim());const r=await fetch('/api/production/plans?'+q.toString());const rows=await r.json();const b=document.getElementById('planBody');if(!rows.length){b.innerHTML='<tr><td colspan="8">조회된 데이터가 없습니다.</td></tr>';return;}b.innerHTML=rows.map((x,i)=>`<tr><td>${i+1}</td><td>${x.plan_date}</td><td>${x.part_no}</td><td>${x.part_name}</td><td class="num">${Number(x.plan_qty).toLocaleString()}</td><td>${x.note||''}</td><td>${x.created_by||''}</td><td><button class="btn danger" style="padding:5px 9px" onclick="deletePlan(${x.id})">삭제</button></td></tr>`).join('');}
 async function deletePlan(id){if(!confirm('생산계획을 삭제하시겠습니까?'))return;const r=await fetch('/api/production/plans/'+id,{method:'DELETE'});const d=await r.json();if(!r.ok){alert(d.detail||'삭제에 실패했습니다.');return;}await loadPlans();}
 </script>
