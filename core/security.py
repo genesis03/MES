@@ -138,6 +138,32 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="로그인이 필요합니다."
         )
+
+    # 메뉴별 세부 권한이 저장된 계정은 사이드바 메뉴 URL 직접 접근도 차단한다.
+    # API는 기존 모듈/기능 권한 검사를 그대로 사용하고, 화면 경로만 여기서 검사한다.
+    if not DEV_BYPASS_AUTH and not check_admin_permission(user):
+        perms = parse_user_permissions(user)
+        menu_access = perms.get("menu_access")
+        if isinstance(menu_access, dict) and menu_access:
+            req_path = request.url.path.rstrip("/") or "/"
+            if not req_path.startswith("/api/"):
+                normalized = {
+                    (str(path).rstrip("/") or "/"): bool(allowed)
+                    for path, allowed in menu_access.items()
+                    if str(path or "").strip()
+                }
+                matched_path = next(
+                    (
+                        path for path in sorted(normalized, key=len, reverse=True)
+                        if req_path == path or req_path.startswith(path + "/")
+                    ),
+                    None,
+                )
+                if matched_path is not None and not normalized[matched_path]:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="해당 메뉴에 대한 접근 권한이 없습니다.",
+                    )
     return user
 
 
