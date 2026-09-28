@@ -397,6 +397,70 @@
             if (!wasOpen) el.classList.add('open');
         }
 
+        {% if user and user.role != "ADMIN" %}
+        window.MES_MENU_ACCESS = {{ (user.perms.menu_access if user.perms and user.perms.menu_access else {}) | tojson }};
+        {% else %}
+        window.MES_MENU_ACCESS = {};
+        {% endif %}
+
+        function mesMenuLevel(value) {
+            if (value === true) return 'READ';
+            if (value === false || value == null) return 'NONE';
+            const level = String(value).toUpperCase();
+            return ['NONE','READ','WRITE'].includes(level) ? level : 'NONE';
+        }
+
+        function mesCurrentMenuPath() {
+            const current = window.location.pathname.replace(/\/$/, '') || '/';
+            const paths = Object.keys(window.MES_MENU_ACCESS || {})
+                .map(path => path.replace(/\/$/, '') || '/')
+                .sort((a,b) => b.length - a.length);
+            return paths.find(path => current === path || (path !== '/' && current.startsWith(path + '/'))) || null;
+        }
+
+        function mesCurrentMenuLevel() {
+            const path = mesCurrentMenuPath();
+            if (!path) return 'WRITE';
+            return mesMenuLevel(window.MES_MENU_ACCESS[path]);
+        }
+
+        function applyReadOnlyMode() {
+            {% if user and user.role != "ADMIN" %}
+            const level = mesCurrentMenuLevel();
+            window.MES_CURRENT_MENU_LEVEL = level;
+            window.MES_READ_ONLY = level === 'READ';
+            if (!window.MES_READ_ONLY) return;
+
+            document.body.classList.add('mes-readonly');
+            const allowPattern = /(조회|검색|초기화|닫기|불러오기|이전|다음|선택|적용|새로고침|엑셀|다운로드)/;
+
+            const lockWrites = root => {
+                (root || document).querySelectorAll('button,input[type="submit"],input[type="button"]').forEach(el => {
+                    const text = (el.textContent || el.value || el.title || '').trim();
+                    if (!text || allowPattern.test(text)) return;
+                    el.disabled = true;
+                    el.title = el.title ? el.title + ' · 읽기 전용 계정' : '읽기 전용 계정에서는 실행할 수 없습니다.';
+                });
+            };
+
+            lockWrites(document);
+            new MutationObserver(records => {
+                records.forEach(record => record.addedNodes.forEach(node => {
+                    if (node.nodeType === 1) lockWrites(node);
+                }));
+            }).observe(document.body, {childList:true, subtree:true});
+
+            const nativeFetch = window.fetch.bind(window);
+            window.fetch = (input, init = {}) => {
+                const method = String(init.method || 'GET').toUpperCase();
+                if (['POST','PUT','PATCH','DELETE'].includes(method)) {
+                    return Promise.reject(new Error('읽기 전용 권한입니다. 저장/수정/삭제/확정 작업을 할 수 없습니다.'));
+                }
+                return nativeFetch(input, init);
+            };
+            {% endif %}
+        }
+
         function applyMenuAccess() {
             {% if user and user.role != "ADMIN" %}
             const menuAccess = {{ (user.perms.menu_access if user.perms and user.perms.menu_access else {}) | tojson }};
@@ -424,6 +488,7 @@
 
         document.addEventListener("DOMContentLoaded", function() {
             applyMenuAccess();
+            applyReadOnlyMode();
             const currentPath = window.location.pathname;
             const routeMap = {
                 "/": "nav-history",
