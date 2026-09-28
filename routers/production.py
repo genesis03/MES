@@ -416,11 +416,12 @@ def delete_plan(plan_id: int, db: Session = Depends(get_db), current_user=Depend
 
 
 @router.get("/orders")
-def list_orders(start_date: Optional[str] = Query(None), end_date: Optional[str] = Query(None), part_no: Optional[str] = Query(None), status: Optional[str] = Query(None), db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+def list_orders(start_date: Optional[str] = Query(None), end_date: Optional[str] = Query(None), part_no: Optional[str] = Query(None), work_order_no: Optional[str] = Query(None), status: Optional[str] = Query(None), db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     query = db.query(ProductionWorkOrder)
     if start_date: query = query.filter(ProductionWorkOrder.order_date >= start_date)
     if end_date: query = query.filter(ProductionWorkOrder.order_date <= end_date)
     if part_no: query = query.filter(ProductionWorkOrder.part_no.ilike(f"%{part_no.strip()}%"))
+    if work_order_no: query = query.filter(ProductionWorkOrder.work_order_no.ilike(f"%{work_order_no.strip()}%"))
     if status: query = query.filter(ProductionWorkOrder.status == status)
     orders = query.order_by(ProductionWorkOrder.order_date.desc(), ProductionWorkOrder.priority.asc(), ProductionWorkOrder.id.desc()).all()
     item_ids = {o.item_id for o in orders if o.item_id}
