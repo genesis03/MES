@@ -177,6 +177,14 @@
     byId('orderLookupNo').focus();
   }
 
+  function resetOrderLookup(){
+    ['orderLookupStart','orderLookupEnd','orderLookupCustomer','orderLookupPart','orderLookupNo'].forEach(id => {
+      const el = byId(id); if(el) el.value = '';
+    });
+    renderOrderLookup();
+    byId('orderLookupNo')?.focus();
+  }
+
   function closeOrderLookup(){
     byId('orderLookupModal').classList.remove('show');
   }
@@ -364,6 +372,7 @@
       }
     });
     byId('orderLookupSearch')?.addEventListener('click', renderOrderLookup);
+    byId('orderLookupReset')?.addEventListener('click', resetOrderLookup);
     byId('orderLookupClose')?.addEventListener('click', closeOrderLookup);
     byId('orderLookupChoose')?.addEventListener('click', applyCheckedOrders);
     ['orderLookupNo','orderLookupPart','orderLookupCustomer'].forEach(id => byId(id)?.addEventListener('keydown', e => {
