@@ -72,7 +72,7 @@
 
 <div class="modal-backdrop mes-popup-backdrop" id="shipmentLookupModal"><div class="lookup-modal mes-popup">
   <div class="modal-head mes-popup-head"><h3>출고번호 조회</h3><button class="btn btn-light" id="shipmentLookupClose">닫기</button></div>
-  <div class="lookup-body mes-popup-body"><div class="lookup-line" style="margin-bottom:10px;"><input id="shipmentLookupKeyword" placeholder="출고번호 일부 또는 전체" style="padding:9px;border:1px solid #cbd5e1;border-radius:6px;flex:1;"><button class="btn btn-primary" id="shipmentLookupSearchBtn">조회</button></div><div style="overflow:auto;max-height:520px;"><table class="ship-table" style="min-width:760px;"><thead><tr><th>출고번호</th><th>출고일자</th><th>수주번호</th><th>판매처</th><th>품번</th><th>수량</th><th>선택</th></tr></thead><tbody id="shipmentLookupBody"><tr><td colspan="7" class="empty">조회해 주세요.</td></tr></tbody></table></div></div>
+  <div class="lookup-body mes-popup-body"><div class="lookup-line" style="margin-bottom:10px;"><input id="shipmentLookupKeyword" placeholder="출고번호 일부 또는 전체" style="padding:9px;border:1px solid #cbd5e1;border-radius:6px;flex:1;"><button class="btn btn-primary" id="shipmentLookupSearchBtn">조회</button><button class="btn btn-light" id="shipmentLookupResetBtn">초기화</button></div><div style="overflow:auto;max-height:520px;"><table class="ship-table" style="min-width:760px;"><thead><tr><th>출고번호</th><th>출고일자</th><th>수주번호</th><th>판매처</th><th>품번</th><th>수량</th><th>선택</th></tr></thead><tbody id="shipmentLookupBody"><tr><td colspan="7" class="empty">조회해 주세요.</td></tr></tbody></table></div></div>
 </div></div>
 
 <div class="modal-backdrop mes-popup-backdrop" id="orderLookupModal"><div class="lookup-modal mes-popup">
@@ -83,7 +83,7 @@
       <div class="lookup-filter"><label>수주처</label><input id="orderLookupCustomer"></div>
       <div class="lookup-filter"><label>품번</label><input id="orderLookupPart"></div>
       <div class="lookup-filter"><label>수주번호</label><input id="orderLookupNo"></div>
-      <button class="btn btn-primary" id="orderLookupSearch">조회</button>
+      <div style="display:flex;gap:6px"><button class="btn btn-primary" id="orderLookupSearch">조회</button><button class="btn btn-light" id="orderLookupReset">초기화</button></div>
     </div>
     <div class="help" style="margin:0 0 10px">※ 체크박스로 수주를 여러 건 선택할 수 있습니다. 같은 판매처의 수주만 함께 선택할 수 있습니다.</div>
     <div style="overflow:auto;max-height:470px;border:1px solid #cbd5e1;"><table class="ship-table" style="min-width:900px"><thead><tr><th style="width:45px">선택</th><th>수주번호</th><th>수주처</th><th>수주일자</th><th>납기일</th><th>상태</th><th>품번</th><th>미출고수량</th></tr></thead><tbody id="orderLookupBody"><tr><td colspan="8" class="empty">조회해 주세요.</td></tr></tbody></table></div>
@@ -91,6 +91,6 @@
   </div>
 </div></div>
 
-<script src="/static/sales_shipping.js?v=20260922-1"></script>
-<script src="/static/sales_shipping_lookup.js?v=20260922-1"></script>
+<script src="/static/sales_shipping.js?v=20260928-2"></script>
+<script src="/static/sales_shipping_lookup.js?v=20260928-2"></script>
 {% endblock %}
