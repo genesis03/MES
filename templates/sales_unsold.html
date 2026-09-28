@@ -32,7 +32,6 @@
       <label><input type="checkbox" class="group-field" value="customer_name"> 판매처</label>
       <label><input type="checkbox" class="group-field" value="order_date"> 수주일자</label>
       <label><input type="checkbox" class="group-field" value="part_no"> 품번</label>
-      <label><input type="checkbox" class="group-field" value="delivery_date"> 납기일</label>
     </div>
     <span class="help">여러 항목을 동시에 선택하면 선택 항목 조합별 부분합을 표시합니다. 항목명을 클릭하면 오름/내림차순 정렬됩니다.</span>
   </div>
@@ -65,7 +64,7 @@ let sourceRows=[];
 let sortKey='order_date';
 let sortDir='asc';
 const numberKeys=new Set(['order_qty','shipped_qty','unsold_qty']);
-const groupLabels={customer_name:'판매처',order_date:'수주일자',part_no:'품번',delivery_date:'납기일'};
+const groupLabels={customer_name:'판매처',order_date:'수주일자',part_no:'품번'};
 const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 const num=v=>Number(v||0);
 const fmt=v=>num(v).toLocaleString(undefined,{maximumFractionDigits:3});
