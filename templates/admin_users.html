@@ -252,14 +252,18 @@
             .filter(group => group.items.length);
     }
 
-    function legacyMenuAllowed(group, item, permissions) {
+    function legacyMenuLevel(group, item, permissions) {
         const access = permissions && permissions.menu_access;
         if (access && Object.keys(access).length) {
-            return access[item.path] === true;
+            const value = access[item.path];
+            if (value === true) return 'READ';
+            if (value === false || value == null) return 'NONE';
+            const level = String(value).toUpperCase();
+            return ['NONE','READ','WRITE'].includes(level) ? level : 'NONE';
         }
 
         const parent = permissions && permissions[group.key];
-        if (!parent || !parent.enabled) return false;
+        if (!parent || !parent.enabled) return 'NONE';
 
         if (group.key === 'shipping') {
             const legacyKeys = {
@@ -270,20 +274,20 @@
             };
             const legacyKey = legacyKeys[item.path];
             if (legacyKey) {
-                const value = parent.menus && parent.menus[legacyKey];
-                return value !== 'NONE';
+                const level = String((parent.menus && parent.menus[legacyKey]) || 'NONE').toUpperCase();
+                return ['NONE','READ','WRITE'].includes(level) ? level : 'NONE';
             }
         }
-        return true;
+        return 'READ';
     }
 
     function syncPermissionParent(groupKey) {
         const parent = document.querySelector(`[data-perm-parent="${groupKey}"]`);
-        const children = Array.from(document.querySelectorAll(`[data-perm-group="${groupKey}"]`));
-        if (!parent || !children.length) return;
-        const checked = children.filter(x => x.checked).length;
-        parent.checked = checked === children.length;
-        parent.indeterminate = checked > 0 && checked < children.length;
+        const reads = Array.from(document.querySelectorAll(`[data-perm-read="${groupKey}"]`));
+        if (!parent || !reads.length) return;
+        const checked = reads.filter(x => x.checked).length;
+        parent.checked = checked === reads.length;
+        parent.indeterminate = checked > 0 && checked < reads.length;
     }
 
     function renderPermissionTree(permissions = {}) {
@@ -296,11 +300,19 @@
 
         tree.innerHTML = groups.map(group => {
             const children = group.items.map(item => {
-                const checked = legacyMenuAllowed(group, item, permissions) ? ' checked' : '';
+                const level = legacyMenuLevel(group, item, permissions);
+                const readChecked = level === 'READ' || level === 'WRITE' ? ' checked' : '';
+                const writeChecked = level === 'WRITE' ? ' checked' : '';
                 return `
-                    <label class="perm-row" style="padding-left:22px;cursor:pointer;">
-                        <span><input type="checkbox" data-perm-group="${escHtml(group.key)}" data-menu-path="${escHtml(item.path)}"${checked}> ${escHtml(item.label)}</span>
-                    </label>
+                    <div class="perm-row" style="padding-left:22px;">
+                        <span style="flex:1;">${escHtml(item.label)}</span>
+                        <label style="display:flex;align-items:center;gap:4px;margin:0 10px 0 0;font-weight:normal;cursor:pointer;">
+                            <input type="checkbox" data-perm-read="${escHtml(group.key)}" data-menu-path="${escHtml(item.path)}"${readChecked}> 읽기
+                        </label>
+                        <label style="display:flex;align-items:center;gap:4px;margin:0;font-weight:normal;cursor:pointer;">
+                            <input type="checkbox" data-perm-write="${escHtml(group.key)}" data-menu-path="${escHtml(item.path)}"${writeChecked}> 쓰기
+                        </label>
+                    </div>
                 `;
             }).join('');
             return `
@@ -316,15 +328,34 @@
         tree.querySelectorAll('[data-perm-parent]').forEach(parent => {
             parent.addEventListener('change', () => {
                 const key = parent.dataset.permParent;
-                tree.querySelectorAll(`[data-perm-group="${key}"]`).forEach(child => {
-                    child.checked = parent.checked;
-                });
+                tree.querySelectorAll(`[data-perm-read="${key}"]`).forEach(read => { read.checked = parent.checked; });
+                if (!parent.checked) {
+                    tree.querySelectorAll(`[data-perm-write="${key}"]`).forEach(write => { write.checked = false; });
+                }
                 syncPermissionParent(key);
             });
         });
-        tree.querySelectorAll('[data-menu-path]').forEach(child => {
-            child.addEventListener('change', () => syncPermissionParent(child.dataset.permGroup));
+
+        tree.querySelectorAll('[data-perm-read]').forEach(read => {
+            read.addEventListener('change', () => {
+                if (!read.checked) {
+                    const write = tree.querySelector(`[data-perm-write="${read.dataset.permRead}"][data-menu-path="${CSS.escape(read.dataset.menuPath)}"]`);
+                    if (write) write.checked = false;
+                }
+                syncPermissionParent(read.dataset.permRead);
+            });
         });
+
+        tree.querySelectorAll('[data-perm-write]').forEach(write => {
+            write.addEventListener('change', () => {
+                if (write.checked) {
+                    const read = tree.querySelector(`[data-perm-read="${write.dataset.permWrite}"][data-menu-path="${CSS.escape(write.dataset.menuPath)}"]`);
+                    if (read) read.checked = true;
+                }
+                syncPermissionParent(write.dataset.permWrite);
+            });
+        });
+
         groups.forEach(group => syncPermissionParent(group.key));
     }
 
@@ -334,20 +365,22 @@
         const groups = sidebarPermissionModel();
 
         groups.forEach(group => {
-            const children = Array.from(document.querySelectorAll(`[data-perm-group="${group.key}"]`));
-            const enabled = children.some(child => child.checked);
-            permissions[group.key] = { enabled };
-            children.forEach(child => {
-                menuAccess[child.dataset.menuPath] = child.checked;
+            const items = group.items.map(item => {
+                const read = document.querySelector(`[data-perm-read="${group.key}"][data-menu-path="${CSS.escape(item.path)}"]`);
+                const write = document.querySelector(`[data-perm-write="${group.key}"][data-menu-path="${CSS.escape(item.path)}"]`);
+                const level = write && write.checked ? 'WRITE' : (read && read.checked ? 'READ' : 'NONE');
+                menuAccess[item.path] = level;
+                return level;
             });
+            permissions[group.key] = { enabled: items.some(level => level !== 'NONE') };
         });
 
         const shipping = permissions.shipping || { enabled:false };
         shipping.menus = {
-            history: menuAccess['/shipping/history'] ? 'READ' : 'NONE',
-            print: menuAccess['/shipping/print'] ? 'READ' : 'NONE',
-            manual: menuAccess['/shipping/manual'] ? 'READ' : 'NONE',
-            verify: menuAccess['/shipping/verify'] ? 'READ' : 'NONE'
+            history: menuAccess['/shipping/history'] || 'NONE',
+            print: menuAccess['/shipping/print'] || 'NONE',
+            manual: menuAccess['/shipping/manual'] || 'NONE',
+            verify: menuAccess['/shipping/verify'] || 'NONE'
         };
         permissions.shipping = shipping;
         permissions.menu_access = menuAccess;
