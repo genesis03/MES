@@ -111,7 +111,7 @@ async function loadCustomers() {
   $('customerFilter').innerHTML =
     '<option value="">전체</option>' +
     (rows || []).map(row =>
-      `<option value="${row.id}">${esc(row.partner_name)}${row.partner_code ? ' (' + esc(row.partner_code) + ')' : ''}</option>`
+      `<option value="${row.id}">${esc(row.partner_name)}</option>`
     ).join('');
 }
 
@@ -227,8 +227,22 @@ async function deleteSelectedOrders() {
   }
 }
 
+function resetFilters(){
+  $('startDate').value='';
+  $('endDate').value='';
+  $('customerFilter').value='';
+  $('orderNoFilter').value='';
+  $('statusFilter').value='';
+  selectedParts=[];
+  $('partSearch').value='';
+  renderChips();
+  hideSuggestions();
+  searchOrders().catch(e=>alert(e.message));
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   $('searchBtn').addEventListener('click', () => searchOrders().catch(e => alert(e.message)));
+  $('resetBtn').addEventListener('click', resetFilters);
   $('deleteSelectedBtn').addEventListener('click', deleteSelectedOrders);
 
   $('checkAll').addEventListener('change', () => {
