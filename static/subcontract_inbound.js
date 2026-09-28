@@ -426,6 +426,14 @@
     }
   }
 
+  function resetOutboundSearch() {
+    $("si-search").value = "";
+    state.selectedOutboundId = null;
+    $("si-load-apply").disabled = true;
+    loadOutboundList();
+    $("si-search").focus();
+  }
+
   async function loadOutboundList() {
     const keyword = $("si-search").value.trim();
     $("si-outbounds").innerHTML = `<tr><td colspan="10">조회 중...</td></tr>`;
@@ -509,6 +517,7 @@
       loadOutboundList();
     });
     $("si-search-btn").addEventListener("click", loadOutboundList);
+    $("si-search-reset").addEventListener("click", resetOutboundSearch);
     $("si-number-search-btn").addEventListener("click", searchInboundNo);
     $("si-number").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); searchInboundNo(); } });
     $("si-search").addEventListener("keydown", (e) => { if (e.key === "Enter") loadOutboundList(); });
