@@ -452,11 +452,16 @@
 
             const nativeFetch = window.fetch.bind(window);
             window.fetch = (input, init = {}) => {
-                const method = String(init.method || 'GET').toUpperCase();
+                const method = String(init.method || (input && input.method) || 'GET').toUpperCase();
+                const headers = new Headers(init.headers || (input && input.headers) || {});
+                const menuPath = mesCurrentMenuPath();
+                if (menuPath) headers.set('X-MES-Menu-Path', menuPath);
+                const nextInit = {...init, headers};
+
                 if (['POST','PUT','PATCH','DELETE'].includes(method)) {
                     return Promise.reject(new Error('읽기 전용 권한입니다. 저장/수정/삭제/확정 작업을 할 수 없습니다.'));
                 }
-                return nativeFetch(input, init);
+                return nativeFetch(input, nextInit);
             };
             {% endif %}
         }
