@@ -332,10 +332,10 @@
                     <li class="submenu-item"><a href="/sales/shipping" id="nav-sales-shipping">출고 입력</a></li>
                     <li class="submenu-item"><a href="/shipping/inquiry" id="nav-shipping-inquiry">출고 내역 조회</a></li>
                     <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
-                    {% if user.role == "ADMIN" or user.perms.shipping.menus.history != "NONE" or (user.perms.menu_access and user.perms.menu_access.get("/shipping/history")) %}<li class="submenu-item"><a href="/shipping/history" id="nav-history">출고 내역 및 LOT 계산</a></li>{% endif %}
-                    {% if user.role == "ADMIN" or user.perms.shipping.menus.print != "NONE" or (user.perms.menu_access and user.perms.menu_access.get("/shipping/print")) %}<li class="submenu-item"><a href="/shipping/print" id="nav-print">바코드 출력 (파일 일괄)</a></li>{% endif %}
+                    {% if user.role == "ADMIN" or user.perms.shipping.menus.history != "NONE" or (user.perms.menu_access and (user.perms.menu_access.get("/shipping/history") == true or user.perms.menu_access.get("/shipping/history") in ["READ","WRITE"])) %}<li class="submenu-item"><a href="/shipping/history" id="nav-history">출고 내역 및 LOT 계산</a></li>{% endif %}
+                    {% if user.role == "ADMIN" or user.perms.shipping.menus.print != "NONE" or (user.perms.menu_access and (user.perms.menu_access.get("/shipping/print") == true or user.perms.menu_access.get("/shipping/print") in ["READ","WRITE"])) %}<li class="submenu-item"><a href="/shipping/print" id="nav-print">바코드 출력 (파일 일괄)</a></li>{% endif %}
                     {% if user.role == "ADMIN" or user.perms.shipping.menus.manual != "NONE" %}<li class="submenu-item"><a href="/shipping/manual" id="nav-manual">바코드 출력 (수기 개별)</a></li>{% endif %}
-                    {% if user.role == "ADMIN" or user.perms.shipping.menus.verify != "NONE" or (user.perms.menu_access and user.perms.menu_access.get("/shipping/verify")) %}<li class="submenu-item"><a href="/shipping/verify" id="nav-verify">출하 바코드 검증</a></li>{% endif %}
+                    {% if user.role == "ADMIN" or user.perms.shipping.menus.verify != "NONE" or (user.perms.menu_access and (user.perms.menu_access.get("/shipping/verify") == true or user.perms.menu_access.get("/shipping/verify") in ["READ","WRITE"])) %}<li class="submenu-item"><a href="/shipping/verify" id="nav-verify">출하 바코드 검증</a></li>{% endif %}
                 </ul>
             </li>
             {% endif %}
@@ -402,11 +402,18 @@
             const menuAccess = {{ (user.perms.menu_access if user.perms and user.perms.menu_access else {}) | tojson }};
             if (!menuAccess || Object.keys(menuAccess).length === 0) return;
 
+            const canReadMenu = value => {
+                if (value === true) return true;
+                if (value === false || value == null) return false;
+                const level = String(value).toUpperCase();
+                return level === 'READ' || level === 'WRITE';
+            };
+
             document.querySelectorAll('.sidebar-menu > .menu-item[data-perm-key]').forEach(menu => {
                 if (menu.dataset.permKey === 'admin') return;
                 const links = Array.from(menu.querySelectorAll('.submenu a[href]'));
                 links.forEach(link => {
-                    const allowed = menuAccess[link.getAttribute('href')] === true;
+                    const allowed = canReadMenu(menuAccess[link.getAttribute('href')]);
                     link.style.display = allowed ? '' : 'none';
                 });
                 const hasVisible = links.some(link => link.style.display !== 'none');
