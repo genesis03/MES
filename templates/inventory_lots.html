@@ -5,7 +5,7 @@
 <style>
 .page-head{margin-bottom:14px}.page-head h1{font-size:23px;margin:0 0 4px}.page-head p{font-size:12.5px;color:#64748b}
 .panel{background:#fff;border:1px solid #dbe3ec;border-radius:6px}.panel-title{padding:10px 14px;border-bottom:1px solid #6495ed;font-weight:800;font-size:13px}.panel-body{padding:14px}
-.search-row{display:grid;grid-template-columns:80px minmax(360px,680px) 90px 150px 100px 1fr;gap:8px;align-items:center}.btn{height:36px;border:0;border-radius:4px;background:#2563eb;color:#fff;font-weight:800;cursor:pointer}.summary{font-size:12px;color:#64748b;text-align:right}
+.search-row{display:grid;grid-template-columns:80px minmax(360px,680px) 90px 150px 100px 100px 1fr;gap:8px;align-items:center}.btn{height:36px;border:0;border-radius:4px;background:#2563eb;color:#fff;font-weight:800;cursor:pointer}.btn-light{background:#e2e8f0;color:#334155}.summary{font-size:12px;color:#64748b;text-align:right}
 .part-picker{position:relative}.picker-box{min-height:38px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 8px}.picker-box:focus-within{border-color:#2563eb;box-shadow:0 0 0 1px #2563eb}.picker-box input{border:0;outline:0;height:28px;min-width:150px;flex:1;font-size:13px}.chip{display:inline-flex;align-items:center;gap:6px;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:14px;padding:4px 8px;font-size:12px;font-weight:700}.chip button{border:0;background:transparent;color:#64748b;cursor:pointer;font-size:14px;line-height:1;padding:0}.suggestions{position:absolute;z-index:50;left:0;right:0;top:42px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;box-shadow:0 6px 18px rgba(15,23,42,.12);max-height:260px;overflow:auto;display:none}.suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12.5px}.suggestion:hover,.suggestion.active{background:#eff6ff}.suggestion .pn{font-weight:800;color:#1e3a8a}.suggestion .name{margin-left:10px;color:#64748b}.hint{font-size:11px;color:#94a3b8;margin-top:5px}
 table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{border:1px solid #e2e8f0;padding:8px 9px}th{background:#f8fafc;color:#475569}.num{text-align:right}.lot{font-family:Consolas,monospace;font-weight:700}.empty{text-align:center;color:#94a3b8;padding:28px}.good{color:#15803d;font-weight:700}
 </style>
@@ -24,7 +24,7 @@ table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{b
       <div class="part-picker">
         <div class="picker-box" id="pickerBox">
           <div id="chips" style="display:contents"></div>
-          <input id="partSearch" placeholder="품번 입력" autocomplete="off">
+          <input id="partSearch" placeholder="품번 / 품명 검색" autocomplete="off">
         </div>
         <div id="suggestions" class="suggestions"></div>
         <div class="hint">검색 결과에서 품번을 선택하세요. 여러 품번을 연속으로 추가할 수 있습니다.</div>
@@ -36,6 +36,7 @@ table{width:100%;border-collapse:collapse;margin-top:14px;font-size:12px}th,td{b
         <option value="USED">사용완료</option>
       </select>
       <button class="btn" onclick="loadLots()">조회</button>
+      <button class="btn btn-light" onclick="resetLotSearch()">초기화</button>
       <div id="summary" class="summary">총 0건</div>
     </div>
     <table>
@@ -98,6 +99,17 @@ async function searchCandidates(){
     activeIndex=-1;
     renderSuggestions();
   }catch(e){suggestions.innerHTML=`<div class="suggestion" style="color:#b91c1c">${esc(e.message)}</div>`;suggestions.style.display='block';}
+}
+
+function resetLotSearch(){
+  selectedParts.splice(0,selectedParts.length);
+  renderChips();
+  partSearch.value='';
+  document.getElementById('stockStatus').value='ALL';
+  hideSuggestions();
+  document.getElementById('summary').textContent='총 0건';
+  document.getElementById('lotBody').innerHTML='<tr><td colspan="9" class="empty">품번을 선택하고 조회해 주세요.</td></tr>';
+  partSearch.focus();
 }
 
 async function loadLots(){
