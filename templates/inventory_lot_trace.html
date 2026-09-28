@@ -13,7 +13,7 @@
     </div>
 
     <div style="background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:18px;margin-bottom:16px;">
-        <div style="display:grid;grid-template-columns:180px minmax(280px,1fr) 100px;gap:10px;align-items:end;">
+        <div style="display:grid;grid-template-columns:180px minmax(280px,1fr) 190px;gap:10px;align-items:end;">
             <label style="font-size:12px;font-weight:bold;">검색 구분
                 <select id="searchType" style="width:100%;padding:9px;margin-top:5px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;">
                     <option value="PROCESS">공정 LOT</option>
@@ -23,7 +23,7 @@
             <label style="font-size:12px;font-weight:bold;">LOT 번호
                 <input id="lotNo" placeholder="LOT 번호 전체 또는 일부 입력" style="width:100%;padding:9px;margin-top:5px;border:1px solid #cbd5e1;border-radius:4px;box-sizing:border-box;">
             </label>
-            <button id="searchBtn" style="padding:9px 18px;background:#2563eb;color:#fff;border:0;border-radius:4px;font-weight:bold;cursor:pointer;">조회</button>
+            <div style="display:flex;gap:6px;"><button id="searchBtn" style="padding:9px 18px;background:#2563eb;color:#fff;border:0;border-radius:4px;font-weight:bold;cursor:pointer;">조회</button><button id="resetBtn" style="padding:9px 18px;background:#e2e8f0;color:#334155;border:0;border-radius:4px;font-weight:bold;cursor:pointer;">초기화</button></div>
         </div>
         <div id="status" style="margin-top:10px;font-size:13px;color:#475569;"></div>
     </div>
@@ -146,7 +146,17 @@ async function traceLot(lotNo){
     }
 }
 
+function resetSearch(){
+    document.getElementById('searchType').value='PROCESS';
+    document.getElementById('lotNo').value='';
+    document.getElementById('status').textContent='';
+    document.getElementById('searchResultPanel').style.display='none';
+    document.getElementById('tracePanel').style.display='none';
+    document.getElementById('searchBody').innerHTML='';
+    document.getElementById('traceBody').innerHTML='';
+}
 document.getElementById('searchBtn').addEventListener('click', searchLots);
+document.getElementById('resetBtn').addEventListener('click', resetSearch);
 document.getElementById('lotNo').addEventListener('keydown', e => { if(e.key === 'Enter') searchLots(); });
 document.getElementById('searchType').addEventListener('change', () => {
     document.getElementById('searchResultPanel').style.display = 'none';
