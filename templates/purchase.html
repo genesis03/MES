@@ -54,15 +54,15 @@
   <h1>발주서 입력</h1>
   <form id="po-form" class="po-box">
     <div class="po-header">
+      <div class="po-field"><label for="po-number">발주번호</label><div class="po-inline"><input id="po-number" autocomplete="off" placeholder="저장 시 자동 발번"><button class="po-btn" type="button" id="po-number-search">조회</button></div></div>
       <div class="po-field"><label for="po-date">발주일자</label><input id="po-date" type="date" required></div>
       <div class="po-field"><label for="po-vendor-query">거래처</label><div class="po-lookup">
         <input id="po-vendor-query" list="po-vendor-options" autocomplete="off" placeholder="거래처명 입력" required>
         <datalist id="po-vendor-options">{% for vendor in vendors %}<option value="{{ vendor.partner_name }}" data-id="{{ vendor.id }}" data-code="{{ vendor.partner_code }}" data-name="{{ vendor.partner_name }}" data-manager="{{ vendor.manager_name or '' }}"></option>{% endfor %}</datalist>
         <div id="po-vendor-hint" class="po-lookup-hint">글자를 입력한 뒤 목록에서 거래처를 선택하세요.</div>
       </div></div>
-      <div class="po-field"><label for="po-manager">담당자</label><input id="po-manager" maxlength="50"></div>
       <div class="po-field"><label for="po-requested-date">납기요청일</label><input id="po-requested-date" type="date"></div>
-      <div class="po-field"><label for="po-number">발주번호</label><div class="po-inline"><input id="po-number" autocomplete="off" placeholder="저장 시 자동 발번"><button class="po-btn" type="button" id="po-number-search">조회</button></div></div>
+      <div class="po-field"><label for="po-manager">담당자</label><input id="po-manager" maxlength="50"></div>
       <div class="po-field"><label for="po-state">상태</label><input id="po-state" value="발주완료" readonly></div>
       <div class="po-field po-field-wide"><label for="po-note">비고</label><textarea id="po-note" rows="2" maxlength="1000"></textarea></div>
     </div>
