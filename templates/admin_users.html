@@ -130,98 +130,11 @@
         </div>
 
         <div id="permissionConfigArea" class="form-group">
-            <label>계층형 메뉴별 권한 설정</label>
-            <div class="perm-tree-box">
-                <!-- 1. 기초 정보 -->
-                <div class="perm-row">
-                    <label style="font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                        <input type="checkbox" id="parentBasicInfo"> [상위] 기초 정보 메뉴 사용 허용
-                    </label>
-                    <span style="font-size: 11px; color: #64748b;">PLM 기준정보</span>
-                </div>
-
-                <!-- 2. 영업관리 -->
-                <div class="perm-row">
-                    <label style="font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                        <input type="checkbox" id="parentSales"> [상위] 영업관리 메뉴 사용 허용
-                    </label>
-                    <span style="font-size: 11px; color: #64748b;">수주/출하지시</span>
-                </div>
-
-                <!-- 3. 구매관리 -->
-                <div class="perm-row">
-                    <label style="font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                        <input type="checkbox" id="parentPurchase"> [상위] 구매관리 메뉴 사용 허용
-                    </label>
-                    <span style="font-size: 11px; color: #64748b;">발주/자재수급</span>
-                </div>
-
-                <!-- 4. 생산관리 -->
-                <div class="perm-row">
-                    <label style="font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                        <input type="checkbox" id="parentProduction"> [상위] 생산관리 메뉴 사용 허용
-                    </label>
-                    <span style="font-size: 11px; color: #64748b;">작업지시/실적</span>
-                </div>
-
-                <!-- 5. 입고관리 -->
-                <div class="perm-row">
-                    <label style="font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                        <input type="checkbox" id="parentInbound"> [상위] 입고관리 메뉴 사용 허용
-                    </label>
-                    <span style="font-size: 11px; color: #64748b;">원자재입고/LOT</span>
-                </div>
-
-                <!-- 6. 출고관리 (기존 계층 유지) -->
-                <div style="padding: 6px 0; border-bottom: 1px dashed #e2e8f0;">
-                    <div style="font-weight: bold; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-                        <input type="checkbox" id="parentShipping" onchange="toggleChildPerms()">
-                        <label for="parentShipping" style="cursor:pointer; font-weight:bold;">[상위] 출고관리 메뉴 사용 허용</label>
-                    </div>
-                    <div id="childPermsBox" style="margin-left: 20px;">
-                        <div class="perm-row">
-                            <label>출고 내역 및 LOT 계산</label>
-                            <select id="perm_history" class="perm-select">
-                                <option value="NONE">접근 차단</option>
-                                <option value="READ">읽기 전용</option>
-                                <option value="WRITE">수정/작성</option>
-                            </select>
-                        </div>
-                        <div class="perm-row">
-                            <label>바코드 출력 (일괄)</label>
-                            <select id="perm_print" class="perm-select">
-                                <option value="NONE">접근 차단</option>
-                                <option value="READ">읽기 전용</option>
-                                <option value="WRITE">수정/작성</option>
-                            </select>
-                        </div>
-                        <div class="perm-row">
-                            <label>바코드 출력 (수기)</label>
-                            <select id="perm_manual" class="perm-select">
-                                <option value="NONE">접근 차단</option>
-                                <option value="READ">읽기 전용</option>
-                                <option value="WRITE">수정/작성</option>
-                            </select>
-                        </div>
-                        <div class="perm-row">
-                            <label>출하 바코드 검증</label>
-                            <select id="perm_verify" class="perm-select">
-                                <option value="NONE">접근 차단</option>
-                                <option value="READ">읽기 전용</option>
-                                <option value="WRITE">수정/작성</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 7. 품질관리 -->
-                <div class="perm-row">
-                    <label style="font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 6px;">
-                        <input type="checkbox" id="parentQuality"> [상위] 품질관리 메뉴 사용 허용
-                    </label>
-                    <span style="font-size: 11px; color: #64748b;">수입/공정/출하검사</span>
-                </div>
+            <label>사이드바 메뉴별 접근 권한</label>
+            <div style="font-size:11px;color:#64748b;margin:0 0 6px;">
+                현재 사이드바 메뉴를 기준으로 자동 생성됩니다. 새 메뉴는 기존 계정에서 기본 차단됩니다.
             </div>
+            <div class="perm-tree-box" id="dynamicPermissionTree"></div>
         </div>
 
         <div class="form-group">
@@ -315,17 +228,139 @@
         tbody.innerHTML = html;
     }
 
+    function escHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, ch => ({
+            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+        }[ch]));
+    }
+
+    function sidebarPermissionModel() {
+        return Array.from(document.querySelectorAll('.sidebar-menu > .menu-item[data-perm-key]'))
+            .filter(menu => menu.dataset.permKey && menu.dataset.permKey !== 'admin')
+            .map(menu => {
+                const title = menu.querySelector('.menu-title span');
+                const items = Array.from(menu.querySelectorAll('.submenu a[href]')).map(link => ({
+                    path: link.getAttribute('href'),
+                    label: (link.textContent || '').trim()
+                })).filter(item => item.path && item.label);
+                return {
+                    key: menu.dataset.permKey,
+                    label: title ? title.textContent.trim() : menu.dataset.permKey,
+                    items
+                };
+            })
+            .filter(group => group.items.length);
+    }
+
+    function legacyMenuAllowed(group, item, permissions) {
+        const access = permissions && permissions.menu_access;
+        if (access && Object.keys(access).length) {
+            return access[item.path] === true;
+        }
+
+        const parent = permissions && permissions[group.key];
+        if (!parent || !parent.enabled) return false;
+
+        if (group.key === 'shipping') {
+            const legacyKeys = {
+                '/shipping/history': 'history',
+                '/shipping/print': 'print',
+                '/shipping/manual': 'manual',
+                '/shipping/verify': 'verify'
+            };
+            const legacyKey = legacyKeys[item.path];
+            if (legacyKey) {
+                const value = parent.menus && parent.menus[legacyKey];
+                return value !== 'NONE';
+            }
+        }
+        return true;
+    }
+
+    function syncPermissionParent(groupKey) {
+        const parent = document.querySelector(`[data-perm-parent="${groupKey}"]`);
+        const children = Array.from(document.querySelectorAll(`[data-perm-group="${groupKey}"]`));
+        if (!parent || !children.length) return;
+        const checked = children.filter(x => x.checked).length;
+        parent.checked = checked === children.length;
+        parent.indeterminate = checked > 0 && checked < children.length;
+    }
+
+    function renderPermissionTree(permissions = {}) {
+        const tree = document.getElementById('dynamicPermissionTree');
+        const groups = sidebarPermissionModel();
+        if (!groups.length) {
+            tree.innerHTML = '<div style="padding:12px;color:#64748b;">사이드바 메뉴를 찾을 수 없습니다.</div>';
+            return;
+        }
+
+        tree.innerHTML = groups.map(group => {
+            const children = group.items.map(item => {
+                const checked = legacyMenuAllowed(group, item, permissions) ? ' checked' : '';
+                return `
+                    <label class="perm-row" style="padding-left:22px;cursor:pointer;">
+                        <span><input type="checkbox" data-perm-group="${escHtml(group.key)}" data-menu-path="${escHtml(item.path)}"${checked}> ${escHtml(item.label)}</span>
+                    </label>
+                `;
+            }).join('');
+            return `
+                <div class="dynamic-perm-group" data-group="${escHtml(group.key)}" style="padding:5px 0;border-bottom:1px dashed #cbd5e1;">
+                    <label style="display:flex;align-items:center;gap:6px;font-weight:bold;cursor:pointer;padding:5px 0;">
+                        <input type="checkbox" data-perm-parent="${escHtml(group.key)}"> ${escHtml(group.label)}
+                    </label>
+                    <div>${children}</div>
+                </div>
+            `;
+        }).join('');
+
+        tree.querySelectorAll('[data-perm-parent]').forEach(parent => {
+            parent.addEventListener('change', () => {
+                const key = parent.dataset.permParent;
+                tree.querySelectorAll(`[data-perm-group="${key}"]`).forEach(child => {
+                    child.checked = parent.checked;
+                });
+                syncPermissionParent(key);
+            });
+        });
+        tree.querySelectorAll('[data-menu-path]').forEach(child => {
+            child.addEventListener('change', () => syncPermissionParent(child.dataset.permGroup));
+        });
+        groups.forEach(group => syncPermissionParent(group.key));
+    }
+
+    function collectPermissions() {
+        const permissions = {};
+        const menuAccess = {};
+        const groups = sidebarPermissionModel();
+
+        groups.forEach(group => {
+            const children = Array.from(document.querySelectorAll(`[data-perm-group="${group.key}"]`));
+            const enabled = children.some(child => child.checked);
+            permissions[group.key] = { enabled };
+            children.forEach(child => {
+                menuAccess[child.dataset.menuPath] = child.checked;
+            });
+        });
+
+        const shipping = permissions.shipping || { enabled:false };
+        shipping.menus = {
+            history: menuAccess['/shipping/history'] ? 'READ' : 'NONE',
+            print: menuAccess['/shipping/print'] ? 'READ' : 'NONE',
+            manual: menuAccess['/shipping/manual'] ? 'READ' : 'NONE',
+            verify: menuAccess['/shipping/verify'] ? 'READ' : 'NONE'
+        };
+        permissions.shipping = shipping;
+        permissions.menu_access = menuAccess;
+        return permissions;
+    }
+
     function toggleRoleUI() {
         const role = document.getElementById('modalRole').value;
         const permArea = document.getElementById('permissionConfigArea');
         permArea.style.display = (role === 'ADMIN') ? 'none' : 'block';
     }
 
-    function toggleChildPerms() {
-        const enabled = document.getElementById('parentShipping').checked;
-        const selects = document.querySelectorAll('#childPermsBox select');
-        selects.forEach(s => s.disabled = !enabled);
-    }
+    function toggleChildPerms() {}
 
     function openCreateModal() {
         IS_EDIT_MODE = false;
@@ -336,27 +371,18 @@
         document.getElementById('modalPassword').value = "";
         document.getElementById('pwdNotice').innerText = "(필수 입력)";
         document.getElementById('modalRole').value = "USER";
-        
         document.getElementById('modalDepartment').value = "";
         document.getElementById('modalName').value = "";
         document.getElementById('modalNote').value = "";
 
-        // 대메뉴 권한 초기화 (기본: 출고관리만 허용)
-        document.getElementById('parentBasicInfo').checked = false;
-        document.getElementById('parentSales').checked = false;
-        document.getElementById('parentPurchase').checked = false;
-        document.getElementById('parentProduction').checked = false;
-        document.getElementById('parentInbound').checked = false;
-        document.getElementById('parentShipping').checked = true;
-        document.getElementById('parentQuality').checked = false;
-
-        document.getElementById('perm_history').value = "READ";
-        document.getElementById('perm_print').value = "READ";
-        document.getElementById('perm_manual').value = "READ";
-        document.getElementById('perm_verify').value = "READ";
-
+        // 기존 신규계정 기본값과 호환: 출고관리만 허용
+        renderPermissionTree({
+            shipping: {
+                enabled: true,
+                menus: {history:'READ', print:'READ', manual:'READ', verify:'READ'}
+            }
+        });
         toggleRoleUI();
-        toggleChildPerms();
         document.getElementById('userModal').style.display = 'flex';
     }
 
@@ -372,33 +398,12 @@
         document.getElementById('modalPassword').value = "";
         document.getElementById('pwdNotice').innerText = "(변경 시에만 입력)";
         document.getElementById('modalRole').value = u.role;
-
         document.getElementById('modalDepartment').value = u.department || "";
         document.getElementById('modalName').value = u.name || "";
         document.getElementById('modalNote').value = u.note || "";
 
-        const p = u.permissions || {};
-        
-        // 각 대메뉴 활성화 상태 바인딩
-        document.getElementById('parentBasicInfo').checked = !!(p.basic_info && p.basic_info.enabled);
-        document.getElementById('parentSales').checked = !!(p.sales && p.sales.enabled);
-        document.getElementById('parentPurchase').checked = !!(p.purchase && p.purchase.enabled);
-        document.getElementById('parentProduction').checked = !!(p.production && p.production.enabled);
-        document.getElementById('parentInbound').checked = !!(p.inbound && p.inbound.enabled);
-
-        const s = p.shipping || { enabled: false, menus: {} };
-        document.getElementById('parentShipping').checked = !!s.enabled;
-
-        const m = s.menus || {};
-        document.getElementById('perm_history').value = m.history || "NONE";
-        document.getElementById('perm_print').value = m.print || "NONE";
-        document.getElementById('perm_manual').value = m.manual || "NONE";
-        document.getElementById('perm_verify').value = m.verify || "NONE";
-
-        document.getElementById('parentQuality').checked = !!(p.quality && p.quality.enabled);
-
+        renderPermissionTree(u.permissions || {});
         toggleRoleUI();
-        toggleChildPerms();
         document.getElementById('userModal').style.display = 'flex';
     }
 
@@ -426,35 +431,7 @@
             return;
         }
 
-        const permissions = {
-            basic_info: {
-                enabled: document.getElementById('parentBasicInfo').checked
-            },
-            sales: {
-                enabled: document.getElementById('parentSales').checked
-            },
-            purchase: {
-                enabled: document.getElementById('parentPurchase').checked
-            },
-            production: {
-                enabled: document.getElementById('parentProduction').checked
-            },
-            inbound: {
-                enabled: document.getElementById('parentInbound').checked
-            },
-            shipping: {
-                enabled: document.getElementById('parentShipping').checked,
-                menus: {
-                    history: document.getElementById('perm_history').value,
-                    print: document.getElementById('perm_print').value,
-                    manual: document.getElementById('perm_manual').value,
-                    verify: document.getElementById('perm_verify').value
-                }
-            },
-            quality: {
-                enabled: document.getElementById('parentQuality').checked
-            }
-        };
+        const permissions = collectPermissions();
 
         const endpoint = IS_EDIT_MODE ? '/api/admin/users/update' : '/api/admin/users/create';
         const payload = IS_EDIT_MODE 
