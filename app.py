@@ -20,6 +20,11 @@ from services.purchase_lot_format import install_purchase_lot_format
 from services.production_lot_service import ensure_production_output_lots
 from services.subcontract_reservation_repair import repair_cancelled_subcontract_reservations
 from services.subcontract_inbound_repair import repair_subcontract_inbound_sample_stock
+from services.audit_log import (
+    install_audit_logging,
+    reset_audit_context,
+    set_audit_context,
+)
 
 from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, subcontract_inbound_lot_policy, subcontract_inbound_edit, purchase_unreceived, quality_pages, quality, quality_standard, production_pages, production, production_complete, production_run, production_run_delete, production_run_lot_fix, production_extra, inventory_lot_location, inventory, inventory_lot_trace, inventory_lot_trace_tree, inventory_lot_usage_trace, internal_labels, packing, sales, sales_order_policy, sales_shipping_direct, sales_shipping_direct_page, sales_shipping_fifo_auto, sales_shipping_partial_confirm, sales_shipping_entry, sales_order_delete, shipping_inquiry
 
@@ -34,6 +39,9 @@ repair_cancelled_subcontract_reservations()
 # 외주입고 LOT는 최초수량을 유지하고 샘플수량은 사용수량으로 계산하도록 과거 데이터를 보정합니다.
 repair_subcontract_inbound_sample_stock()
 
+# 사용자 업무행위 감사로그는 초기 보정 작업 이후부터 기록합니다.
+install_audit_logging()
+
 app = FastAPI(title="출하 바코드 관리 시스템")
 
 
@@ -44,6 +52,50 @@ def _menu_level(value) -> str:
         return "NONE"
     level = str(value).strip().upper()
     return level if level in {"NONE", "READ", "WRITE"} else "NONE"
+
+
+@app.middleware("http")
+async def audit_request_context(request: Request, call_next):
+    """업무 데이터 변경 시 사용자/메뉴/요청 정보를 감사로그에 연결합니다."""
+    request_path = request.url.path
+    token = request.cookies.get("session_token")
+    username = verify_session_token(token) if token else None
+    user_id = None
+
+    if username:
+        db = SessionLocal()
+        try:
+            user = db.query(UserModel).filter(UserModel.username == username).first()
+            if user:
+                user_id = user.id
+                username = user.username
+        finally:
+            db.close()
+
+    if not username:
+        username = "DEV_BYPASS" if DEV_BYPASS_AUTH else "ANONYMOUS"
+
+    menu_path = (request.headers.get("X-MES-Menu-Path") or "").strip()
+    if not menu_path:
+        referer = request.headers.get("referer") or ""
+        if referer:
+            menu_path = urlparse(referer).path
+    if not menu_path and not request_path.startswith("/api/"):
+        menu_path = request_path
+
+    client_ip = request.client.host if request.client else None
+    audit_token = set_audit_context(
+        user_id=user_id,
+        username=username,
+        menu_path=menu_path or None,
+        request_path=request_path,
+        request_method=request.method.upper(),
+        ip_address=client_ip,
+    )
+    try:
+        return await call_next(request)
+    finally:
+        reset_audit_context(audit_token)
 
 
 @app.middleware("http")
