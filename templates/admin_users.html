@@ -77,6 +77,24 @@
     .perm-row:last-child { border-bottom: none; }
     .perm-row label { margin-bottom: 0; font-weight: normal; }
     .perm-select { width: 110px; padding: 4px 6px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px; }
+
+    .dynamic-perm-group { background:#fff; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:8px; overflow:hidden; }
+    .perm-group-head { display:flex; align-items:center; gap:8px; padding:9px 10px; background:#f8fafc; cursor:pointer; user-select:none; }
+    .perm-group-head:hover { background:#f1f5f9; }
+    .perm-group-arrow { width:14px; color:#64748b; font-size:11px; transition:transform .15s ease; }
+    .dynamic-perm-group.open .perm-group-arrow { transform:rotate(90deg); }
+    .perm-group-title { flex:1; font-weight:bold; color:#334155; }
+    .perm-group-summary { font-size:11px; color:#64748b; margin-right:6px; }
+    .perm-group-actions { display:flex; gap:4px; }
+    .perm-mini-btn { border:1px solid #cbd5e1; background:#fff; color:#475569; border-radius:4px; padding:3px 6px; font-size:10px; cursor:pointer; }
+    .perm-mini-btn:hover { background:#e2e8f0; }
+    .perm-group-body { display:none; padding:0 10px 6px; }
+    .dynamic-perm-group.open .perm-group-body { display:block; }
+    .perm-column-head { display:grid; grid-template-columns:minmax(0,1fr) 58px 58px; gap:8px; padding:6px 0; color:#64748b; font-size:10px; text-align:center; border-bottom:1px solid #e2e8f0; }
+    .perm-column-head span:first-child { text-align:left; }
+    .perm-row-dynamic { display:grid; grid-template-columns:minmax(0,1fr) 58px 58px; gap:8px; align-items:center; padding:7px 0; border-bottom:1px dashed #e2e8f0; }
+    .perm-row-dynamic:last-child { border-bottom:none; }
+    .perm-row-dynamic label { display:flex; align-items:center; justify-content:center; gap:3px; margin:0; font-weight:normal; cursor:pointer; }
 </style>
 {% endblock %}
 
@@ -281,6 +299,17 @@
         return 'READ';
     }
 
+    function updatePermissionGroupSummary(groupKey) {
+        const group = document.querySelector(`.dynamic-perm-group[data-group="${groupKey}"]`);
+        if (!group) return;
+        const reads = Array.from(group.querySelectorAll('[data-perm-read]'));
+        const writes = Array.from(group.querySelectorAll('[data-perm-write]'));
+        const allowed = reads.filter(x => x.checked).length;
+        const writeCount = writes.filter(x => x.checked).length;
+        const summary = group.querySelector('.perm-group-summary');
+        if (summary) summary.textContent = `${allowed}/${reads.length} 허용 · 쓰기 ${writeCount}`;
+    }
+
     function syncPermissionParent(groupKey) {
         const parent = document.querySelector(`[data-perm-parent="${groupKey}"]`);
         const reads = Array.from(document.querySelectorAll(`[data-perm-read="${groupKey}"]`));
@@ -288,6 +317,7 @@
         const checked = reads.filter(x => x.checked).length;
         parent.checked = checked === reads.length;
         parent.indeterminate = checked > 0 && checked < reads.length;
+        updatePermissionGroupSummary(groupKey);
     }
 
     function renderPermissionTree(permissions = {}) {
@@ -304,26 +334,40 @@
                 const readChecked = level === 'READ' || level === 'WRITE' ? ' checked' : '';
                 const writeChecked = level === 'WRITE' ? ' checked' : '';
                 return `
-                    <div class="perm-row" style="padding-left:22px;">
-                        <span style="flex:1;">${escHtml(item.label)}</span>
-                        <label style="display:flex;align-items:center;gap:4px;margin:0 10px 0 0;font-weight:normal;cursor:pointer;">
-                            <input type="checkbox" data-perm-read="${escHtml(group.key)}" data-menu-path="${escHtml(item.path)}"${readChecked}> 읽기
-                        </label>
-                        <label style="display:flex;align-items:center;gap:4px;margin:0;font-weight:normal;cursor:pointer;">
-                            <input type="checkbox" data-perm-write="${escHtml(group.key)}" data-menu-path="${escHtml(item.path)}"${writeChecked}> 쓰기
-                        </label>
+                    <div class="perm-row-dynamic">
+                        <span>${escHtml(item.label)}</span>
+                        <label title="조회 및 화면 접근"><input type="checkbox" data-perm-read="${escHtml(group.key)}" data-menu-path="${escHtml(item.path)}"${readChecked}> 읽기</label>
+                        <label title="저장/수정/삭제/확정 가능"><input type="checkbox" data-perm-write="${escHtml(group.key)}" data-menu-path="${escHtml(item.path)}"${writeChecked}> 쓰기</label>
                     </div>
                 `;
             }).join('');
             return `
-                <div class="dynamic-perm-group" data-group="${escHtml(group.key)}" style="padding:5px 0;border-bottom:1px dashed #cbd5e1;">
-                    <label style="display:flex;align-items:center;gap:6px;font-weight:bold;cursor:pointer;padding:5px 0;">
-                        <input type="checkbox" data-perm-parent="${escHtml(group.key)}"> ${escHtml(group.label)}
-                    </label>
-                    <div>${children}</div>
+                <div class="dynamic-perm-group" data-group="${escHtml(group.key)}">
+                    <div class="perm-group-head" data-perm-toggle="${escHtml(group.key)}">
+                        <span class="perm-group-arrow">▶</span>
+                        <input type="checkbox" data-perm-parent="${escHtml(group.key)}" title="하위 메뉴 전체 읽기 선택">
+                        <span class="perm-group-title">${escHtml(group.label)}</span>
+                        <span class="perm-group-summary"></span>
+                        <span class="perm-group-actions">
+                            <button type="button" class="perm-mini-btn" data-group-read="${escHtml(group.key)}">전체 읽기</button>
+                            <button type="button" class="perm-mini-btn" data-group-write="${escHtml(group.key)}">전체 쓰기</button>
+                            <button type="button" class="perm-mini-btn" data-group-clear="${escHtml(group.key)}">전체 해제</button>
+                        </span>
+                    </div>
+                    <div class="perm-group-body">
+                        <div class="perm-column-head"><span>메뉴</span><span>읽기</span><span>쓰기</span></div>
+                        ${children}
+                    </div>
                 </div>
             `;
         }).join('');
+
+        tree.querySelectorAll('[data-perm-toggle]').forEach(head => {
+            head.addEventListener('click', event => {
+                if (event.target.closest('input,button')) return;
+                head.closest('.dynamic-perm-group').classList.toggle('open');
+            });
+        });
 
         tree.querySelectorAll('[data-perm-parent]').forEach(parent => {
             parent.addEventListener('change', () => {
@@ -332,6 +376,30 @@
                 if (!parent.checked) {
                     tree.querySelectorAll(`[data-perm-write="${key}"]`).forEach(write => { write.checked = false; });
                 }
+                syncPermissionParent(key);
+            });
+        });
+
+        tree.querySelectorAll('[data-group-read]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.groupRead;
+                tree.querySelectorAll(`[data-perm-read="${key}"]`).forEach(x => x.checked = true);
+                tree.querySelectorAll(`[data-perm-write="${key}"]`).forEach(x => x.checked = false);
+                syncPermissionParent(key);
+            });
+        });
+        tree.querySelectorAll('[data-group-write]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.groupWrite;
+                tree.querySelectorAll(`[data-perm-read="${key}"]`).forEach(x => x.checked = true);
+                tree.querySelectorAll(`[data-perm-write="${key}"]`).forEach(x => x.checked = true);
+                syncPermissionParent(key);
+            });
+        });
+        tree.querySelectorAll('[data-group-clear]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.groupClear;
+                tree.querySelectorAll(`[data-perm-read="${key}"],[data-perm-write="${key}"]`).forEach(x => x.checked = false);
                 syncPermissionParent(key);
             });
         });
