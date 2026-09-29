@@ -29,18 +29,18 @@
 .pi-lot {font-family:monospace;color:#166534}
 .pi-message {font-size:13px;min-height:18px}.pi-inline{display:flex;gap:6px;align-items:center}.pi-inline input{min-width:0;flex:1}.pi-inline .pi-btn{flex:0 0 auto}
 
-.po-modal {border:0;padding:0;width:min(940px,94vw);max-width:940px;border-radius:0;box-shadow:0 18px 40px rgba(15,23,42,.28)}
+.po-modal {border:0;padding:0;width:min(940px,94vw);max-width:940px;border-radius:8px;box-shadow:0 20px 60px rgba(15,23,42,.28)}
 .po-modal::backdrop {background:rgba(15,23,42,.42)}
-.po-modal-shell {background:#fff;min-height:640px;display:flex;flex-direction:column}
+.po-modal-shell {background:#fff;min-height:620px;display:flex;flex-direction:column}
 .po-modal-top {height:38px;border-bottom:8px solid #c7c7c7;display:flex;align-items:center;justify-content:flex-end;padding:0 16px}
 .po-modal-close-x {border:0;background:transparent;font-size:24px;line-height:1;cursor:pointer;color:#333}
-.po-modal-body {padding:28px 18px 16px;display:flex;flex-direction:column;flex:1}
+.po-modal-body {padding:14px 16px;display:flex;flex-direction:column;flex:1}
 .po-modal-title {font-size:18px;font-weight:800;color:#4b97d1;padding:0 24px 8px;border-bottom:2px solid #54aac8;margin:0 0 20px}
 .po-search-grid {display:grid;grid-template-columns:80px 1fr 100px 170px 20px 170px;gap:10px 14px;align-items:center;padding:0 0 18px}
 .po-search-grid label {font-size:13px;color:#222}
 .po-search-grid input {height:36px;border:1px solid #d6d6d6;border-radius:4px;padding:0 10px;font:inherit;box-sizing:border-box;width:100%}
-.po-search-btn {height:36px;border:0;border-radius:3px;background:#2297d6;color:#fff;font-weight:700;cursor:pointer;padding:0 22px;justify-self:end}
-.po-search-grid .po-search-btn {grid-column:6;grid-row:2}
+.po-search-btn {height:36px;border:0;border-radius:4px;background:#2563eb;color:#fff;font-weight:700;cursor:pointer;padding:0 18px}
+.po-search-actions{grid-column:6;grid-row:2;display:flex;gap:6px;justify-content:flex-end}
 .po-popup-table-wrap {border:1px solid #d8d8d8;min-height:365px;max-height:420px;overflow:auto;flex:1;background:#fff}
 .po-popup-table {width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}
 .po-popup-table th,.po-popup-table td {border-right:1px solid #d8d8d8;border-bottom:1px solid #e6e6e6;padding:10px 8px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -53,8 +53,8 @@
 .po-popup-count {justify-self:start}
 .po-popup-page {justify-self:center}
 .po-popup-actions {justify-self:end;display:flex;gap:8px}
-.po-popup-select {background:#2297d6;border-color:#2297d6;color:#fff;font-weight:700;min-width:86px}
-.po-popup-close {background:#f5b34e;border-color:#f5b34e;color:#fff;font-weight:700;min-width:86px}
+.po-popup-select {background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700;min-width:86px}
+.po-popup-close {background:#e2e8f0;border-color:#cbd5e1;color:#334155;font-weight:700;min-width:86px}
 .po-popup-message {min-height:18px;margin:8px 0 0;color:#64748b;font-size:12px}
 @media(max-width:750px) {
   .pi-header {grid-template-columns:1fr}.pi-wide {grid-column:1}
@@ -84,9 +84,8 @@
 
 <dialog id="pi-inbound-dialog" class="po-modal mes-popup" aria-labelledby="pi-inbound-dialog-title">
   <div class="po-modal-shell">
-    <div class="po-modal-top"><button type="button" class="po-modal-close-x" id="pi-inbound-x" aria-label="닫기">×</button></div>
+    <div class="mes-popup-head"><h2 class="mes-popup-title" id="pi-inbound-dialog-title">입고 조회</h2><button type="button" class="pi-btn" id="pi-inbound-x">닫기</button></div>
     <div class="po-modal-body mes-popup-body">
-      <h2 class="po-modal-title mes-popup-title" id="pi-inbound-dialog-title">입고 조회</h2>
       <div class="po-search-grid mes-popup-filters">
         <label for="pi-inbound-search-no">입고번호</label><input id="pi-inbound-search-no" maxlength="30">
         <label for="pi-inbound-start">입고기간</label><input id="pi-inbound-start" type="date"><span style="text-align:center">~</span><input id="pi-inbound-end" type="date">
@@ -94,7 +93,7 @@
         <label for="pi-inbound-search-part">품번</label><input id="pi-inbound-search-part" maxlength="50">
         <label for="pi-inbound-search-po">발주번호</label><input id="pi-inbound-search-po" maxlength="30">
         <label for="pi-inbound-search-lot">LOT</label><input id="pi-inbound-search-lot" maxlength="100">
-        <button type="button" class="po-search-btn" id="pi-inbound-search-submit">조회</button>
+        <div class="po-search-actions"><button type="button" class="po-search-btn" id="pi-inbound-search-submit">조회</button><button type="button" class="pi-btn" id="pi-inbound-search-reset">초기화</button></div>
       </div>
       <div class="po-popup-table-wrap"><table class="po-popup-table mes-popup-table">
         <thead><tr><th>입고번호</th><th>거래처</th><th>입고일</th><th>발주번호</th><th>상태</th><th>품목수</th></tr></thead>
@@ -108,14 +107,13 @@
 
 <dialog id="pi-po-dialog" class="po-modal mes-popup" aria-labelledby="pi-po-dialog-title">
   <div class="po-modal-shell">
-    <div class="po-modal-top"><button type="button" class="po-modal-close-x" id="pi-po-x" aria-label="닫기">×</button></div>
+    <div class="mes-popup-head"><h2 class="mes-popup-title" id="pi-po-dialog-title">발주 조회</h2><button type="button" class="pi-btn" id="pi-po-x">닫기</button></div>
     <div class="po-modal-body mes-popup-body">
-      <h2 class="po-modal-title mes-popup-title" id="pi-po-dialog-title">발주 조회</h2>
       <div class="po-search-grid mes-popup-filters">
         <label for="pi-po-search-no">발주번호</label><input id="pi-po-search-no" maxlength="30">
         <label for="pi-po-start">발주기간</label><input id="pi-po-start" type="date"><span style="text-align:center">~</span><input id="pi-po-end" type="date">
         <label for="pi-po-search-part">품번</label><input id="pi-po-search-part" maxlength="50">
-        <button type="button" class="po-search-btn" id="pi-po-search-btn">조회</button>
+        <div class="po-search-actions"><button type="button" class="po-search-btn" id="pi-po-search-btn">조회</button><button type="button" class="pi-btn" id="pi-po-search-reset">초기화</button></div>
       </div>
       <div class="po-popup-table-wrap">
         <table class="po-popup-table mes-popup-table">
@@ -134,4 +132,4 @@
   </div>
 </dialog>
 {% endblock %}
-{% block extra_script %}<script src="/static/purchase_inbound.js?v=20260923-2"></script><script src="/static/internal_label_buttons.js?v=20260916-1"></script>{% endblock %}
+{% block extra_script %}<script src="/static/purchase_inbound.js?v=20260928-4"></script><script src="/static/internal_label_buttons.js?v=20260916-1"></script>{% endblock %}
