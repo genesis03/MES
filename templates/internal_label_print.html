@@ -12,10 +12,11 @@
 .internal-label-table td{border-bottom:1px solid #111;border-right:1px solid #111;padding:.85mm 1mm;vertical-align:middle;height:5.4mm;box-sizing:border-box}
 .internal-label-table td:last-child{border-right:0}
 .internal-label-table col.c1{width:16%}
-.internal-label-table col.c2{width:45%}
-.internal-label-table col.c3{width:5%}
+.internal-label-table col.c2{width:38%}
+.internal-label-table col.c3{width:12%}
 .internal-label-table col.c4{width:34%}
 .internal-label-table .k{font-weight:900;text-align:center;white-space:nowrap}
+.internal-label-table .storage-k{font-size:7.2pt;letter-spacing:-.2px;padding-left:.45mm;padding-right:.45mm}
 .internal-label-table .v{font-weight:800}
 .internal-label-table .wide{font-size:8.5pt;overflow:hidden}
 .internal-label-table .half-k{font-weight:900;text-align:center;white-space:nowrap}
@@ -55,7 +56,7 @@ function render(){
         <tr><td class="k">품명</td><td class="v wide" colspan="3">${esc(row.part_name)}</td></tr>
         <tr><td class="half-k">LOT</td><td class="half-v">${esc(row.lot_no)}</td><td class="half-k">수량</td><td class="half-v">${fmt(row.qty)} ${esc(row.unit)}</td></tr>
         <tr><td class="half-k">기준일</td><td class="half-v">${esc(row.date)}</td><td class="half-k">공정</td><td class="half-v">${esc(row.process)}</td></tr>
-        <tr><td class="k">저장위치</td><td class="v wide" colspan="3">${esc(row.storage)}</td></tr>
+        <tr><td class="k storage-k">저장위치</td><td class="v wide" colspan="3">${esc(row.storage)}</td></tr>
       </tbody></table>${extra}
       <div class="internal-barcode">${Code128Engine.createSVG(String(row.lot_no||''))}<div class="internal-lot-text">${esc(row.lot_no)}</div></div>
       <div class="internal-company">(주)유니코어텍</div>
