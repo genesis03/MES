@@ -33,3 +33,12 @@ def production_defects_page(request: Request, current_user=Depends(get_current_u
             "is_admin": username == "admin" or role in {"ADMIN", "SUPERADMIN"},
         },
     )
+
+
+@router.get("/quality/defect-status", response_class=HTMLResponse)
+def defect_status_page(request: Request, current_user=Depends(get_current_user)):
+    return templates.TemplateResponse(
+        request=request,
+        name="quality_defect_status.html",
+        context={"request": request, "user": current_user},
+    )
