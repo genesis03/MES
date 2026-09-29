@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from models.inventory_adjustment import InventoryAdjustmentModel
+from models.inventory_movement import InventoryMovementModel
 from models.lot_consumption import LotConsumptionModel
 from models.lot_relation import LotRelationModel
 from models.models import ItemMasterModel, PurchaseInboundItem, PurchaseInboundMaster, StorageLocationModel
@@ -79,6 +80,16 @@ def _storage_display(code: Optional[str], names: dict[str, str]) -> str:
 
 
 def _current_storage(db: Session, lot_no: str, original: Optional[str]) -> str:
+    # 수동 창고/저장위치 이동 이력이 있으면 가장 최신 위치를 최우선으로 봅니다.
+    movement = (
+        db.query(InventoryMovementModel)
+        .filter(InventoryMovementModel.lot_no == lot_no)
+        .order_by(InventoryMovementModel.created_at.desc(), InventoryMovementModel.id.desc())
+        .first()
+    )
+    if movement:
+        return movement.to_location or original or ""
+
     # 전량 외주입고로 원 LOT를 그대로 유지한 경우 입고 저장위치가 최신 위치입니다.
     inbound = (
         db.query(SubcontractInboundMaster)
@@ -343,6 +354,8 @@ def inventory_adjustment_lots(
             adjustment_qty = _adjustment_qty(db, item.internal_lot_no, item.item_id)
             current_qty = max(base_qty - used_qty + adjustment_qty, 0.0)
             part = item_map.get(item.item_id)
+            if current_qty <= 1e-9:
+                continue
             rows.append({
                 "source": "구매입고",
                 "item_id": item.item_id,
@@ -370,6 +383,8 @@ def inventory_adjustment_lots(
             adjustment_qty = _adjustment_qty(db, lot.lot_no, lot.item_id)
             current_qty = max(base_qty - used_qty + adjustment_qty, 0.0)
             part = item_map.get(lot.item_id)
+            if current_qty <= 1e-9:
+                continue
             rows.append({
                 "source": "생산",
                 "item_id": lot.item_id,
@@ -462,6 +477,141 @@ def inventory_adjustment_history(
                 "before_qty": row.before_qty,
                 "adjustment_qty": row.adjustment_qty,
                 "after_qty": row.after_qty,
+                "reason": row.reason,
+                "note": row.note or "",
+                "created_by": row.created_by or "",
+                "created_at": row.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
+            }
+            for row in rows
+        ]
+    }
+
+
+class InventoryMovementInput(BaseModel):
+    item_id: int
+    lot_no: str = Field(min_length=1, max_length=100)
+    to_location: str = Field(min_length=1, max_length=20)
+    reason: str = Field(min_length=1, max_length=100)
+    note: Optional[str] = Field(None, max_length=1000)
+
+
+@router.get("/api/inventory/movements/locations")
+def inventory_movement_locations(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    rows = (
+        db.query(StorageLocationModel)
+        .filter(StorageLocationModel.is_active == "Y")
+        .order_by(StorageLocationModel.sort_order.asc(), StorageLocationModel.location_name.asc())
+        .all()
+    )
+    return {
+        "items": [
+            {"code": row.location_code, "name": row.location_name}
+            for row in rows
+        ]
+    }
+
+
+@router.get("/api/inventory/movements/lots")
+def inventory_movement_lots(
+    keyword: Optional[str] = Query(None, max_length=100),
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    data = inventory_adjustment_lots(keyword=keyword, limit=limit, db=db, current_user=current_user)
+    return data
+
+
+@router.post("/api/inventory/movements")
+def create_inventory_movement(
+    payload: InventoryMovementInput,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    lot_no = payload.lot_no.strip()
+    item = db.get(ItemMasterModel, payload.item_id)
+    if item is None:
+        raise HTTPException(404, "품목을 찾을 수 없습니다.")
+
+    base = _lot_base_info(db, payload.item_id, lot_no)
+    if base is None:
+        raise HTTPException(404, "이동할 LOT를 찾을 수 없습니다.")
+    base_qty, original_location, _source = base
+    current_qty = max(
+        base_qty - _used_qty(db, lot_no, payload.item_id) + _adjustment_qty(db, lot_no, payload.item_id),
+        0.0,
+    )
+    if current_qty <= 1e-9:
+        raise HTTPException(409, "현재 재고가 0인 LOT는 이동할 수 없습니다.")
+
+    from_location = _current_storage(db, lot_no, original_location)
+    to_location = payload.to_location.strip()
+    if from_location == to_location:
+        raise HTTPException(422, "현재 저장위치와 이동할 저장위치가 같습니다.")
+
+    target = (
+        db.query(StorageLocationModel)
+        .filter(
+            StorageLocationModel.location_code == to_location,
+            StorageLocationModel.is_active == "Y",
+        )
+        .one_or_none()
+    )
+    if target is None:
+        raise HTTPException(404, "이동할 저장위치를 찾을 수 없습니다.")
+
+    row = InventoryMovementModel(
+        item_id=item.id,
+        part_no=item.part_no,
+        lot_no=lot_no,
+        from_location=from_location or None,
+        to_location=to_location,
+        moved_qty=current_qty,
+        reason=payload.reason.strip(),
+        note=(payload.note or "").strip() or None,
+        created_by=getattr(current_user, "username", None),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {
+        "id": row.id,
+        "part_no": row.part_no,
+        "lot_no": row.lot_no,
+        "from_location": _storage_display(row.from_location, _storage_map(db)),
+        "to_location": _storage_display(row.to_location, _storage_map(db)),
+        "moved_qty": row.moved_qty,
+        "reason": row.reason,
+        "created_by": row.created_by,
+        "created_at": row.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
+    }
+
+
+@router.get("/api/inventory/movements/history")
+def inventory_movement_history(
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    names = _storage_map(db)
+    rows = (
+        db.query(InventoryMovementModel)
+        .order_by(InventoryMovementModel.created_at.desc(), InventoryMovementModel.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "part_no": row.part_no,
+                "lot_no": row.lot_no,
+                "from_location": _storage_display(row.from_location, names),
+                "to_location": _storage_display(row.to_location, names),
+                "moved_qty": row.moved_qty,
                 "reason": row.reason,
                 "note": row.note or "",
                 "created_by": row.created_by or "",
