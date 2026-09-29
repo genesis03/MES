@@ -282,6 +282,7 @@ def inquiry_subcontract_inbounds(
         db.query(SubcontractInboundMaster.id)
         .join(SubcontractInboundItem, SubcontractInboundItem.inbound_id == SubcontractInboundMaster.id)
         .join(SubcontractInboundLot, SubcontractInboundLot.inbound_item_id == SubcontractInboundItem.id)
+        .filter(SubcontractInboundMaster.status == "RECEIVED")
     )
     if start_date:
         match_query = match_query.filter(SubcontractInboundMaster.inbound_date >= start_date)
@@ -304,11 +305,9 @@ def inquiry_subcontract_inbounds(
         ))
     if status:
         if status == "CONFIRMED":
-            match_query = match_query.filter(SubcontractInboundMaster.status == "RECEIVED")
-        elif status == "DRAFT":
+            pass
+        elif status in {"DRAFT", "CANCELLED"}:
             return {"total": 0, "items": []}
-        elif status == "CANCELLED":
-            match_query = match_query.filter(SubcontractInboundMaster.status == "CANCELLED")
         else:
             raise HTTPException(422, "지원하지 않는 외주입고 상태입니다.")
 
