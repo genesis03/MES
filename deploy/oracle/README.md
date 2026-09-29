@@ -1,75 +1,122 @@
-# Oracle Cloud 배포 준비
+# Oracle Cloud 운영 배포
 
-## 1. 서버 디렉터리
-권장 경로: `/opt/mes`
+현재 운영 경로는 `/home/ubuntu/MES`를 기준으로 합니다.
+
+## 1. 배포 구조
+
+- 코드 원본: GitHub `genesis03/MES`
+- 로컬 검증: 사용자 PC
+- 운영 서버: Oracle Cloud `/home/ubuntu/MES`
+- 운영 DB: `/home/ubuntu/MES/data/manual_labels.db`
+- 외부 접속: 80 포트
+- 컨테이너 내부 앱: 8080 포트
+
+운영 DB는 GitHub DB와 분리해서 관리합니다. Oracle 운영이 시작된 뒤에는 GitHub의 `manual_labels.db`로 운영 DB를 덮어쓰지 않습니다.
+
+## 2. 최초 배포
 
 ```bash
-sudo mkdir -p /opt/mes/data
-sudo chown -R $USER:$USER /opt/mes
-cd /opt/mes
-git clone https://github.com/genesis03/MES.git .
-```
-
-## 2. 기존 운영 DB 유지
-현재 GitHub의 `manual_labels.db` 또는 실제 운영 PC의 최신 DB를 서버의 영구 볼륨으로 복사합니다.
-
-```bash
+cd /home/ubuntu
+git clone https://github.com/genesis03/MES.git MES
+cd MES
+mkdir -p data
 cp manual_labels.db data/manual_labels.db
-```
-
-운영 PC의 DB가 GitHub 파일보다 최신이면 반드시 운영 PC의 파일을 사용합니다. 기존 LOT/이력 데이터는 초기화하지 않습니다.
-
-## 3. 환경변수
-```bash
 cp .env.example .env
-nano .env
+docker compose -f docker-compose.oracle.yml up -d --build
 ```
 
-반드시 변경:
-- `SECRET_KEY`
-- `DEFAULT_ADMIN_PASSWORD`
-- `DEFAULT_USER_PASSWORD`
+`.env`의 `SECRET_KEY`, `DEFAULT_ADMIN_PASSWORD`, `DEFAULT_USER_PASSWORD`는 실제 운영값으로 변경합니다.
 
-기존 DB에 이미 계정이 있으면 초기 비밀번호 환경변수는 기존 계정 비밀번호를 바꾸지 않습니다.
+## 3. 정상 업데이트 절차
 
-## 4. 실행
-Docker Engine과 Docker Compose plugin 설치 후:
+로컬 PC에서 먼저 GitHub 최신본을 받아 기능을 검증한 뒤 이상이 없을 때만 Oracle에 적용합니다.
+
+Oracle 서버:
 
 ```bash
+cd /home/ubuntu/MES
+git pull origin main
 docker compose -f docker-compose.oracle.yml up -d --build
 docker compose -f docker-compose.oracle.yml ps
 docker compose -f docker-compose.oracle.yml logs --tail=100 mes
 ```
 
-## 5. 기본 접속
-기본값은 서버의 `8080` 포트입니다.
+일반 코드 업데이트에서는 `data/manual_labels.db`를 복사하거나 덮어쓰지 않습니다.
 
-Oracle Cloud 보안 목록/NSG와 Ubuntu UFW를 함께 확인해야 합니다. 인터넷에 직접 노출하기 전에는 관리자 계정 로그인과 일반계정 메뉴 권한을 먼저 검증합니다.
+## 4. 접속
 
-## 6. 업데이트
-```bash
-cd /opt/mes
-git pull origin main
-docker compose -f docker-compose.oracle.yml up -d --build
+외부 80 포트를 컨테이너 8080 포트로 연결합니다.
+
+```text
+http://서버공인IP
 ```
 
-DB는 `./data/manual_labels.db`에 유지되므로 이미지 재빌드와 분리됩니다.
+Compose 설정:
 
-## 7. 배포 전 필수 확인
-- `core/security.py`의 `DEV_BYPASS_AUTH = False`
-- 관리자 로그인
-- 일반계정 READ/WRITE 메뉴 권한
-- 입고/생산/외주/포장/출고 주요 LOT 흐름
-- 입고불량 LOT 수량 / 처리 가능 수량
-- `data/manual_labels.db` 백업
-- `.env`가 Git에 포함되지 않는지 확인
-- 정적파일 및 업로드 기능 경로 확인
-- 서버 재부팅 후 컨테이너 자동 재시작 확인
-
-## 8. 백업 예시
-```bash
-mkdir -p backup
-cp data/manual_labels.db "backup/manual_labels_$(date +%Y%m%d_%H%M%S).db"
+```yaml
+ports:
+  - "80:8080"
 ```
 
-SQLite 운영 중에는 가능하면 애플리케이션 정지 후 백업하거나 SQLite backup API를 사용하는 것이 안전합니다.
+## 5. 운영 DB 수동 백업
+
+실행 중인 SQLite DB를 단순 `cp`하지 않고 SQLite backup API를 사용합니다.
+
+```bash
+cd /home/ubuntu/MES
+docker compose -f docker-compose.oracle.yml exec -T mes \
+  python deploy/oracle/backup_db.py \
+  --source /data/manual_labels.db \
+  --backup-dir /data/backup \
+  --retention-days 14
+```
+
+백업 파일은 호스트 기준:
+
+```text
+/home/ubuntu/MES/data/backup/
+```
+
+에 저장됩니다.
+
+## 6. 매일 자동 백업
+
+기본 정책은 매일 03:00, 14일 보관입니다.
+
+```bash
+cd /home/ubuntu/MES
+sudo cp deploy/oracle/mes-backup.service /etc/systemd/system/
+sudo cp deploy/oracle/mes-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now mes-backup.timer
+```
+
+타이머 확인:
+
+```bash
+systemctl list-timers --all | grep mes-backup
+```
+
+즉시 1회 테스트:
+
+```bash
+sudo systemctl start mes-backup.service
+sudo systemctl status mes-backup.service --no-pager
+ls -lh /home/ubuntu/MES/data/backup/
+```
+
+## 7. 운영 확인 항목
+
+- 관리자 로그인 정상
+- 일반계정 메뉴 READ/WRITE 권한 정상
+- 구매/외주/생산/재고/품질/포장/출고 주요 화면 정상
+- 입고불량에서 현재 재고 0 LOT 제외
+- `data/manual_labels.db` 유지
+- `.env` Git 미추적
+- 서버 재부팅 후 MES 컨테이너 자동 재시작
+- `mes-backup.timer` 활성 상태
+- 백업 DB `PRAGMA integrity_check` 통과
+
+## 8. 무료 운영 원칙
+
+Oracle 무료 인스턴스 안에서 단일 MES 컨테이너 + SQLite 구조를 유지합니다. 별도 유료 DB, 로드밸런서, 추가 스토리지 서비스는 필요성이 확인되기 전까지 사용하지 않습니다.
