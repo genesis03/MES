@@ -3,7 +3,10 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from core.config import BASE_DIR, DATABASE_URL
 
 if DATABASE_URL:
-    engine = create_engine(DATABASE_URL)
+    engine_options = {}
+    if DATABASE_URL.startswith("sqlite:"):
+        engine_options["connect_args"] = {"check_same_thread": False}
+    engine = create_engine(DATABASE_URL, **engine_options)
 else:
     DB_PATH = BASE_DIR / "manual_labels.db"
     engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
