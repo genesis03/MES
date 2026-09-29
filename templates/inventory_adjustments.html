@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}재고 조정{% endblock %}
+{% block extra_head %}
+<style>
+.adj-page{font-size:13px}.adj-page h1{font-size:22px;margin:0 0 6px}.adj-sub{color:#64748b;margin-bottom:14px}
+.adj-panel{background:#fff;border:1px solid #cbd5e1;border-radius:7px;margin-bottom:14px}
+.adj-panel-title{padding:10px 14px;border-bottom:1px solid #dbe3ec;font-weight:800}
+.adj-filter{display:grid;grid-template-columns:90px minmax(320px,620px) 100px 100px 1fr;gap:8px;align-items:center;padding:12px 14px}
+.adj-filter input,.adj-form input,.adj-form select,.adj-form textarea{border:1px solid #cbd5e1;border-radius:4px;padding:8px 10px;font:inherit;background:#fff}
+.adj-filter input{height:36px}.adj-btn{height:36px;border:0;border-radius:4px;padding:0 15px;font-weight:800;cursor:pointer}
+.adj-primary{background:#2563eb;color:#fff}.adj-light{background:#e2e8f0;color:#334155}.adj-green{background:#059669;color:#fff}
+.adj-summary{justify-self:end;color:#475569;font-weight:700}
+.adj-table-wrap{overflow:auto}.adj-table{width:100%;border-collapse:collapse;min-width:960px}
+.adj-table th,.adj-table td{border:1px solid #e2e8f0;padding:8px;text-align:center;white-space:nowrap}
+.adj-table th{background:#f1f5f9;color:#334155}.adj-table td.left{text-align:left}.adj-table td.num{text-align:right}
+.adj-empty{padding:30px!important;color:#94a3b8;text-align:center}
+.adj-modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000}
+.adj-modal.show{display:flex}.adj-box{width:min(560px,94vw);background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(15,23,42,.28);overflow:hidden}
+.adj-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #e2e8f0}
+.adj-head h2{font-size:16px}.adj-form{padding:14px 16px;display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center}
+.adj-form textarea{min-height:70px;resize:vertical}.adj-readonly{background:#f8fafc!important;color:#475569}
+.adj-foot{display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid #e2e8f0}
+</style>
+{% endblock %}
+{% block content %}
+<div class="adj-page">
+  <h1>재고 조정</h1>
+  <div class="adj-sub">LOT별 현재재고를 확인한 뒤 실사차이, 파손, 누락 등의 사유로 재고를 조정합니다. 조정 이력은 삭제하지 않고 누적 관리합니다.</div>
+
+  <div class="adj-panel">
+    <div class="adj-panel-title">조회 조건</div>
+    <div class="adj-filter">
+      <strong>품번 / LOT</strong>
+      <input id="adjKeyword" placeholder="품번 / 품명 / LOT 검색" autocomplete="off">
+      <button class="adj-btn adj-primary" id="adjSearch">조회</button>
+      <button class="adj-btn adj-light" id="adjReset">초기화</button>
+      <div class="adj-summary" id="adjSummary">총 0건</div>
+    </div>
+  </div>
+
+  <div class="adj-panel">
+    <div class="adj-panel-title">현재 재고</div>
+    <div class="adj-table-wrap">
+      <table class="adj-table">
+        <thead><tr><th>No.</th><th>구분</th><th>품번</th><th>품명</th><th>LOT</th><th>저장위치</th><th>현재재고</th><th>단위</th><th>조정</th></tr></thead>
+        <tbody id="adjBody"><tr><td colspan="9" class="adj-empty">조회해 주세요.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="adj-panel">
+    <div class="adj-panel-title">최근 조정 이력</div>
+    <div class="adj-table-wrap">
+      <table class="adj-table">
+        <thead><tr><th>일시</th><th>작업자</th><th>품번</th><th>LOT</th><th>저장위치</th><th>조정 전</th><th>증감</th><th>조정 후</th><th>사유</th><th>비고</th></tr></thead>
+        <tbody id="histBody"><tr><td colspan="10" class="adj-empty">이력이 없습니다.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="adj-modal" id="adjModal">
+  <div class="adj-box">
+    <div class="adj-head"><h2>재고 조정</h2><button class="adj-btn adj-light" id="adjClose" type="button">닫기</button></div>
+    <div class="adj-form">
+      <label>품번</label><input id="fPartNo" class="adj-readonly" readonly>
+      <label>LOT</label><input id="fLotNo" class="adj-readonly" readonly>
+      <label>저장위치</label><input id="fLocation" class="adj-readonly" readonly>
+      <label>조정 전 수량</label><input id="fBefore" class="adj-readonly" readonly>
+      <label>조정 후 수량</label><input id="fAfter" type="number" min="0" step="0.001">
+      <label>증감</label><input id="fDelta" class="adj-readonly" readonly>
+      <label>조정 사유</label>
+      <select id="fReason">
+        <option value="">선택</option>
+        <option value="실사차이">실사차이</option>
+        <option value="파손">파손</option>
+        <option value="분실/누락">분실/누락</option>
+        <option value="입력오류 정정">입력오류 정정</option>
+        <option value="기타">기타</option>
+      </select>
+      <label>비고</label><textarea id="fNote" maxlength="1000"></textarea>
+    </div>
+    <div class="adj-foot"><button class="adj-btn adj-light" id="adjCancel" type="button">취소</button><button class="adj-btn adj-green" id="adjSave" type="button">저장</button></div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:3});
+let currentRows=[], selected=null;
+
+async function loadLots(){
+  const q=new URLSearchParams();
+  const keyword=$('adjKeyword').value.trim();
+  if(keyword) q.set('keyword',keyword);
+  const r=await fetch('/api/inventory/adjustments/lots?'+q.toString());
+  const d=await r.json();
+  if(!r.ok) throw new Error(d.detail||'조회 실패');
+  currentRows=d.items||[];
+  $('adjSummary').textContent=`총 ${currentRows.length.toLocaleString()}건`;
+  $('adjBody').innerHTML=currentRows.length?currentRows.map((x,i)=>`<tr>
+    <td>${i+1}</td><td>${esc(x.source)}</td><td>${esc(x.part_no)}</td><td class="left">${esc(x.part_name)}</td>
+    <td>${esc(x.lot_no)}</td><td>${esc(x.storage_location||'미지정')}</td><td class="num"><strong>${fmt(x.current_qty)}</strong></td>
+    <td>${esc(x.unit)}</td><td><button class="adj-btn adj-primary" type="button" onclick="openAdjust(${i})">조정</button></td>
+  </tr>`).join(''):'<tr><td colspan="9" class="adj-empty">조회된 재고가 없습니다.</td></tr>';
+}
+
+async function loadHistory(){
+  const r=await fetch('/api/inventory/adjustments/history?limit=100');
+  const d=await r.json();
+  if(!r.ok) throw new Error(d.detail||'이력 조회 실패');
+  const rows=d.items||[];
+  $('histBody').innerHTML=rows.length?rows.map(x=>`<tr>
+    <td>${esc(x.created_at)}</td><td>${esc(x.created_by)}</td><td>${esc(x.part_no)}</td><td>${esc(x.lot_no)}</td>
+    <td>${esc(x.storage_location||'미지정')}</td><td class="num">${fmt(x.before_qty)}</td>
+    <td class="num">${Number(x.adjustment_qty||0)>0?'+':''}${fmt(x.adjustment_qty)}</td><td class="num">${fmt(x.after_qty)}</td>
+    <td>${esc(x.reason)}</td><td class="left">${esc(x.note)}</td>
+  </tr>`).join(''):'<tr><td colspan="10" class="adj-empty">조정 이력이 없습니다.</td></tr>';
+}
+
+function openAdjust(index){
+  selected=currentRows[index];
+  if(!selected)return;
+  $('fPartNo').value=selected.part_no||'';
+  $('fLotNo').value=selected.lot_no||'';
+  $('fLocation').value=selected.storage_location||'';
+  $('fBefore').value=selected.current_qty??0;
+  $('fAfter').value=selected.current_qty??0;
+  $('fDelta').value='0';
+  $('fReason').value='';
+  $('fNote').value='';
+  $('adjModal').classList.add('show');
+  $('fAfter').focus();
+  $('fAfter').select();
+}
+
+function closeAdjust(){selected=null;$('adjModal').classList.remove('show');}
+function calcDelta(){
+  const before=Number($('fBefore').value||0), after=Number($('fAfter').value||0);
+  const delta=after-before;
+  $('fDelta').value=(delta>0?'+':'')+String(Number(delta.toFixed(3)));
+}
+
+async function saveAdjust(){
+  if(!selected)return;
+  const after=Number($('fAfter').value);
+  if(!Number.isFinite(after)||after<0)return alert('조정 후 수량을 0 이상으로 입력해 주세요.');
+  const reason=$('fReason').value;
+  if(!reason)return alert('조정 사유를 선택해 주세요.');
+  if(!confirm(`${selected.lot_no} 재고를 ${fmt(selected.current_qty)} → ${fmt(after)}로 조정하시겠습니까?`))return;
+
+  const r=await fetch('/api/inventory/adjustments',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({item_id:selected.item_id,lot_no:selected.lot_no,after_qty:after,reason,note:$('fNote').value.trim()})
+  });
+  const d=await r.json();
+  if(!r.ok)throw new Error(d.detail||'재고조정 실패');
+  closeAdjust();
+  await Promise.all([loadLots(),loadHistory()]);
+  alert(`재고조정 완료: ${d.lot_no} ${fmt(d.before_qty)} → ${fmt(d.after_qty)}`);
+}
+
+$('adjSearch').addEventListener('click',()=>loadLots().catch(e=>alert(e.message)));
+$('adjReset').addEventListener('click',()=>{$('adjKeyword').value='';loadLots().catch(e=>alert(e.message));});
+$('adjKeyword').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadLots().catch(err=>alert(err.message));}});
+$('adjClose').addEventListener('click',closeAdjust);
+$('adjCancel').addEventListener('click',closeAdjust);
+$('fAfter').addEventListener('input',calcDelta);
+$('adjSave').addEventListener('click',()=>saveAdjust().catch(e=>alert(e.message)));
+$('adjModal').addEventListener('click',e=>{if(e.target===$('adjModal'))closeAdjust();});
+loadHistory().catch(e=>alert(e.message));
+</script>
+{% endblock %}
