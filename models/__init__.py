@@ -22,6 +22,7 @@ from models.subcontract import SubcontractOrderMaster, SubcontractOrderItem, Sub
 from models.subcontract_outbound import SubcontractOutboundMaster, SubcontractOutboundItem, SubcontractOutboundLot
 from models.subcontract_inbound import SubcontractInboundMaster, SubcontractInboundItem, SubcontractInboundLot
 from models.quality import QualityInboundResult, QualityInboundDefectDetail, QualityInboundLotDefect
+from models.production_defect import QualityProductionDefect, QualityProductionDefectDetail
 from models.quality_standard import QualityInspectionItemMaster, QualityInboundStandard, QualityInboundStandardItem
 from models.partner import Partner, PartnerContact
 from models.purchase import PurchaseMaster, PurchaseItem
@@ -79,6 +80,7 @@ __all__ = [
     "SalesOrderMaster", "SalesOrderItem", "ShipmentMaster", "ShipmentItem", "ShipmentBox", "ShipmentDirectLot",
     "ShippingLotRegistry", "AuditLogModel", "InventoryAdjustmentModel", "InventoryMovementModel", "ItemPartNoHistory",
     "QualityInboundResult", "QualityInboundDefectDetail", "QualityInboundLotDefect",
+    "QualityProductionDefect", "QualityProductionDefectDetail",
     "QualityInspectionItemMaster", "QualityInboundStandard", "QualityInboundStandardItem",
     "Base",
     "engine",
