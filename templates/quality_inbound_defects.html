@@ -183,14 +183,15 @@
     $('sel-status').textContent=selectedGroup.status_summary||'';
     $('qi-save-all').disabled=false;
 
-    $('qi-main-head').innerHTML='<tr><th>No.</th><th class="partno">품번</th><th class="partname">품명</th><th class="location">저장위치</th><th class="lot">LOT NO</th><th>처리 가능 수량</th>'+
-      defectTypes.map(x=>`<th class="defect-col">${esc(x.name)}</th>`).join('')+'<th>불량합계</th><th>정상수량</th></tr>';
+    $('qi-main-head').innerHTML='<tr><th>No.</th><th class="partno">품번</th><th class="partname">품명</th><th class="location">저장위치</th><th class="lot">LOT NO</th><th>LOT 수량</th><th>처리 가능 수량</th><th>불량합계</th><th>정상수량</th>'+
+      defectTypes.map(x=>`<th class="defect-col">${esc(x.name)}</th>`).join('')+'</tr>';
 
     $('qi-main-body').innerHTML=flatLots.length?flatLots.map((x,i)=>`<tr data-index="${i}" data-item-id="${x.row.inbound_item_id}" data-lot="${esc(x.lot_no)}" data-lot-qty="${x.lot_qty}">
       <td>${i+1}</td><td>${esc(x.row.part_no)}</td><td class="left">${esc(x.row.part_name)}</td><td>${esc(x.row.storage_location||'')}</td><td>${esc(x.lot_no)}</td>
       <td class="num">${fmt(x.lot_qty)} ${esc(x.row.unit||'')}</td>
-      ${defectTypes.map(t=>`<td><input class="qi-defect-input" data-code="${esc(t.code)}" type="number" min="0" step="any" value="${x.detail.get(t.code)||''}" placeholder="0"></td>`).join('')}
+      <td class="num">${fmt(x.lot_qty)} ${esc(x.row.unit||'')}</td>
       <td class="num qi-lot-defect">0</td><td class="num qi-lot-good">${fmt(x.lot_qty)}</td>
+      ${defectTypes.map(t=>`<td><input class="qi-defect-input" data-code="${esc(t.code)}" type="number" min="0" step="any" value="${x.detail.get(t.code)||''}" placeholder="0"></td>`).join('')}
     </tr>`).join(''):'<tr><td colspan="8" class="qi-empty">LOT 정보가 없습니다.</td></tr>';
     document.querySelectorAll('.qi-defect-input').forEach(el=>el.addEventListener('input',updateTotals));
     updateTotals();
@@ -248,8 +249,8 @@
 
   function clearAll(){
     selectedGroup=null;selectedRows=[];flatLots=[];$('qi-inbound-no').value='';$('qi-selected').classList.remove('show');$('qi-save-all').disabled=true;
-    $('qi-main-head').innerHTML='<tr><th>No.</th><th>품번</th><th>품명</th><th>저장위치</th><th>LOT NO</th><th>처리 가능 수량</th><th>불량합계</th><th>정상수량</th></tr>';
-    $('qi-main-body').innerHTML='<tr><td colspan="8" class="qi-empty">입고번호를 선택해 주세요.</td></tr>';
+    $('qi-main-head').innerHTML='<tr><th>No.</th><th>품번</th><th>품명</th><th>저장위치</th><th>LOT NO</th><th>LOT 수량</th><th>처리 가능 수량</th><th>불량합계</th><th>정상수량</th></tr>';
+    $('qi-main-body').innerHTML='<tr><td colspan="9" class="qi-empty">입고번호를 선택해 주세요.</td></tr>';
     $('sum-inbound').textContent='0';$('sum-defect').textContent='0';$('sum-good').textContent='0';setMsg('');
   }
 
