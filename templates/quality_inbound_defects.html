@@ -2,69 +2,95 @@
 {% block title %}입고 품목 불량 처리 - 품질관리{% endblock %}
 {% block extra_head %}
 <style>
-.qi-wrap h1{font-size:24px;margin:0 0 5px}.qi-sub{font-size:13px;color:#64748b;margin-bottom:14px}.qi-filter{display:flex;flex-wrap:wrap;gap:8px;align-items:end;background:#fff;border:1px solid #cbd5e1;border-radius:7px;padding:12px;margin-bottom:10px}.qi-field{display:flex;flex-direction:column;gap:4px}.qi-field label{font-size:11px;font-weight:700;color:#64748b}.qi-field input,.qi-field select{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px;min-width:130px;background:#fff}.qi-btn{height:34px;border:0;border-radius:4px;padding:0 14px;font-weight:700;cursor:pointer}.qi-primary{background:#2563eb;color:#fff}.qi-light{background:#e2e8f0;color:#334155}.qi-save{background:#0f766e;color:#fff}.qi-summary{display:flex;gap:18px;margin:10px 0;font-size:13px;font-weight:700;color:#475569}.qi-tablebox{background:#fff;border:1px solid #cbd5e1;border-radius:7px;overflow:auto}.qi-table{width:100%;border-collapse:collapse;min-width:1560px;font-size:12px}.qi-table th{background:#f1f5f9;padding:9px 7px;border-bottom:2px solid #cbd5e1;white-space:nowrap}.qi-table td{padding:7px;border-bottom:1px solid #e2e8f0;text-align:center;white-space:nowrap}.qi-table input,.qi-table select{height:30px;border:1px solid #cbd5e1;border-radius:4px;padding:0 6px;background:#fff}.qi-table .qty{width:92px;text-align:right}.qi-table .remark{width:180px}.qi-left{text-align:left!important}.badge{display:inline-block;border-radius:12px;padding:3px 8px;font-weight:700}.badge-general{background:#dbeafe;color:#1d4ed8}.badge-sub{background:#ede9fe;color:#6d28d9}.badge-wait{background:#fef3c7;color:#a16207}.badge-done{background:#dcfce7;color:#15803d}.badge-reject{background:#fee2e2;color:#b91c1c}.qi-empty{padding:36px!important;color:#94a3b8}.qi-msg{margin-top:8px;min-height:18px;font-size:12px;color:#64748b}.qi-msg.error{color:#dc2626}.qi-msg.ok{color:#15803d}
-.qi-actions{display:flex;gap:5px;justify-content:center}.qi-normal{background:#059669;color:#fff}.qi-defect{background:#dc2626;color:#fff}.qi-edit{background:#2563eb;color:#fff}
-.qi-modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);align-items:center;justify-content:center;z-index:1100}.qi-modal.show{display:flex}
-.qi-modal-box{width:min(1500px,98vw);max-height:92vh;background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(15,23,42,.28);overflow:hidden;display:flex;flex-direction:column}
-.qi-modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #e2e8f0}.qi-modal-head h2{font-size:16px;margin:0}
-.qi-modal-body{padding:14px 16px;overflow:auto}.qi-info-grid{display:grid;grid-template-columns:110px 1fr 110px 1fr;gap:8px 10px;margin-bottom:14px}.qi-info-grid .label{color:#64748b;font-weight:700}.qi-info-grid .value{font-weight:700}
-.qi-form-grid{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center}.qi-form-grid input,.qi-form-grid select,.qi-form-grid textarea{border:1px solid #cbd5e1;border-radius:4px;padding:8px 10px;font:inherit}.qi-form-grid textarea{min-height:72px;resize:vertical}
-.qi-modal-foot{display:flex;justify-content:flex-end;gap:7px;padding:10px 16px;border-top:1px solid #e2e8f0}
-.qi-defect-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 14px}.qi-sum-box{border:1px solid #cbd5e1;border-radius:6px;padding:10px 12px;background:#f8fafc}.qi-sum-box span{display:block;font-size:11px;color:#64748b;margin-bottom:3px}.qi-sum-box strong{font-size:18px}.qi-sum-box.defect strong{color:#dc2626}.qi-sum-box.good strong{color:#15803d}
-.qi-defect-title{font-weight:800;margin:4px 0 8px}.qi-lot-table-wrap{overflow:auto;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:14px}.qi-lot-table{border-collapse:collapse;width:max-content;min-width:100%;font-size:12px}.qi-lot-table th,.qi-lot-table td{border:1px solid #e2e8f0;padding:7px;text-align:center;white-space:nowrap}.qi-lot-table th{background:#f1f5f9;position:sticky;top:0;z-index:1}.qi-lot-table .lot-col{min-width:160px;text-align:left}.qi-lot-table .qty-col{min-width:92px;text-align:right}.qi-lot-table .defect-col{min-width:88px}.qi-lot-table input{width:74px;height:32px;border:1px solid #cbd5e1;border-radius:4px;padding:0 6px;text-align:right}.qi-lot-total{font-weight:800;color:#dc2626}.qi-lot-good{font-weight:800;color:#15803d}
-@media(max-width:760px){.qi-info-grid{grid-template-columns:100px 1fr}.qi-defect-summary{grid-template-columns:1fr}}
+.qi-wrap h1{font-size:24px;margin:0 0 5px}.qi-sub{font-size:13px;color:#64748b;margin-bottom:14px}
+.qi-select{display:flex;align-items:end;gap:8px;background:#fff;border:1px solid #cbd5e1;border-radius:7px;padding:12px;margin-bottom:10px}
+.qi-field{display:flex;flex-direction:column;gap:4px}.qi-field label{font-size:11px;font-weight:700;color:#64748b}
+.qi-field input,.qi-field select{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px;min-width:150px;background:#fff}
+.qi-btn{height:34px;border:0;border-radius:4px;padding:0 14px;font-weight:700;cursor:pointer}.qi-primary{background:#2563eb;color:#fff}.qi-light{background:#e2e8f0;color:#334155}.qi-save{background:#0f766e;color:#fff}
+.qi-head-actions{margin-left:auto;display:flex;gap:7px}.qi-selected{background:#fff;border:1px solid #cbd5e1;border-radius:7px;padding:10px 12px;margin-bottom:10px;display:none}
+.qi-selected.show{display:block}.qi-selected-grid{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:8px 14px}
+.qi-selected-item span{display:block;font-size:10px;color:#64748b;margin-bottom:2px}.qi-selected-item strong{font-size:12px}
+.qi-summary{display:grid;grid-template-columns:repeat(3,180px);gap:8px;margin:10px 0}
+.qi-sum{background:#fff;border:1px solid #cbd5e1;border-radius:6px;padding:9px 12px}.qi-sum span{display:block;font-size:11px;color:#64748b}.qi-sum strong{font-size:18px}.qi-sum.defect strong{color:#dc2626}.qi-sum.good strong{color:#15803d}
+.qi-tablebox{background:#fff;border:1px solid #cbd5e1;border-radius:7px;overflow:auto;max-height:62vh}
+.qi-table{border-collapse:collapse;width:max-content;min-width:100%;font-size:12px}.qi-table th,.qi-table td{border:1px solid #e2e8f0;padding:7px;text-align:center;white-space:nowrap}
+.qi-table th{background:#f1f5f9;position:sticky;top:0;z-index:2}.qi-table .left{text-align:left}.qi-table .num{text-align:right}
+.qi-table .partno{min-width:120px}.qi-table .partname{min-width:240px}.qi-table .location{min-width:130px}.qi-table .lot{min-width:160px}.qi-table .defect-col{min-width:82px}
+.qi-table input.qi-defect-input{width:70px;height:30px;border:1px solid #cbd5e1;border-radius:4px;padding:0 6px;text-align:right}
+.qi-lot-defect{font-weight:800;color:#dc2626}.qi-lot-good{font-weight:800;color:#15803d}.qi-empty{padding:40px!important;color:#94a3b8}
+.qi-msg{margin-top:8px;min-height:18px;font-size:12px;color:#64748b}.qi-msg.error{color:#dc2626}.qi-msg.ok{color:#15803d}
+.qi-popup{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);align-items:center;justify-content:center;z-index:1200}.qi-popup.show{display:flex}
+.qi-popup-box{width:min(1100px,96vw);max-height:88vh;background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(15,23,42,.28);overflow:hidden;display:flex;flex-direction:column}
+.qi-popup-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #e2e8f0}.qi-popup-head h2{font-size:16px;margin:0}
+.qi-popup-body{padding:14px 16px;overflow:auto}.qi-popup-filter{display:grid;grid-template-columns:130px 140px 140px 150px 150px 1fr;gap:8px;align-items:end;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:12px;margin-bottom:12px}
+.qi-popup-filter .period{grid-column:2/4;display:grid;grid-template-columns:1fr 14px 1fr;gap:5px;align-items:end}.qi-popup-filter .period .qi-field{min-width:0}
+.qi-popup-table{width:100%;border-collapse:collapse;font-size:12px}.qi-popup-table th,.qi-popup-table td{border:1px solid #dbe2eb;padding:8px;text-align:center;white-space:nowrap}.qi-popup-table th{background:#f8fafc}
+.qi-popup-table tbody tr{cursor:pointer}.qi-popup-table tbody tr:hover,.qi-popup-table tbody tr.selected{background:#eff6ff}
+.qi-popup-foot{display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid #e2e8f0}
+@media(max-width:900px){.qi-selected-grid{grid-template-columns:repeat(2,1fr)}.qi-summary{grid-template-columns:1fr}.qi-popup-filter{grid-template-columns:1fr 1fr}.qi-popup-filter .period{grid-column:1/3}}
 </style>
 {% endblock %}
 {% block content %}
 <div class="qi-wrap">
   <h1>입고 품목 불량 처리</h1>
-  <div class="qi-sub">일반구매와 외주가공 입고품을 동일 기준으로 조회하고 검사 결과를 등록합니다. 실제 LOT 이력은 기존 입고 데이터에 유지됩니다.</div>
-  <div class="qi-filter">
-    <div class="qi-field"><label>시작일</label><input type="date" id="qi-start"></div>
-    <div class="qi-field"><label>종료일</label><input type="date" id="qi-end"></div>
-    <div class="qi-field"><label>구분</label><select id="qi-kind"><option value="ALL">전체</option><option value="GENERAL">일반구매</option><option value="SUBCONTRACT">외주가공</option></select></div>
-    <div class="qi-field"><label>거래처</label><input id="qi-partner" placeholder="거래처명"></div>
-    <div class="qi-field"><label>품번</label><input id="qi-part-no" placeholder="품번"></div>
-    <div class="qi-field"><label>입고번호</label><input id="qi-inbound-no" placeholder="입고번호"></div>
-    <div class="qi-field"><label>발주번호</label><input id="qi-order-no" placeholder="발주번호"></div>
-    <button class="qi-btn qi-primary" id="qi-search">조회</button>
-    <button class="qi-btn qi-light" id="qi-reset">초기화</button>
+  <div class="qi-sub">입고번호를 선택한 뒤 LOT별로 불량유형 수량을 입력합니다. 불량합계와 정상수량은 자동 집계됩니다.</div>
+
+  <div class="qi-select">
+    <div class="qi-field"><label>입고번호</label><input id="qi-inbound-no" placeholder="입고번호 조회" autocomplete="off"></div>
+    <button class="qi-btn qi-primary" id="qi-open-search" type="button">조회</button>
+    <button class="qi-btn qi-light" id="qi-clear" type="button">초기화</button>
+    <div class="qi-head-actions"><button class="qi-btn qi-save" id="qi-save-all" type="button" disabled>저장</button></div>
   </div>
-  <div class="qi-summary"><span>조회 <strong id="qi-count">0</strong>건</span><span>불량수량 합계 <strong id="qi-defect-total">0</strong></span></div>
-  <div class="qi-tablebox"><table class="qi-table"><thead><tr>
-    <th>No.</th><th>구분</th><th>입고일자</th><th>입고번호</th><th>발주번호</th><th>거래처</th><th>품번</th><th>품명</th><th>입고수량</th><th>검사상태</th><th>불량수량</th><th>불량유형</th><th>판정</th><th>비고</th><th>처리</th>
-  </tr></thead><tbody id="qi-body"><tr><td colspan="15" class="qi-empty">조회 중입니다...</td></tr></tbody></table></div>
+
+  <div class="qi-selected" id="qi-selected">
+    <div class="qi-selected-grid">
+      <div class="qi-selected-item"><span>구분</span><strong id="sel-kind"></strong></div>
+      <div class="qi-selected-item"><span>입고번호</span><strong id="sel-no"></strong></div>
+      <div class="qi-selected-item"><span>입고일자</span><strong id="sel-date"></strong></div>
+      <div class="qi-selected-item"><span>거래처</span><strong id="sel-partner"></strong></div>
+      <div class="qi-selected-item"><span>발주번호</span><strong id="sel-order"></strong></div>
+      <div class="qi-selected-item"><span>검사상태</span><strong id="sel-status"></strong></div>
+    </div>
+  </div>
+
+  <div class="qi-summary">
+    <div class="qi-sum"><span>입고수량</span><strong id="sum-inbound">0</strong></div>
+    <div class="qi-sum defect"><span>불량합계</span><strong id="sum-defect">0</strong></div>
+    <div class="qi-sum good"><span>정상수량</span><strong id="sum-good">0</strong></div>
+  </div>
+
+  <div class="qi-tablebox">
+    <table class="qi-table">
+      <thead id="qi-main-head"><tr><th>No.</th><th>품번</th><th>품명</th><th>저장위치</th><th>LOT NO</th><th>처리 가능 수량</th><th>불량합계</th><th>정상수량</th></tr></thead>
+      <tbody id="qi-main-body"><tr><td colspan="8" class="qi-empty">입고번호를 선택해 주세요.</td></tr></tbody>
+    </table>
+  </div>
   <div id="qi-msg" class="qi-msg"></div>
 </div>
 
-<div class="qi-modal" id="qi-defect-modal">
-  <div class="qi-modal-box">
-    <div class="qi-modal-head"><h2>불량 입력</h2><button class="qi-btn qi-light" type="button" id="qi-modal-close">닫기</button></div>
-    <div class="qi-modal-body">
-      <div class="qi-info-grid">
-        <div class="label">입고번호</div><div class="value" id="qm-inbound-no"></div>
-        <div class="label">품번</div><div class="value" id="qm-part-no"></div>
-        <div class="label">품명</div><div class="value" id="qm-part-name"></div>
-        <div class="label">입고수량</div><div class="value" id="qm-inbound-qty"></div>
+<div class="qi-popup" id="qi-search-popup">
+  <div class="qi-popup-box">
+    <div class="qi-popup-head"><h2>입고 번호 조회</h2><button class="qi-btn qi-light" id="qp-close" type="button">닫기</button></div>
+    <div class="qi-popup-body">
+      <div class="qi-popup-filter">
+        <div class="qi-field"><label>입고번호</label><input id="qp-no" placeholder="입고번호"></div>
+        <div class="period">
+          <div class="qi-field"><label>시작일</label><input type="date" id="qp-start"></div><div style="padding-bottom:9px;text-align:center">~</div>
+          <div class="qi-field"><label>종료일</label><input type="date" id="qp-end"></div>
+        </div>
+        <div class="qi-field"><label>구분</label><select id="qp-kind"><option value="ALL">전체</option><option value="GENERAL">일반구매</option><option value="SUBCONTRACT">외주가공</option></select></div>
+        <div class="qi-field"><label>거래처</label><input id="qp-partner" placeholder="거래처명"></div>
+        <div class="qi-field"><label>품번</label><input id="qp-part" placeholder="품번"></div>
+        <div style="display:flex;gap:6px;justify-content:flex-end"><button class="qi-btn qi-primary" id="qp-search" type="button">조회</button><button class="qi-btn qi-light" id="qp-reset" type="button">초기화</button></div>
       </div>
-      <div class="qi-defect-summary">
-        <div class="qi-sum-box"><span>입고수량</span><strong id="qm-sum-inbound">0</strong></div>
-        <div class="qi-sum-box defect"><span>불량합계</span><strong id="qm-sum-defect">0</strong></div>
-        <div class="qi-sum-box good"><span>정상수량</span><strong id="qm-sum-good">0</strong></div>
-      </div>
-      <div class="qi-defect-title">LOT별 불량유형 수량</div>
-      <div class="qi-lot-table-wrap">
-        <table class="qi-lot-table">
-          <thead id="qm-lot-head"></thead>
-          <tbody id="qm-lot-body"></tbody>
+      <div style="overflow:auto;max-height:52vh">
+        <table class="qi-popup-table">
+          <thead><tr><th>구분</th><th>입고번호</th><th>입고일자</th><th>거래처</th><th>발주번호</th><th>품번 / 품명</th><th>입고수량</th><th>검사상태</th></tr></thead>
+          <tbody id="qp-body"><tr><td colspan="8" class="qi-empty">조회해 주세요.</td></tr></tbody>
         </table>
       </div>
-      <div class="qi-form-grid">
-        <label>판정 *</label><select id="qm-judgment"></select>
-        <label>비고</label><textarea id="qm-remark" maxlength="1000"></textarea>
-      </div>
     </div>
-    <div class="qi-modal-foot"><button class="qi-btn qi-light" type="button" id="qi-modal-cancel">취소</button><button class="qi-btn qi-primary" type="button" id="qi-modal-save">저장</button></div>
+    <div class="qi-popup-foot"><button class="qi-btn qi-light" id="qp-cancel" type="button">취소</button><button class="qi-btn qi-primary" id="qp-apply" type="button" disabled>적용</button></div>
   </div>
 </div>
 {% endblock %}
@@ -74,177 +100,173 @@
   const $=id=>document.getElementById(id);
   const esc=v=>{const s=document.createElement('span');s.textContent=v??'';return s.innerHTML;};
   const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6});
-  let defectTypes=[]; let judgments=[]; let currentRows=[]; let selectedRow=null;
+  let defectTypes=[], popupGroups=[], selectedGroup=null, selectedRows=[], flatLots=[];
 
-  function statusBadge(row){
-    const done=row.inspection_status==='COMPLETED';
-    return `<span class="badge ${done?'badge-done':'badge-wait'}">${esc(row.inspection_status_name||'')}</span>`;
-  }
-  function optionHtml(list, selected, emptyLabel){
-    const head=`<option value="">${esc(emptyLabel)}</option>`;
-    return head+list.map(x=>`<option value="${esc(x.code)}" ${x.code===selected?'selected':''}>${esc(x.name)}</option>`).join('');
-  }
-  function judgmentBadge(row){
-    if(!row.judgment_name)return '';
-    const cls=row.judgment==='REJECT'?'badge-reject':(row.judgment==='PASS'?'badge-done':'badge-wait');
-    return `<span class="badge ${cls}">${esc(row.judgment_name)}</span>`;
-  }
+  function dateOffset(days){const d=new Date();d.setDate(d.getDate()+days);return d.toISOString().slice(0,10);}
   function setMsg(text,type=''){$('qi-msg').className='qi-msg'+(type?' '+type:'');$('qi-msg').textContent=text||'';}
 
   async function loadOptions(){
     const r=await fetch('/api/quality/inbound-defects/options'); const d=await r.json();
-    if(!r.ok)throw new Error(d.detail||'품질 기준정보 조회 실패');
-    defectTypes=d.defect_types||[]; judgments=d.judgments||[];
+    if(!r.ok)throw new Error(d.detail||'불량유형 조회 실패');
+    defectTypes=d.defect_types||[];
   }
 
-  async function load(){
-    setMsg(''); const p=new URLSearchParams({kind:$('qi-kind').value});
-    const map={start_date:'qi-start',end_date:'qi-end',inbound_no:'qi-inbound-no',order_no:'qi-order-no',partner_name:'qi-partner',part_no:'qi-part-no'};
+  function groupInboundRows(rows){
+    const map=new Map();
+    (rows||[]).forEach(row=>{
+      const key=row.source_type+'|'+row.inbound_no;
+      if(!map.has(key))map.set(key,{key,source_type:row.source_type,source_name:row.source_name,inbound_no:row.inbound_no,inbound_date:row.inbound_date,partner_name:row.partner_name,order_no:row.order_no,rows:[]});
+      map.get(key).rows.push(row);
+    });
+    return [...map.values()].map(g=>{
+      const partNos=[...new Set(g.rows.map(x=>x.part_no).filter(Boolean))];
+      const partNames=[...new Set(g.rows.map(x=>x.part_name).filter(Boolean))];
+      const statuses=[...new Set(g.rows.map(x=>x.inspection_status_name).filter(Boolean))];
+      g.part_summary=(partNos[0]||'')+(partNames[0]?' / '+partNames[0]:'')+(partNos.length>1?` 외 ${partNos.length-1}건`:'');
+      g.inbound_qty=g.rows.reduce((s,x)=>s+Number(x.inbound_qty||0),0);
+      g.status_summary=statuses.length===1?statuses[0]:(statuses.length?'일부완료':'');
+      return g;
+    }).sort((a,b)=>(b.inbound_date+b.inbound_no).localeCompare(a.inbound_date+a.inbound_no));
+  }
+
+  async function searchPopup(){
+    const p=new URLSearchParams({kind:$('qp-kind').value,limit:'2000'});
+    const map={start_date:'qp-start',end_date:'qp-end',inbound_no:'qp-no',partner_name:'qp-partner',part_no:'qp-part'};
     Object.entries(map).forEach(([k,id])=>{const v=$(id).value.trim();if(v)p.set(k,v)});
-    $('qi-body').innerHTML='<tr><td colspan="15" class="qi-empty">조회 중입니다...</td></tr>';
-    try{
-      const r=await fetch('/api/quality/inbound-defects?'+p.toString()); const d=await r.json(); if(!r.ok)throw new Error(d.detail||'조회 실패');
-      currentRows=d.items||[]; $('qi-count').textContent=currentRows.length.toLocaleString(); $('qi-defect-total').textContent=fmt(currentRows.reduce((s,x)=>s+Number(x.defect_qty||0),0));
-      if(!currentRows.length){$('qi-body').innerHTML='<tr><td colspan="15" class="qi-empty">조회 결과가 없습니다.</td></tr>';return;}
-      $('qi-body').innerHTML=currentRows.map((x,i)=>{
-        const sub=x.source_type==='SUBCONTRACT'; const rowId=`${x.source_type}-${x.inbound_item_id}`;
-        const completed=x.inspection_status==='COMPLETED';
-        const actionLabel=completed?'수정':'불량입력';
-        return `<tr data-row="${rowId}"><td>${i+1}</td><td><span class="badge ${sub?'badge-sub':'badge-general'}">${esc(x.source_name)}</span></td><td>${esc(x.inbound_date)}</td><td>${esc(x.inbound_no)}</td><td>${esc(x.order_no)}</td><td class="qi-left">${esc(x.partner_name)}</td><td>${esc(x.part_no)}</td><td class="qi-left">${esc(x.part_name)}</td><td>${fmt(x.inbound_qty)} ${esc(x.unit)}</td><td class="status-cell">${statusBadge(x)}</td><td>${fmt(x.defect_qty||0)}</td><td>${esc(x.defect_type_name||'')}</td><td>${judgmentBadge(x)}</td><td class="qi-left">${esc(x.quality_remark||'')}</td><td><div class="qi-actions"><button class="qi-btn qi-normal normal-row" data-index="${i}" type="button">정상처리</button><button class="qi-btn ${completed?'qi-edit':'qi-defect'} defect-row" data-index="${i}" type="button">${actionLabel}</button></div></td></tr>`;
-      }).join('');
-    }catch(e){$('qi-body').innerHTML=`<tr><td colspan="15" class="qi-empty" style="color:#dc2626">${esc(e.message)}</td></tr>`;}
+    $('qp-body').innerHTML='<tr><td colspan="8" class="qi-empty">조회 중입니다...</td></tr>';
+    const r=await fetch('/api/quality/inbound-defects?'+p.toString()); const d=await r.json();
+    if(!r.ok)throw new Error(d.detail||'입고 조회 실패');
+    popupGroups=groupInboundRows(d.items||[]);
+    selectedGroup=null;$('qp-apply').disabled=true;
+    $('qp-body').innerHTML=popupGroups.length?popupGroups.map((g,i)=>`<tr data-index="${i}">
+      <td>${esc(g.source_name)}</td><td>${esc(g.inbound_no)}</td><td>${esc(g.inbound_date)}</td><td>${esc(g.partner_name)}</td>
+      <td>${esc(g.order_no)}</td><td style="text-align:left">${esc(g.part_summary)}</td><td style="text-align:right">${fmt(g.inbound_qty)}</td><td>${esc(g.status_summary)}</td>
+    </tr>`).join(''):'<tr><td colspan="8" class="qi-empty">조회 결과가 없습니다.</td></tr>';
   }
 
-  async function postResult(row,payload){
-    const r=await fetch(`/api/quality/inbound-defects/${encodeURIComponent(row.source_type)}/${encodeURIComponent(row.inbound_item_id)}`,{
-      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
+  function openSearch(){
+    $('qp-no').value=$('qi-inbound-no').value.trim();
+    if(!$('qp-start').value)$('qp-start').value=dateOffset(-7);
+    if(!$('qp-end').value)$('qp-end').value=dateOffset(0);
+    $('qi-search-popup').classList.add('show');
+    searchPopup().catch(e=>alert(e.message));
+  }
+  function closeSearch(){$('qi-search-popup').classList.remove('show');selectedGroup=null;$('qp-apply').disabled=true;}
+
+  function flattenSelectedRows(rows){
+    const result=[];
+    rows.forEach(row=>{
+      const savedLots=new Map((row.defect_lots||[]).map(x=>[x.lot_no,x]));
+      const legacy=row.defect_items||[];
+      const lots=(row.lots||[]).filter(x=>x.lot_no);
+      lots.forEach((lot,idx)=>{
+        const saved=savedLots.get(lot.lot_no);
+        const detail=new Map((saved?.defect_items||[]).map(x=>[x.defect_type_code,Number(x.defect_qty||0)]));
+        if(!saved && !(row.defect_lots||[]).length && idx===0)legacy.forEach(x=>detail.set(x.defect_type_code,Number(x.defect_qty||0)));
+        result.push({row,lot_no:lot.lot_no,lot_qty:Number(lot.lot_qty||0),detail});
+      });
     });
-    const d=await r.json(); if(!r.ok)throw new Error(d.detail||'저장 실패');
-    return d;
+    return result;
   }
 
-  async function saveNormal(index){
-    const row=currentRows[index]; if(!row)return;
-    if(!confirm(`${row.inbound_no} / ${row.part_no}를 정상(합격) 처리하시겠습니까?`))return;
-    setMsg('');
+  function renderSelected(){
+    if(!selectedGroup)return;
+    selectedRows=selectedGroup.rows;
+    flatLots=flattenSelectedRows(selectedRows);
+    $('qi-inbound-no').value=selectedGroup.inbound_no;
+    $('qi-selected').classList.add('show');
+    $('sel-kind').textContent=selectedGroup.source_name||'';
+    $('sel-no').textContent=selectedGroup.inbound_no||'';
+    $('sel-date').textContent=selectedGroup.inbound_date||'';
+    $('sel-partner').textContent=selectedGroup.partner_name||'';
+    $('sel-order').textContent=selectedGroup.order_no||'';
+    $('sel-status').textContent=selectedGroup.status_summary||'';
+    $('qi-save-all').disabled=false;
+
+    $('qi-main-head').innerHTML='<tr><th>No.</th><th class="partno">품번</th><th class="partname">품명</th><th class="location">저장위치</th><th class="lot">LOT NO</th><th>처리 가능 수량</th>'+
+      defectTypes.map(x=>`<th class="defect-col">${esc(x.name)}</th>`).join('')+'<th>불량합계</th><th>정상수량</th></tr>';
+
+    $('qi-main-body').innerHTML=flatLots.length?flatLots.map((x,i)=>`<tr data-index="${i}" data-item-id="${x.row.inbound_item_id}" data-lot="${esc(x.lot_no)}" data-lot-qty="${x.lot_qty}">
+      <td>${i+1}</td><td>${esc(x.row.part_no)}</td><td class="left">${esc(x.row.part_name)}</td><td>${esc(x.row.storage_location||'')}</td><td>${esc(x.lot_no)}</td>
+      <td class="num">${fmt(x.lot_qty)} ${esc(x.row.unit||'')}</td>
+      ${defectTypes.map(t=>`<td><input class="qi-defect-input" data-code="${esc(t.code)}" type="number" min="0" step="any" value="${x.detail.get(t.code)||''}" placeholder="0"></td>`).join('')}
+      <td class="num qi-lot-defect">0</td><td class="num qi-lot-good">${fmt(x.lot_qty)}</td>
+    </tr>`).join(''):'<tr><td colspan="8" class="qi-empty">LOT 정보가 없습니다.</td></tr>';
+    document.querySelectorAll('.qi-defect-input').forEach(el=>el.addEventListener('input',updateTotals));
+    updateTotals();
+  }
+
+  function lotPayloadFromTr(tr){
+    const defect_items=[...tr.querySelectorAll('.qi-defect-input')].map(el=>({defect_type_code:el.dataset.code,defect_qty:Number(el.value||0)})).filter(x=>Number.isFinite(x.defect_qty)&&x.defect_qty>0);
+    return {lot_no:tr.dataset.lot,lot_qty:Number(tr.dataset.lotQty||0),defect_items};
+  }
+
+  function updateTotals(){
+    let totalInbound=0,totalDefect=0;
+    document.querySelectorAll('#qi-main-body tr[data-index]').forEach(tr=>{
+      const lot=lotPayloadFromTr(tr), subtotal=lot.defect_items.reduce((s,x)=>s+x.defect_qty,0), qty=lot.lot_qty;
+      totalInbound+=qty;totalDefect+=subtotal;
+      tr.querySelector('.qi-lot-defect').textContent=fmt(subtotal);
+      tr.querySelector('.qi-lot-good').textContent=fmt(Math.max(qty-subtotal,0));
+      tr.querySelector('.qi-lot-defect').style.color=subtotal>qty?'#b91c1c':'';
+    });
+    $('sum-inbound').textContent=fmt(totalInbound);$('sum-defect').textContent=fmt(totalDefect);$('sum-good').textContent=fmt(Math.max(totalInbound-totalDefect,0));
+  }
+
+  async function saveAll(){
+    if(!selectedRows.length)return;
+    const trs=[...document.querySelectorAll('#qi-main-body tr[data-index]')];
+    const payloadByItem=new Map();
+    trs.forEach(tr=>{
+      const itemId=Number(tr.dataset.itemId), lot=lotPayloadFromTr(tr);
+      if(lot.defect_items.reduce((s,x)=>s+x.defect_qty,0)>lot.lot_qty)throw new Error(`${lot.lot_no} 불량합계가 처리 가능 수량을 초과합니다.`);
+      if(!payloadByItem.has(itemId))payloadByItem.set(itemId,[]);
+      payloadByItem.get(itemId).push({lot_no:lot.lot_no,defect_items:lot.defect_items});
+    });
+    if(!confirm(`${selectedGroup.inbound_no}의 LOT별 불량수량을 저장하시겠습니까?`))return;
+    $('qi-save-all').disabled=true;setMsg('');
     try{
-      await postResult(row,{defect_qty:0,defect_type_code:null,judgment:'PASS',remark:null});
-      setMsg(`${row.inbound_no} / ${row.part_no} 정상 처리했습니다.`,'ok');
-      await load();
-    }catch(e){setMsg(e.message,'error');}
-  }
-
-  function renderLotDefectTable(){
-    if(!selectedRow)return;
-    const lots=(selectedRow.lots||[]).filter(x=>x.lot_no);
-    const savedLots=new Map((selectedRow.defect_lots||[]).map(x=>[x.lot_no,x]));
-    const legacyItems=selectedRow.defect_items||[];
-    const firstLot=lots[0]?.lot_no||'';
-
-    $('qm-lot-head').innerHTML='<tr><th class="lot-col">LOT</th><th class="qty-col">LOT 수량</th>'+
-      defectTypes.map(x=>`<th class="defect-col">${esc(x.name)}</th>`).join('')+
-      '<th class="qty-col">불량합계</th><th class="qty-col">정상수량</th></tr>';
-
-    $('qm-lot-body').innerHTML=lots.map(lot=>{
-      const saved=savedLots.get(lot.lot_no);
-      const detailMap=new Map((saved?.defect_items||[]).map(x=>[x.defect_type_code,Number(x.defect_qty||0)]));
-      if(!saved && lot.lot_no===firstLot && !(selectedRow.defect_lots||[]).length){
-        legacyItems.forEach(x=>detailMap.set(x.defect_type_code,Number(x.defect_qty||0)));
+      for(const row of selectedRows){
+        const lots=payloadByItem.get(Number(row.inbound_item_id))||[];
+        const defectQty=lots.reduce((a,l)=>a+l.defect_items.reduce((s,x)=>s+x.defect_qty,0),0);
+        const body={defect_qty:defectQty,defect_type_code:null,defect_lots:lots,judgment:defectQty>0?'REJECT':'PASS',remark:row.quality_remark||null};
+        const rr=await fetch(`/api/quality/inbound-defects/${encodeURIComponent(row.source_type)}/${encodeURIComponent(row.inbound_item_id)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const dd=await rr.json();if(!rr.ok)throw new Error(dd.detail||'저장 실패');
       }
-      return `<tr data-lot="${esc(lot.lot_no)}" data-lot-qty="${Number(lot.lot_qty||0)}">
-        <td class="lot-col">${esc(lot.lot_no)}</td>
-        <td class="qty-col">${fmt(lot.lot_qty)}</td>
-        ${defectTypes.map(x=>`<td><input class="qm-lot-defect-input" data-code="${esc(x.code)}" type="number" min="0" step="any" value="${detailMap.get(x.code)||''}" placeholder="0"></td>`).join('')}
-        <td class="qty-col qi-lot-total">0</td>
-        <td class="qty-col qi-lot-good">${fmt(lot.lot_qty)}</td>
-      </tr>`;
-    }).join('');
-
-    document.querySelectorAll('.qm-lot-defect-input').forEach(el=>el.addEventListener('input',updateDefectSummary));
-    updateDefectSummary();
+      setMsg('LOT별 불량수량을 저장했습니다.','ok');
+      await reloadSelected();
+    }catch(e){setMsg(e.message,'error');}finally{$('qi-save-all').disabled=false;}
   }
 
-  function currentDefectLots(){
-    return [...document.querySelectorAll('#qm-lot-body tr[data-lot]')].map(tr=>{
-      const items=[...tr.querySelectorAll('.qm-lot-defect-input')].map(el=>({
-        defect_type_code:el.dataset.code,
-        defect_qty:Number(el.value||0)
-      })).filter(x=>Number.isFinite(x.defect_qty)&&x.defect_qty>0);
-      return {
-        lot_no:tr.dataset.lot,
-        lot_qty:Number(tr.dataset.lotQty||0),
-        defect_items:items
-      };
-    });
+  async function reloadSelected(){
+    if(!selectedGroup)return;
+    const p=new URLSearchParams({kind:selectedGroup.source_type,inbound_no:selectedGroup.inbound_no,limit:'2000'});
+    const r=await fetch('/api/quality/inbound-defects?'+p.toString());const d=await r.json();if(!r.ok)throw new Error(d.detail||'재조회 실패');
+    const groups=groupInboundRows((d.items||[]).filter(x=>x.inbound_no===selectedGroup.inbound_no&&x.source_type===selectedGroup.source_type));
+    if(groups.length){selectedGroup=groups[0];renderSelected();}
   }
 
-  function updateDefectSummary(){
-    if(!selectedRow)return;
-    const lots=currentDefectLots();
-    let defect=0;
-    document.querySelectorAll('#qm-lot-body tr[data-lot]').forEach((tr,index)=>{
-      const lot=lots[index];
-      const subtotal=(lot?.defect_items||[]).reduce((s,x)=>s+x.defect_qty,0);
-      const lotQty=Number(tr.dataset.lotQty||0);
-      defect+=subtotal;
-      tr.querySelector('.qi-lot-total').textContent=fmt(subtotal);
-      tr.querySelector('.qi-lot-good').textContent=fmt(Math.max(lotQty-subtotal,0));
-      tr.querySelector('.qi-lot-total').style.color=subtotal>lotQty?'#b91c1c':'';
-    });
-    const inbound=Number(selectedRow.inbound_qty||0);
-    $('qm-sum-inbound').textContent=fmt(inbound);
-    $('qm-sum-defect').textContent=fmt(defect);
-    $('qm-sum-good').textContent=fmt(Math.max(inbound-defect,0));
-    $('qm-sum-defect').style.color=defect>inbound?'#b91c1c':'';
+  function clearAll(){
+    selectedGroup=null;selectedRows=[];flatLots=[];$('qi-inbound-no').value='';$('qi-selected').classList.remove('show');$('qi-save-all').disabled=true;
+    $('qi-main-head').innerHTML='<tr><th>No.</th><th>품번</th><th>품명</th><th>저장위치</th><th>LOT NO</th><th>처리 가능 수량</th><th>불량합계</th><th>정상수량</th></tr>';
+    $('qi-main-body').innerHTML='<tr><td colspan="8" class="qi-empty">입고번호를 선택해 주세요.</td></tr>';
+    $('sum-inbound').textContent='0';$('sum-defect').textContent='0';$('sum-good').textContent='0';setMsg('');
   }
 
-  function openDefect(index){
-    selectedRow=currentRows[index]; if(!selectedRow)return;
-    $('qm-inbound-no').textContent=selectedRow.inbound_no||'';
-    $('qm-part-no').textContent=selectedRow.part_no||'';
-    $('qm-part-name').textContent=selectedRow.part_name||'';
-    $('qm-inbound-qty').textContent=`${fmt(selectedRow.inbound_qty)} ${selectedRow.unit||''}`;
-    $('qm-judgment').innerHTML=optionHtml(judgments,selectedRow.judgment||'REJECT','선택');
-    if(!selectedRow.judgment)$('qm-judgment').value='REJECT';
-    $('qm-remark').value=selectedRow.quality_remark||'';
-    renderLotDefectTable();
-    $('qi-defect-modal').classList.add('show');
-    const first=document.querySelector('.qm-lot-defect-input'); if(first)first.focus();
-  }
+  $('qi-open-search').addEventListener('click',openSearch);
+  $('qi-inbound-no').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();openSearch();}});
+  $('qi-clear').addEventListener('click',clearAll);
+  $('qi-save-all').addEventListener('click',()=>{try{saveAll().catch(e=>setMsg(e.message,'error'));}catch(e){setMsg(e.message,'error');}});
+  $('qp-close').addEventListener('click',closeSearch);$('qp-cancel').addEventListener('click',closeSearch);
+  $('qp-search').addEventListener('click',()=>searchPopup().catch(e=>alert(e.message)));
+  $('qp-reset').addEventListener('click',()=>{['qp-no','qp-start','qp-end','qp-partner','qp-part'].forEach(id=>$(id).value='');$('qp-kind').value='ALL';searchPopup().catch(e=>alert(e.message));});
+  ['qp-no','qp-partner','qp-part'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchPopup().catch(err=>alert(err.message));}}));
+  $('qp-body').addEventListener('click',e=>{const tr=e.target.closest('tr[data-index]');if(!tr)return;[...$('qp-body').querySelectorAll('tr')].forEach(x=>x.classList.remove('selected'));tr.classList.add('selected');selectedGroup=popupGroups[Number(tr.dataset.index)];$('qp-apply').disabled=false;});
+  $('qp-body').addEventListener('dblclick',e=>{const tr=e.target.closest('tr[data-index]');if(!tr)return;selectedGroup=popupGroups[Number(tr.dataset.index)];renderSelected();closeSearch();});
+  $('qp-apply').addEventListener('click',()=>{if(!selectedGroup)return;renderSelected();closeSearch();});
+  $('qi-search-popup').addEventListener('click',e=>{if(e.target===$('qi-search-popup'))closeSearch();});
 
-  function closeDefect(){selectedRow=null;$('qi-defect-modal').classList.remove('show');}
-
-  async function saveDefect(){
-    if(!selectedRow)return;
-    const lots=currentDefectLots();
-    const qty=lots.reduce((sum,lot)=>sum+lot.defect_items.reduce((s,x)=>s+x.defect_qty,0),0);
-    const invalidLot=lots.find(lot=>lot.defect_items.reduce((s,x)=>s+x.defect_qty,0)>Number(lot.lot_qty||0));
-    const judgment=$('qm-judgment').value;
-    const remark=$('qm-remark').value.trim();
-    if(qty<=0){alert('LOT별 불량수량을 1개 이상 입력해 주세요.');return;}
-    if(invalidLot){alert(`${invalidLot.lot_no}의 불량합계가 LOT 수량을 초과합니다.`);return;}
-    if(qty>Number(selectedRow.inbound_qty||0)){alert('전체 불량합계는 입고수량을 초과할 수 없습니다.');return;}
-    if(!judgment){alert('판정을 선택해 주세요.');return;}
-    try{
-      await postResult(selectedRow,{defect_qty:qty,defect_type_code:null,defect_lots:lots,judgment,remark:remark||null});
-      const inboundNo=selectedRow.inbound_no, partNo=selectedRow.part_no;
-      closeDefect();
-      setMsg(`${inboundNo} / ${partNo} 불량합계 ${fmt(qty)}를 저장했습니다.`,'ok');
-      await load();
-    }catch(e){alert(e.message);}
-  }
-
-  $('qi-body').addEventListener('click',e=>{
-    const normal=e.target.closest('.normal-row'); if(normal){saveNormal(Number(normal.dataset.index));return;}
-    const defect=e.target.closest('.defect-row'); if(defect){openDefect(Number(defect.dataset.index));}
-  });
-  $('qi-modal-close').addEventListener('click',closeDefect);
-  $('qi-modal-cancel').addEventListener('click',closeDefect);
-  $('qi-modal-save').addEventListener('click',saveDefect);
-  $('qi-defect-modal').addEventListener('click',e=>{if(e.target===$('qi-defect-modal'))closeDefect();});
-  $('qi-search').addEventListener('click',load);
-  $('qi-reset').addEventListener('click',()=>{['qi-start','qi-end','qi-inbound-no','qi-order-no','qi-partner','qi-part-no'].forEach(id=>$(id).value='');$('qi-kind').value='ALL';load();});
-  (async()=>{try{await loadOptions();await load();}catch(e){setMsg(e.message,'error');}})();
+  loadOptions().catch(e=>setMsg(e.message,'error'));
 })();
 </script>
 {% endblock %}
