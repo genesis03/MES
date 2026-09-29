@@ -3,6 +3,13 @@
 {% block extra_head %}
 <style>
 .qi-wrap h1{font-size:24px;margin:0 0 5px}.qi-sub{font-size:13px;color:#64748b;margin-bottom:14px}.qi-filter{display:flex;flex-wrap:wrap;gap:8px;align-items:end;background:#fff;border:1px solid #cbd5e1;border-radius:7px;padding:12px;margin-bottom:10px}.qi-field{display:flex;flex-direction:column;gap:4px}.qi-field label{font-size:11px;font-weight:700;color:#64748b}.qi-field input,.qi-field select{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px;min-width:130px;background:#fff}.qi-btn{height:34px;border:0;border-radius:4px;padding:0 14px;font-weight:700;cursor:pointer}.qi-primary{background:#2563eb;color:#fff}.qi-light{background:#e2e8f0;color:#334155}.qi-save{background:#0f766e;color:#fff}.qi-summary{display:flex;gap:18px;margin:10px 0;font-size:13px;font-weight:700;color:#475569}.qi-tablebox{background:#fff;border:1px solid #cbd5e1;border-radius:7px;overflow:auto}.qi-table{width:100%;border-collapse:collapse;min-width:1560px;font-size:12px}.qi-table th{background:#f1f5f9;padding:9px 7px;border-bottom:2px solid #cbd5e1;white-space:nowrap}.qi-table td{padding:7px;border-bottom:1px solid #e2e8f0;text-align:center;white-space:nowrap}.qi-table input,.qi-table select{height:30px;border:1px solid #cbd5e1;border-radius:4px;padding:0 6px;background:#fff}.qi-table .qty{width:92px;text-align:right}.qi-table .remark{width:180px}.qi-left{text-align:left!important}.badge{display:inline-block;border-radius:12px;padding:3px 8px;font-weight:700}.badge-general{background:#dbeafe;color:#1d4ed8}.badge-sub{background:#ede9fe;color:#6d28d9}.badge-wait{background:#fef3c7;color:#a16207}.badge-done{background:#dcfce7;color:#15803d}.badge-reject{background:#fee2e2;color:#b91c1c}.qi-empty{padding:36px!important;color:#94a3b8}.qi-msg{margin-top:8px;min-height:18px;font-size:12px;color:#64748b}.qi-msg.error{color:#dc2626}.qi-msg.ok{color:#15803d}
+.qi-actions{display:flex;gap:5px;justify-content:center}.qi-normal{background:#059669;color:#fff}.qi-defect{background:#dc2626;color:#fff}.qi-edit{background:#2563eb;color:#fff}
+.qi-modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);align-items:center;justify-content:center;z-index:1100}.qi-modal.show{display:flex}
+.qi-modal-box{width:min(620px,94vw);background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(15,23,42,.28);overflow:hidden}
+.qi-modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #e2e8f0}.qi-modal-head h2{font-size:16px;margin:0}
+.qi-modal-body{padding:14px 16px}.qi-info-grid{display:grid;grid-template-columns:110px 1fr 110px 1fr;gap:8px 10px;margin-bottom:14px}.qi-info-grid .label{color:#64748b;font-weight:700}.qi-info-grid .value{font-weight:700}
+.qi-form-grid{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center}.qi-form-grid input,.qi-form-grid select,.qi-form-grid textarea{border:1px solid #cbd5e1;border-radius:4px;padding:8px 10px;font:inherit}.qi-form-grid textarea{min-height:72px;resize:vertical}
+.qi-modal-foot{display:flex;justify-content:flex-end;gap:7px;padding:10px 16px;border-top:1px solid #e2e8f0}
 </style>
 {% endblock %}
 {% block content %}
@@ -26,6 +33,27 @@
   </tr></thead><tbody id="qi-body"><tr><td colspan="15" class="qi-empty">조회 중입니다...</td></tr></tbody></table></div>
   <div id="qi-msg" class="qi-msg"></div>
 </div>
+
+<div class="qi-modal" id="qi-defect-modal">
+  <div class="qi-modal-box">
+    <div class="qi-modal-head"><h2>불량 입력</h2><button class="qi-btn qi-light" type="button" id="qi-modal-close">닫기</button></div>
+    <div class="qi-modal-body">
+      <div class="qi-info-grid">
+        <div class="label">입고번호</div><div class="value" id="qm-inbound-no"></div>
+        <div class="label">품번</div><div class="value" id="qm-part-no"></div>
+        <div class="label">품명</div><div class="value" id="qm-part-name"></div>
+        <div class="label">입고수량</div><div class="value" id="qm-inbound-qty"></div>
+      </div>
+      <div class="qi-form-grid">
+        <label>불량수량 *</label><input id="qm-defect-qty" type="number" min="0" step="any">
+        <label>불량유형 *</label><select id="qm-defect-type"></select>
+        <label>판정 *</label><select id="qm-judgment"></select>
+        <label>비고</label><textarea id="qm-remark" maxlength="1000"></textarea>
+      </div>
+    </div>
+    <div class="qi-modal-foot"><button class="qi-btn qi-light" type="button" id="qi-modal-cancel">취소</button><button class="qi-btn qi-primary" type="button" id="qi-modal-save">저장</button></div>
+  </div>
+</div>
 {% endblock %}
 {% block extra_script %}
 <script>
@@ -33,7 +61,7 @@
   const $=id=>document.getElementById(id);
   const esc=v=>{const s=document.createElement('span');s.textContent=v??'';return s.innerHTML;};
   const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6});
-  let defectTypes=[]; let judgments=[]; let currentRows=[];
+  let defectTypes=[]; let judgments=[]; let currentRows=[]; let selectedRow=null;
 
   function statusBadge(row){
     const done=row.inspection_status==='COMPLETED';
@@ -42,6 +70,11 @@
   function optionHtml(list, selected, emptyLabel){
     const head=`<option value="">${esc(emptyLabel)}</option>`;
     return head+list.map(x=>`<option value="${esc(x.code)}" ${x.code===selected?'selected':''}>${esc(x.name)}</option>`).join('');
+  }
+  function judgmentBadge(row){
+    if(!row.judgment_name)return '';
+    const cls=row.judgment==='REJECT'?'badge-reject':(row.judgment==='PASS'?'badge-done':'badge-wait');
+    return `<span class="badge ${cls}">${esc(row.judgment_name)}</span>`;
   }
   function setMsg(text,type=''){$('qi-msg').className='qi-msg'+(type?' '+type:'');$('qi-msg').textContent=text||'';}
 
@@ -62,24 +95,77 @@
       if(!currentRows.length){$('qi-body').innerHTML='<tr><td colspan="15" class="qi-empty">조회 결과가 없습니다.</td></tr>';return;}
       $('qi-body').innerHTML=currentRows.map((x,i)=>{
         const sub=x.source_type==='SUBCONTRACT'; const rowId=`${x.source_type}-${x.inbound_item_id}`;
-        return `<tr data-row="${rowId}"><td>${i+1}</td><td><span class="badge ${sub?'badge-sub':'badge-general'}">${esc(x.source_name)}</span></td><td>${esc(x.inbound_date)}</td><td>${esc(x.inbound_no)}</td><td>${esc(x.order_no)}</td><td class="qi-left">${esc(x.partner_name)}</td><td>${esc(x.part_no)}</td><td class="qi-left">${esc(x.part_name)}</td><td>${fmt(x.inbound_qty)} ${esc(x.unit)}</td><td class="status-cell">${statusBadge(x)}</td><td><input class="qty defect-qty" type="number" min="0" max="${Number(x.inbound_qty||0)}" step="any" value="${Number(x.defect_qty||0)}"></td><td><select class="defect-type">${optionHtml(defectTypes,x.defect_type_code,'선택')}</select></td><td><select class="judgment">${optionHtml(judgments,x.judgment,'선택')}</select></td><td><input class="remark" value="${esc(x.quality_remark||'')}"></td><td><button class="qi-btn qi-save save-row" data-source="${x.source_type}" data-id="${x.inbound_item_id}">저장</button></td></tr>`;
+        const completed=x.inspection_status==='COMPLETED';
+        const actionLabel=completed?'수정':'불량입력';
+        return `<tr data-row="${rowId}"><td>${i+1}</td><td><span class="badge ${sub?'badge-sub':'badge-general'}">${esc(x.source_name)}</span></td><td>${esc(x.inbound_date)}</td><td>${esc(x.inbound_no)}</td><td>${esc(x.order_no)}</td><td class="qi-left">${esc(x.partner_name)}</td><td>${esc(x.part_no)}</td><td class="qi-left">${esc(x.part_name)}</td><td>${fmt(x.inbound_qty)} ${esc(x.unit)}</td><td class="status-cell">${statusBadge(x)}</td><td>${fmt(x.defect_qty||0)}</td><td>${esc(x.defect_type_name||'')}</td><td>${judgmentBadge(x)}</td><td class="qi-left">${esc(x.quality_remark||'')}</td><td><div class="qi-actions"><button class="qi-btn qi-normal normal-row" data-index="${i}" type="button">정상처리</button><button class="qi-btn ${completed?'qi-edit':'qi-defect'} defect-row" data-index="${i}" type="button">${actionLabel}</button></div></td></tr>`;
       }).join('');
     }catch(e){$('qi-body').innerHTML=`<tr><td colspan="15" class="qi-empty" style="color:#dc2626">${esc(e.message)}</td></tr>`;}
   }
 
-  async function saveRow(button){
-    const tr=button.closest('tr'); const source=button.dataset.source; const itemId=button.dataset.id;
-    const defectQty=Number(tr.querySelector('.defect-qty').value||0); const defectType=tr.querySelector('.defect-type').value; const judgment=tr.querySelector('.judgment').value; const remark=tr.querySelector('.remark').value.trim();
-    if(!judgment){setMsg('판정을 선택해 주십시오.','error');return;}
-    button.disabled=true; setMsg('');
-    try{
-      const r=await fetch(`/api/quality/inbound-defects/${encodeURIComponent(source)}/${encodeURIComponent(itemId)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({defect_qty:defectQty,defect_type_code:defectType||null,judgment,remark:remark||null})});
-      const d=await r.json(); if(!r.ok)throw new Error(d.detail||'저장 실패');
-      tr.querySelector('.status-cell').innerHTML=`<span class="badge badge-done">${esc(d.inspection_status_name)}</span>`; setMsg(`${tr.children[3].textContent} / ${tr.children[6].textContent} 품질 결과를 저장했습니다.`,'ok'); await load();
-    }catch(e){setMsg(e.message,'error');}finally{button.disabled=false;}
+  async function postResult(row,payload){
+    const r=await fetch(`/api/quality/inbound-defects/${encodeURIComponent(row.source_type)}/${encodeURIComponent(row.inbound_item_id)}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
+    });
+    const d=await r.json(); if(!r.ok)throw new Error(d.detail||'저장 실패');
+    return d;
   }
 
-  $('qi-body').addEventListener('click',e=>{const b=e.target.closest('.save-row');if(b)saveRow(b);});
+  async function saveNormal(index){
+    const row=currentRows[index]; if(!row)return;
+    if(!confirm(`${row.inbound_no} / ${row.part_no}를 정상(합격) 처리하시겠습니까?`))return;
+    setMsg('');
+    try{
+      await postResult(row,{defect_qty:0,defect_type_code:null,judgment:'PASS',remark:null});
+      setMsg(`${row.inbound_no} / ${row.part_no} 정상 처리했습니다.`,'ok');
+      await load();
+    }catch(e){setMsg(e.message,'error');}
+  }
+
+  function openDefect(index){
+    selectedRow=currentRows[index]; if(!selectedRow)return;
+    $('qm-inbound-no').textContent=selectedRow.inbound_no||'';
+    $('qm-part-no').textContent=selectedRow.part_no||'';
+    $('qm-part-name').textContent=selectedRow.part_name||'';
+    $('qm-inbound-qty').textContent=`${fmt(selectedRow.inbound_qty)} ${selectedRow.unit||''}`;
+    $('qm-defect-qty').max=String(Number(selectedRow.inbound_qty||0));
+    $('qm-defect-qty').value=Number(selectedRow.defect_qty||0)||'';
+    $('qm-defect-type').innerHTML=optionHtml(defectTypes,selectedRow.defect_type_code,'선택');
+    $('qm-judgment').innerHTML=optionHtml(judgments,selectedRow.judgment||'REJECT','선택');
+    if(!selectedRow.judgment)$('qm-judgment').value='REJECT';
+    $('qm-remark').value=selectedRow.quality_remark||'';
+    $('qi-defect-modal').classList.add('show');
+    $('qm-defect-qty').focus();
+  }
+
+  function closeDefect(){selectedRow=null;$('qi-defect-modal').classList.remove('show');}
+
+  async function saveDefect(){
+    if(!selectedRow)return;
+    const qty=Number($('qm-defect-qty').value||0);
+    const type=$('qm-defect-type').value;
+    const judgment=$('qm-judgment').value;
+    const remark=$('qm-remark').value.trim();
+    if(!Number.isFinite(qty)||qty<=0){alert('불량수량을 0보다 크게 입력해 주세요.');$('qm-defect-qty').focus();return;}
+    if(qty>Number(selectedRow.inbound_qty||0)){alert('불량수량은 입고수량을 초과할 수 없습니다.');return;}
+    if(!type){alert('불량유형을 선택해 주세요.');return;}
+    if(!judgment){alert('판정을 선택해 주세요.');return;}
+    try{
+      await postResult(selectedRow,{defect_qty:qty,defect_type_code:type,judgment,remark:remark||null});
+      const inboundNo=selectedRow.inbound_no, partNo=selectedRow.part_no;
+      closeDefect();
+      setMsg(`${inboundNo} / ${partNo} 불량 내용을 저장했습니다.`,'ok');
+      await load();
+    }catch(e){alert(e.message);}
+  }
+
+  $('qi-body').addEventListener('click',e=>{
+    const normal=e.target.closest('.normal-row'); if(normal){saveNormal(Number(normal.dataset.index));return;}
+    const defect=e.target.closest('.defect-row'); if(defect){openDefect(Number(defect.dataset.index));}
+  });
+  $('qi-modal-close').addEventListener('click',closeDefect);
+  $('qi-modal-cancel').addEventListener('click',closeDefect);
+  $('qi-modal-save').addEventListener('click',saveDefect);
+  $('qi-defect-modal').addEventListener('click',e=>{if(e.target===$('qi-defect-modal'))closeDefect();});
   $('qi-search').addEventListener('click',load);
   $('qi-reset').addEventListener('click',()=>{['qi-start','qi-end','qi-inbound-no','qi-order-no','qi-partner','qi-part-no'].forEach(id=>$(id).value='');$('qi-kind').value='ALL';load();});
   (async()=>{try{await loadOptions();await load();}catch(e){setMsg(e.message,'error');}})();
