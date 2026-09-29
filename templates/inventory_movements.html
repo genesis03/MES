@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}창고 이동{% endblock %}
+{% block extra_head %}
+<style>
+.mv-page{font-size:13px}.mv-page h1{font-size:22px;margin:0 0 6px}.mv-sub{color:#64748b;margin-bottom:14px}
+.mv-panel{background:#fff;border:1px solid #cbd5e1;border-radius:7px;margin-bottom:14px}
+.mv-panel-title{padding:10px 14px;border-bottom:1px solid #dbe3ec;font-weight:800}
+.mv-filter{display:grid;grid-template-columns:90px minmax(320px,620px) 100px 100px 1fr;gap:8px;align-items:center;padding:12px 14px}
+.mv-filter input,.mv-form input,.mv-form select,.mv-form textarea{border:1px solid #cbd5e1;border-radius:4px;padding:8px 10px;font:inherit;background:#fff}
+.mv-filter input{height:36px}.mv-btn{height:36px;border:0;border-radius:4px;padding:0 15px;font-weight:800;cursor:pointer}
+.mv-primary{background:#2563eb;color:#fff}.mv-light{background:#e2e8f0;color:#334155}.mv-green{background:#059669;color:#fff}
+.mv-summary{justify-self:end;color:#475569;font-weight:700}
+.mv-table-wrap{overflow:auto}.mv-table{width:100%;border-collapse:collapse;min-width:960px}
+.mv-table th,.mv-table td{border:1px solid #e2e8f0;padding:8px;text-align:center;white-space:nowrap}
+.mv-table th{background:#f1f5f9;color:#334155}.mv-table td.left{text-align:left}.mv-table td.num{text-align:right}
+.mv-empty{padding:30px!important;color:#94a3b8;text-align:center}
+.mv-modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000}
+.mv-modal.show{display:flex}.mv-box{width:min(580px,94vw);background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(15,23,42,.28);overflow:hidden}
+.mv-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #e2e8f0}
+.mv-head h2{font-size:16px}.mv-form{padding:14px 16px;display:grid;grid-template-columns:130px 1fr;gap:10px;align-items:center}
+.mv-form textarea{min-height:70px;resize:vertical}.mv-readonly{background:#f8fafc!important;color:#475569}
+.mv-foot{display:flex;justify-content:flex-end;gap:8px;padding:10px 16px;border-top:1px solid #e2e8f0}
+.mv-note{grid-column:1/-1;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:8px 10px;color:#1e40af;font-size:12px}
+</style>
+{% endblock %}
+{% block content %}
+<div class="mv-page">
+  <h1>창고 이동</h1>
+  <div class="mv-sub">LOT 잔량 전체의 저장위치만 이동합니다. 이동 수량은 수정할 수 없으며 LOT 수량과 재고조정 수량은 변경되지 않습니다.</div>
+
+  <div class="mv-panel">
+    <div class="mv-panel-title">조회 조건</div>
+    <div class="mv-filter">
+      <strong>품번 / LOT</strong>
+      <input id="mvKeyword" placeholder="품번 / 품명 / LOT 검색" autocomplete="off">
+      <button class="mv-btn mv-primary" id="mvSearch">조회</button>
+      <button class="mv-btn mv-light" id="mvReset">초기화</button>
+      <div class="mv-summary" id="mvSummary">총 0건</div>
+    </div>
+  </div>
+
+  <div class="mv-panel">
+    <div class="mv-panel-title">이동 가능 재고</div>
+    <div class="mv-table-wrap">
+      <table class="mv-table">
+        <thead><tr><th>No.</th><th>구분</th><th>품번</th><th>품명</th><th>LOT</th><th>현재 저장위치</th><th>현재재고</th><th>단위</th><th>이동</th></tr></thead>
+        <tbody id="mvBody"><tr><td colspan="9" class="mv-empty">조회해 주세요.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="mv-panel">
+    <div class="mv-panel-title">최근 이동 이력</div>
+    <div class="mv-table-wrap">
+      <table class="mv-table">
+        <thead><tr><th>일시</th><th>작업자</th><th>품번</th><th>LOT</th><th>기존 위치</th><th>신규 위치</th><th>이동수량</th><th>사유</th><th>비고</th></tr></thead>
+        <tbody id="mvHistBody"><tr><td colspan="9" class="mv-empty">이력이 없습니다.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="mv-modal" id="mvModal">
+  <div class="mv-box">
+    <div class="mv-head"><h2>LOT 전체 이동</h2><button class="mv-btn mv-light" id="mvClose" type="button">닫기</button></div>
+    <div class="mv-form">
+      <div class="mv-note">이동수량은 LOT 현재재고 전량으로 자동 적용됩니다. 부분 이동이나 수량 수정은 할 수 없습니다.</div>
+      <label>품번</label><input id="fPartNo" class="mv-readonly" readonly>
+      <label>LOT</label><input id="fLotNo" class="mv-readonly" readonly>
+      <label>현재 위치</label><input id="fFrom" class="mv-readonly" readonly>
+      <label>현재재고</label><input id="fQty" class="mv-readonly" readonly>
+      <label>이동 위치</label><select id="fTo"><option value="">선택</option></select>
+      <label>이동 사유</label>
+      <select id="fReason">
+        <option value="">선택</option>
+        <option value="창고정리">창고정리</option>
+        <option value="공정이동">공정이동</option>
+        <option value="보관위치 변경">보관위치 변경</option>
+        <option value="오입고 위치 정정">오입고 위치 정정</option>
+        <option value="기타">기타</option>
+      </select>
+      <label>비고</label><textarea id="fNote" maxlength="1000"></textarea>
+    </div>
+    <div class="mv-foot"><button class="mv-btn mv-light" id="mvCancel" type="button">취소</button><button class="mv-btn mv-green" id="mvSave" type="button">이동</button></div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:3});
+let currentRows=[], selected=null, locations=[];
+
+async function loadLocations(){
+  const r=await fetch('/api/inventory/movements/locations');
+  const d=await r.json();
+  if(!r.ok)throw new Error(d.detail||'저장위치 조회 실패');
+  locations=d.items||[];
+}
+
+async function loadLots(){
+  const q=new URLSearchParams();
+  const keyword=$('mvKeyword').value.trim();
+  if(keyword)q.set('keyword',keyword);
+  const r=await fetch('/api/inventory/movements/lots?'+q.toString());
+  const d=await r.json();
+  if(!r.ok)throw new Error(d.detail||'조회 실패');
+  currentRows=d.items||[];
+  $('mvSummary').textContent=`총 ${currentRows.length.toLocaleString()}건`;
+  $('mvBody').innerHTML=currentRows.length?currentRows.map((x,i)=>`<tr>
+    <td>${i+1}</td><td>${esc(x.source)}</td><td>${esc(x.part_no)}</td><td class="left">${esc(x.part_name)}</td>
+    <td>${esc(x.lot_no)}</td><td>${esc(x.storage_location||'미지정')}</td><td class="num"><strong>${fmt(x.current_qty)}</strong></td>
+    <td>${esc(x.unit)}</td><td><button class="mv-btn mv-primary" type="button" onclick="openMove(${i})">이동</button></td>
+  </tr>`).join(''):'<tr><td colspan="9" class="mv-empty">이동 가능한 재고가 없습니다.</td></tr>';
+}
+
+async function loadHistory(){
+  const r=await fetch('/api/inventory/movements/history?limit=100');
+  const d=await r.json();
+  if(!r.ok)throw new Error(d.detail||'이력 조회 실패');
+  const rows=d.items||[];
+  $('mvHistBody').innerHTML=rows.length?rows.map(x=>`<tr>
+    <td>${esc(x.created_at)}</td><td>${esc(x.created_by)}</td><td>${esc(x.part_no)}</td><td>${esc(x.lot_no)}</td>
+    <td>${esc(x.from_location||'미지정')}</td><td>${esc(x.to_location)}</td><td class="num">${fmt(x.moved_qty)}</td>
+    <td>${esc(x.reason)}</td><td class="left">${esc(x.note)}</td>
+  </tr>`).join(''):'<tr><td colspan="9" class="mv-empty">이동 이력이 없습니다.</td></tr>';
+}
+
+function openMove(index){
+  selected=currentRows[index];
+  if(!selected)return;
+  $('fPartNo').value=selected.part_no||'';
+  $('fLotNo').value=selected.lot_no||'';
+  $('fFrom').value=selected.storage_location||'미지정';
+  $('fQty').value=fmt(selected.current_qty)+' '+(selected.unit||'');
+  $('fTo').innerHTML='<option value="">선택</option>'+locations
+    .filter(x=>x.name!==(selected.storage_location||''))
+    .map(x=>`<option value="${esc(x.code)}">${esc(x.name)}</option>`).join('');
+  $('fReason').value='';
+  $('fNote').value='';
+  $('mvModal').classList.add('show');
+}
+
+function closeMove(){selected=null;$('mvModal').classList.remove('show');}
+
+async function saveMove(){
+  if(!selected)return;
+  const to=$('fTo').value;
+  const reason=$('fReason').value;
+  if(!to)return alert('이동할 저장위치를 선택해 주세요.');
+  if(!reason)return alert('이동 사유를 선택해 주세요.');
+  const target=locations.find(x=>x.code===to);
+  if(!confirm(`${selected.lot_no}의 현재재고 ${fmt(selected.current_qty)} ${selected.unit||''} 전량을 ${target?target.name:to}(으)로 이동하시겠습니까?`))return;
+  const r=await fetch('/api/inventory/movements',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({item_id:selected.item_id,lot_no:selected.lot_no,to_location:to,reason,note:$('fNote').value.trim()})
+  });
+  const d=await r.json();
+  if(!r.ok)throw new Error(d.detail||'창고 이동 실패');
+  closeMove();
+  await Promise.all([loadLots(),loadHistory()]);
+  alert(`이동 완료: ${d.lot_no} / ${d.from_location||'미지정'} → ${d.to_location}`);
+}
+
+$('mvSearch').addEventListener('click',()=>loadLots().catch(e=>alert(e.message)));
+$('mvReset').addEventListener('click',()=>{$('mvKeyword').value='';loadLots().catch(e=>alert(e.message));});
+$('mvKeyword').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadLots().catch(err=>alert(err.message));}});
+$('mvClose').addEventListener('click',closeMove);
+$('mvCancel').addEventListener('click',closeMove);
+$('mvSave').addEventListener('click',()=>saveMove().catch(e=>alert(e.message)));
+$('mvModal').addEventListener('click',e=>{if(e.target===$('mvModal'))closeMove();});
+Promise.all([loadLocations(),loadHistory()]).catch(e=>alert(e.message));
+</script>
+{% endblock %}
