@@ -30,6 +30,7 @@ from models.sales import SalesOrderMaster, SalesOrderItem, ShipmentMaster, Shipm
 from models.shipping_lot import ShippingLotRegistry
 from models.audit_log import AuditLogModel
 from models.inventory_adjustment import InventoryAdjustmentModel
+from models.inventory_movement import InventoryMovementModel
 from models.item_identity import ItemPartNoHistory, install_item_identity_events
 
 
@@ -76,7 +77,7 @@ __all__ = [
     "SubcontractInboundMaster", "SubcontractInboundItem", "SubcontractInboundLot",
     "PackingMaster", "PackingLotAllocation", "PackingBox",
     "SalesOrderMaster", "SalesOrderItem", "ShipmentMaster", "ShipmentItem", "ShipmentBox", "ShipmentDirectLot",
-    "ShippingLotRegistry", "AuditLogModel", "InventoryAdjustmentModel", "ItemPartNoHistory",
+    "ShippingLotRegistry", "AuditLogModel", "InventoryAdjustmentModel", "InventoryMovementModel", "ItemPartNoHistory",
     "QualityInboundResult",
     "QualityInspectionItemMaster", "QualityInboundStandard", "QualityInboundStandardItem",
     "Base",
