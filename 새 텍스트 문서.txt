@@ -1,0 +1,56 @@
+사이트 주소
+
+ssh -i "C:\문서\공유폴더\BarcodeApp\ssh-key-2026-09-02.key" ubuntu@129.225.159.7
+
+#해당 폴더로 가서
+docker compose up -d --build
+
+
+구분,대상 항목,파일 및 위치,수정 속성 및 권장 수치
+테이블 폰트,"항목명 (품 번, 수 량 등)",label_common.css → .col-header,font-size: 9pt ~ 10pt;
+,"본문 데이터 (품번 값, 날짜)",label_common.css → .col-value,font-size: 9pt ~ 10pt;
+,품명 텍스트 (1~2줄),label_common.css → .part-name-text,"font-size: 7.5pt;, line-height: 1.15;"
+,상호 ((주)유니코어텍),label_common.css → .company-table td,font-size: 10.5pt;
+테이블 행 높이,상단 본문 테이블 행 높이 고정,label_common.css → .data-table-main tr,height: 7.5mm !important;
+바코드 위치/여백,테이블과 바코드 사이 상단 여백,label_common.css → .barcode-section,"margin-top: 2.0mm; (늘리면 하강, 줄이면 상승)"
+바코드 크기,바코드 세로 높이,label_common.css → .barcode-svg,height: 19mm ~ 22mm;
+바코드 좌우 여백,콰이어트 존 (Quiet Zone),Code128Engine 스크립트,const quietZone = 10; (국제 표준 10X)
+하단 원산지,MADE IN KOREA 크기/위치,label_common.css → .origin-text,"font-size: 11pt;, margin-top: 1.5mm;"
+
+
+# 1. 상태 확인
+git status
+
+# 2. 수정된 모든 파일 스테이징
+git add .
+
+# 3. 커밋 메시지 작성
+git commit -m "Design: 라벨 폰트 및 바코드 여백 조정"
+
+# 4. 원격 저장소(GitHub)로 업로드
+git push origin main
+
+# 원격 저장소 최신 코드를 로컬로 병합
+git pull origin main
+
+# 한줄 명령어(app.py)
+git add app.py; git commit -m "app.py 경량화 및 엑셀 정렬 기능 반영"; git push
+
+# 로컬 파일은 남겨두고 Git 추적(GitHub)에서만 제거할 때
+git rm --cached "label_manual - 복사본.html"
+git commit -m "Remove: 백업 복사본 파일 추적 제외"
+git push origin main
+
+# 로컬 복사본 파일을 완전히 삭제할 때 (PowerShell)
+Remove-Item "label_manual - 복사본.html"
+
+# 현재 디렉토리의 모든 수정된 파일을 최신 커밋 상태로 복원
+git checkout HEAD -- .
+
+# 특정 파일만 복원할 때
+git checkout HEAD -- static/css/label_common.css
+
+
+HTML 태그 안에 style="margin-top: 10px;"와 같이 인라인 스타일이 직접 작성되어 있으면
+외부 CSS 파일 수정 수치가 덮어씌워지므로 태그 내 style=""을 우선 제거해야 합니다.
+
