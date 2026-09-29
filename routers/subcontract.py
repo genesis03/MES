@@ -23,6 +23,7 @@ from models.production_lot import ProductionLotModel
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from schemas.subcontract import LotAllocationInput, SubcontractOrderInput
 from services.production_lot_service import performance_id_from_lot_note
+from services.production_defect_service import active_production_defect_qty
 
 router = APIRouter(prefix="/api/subcontract", tags=["Subcontract"])
 
@@ -142,11 +143,13 @@ def _available_qty(
     if current_item_id:
         reserved_query = reserved_query.filter(SubcontractLotAllocation.order_item_id != current_item_id)
     reserved = reserved_query.scalar() or 0.0
+    defected = active_production_defect_qty(db, lot_no, source_item_id)
     return float(
         Decimal(str(base_qty))
         - Decimal(str(consumed_relation))
         - Decimal(str(consumed_process))
         - Decimal(str(reserved))
+        - Decimal(str(defected))
     )
 
 
