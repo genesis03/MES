@@ -206,11 +206,16 @@ def _source_lots(db: Session, source_type: str, item):
     if source_type == "GENERAL":
         lot_no = (item.internal_lot_no or item.supplier_lot_no or "").strip()
         lot_qty = float(item.inbound_qty or 0)
+        if not lot_no:
+            return []
+        available_qty = _available_qty(db, lot_no, lot_qty, item.item_id)
+        if available_qty <= 1e-9:
+            return []
         return [{
             "lot_no": lot_no,
             "lot_qty": lot_qty,
-            "available_qty": _available_qty(db, lot_no, lot_qty, item.item_id),
-        }] if lot_no else []
+            "available_qty": available_qty,
+        }]
 
     rows = (
         db.query(SubcontractInboundLot)
@@ -224,10 +229,13 @@ def _source_lots(db: Session, source_type: str, item):
         if not lot_no:
             continue
         lot_qty = float(row.good_qty or 0)
+        available_qty = _available_qty(db, lot_no, lot_qty, item.item_id)
+        if available_qty <= 1e-9:
+            continue
         result.append({
             "lot_no": lot_no,
             "lot_qty": lot_qty,
-            "available_qty": _available_qty(db, lot_no, lot_qty, item.item_id),
+            "available_qty": available_qty,
         })
     return result
 
@@ -387,8 +395,9 @@ def inbound_defect_list(
 
     if kind in ("ALL", "SUBCONTRACT"):
         query = (
-            db.query(SubcontractInboundMaster, SubcontractInboundItem)
+            db.query(SubcontractInboundMaster, SubcontractInboundItem, ItemMasterModel)
             .join(SubcontractInboundItem, SubcontractInboundItem.inbound_id == SubcontractInboundMaster.id)
+            .outerjoin(ItemMasterModel, ItemMasterModel.id == SubcontractInboundItem.item_id)
             .filter(SubcontractInboundMaster.status == "RECEIVED")
         )
         if start_date:
@@ -402,18 +411,19 @@ def inbound_defect_list(
         if partner_name:
             query = query.filter(SubcontractInboundMaster.partner_name.contains(partner_name.strip(), autoescape=True))
         if part_no:
-            query = query.filter(SubcontractInboundItem.part_no.contains(part_no.strip(), autoescape=True))
+            query = query.filter(ItemMasterModel.part_no.contains(part_no.strip(), autoescape=True))
 
         subcontract_rows = (
             query.order_by(SubcontractInboundMaster.inbound_date.desc(), SubcontractInboundMaster.id.desc(), SubcontractInboundItem.id)
             .limit(limit)
             .all()
         )
-        result_map = _quality_result_map(db, "SUBCONTRACT", [item.id for _, item in subcontract_rows])
+        result_map = _quality_result_map(db, "SUBCONTRACT", [item.id for _, item, _ in subcontract_rows])
         result_ids = [row.id for row in result_map.values()]
         detail_map = _defect_details_for_results(db, result_ids)
         lot_detail_map = _lot_defects_for_results(db, result_ids)
-        for master, item in subcontract_rows:
+        for master, item, product in subcontract_rows:
+            lots = _source_lots(db, "SUBCONTRACT", item)
             data = {
                 "source_type": "SUBCONTRACT",
                 "source_name": SOURCE_NAMES["SUBCONTRACT"],
@@ -424,13 +434,13 @@ def inbound_defect_list(
                 "order_no": master.order_no,
                 "partner_name": master.partner_name,
                 "item_id": item.item_id,
-                "part_no": item.part_no,
-                "part_name": item.part_name,
+                "part_no": product.part_no if product else item.part_no,
+                "part_name": product.part_name if product else item.part_name,
                 "inbound_qty": float(item.good_qty or 0),
                 "unit": item.unit,
                 "storage_location": storage_names.get(master.storage_location, master.storage_location or ""),
                 "note": item.note or master.note or "",
-                "lots": _source_lots(db, "SUBCONTRACT", item),
+                "lots": lots,
             }
             result = result_map.get(item.id)
             data.update(_result_fields(
