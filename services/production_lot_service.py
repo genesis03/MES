@@ -42,17 +42,22 @@ def _lot_prefix(performance: ProductionPerformance) -> str:
 
 
 def ensure_output_lot_for_performance(db, performance: ProductionPerformance) -> ProductionLotModel:
-    existing_rows = output_lots_for_performance(db, performance.id)
-    if existing_rows:
-        return existing_rows[0]
-
     order = db.get(ProductionWorkOrder, performance.work_order_id)
     if not order:
         raise RuntimeError(f"생산실적 {performance.id}의 작업지시를 찾을 수 없습니다.")
 
+    item = db.get(ItemMasterModel, order.item_id) if order.item_id else None
+    existing_rows = output_lots_for_performance(db, performance.id)
+    if existing_rows:
+        lot = existing_rows[0]
+        # 생산실적 LOT의 저장위치는 품목마스터 저장위치를 자동 사용합니다.
+        # 과거 LOT 중 위치가 비어 있는 경우에만 보강하여 창고이동/기존 이력을 덮어쓰지 않습니다.
+        if not (lot.storage_location or "").strip() and item and (item.inbound_loc or "").strip():
+            lot.storage_location = item.inbound_loc
+        return lot
+
     equipment = db.get(EquipmentMaster, performance.equipment_id) if performance.equipment_id else None
     machine_no = equipment.machine_no if equipment else 1
-    item = db.get(ItemMasterModel, order.item_id) if order.item_id else None
 
     lot_no = next_lot_no(
         db,
