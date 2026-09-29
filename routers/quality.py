@@ -13,6 +13,7 @@ from models.models import (
     PurchaseInboundMaster,
     PurchaseOrderItem,
     PurchaseOrderMaster,
+    StorageLocationModel,
 )
 from models.quality import QualityInboundDefectDetail, QualityInboundLotDefect, QualityInboundResult
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundLot, SubcontractInboundMaster
@@ -80,6 +81,14 @@ def _quality_result_map(db: Session, source_type: str, item_ids):
         .all()
     )
     return {row.inbound_item_id: row for row in rows}
+
+
+def _storage_name_map(db: Session):
+    return {
+        row.location_code: row.location_name
+        for row in db.query(StorageLocationModel).all()
+        if row.location_code
+    }
 
 
 def _defect_type_map(db: Session):
@@ -237,6 +246,7 @@ def inbound_defect_list(
     kind = _normalize_kind(kind)
     rows = []
     defect_names = _defect_type_map(db)
+    storage_names = _storage_name_map(db)
 
     if kind in ("ALL", "GENERAL"):
         query = (
@@ -284,6 +294,7 @@ def inbound_defect_list(
                 "part_name": product.part_name,
                 "inbound_qty": float(item.inbound_qty or 0),
                 "unit": item.unit,
+                "storage_location": storage_names.get(item.storage_location, item.storage_location or ""),
                 "note": item.note or master.note or "",
                 "lots": _source_lots(db, "GENERAL", item),
             }
@@ -340,6 +351,7 @@ def inbound_defect_list(
                 "part_name": item.part_name,
                 "inbound_qty": float(item.good_qty or 0),
                 "unit": item.unit,
+                "storage_location": storage_names.get(master.storage_location, master.storage_location or ""),
                 "note": item.note or master.note or "",
                 "lots": _source_lots(db, "SUBCONTRACT", item),
             }
