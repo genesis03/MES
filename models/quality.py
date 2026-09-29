@@ -40,3 +40,22 @@ class QualityInboundDefectDetail(Base):
     defect_qty = Column(Float, nullable=False, default=0.0)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+
+
+class QualityInboundLotDefect(Base):
+    __tablename__ = "quality_inbound_lot_defects"
+    __table_args__ = (
+        UniqueConstraint("result_id", "lot_no", "defect_type_code", name="uq_quality_inbound_lot_defect"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    result_id = Column(Integer, ForeignKey("quality_inbound_results.id"), nullable=False, index=True)
+    source_type = Column(String(20), nullable=False, index=True)
+    inbound_item_id = Column(Integer, nullable=False, index=True)
+    lot_no = Column(String(100), nullable=False, index=True)
+    lot_qty = Column(Float, nullable=False, default=0.0)
+    defect_type_code = Column(String(30), nullable=False, index=True)
+    defect_qty = Column(Float, nullable=False, default=0.0)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
