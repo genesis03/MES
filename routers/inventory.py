@@ -20,6 +20,7 @@ from models.packing import PackingLotAllocation, PackingMaster
 from models.production_lot import ProductionLotModel
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundLot, SubcontractInboundMaster
+from services.production_defect_service import active_production_defect_qty
 
 router = APIRouter(tags=["Inventory"])
 templates = Jinja2Templates(directory="templates")
@@ -107,7 +108,8 @@ def _used_qty(db: Session, lot_no: str, item_id: int | None = None) -> float:
         .scalar()
         or 0.0
     )
-    return float(consumed) + float(related) + float(packed) + float(subcontract_reserved) + float(sample_used)
+    defected = active_production_defect_qty(db, lot_no, item_id)
+    return float(consumed) + float(related) + float(packed) + float(subcontract_reserved) + float(sample_used) + float(defected)
 
 
 def _storage_name_map(db: Session) -> dict[str, str]:
