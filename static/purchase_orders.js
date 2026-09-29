@@ -328,6 +328,13 @@
   }
 
 
+  function resetOrderSearchFilters() {
+    ['po-search-number','po-search-start','po-search-end','po-search-partner','po-search-part'].forEach(id => { $(id).value = ''; });
+    $('po-search-status').value = '';
+    loadOrderSearch();
+    $('po-search-number').focus();
+  }
+
   function closeOrderSearch() {
     $('po-search-modal').hidden = true;
     selectedSearchOrderId = null;
@@ -406,7 +413,7 @@
   }
 
   function init() {
-    const required = ['po-form','po-date','po-vendor-query','po-vendor-options','po-manager','po-requested-date','po-number','po-number-search','po-state','po-note','po-add-row','po-new','po-save','po-lines','po-warehouse-template','po-location-template','po-message','po-search-modal','po-search-close-x','po-search-number','po-search-start','po-search-end','po-search-partner','po-search-part','po-search-status','po-search-submit','po-search-body','po-search-message','po-search-apply','po-search-close'];
+    const required = ['po-form','po-date','po-vendor-query','po-vendor-options','po-manager','po-requested-date','po-number','po-number-search','po-state','po-note','po-add-row','po-new','po-save','po-lines','po-warehouse-template','po-location-template','po-message','po-search-modal','po-search-close-x','po-search-number','po-search-start','po-search-end','po-search-partner','po-search-part','po-search-status','po-search-submit','po-search-reset','po-search-body','po-search-message','po-search-apply','po-search-close'];
     const missing = required.filter(id => !$(id));
     if (missing.length) {
       console.error('Purchase order UI missing elements:', missing);
@@ -419,6 +426,7 @@
     $('po-search-close').addEventListener('click', closeOrderSearch);
     $('po-search-modal').addEventListener('click', event => { if (event.target === $('po-search-modal')) closeOrderSearch(); });
     $('po-search-submit').addEventListener('click', loadOrderSearch);
+    $('po-search-reset').addEventListener('click', resetOrderSearchFilters);
     $('po-search-apply').addEventListener('click', () => applySearchOrder());
     ['po-search-number','po-search-start','po-search-end','po-search-partner','po-search-part'].forEach(id => $(id).addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); loadOrderSearch(); } }));
     $('po-vendor-query').addEventListener('input', resolveVendorFromInput);
