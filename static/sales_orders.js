@@ -259,6 +259,13 @@ async function loadOrder(orderId) {
 
 
 
+function resetOrderLookup() {
+  ['lookupOrderNo','lookupStart','lookupEnd','lookupCustomer'].forEach(id => { $(id).value = ''; });
+  $('lookupStatus').value = '';
+  loadOrderLookup();
+  $('lookupOrderNo').focus();
+}
+
 function closeOrderLookup() {
   $('orderLookupModal').classList.remove('show');
   selectedLookupOrderId = 0;
@@ -371,6 +378,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('orderLookupClose').addEventListener('click', closeOrderLookup);
   $('lookupClose2').addEventListener('click', closeOrderLookup);
   $('lookupSearchBtn').addEventListener('click', loadOrderLookup);
+  $('lookupResetBtn').addEventListener('click', resetOrderLookup);
   $('lookupApplyBtn').addEventListener('click', async()=>{ if(selectedLookupOrderId){ await loadOrder(selectedLookupOrderId); closeOrderLookup(); } });
   ['lookupOrderNo','lookupStart','lookupEnd','lookupCustomer'].forEach(id => $(id).addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();loadOrderLookup();} }));
   $('orderLookupModal').addEventListener('click',e=>{if(e.target===$('orderLookupModal'))closeOrderLookup();});
