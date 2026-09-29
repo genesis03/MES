@@ -37,7 +37,7 @@ def replace_shipping_records(db: Session, rows_data: list[dict]) -> None:
     기존 CSV 업로드와 MES 출고 선택이 동일한 shipping_master를 사용하므로
     바코드 출력/검증 등 하위 기존 기능은 변경하지 않고 같은 데이터를 계속 읽습니다.
     """
-    if DATABASE_URL:
+    if DATABASE_URL and DATABASE_URL.startswith(("postgresql://", "postgres://")):
         db.execute(text("TRUNCATE TABLE shipping_master RESTART IDENTITY;"))
     else:
         db.execute(text("DELETE FROM shipping_master;"))
