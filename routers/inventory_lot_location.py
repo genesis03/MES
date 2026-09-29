@@ -171,3 +171,81 @@ def inventory_lots_with_current_location(
         "selected_parts": selected,
         "stock_status": status,
     }
+
+
+@router.get("/api/inventory/status")
+def inventory_status(
+    q: Optional[str] = Query(None, max_length=100),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    keyword = str(q or "").strip().lower()
+    names = _storage_map(db)
+    grouped: dict[tuple[int, str], dict] = {}
+
+    item_query = db.query(ItemMasterModel)
+    if keyword:
+        item_query = item_query.filter(
+            (ItemMasterModel.part_no.ilike(f"%{keyword}%"))
+            | (ItemMasterModel.part_name.ilike(f"%{keyword}%"))
+        )
+    items = item_query.all()
+    item_map = {row.id: row for row in items}
+    item_ids = list(item_map)
+    if not item_ids:
+        return {"items": [], "total": 0, "stock_qty": 0.0}
+
+    def add_stock(item_id: int, lot_no: str, lot_qty: float, original_location: Optional[str]):
+        remaining = max(float(lot_qty or 0) - _used_qty(db, lot_no, item_id), 0.0)
+        if remaining <= 1e-9:
+            return
+        location_code = _current_storage(db, lot_no, original_location)
+        key = (int(item_id), str(location_code or ""))
+        item = item_map.get(item_id)
+        if item is None:
+            return
+        row = grouped.setdefault(
+            key,
+            {
+                "item_id": item.id,
+                "part_no": item.part_no,
+                "part_name": item.part_name or "",
+                "spec": item.spec or "",
+                "unit": item.unit or "EA",
+                "storage_location": _storage_display(location_code, names),
+                "lot_count": 0,
+                "stock_qty": 0.0,
+            },
+        )
+        row["lot_count"] += 1
+        row["stock_qty"] += remaining
+
+    purchase_rows = (
+        db.query(PurchaseInboundItem, PurchaseInboundMaster)
+        .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
+        .filter(
+            PurchaseInboundMaster.status == "CONFIRMED",
+            PurchaseInboundItem.item_id.in_(item_ids),
+            PurchaseInboundItem.internal_lot_no.isnot(None),
+            PurchaseInboundItem.internal_lot_no != "",
+        )
+        .all()
+    )
+    for item, _master in purchase_rows:
+        add_stock(item.item_id, item.internal_lot_no, item.inbound_qty, item.storage_location)
+
+    production_rows = (
+        db.query(ProductionLotModel)
+        .filter(
+            ProductionLotModel.item_id.in_(item_ids),
+            ProductionLotModel.status == "ACTIVE",
+        )
+        .all()
+    )
+    for lot in production_rows:
+        add_stock(lot.item_id, lot.lot_no, lot.lot_qty, lot.storage_location)
+
+    rows = list(grouped.values())
+    rows.sort(key=lambda row: (row["part_no"], row["storage_location"]))
+    total_qty = sum(float(row["stock_qty"] or 0) for row in rows)
+    return {"items": rows, "total": len(rows), "stock_qty": total_qty}
