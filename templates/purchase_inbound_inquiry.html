@@ -132,8 +132,11 @@ function renderInboundRows(rows){
         const typeBadge=isSub?'<span class="type-badge type-subcontract">외주가공</span>':'<span class="type-badge type-general">일반구매</span>';
         const editUrl=inboundEditUrl(x);
         const inspection=x.inspection_status||'';
+        const statusText=isSub
+          ? (x.status_name||'입고확정')
+          : (x.status==='DRAFT'?'임시저장':'입고확정');
         const note=isSub&&x.source_lot_no?`원 LOT: ${x.source_lot_no}${x.sample_qty?` / 샘플 ${Number(x.sample_qty).toLocaleString()}`:''}${x.note?` / ${x.note}`:''}`:(x.note||'');
-        return `<tr${rowAttr}><td><div class="select-cell">${checkbox}</div></td><td>${index+1}</td><td>${typeBadge}</td><td><a class="doc-link" href="${editUrl}">${escInbound(x.inbound_no)}</a></td><td>${escInbound(x.inbound_date)}</td><td><span class="status-badge ${statusClass(x.status)}">${escInbound(x.status_name||({DRAFT:'임시저장',CONFIRMED:'입고확정',CANCELLED:'입고취소'}[x.status]||x.status||''))}</span></td><td>${escInbound(x.po_no)}</td><td class="left">${escInbound(x.partner_name)}</td><td>${escInbound(x.part_no)}</td><td class="left">${escInbound(x.part_name)}</td><td class="left">${escInbound(x.spec)}</td><td>${Number(x.inbound_qty||0).toLocaleString()}</td><td>${escInbound(x.unit)}</td><td class="lot">${escInbound(x.supplier_lot_no)}</td><td class="lot">${escInbound(x.internal_lot_no)}</td><td>${escInbound(x.warehouse_code)}</td><td>${escInbound(x.storage_location)}</td><td>${escInbound(inspection)}</td><td class="left">${escInbound(note)}</td></tr>`;
+        return `<tr${rowAttr}><td><div class="select-cell">${checkbox}</div></td><td>${index+1}</td><td>${typeBadge}</td><td><a class="doc-link" href="${editUrl}">${escInbound(x.inbound_no)}</a></td><td>${escInbound(x.inbound_date)}</td><td><span class="status-badge ${statusClass(x.status)}">${escInbound(statusText)}</span></td><td>${escInbound(x.po_no)}</td><td class="left">${escInbound(x.partner_name)}</td><td>${escInbound(x.part_no)}</td><td class="left">${escInbound(x.part_name)}</td><td class="left">${escInbound(x.spec)}</td><td>${Number(x.inbound_qty||0).toLocaleString()}</td><td>${escInbound(x.unit)}</td><td class="lot">${escInbound(x.supplier_lot_no)}</td><td class="lot">${escInbound(x.internal_lot_no)}</td><td>${escInbound(x.warehouse_code)}</td><td>${escInbound(x.storage_location)}</td><td>${escInbound(inspection)}</td><td class="left">${escInbound(note)}</td></tr>`;
     }).join('');
 }
 
