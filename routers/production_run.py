@@ -19,6 +19,7 @@ from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunDefect, ProductionRunLotAllocation, ProductionRunMaterial
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundLot, SubcontractInboundMaster
+from services.production_defect_service import active_production_defect_qty
 from models.worker import WorkerMaster, WorkerProcess
 
 router = APIRouter(prefix="/api/production-run", tags=["Production Run"])
@@ -184,6 +185,7 @@ def _available_qty(
     if item_id:
         adjustment_query = adjustment_query.filter(InventoryAdjustmentModel.item_id == item_id)
     adjustment_qty = adjustment_query.scalar() or 0.0
+    defected = active_production_defect_qty(db, lot_no, item_id)
     return max(
         float(base_qty)
         - float(consumed_process)
@@ -192,6 +194,7 @@ def _available_qty(
         - float(reserved_subcontract)
         - float(sample_used)
         - float(reserved_run)
+        - float(defected)
         + float(adjustment_qty),
         0.0,
     )
