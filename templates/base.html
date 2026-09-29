@@ -368,6 +368,7 @@
                     <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
                     <li class="submenu-item"><a href="/quality/inbound-defects" id="nav-quality-inbound-defects">입고 품목 불량 처리</a></li>
                     <li class="submenu-item"><a href="/quality/production-defects" id="nav-quality-production-defects">생산 LOT 불량 처리</a></li>
+                    <li class="submenu-item"><a href="/quality/defect-status" id="nav-quality-defect-status">불량 현황</a></li>
                 </ul>
             </li>
             {% endif %}
@@ -565,7 +566,8 @@
                 "/quality/inspection-items": "nav-quality-inspection-items",
                 "/quality/inbound-standards": "nav-quality-inbound-standards",
                 "/quality/inbound-defects": "nav-quality-inbound-defects",
-                "/quality/production-defects": "nav-quality-production-defects"
+                "/quality/production-defects": "nav-quality-production-defects",
+                "/quality/defect-status": "nav-quality-defect-status"
             };
             const activeNavId = routeMap[currentPath];
             if (activeNavId) {
