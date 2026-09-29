@@ -479,6 +479,40 @@
             {% endif %}
         }
 
+        {% if user %}
+        const MES_IDLE_USERNAME = {{ (user.username or '') | tojson }};
+        const MES_IDLE_MINUTES = {{ 20 if (user.role|string|lower) == 'admin' else 30 }};
+        const MES_IDLE_TIMEOUT_MS = MES_IDLE_MINUTES * 60 * 1000;
+        const MES_IDLE_STORAGE_KEY = `mes:last-activity:${MES_IDLE_USERNAME}`;
+        let mesLastActivityWrite = 0;
+
+        function mesRecordActivity(force = false) {
+            const now = Date.now();
+            if (!force && now - mesLastActivityWrite < 5000) return;
+            mesLastActivityWrite = now;
+            localStorage.setItem(MES_IDLE_STORAGE_KEY, String(now));
+        }
+
+        function mesCheckIdleTimeout() {
+            const raw = Number(localStorage.getItem(MES_IDLE_STORAGE_KEY) || 0);
+            if (!raw) {
+                mesRecordActivity(true);
+                return;
+            }
+            if (Date.now() - raw >= MES_IDLE_TIMEOUT_MS) {
+                window.location.replace('/logout');
+            }
+        }
+
+        function initIdleLogout() {
+            ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'].forEach(eventName => {
+                window.addEventListener(eventName, () => mesRecordActivity(false), {passive:true});
+            });
+            mesCheckIdleTimeout();
+            setInterval(mesCheckIdleTimeout, 15000);
+        }
+        {% endif %}
+
         function applyMenuAccess() {
             {% if user and user.role != "ADMIN" %}
             const menuAccess = window.MES_MENU_ACCESS || {};
@@ -512,6 +546,9 @@
         }
 
         document.addEventListener("DOMContentLoaded", function() {
+            {% if user %}
+            initIdleLogout();
+            {% endif %}
             applyMenuAccess();
             applyReadOnlyMode();
             const currentPath = window.location.pathname;
