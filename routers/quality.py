@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -14,7 +14,7 @@ from models.models import (
     PurchaseOrderItem,
     PurchaseOrderMaster,
 )
-from models.quality import QualityInboundResult
+from models.quality import QualityInboundDefectDetail, QualityInboundResult
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundMaster
 
 router = APIRouter(prefix="/api/quality", tags=["Quality"])
@@ -34,9 +34,15 @@ SOURCE_NAMES = {
 }
 
 
+class QualityDefectItemPayload(BaseModel):
+    defect_type_code: str = Field(min_length=1, max_length=30)
+    defect_qty: float = Field(gt=0)
+
+
 class QualityResultPayload(BaseModel):
     defect_qty: float = Field(default=0, ge=0)
     defect_type_code: Optional[str] = Field(default=None, max_length=30)
+    defect_items: Optional[List[QualityDefectItemPayload]] = None
     judgment: str = Field(max_length=20)
     remark: Optional[str] = Field(default=None, max_length=1000)
 
@@ -83,16 +89,49 @@ def _defect_type_map(db: Session):
     return {row.code: row.code_name for row in rows}
 
 
-def _result_fields(result, fallback_status, defect_names):
+def _defect_details_for_results(db: Session, result_ids):
+    if not result_ids:
+        return {}
+    rows = (
+        db.query(QualityInboundDefectDetail)
+        .filter(QualityInboundDefectDetail.result_id.in_(result_ids))
+        .order_by(QualityInboundDefectDetail.id.asc())
+        .all()
+    )
+    grouped = {}
+    for row in rows:
+        grouped.setdefault(row.result_id, []).append(row)
+    return grouped
+
+
+def _result_fields(result, fallback_status, defect_names, detail_rows=None):
     inspection_status = result.inspection_status if result else (fallback_status or "WAITING")
     judgment = result.judgment if result else ""
     defect_type_code = result.defect_type_code if result else ""
+    details = []
+    if result:
+        for row in (detail_rows or []):
+            details.append({
+                "defect_type_code": row.defect_type_code,
+                "defect_type_name": defect_names.get(row.defect_type_code, row.defect_type_code),
+                "defect_qty": float(row.defect_qty or 0),
+            })
+        if not details and float(result.defect_qty or 0) > 0 and defect_type_code:
+            details.append({
+                "defect_type_code": defect_type_code,
+                "defect_type_name": defect_names.get(defect_type_code, defect_type_code),
+                "defect_qty": float(result.defect_qty or 0),
+            })
+    summary = " / ".join(
+        f"{row['defect_type_name']} {row['defect_qty']:g}" for row in details if row["defect_qty"] > 0
+    )
     return {
         "inspection_status": inspection_status,
         "inspection_status_name": INSPECTION_STATUS_NAMES.get(inspection_status, inspection_status),
         "defect_qty": float(result.defect_qty or 0) if result else 0,
         "defect_type_code": defect_type_code or "",
-        "defect_type_name": defect_names.get(defect_type_code, "") if defect_type_code else "",
+        "defect_type_name": summary or (defect_names.get(defect_type_code, "") if defect_type_code else ""),
+        "defect_items": details,
         "judgment": judgment or "",
         "judgment_name": JUDGMENT_NAMES.get(judgment, judgment) if judgment else "",
         "quality_remark": result.remark or "" if result else "",
@@ -165,6 +204,7 @@ def inbound_defect_list(
             .all()
         )
         result_map = _quality_result_map(db, "GENERAL", [item.id for _, item, _, _ in general_rows])
+        detail_map = _defect_details_for_results(db, [row.id for row in result_map.values()])
         for master, item, po_no, product in general_rows:
             data = {
                 "source_type": "GENERAL",
@@ -182,7 +222,8 @@ def inbound_defect_list(
                 "unit": item.unit,
                 "note": item.note or master.note or "",
             }
-            data.update(_result_fields(result_map.get(item.id), item.inspection_status, defect_names))
+            result = result_map.get(item.id)
+            data.update(_result_fields(result, item.inspection_status, defect_names, detail_map.get(result.id, []) if result else []))
             rows.append(data)
 
     if kind in ("ALL", "SUBCONTRACT"):
@@ -210,6 +251,7 @@ def inbound_defect_list(
             .all()
         )
         result_map = _quality_result_map(db, "SUBCONTRACT", [item.id for _, item in subcontract_rows])
+        detail_map = _defect_details_for_results(db, [row.id for row in result_map.values()])
         for master, item in subcontract_rows:
             data = {
                 "source_type": "SUBCONTRACT",
@@ -227,7 +269,8 @@ def inbound_defect_list(
                 "unit": item.unit,
                 "note": item.note or master.note or "",
             }
-            data.update(_result_fields(result_map.get(item.id), "WAITING", defect_names))
+            result = result_map.get(item.id)
+            data.update(_result_fields(result, "WAITING", defect_names, detail_map.get(result.id, []) if result else []))
             rows.append(data)
 
     rows.sort(key=lambda row: (row["inbound_date"], row["inbound_no"], row["inbound_item_id"]), reverse=True)
@@ -270,24 +313,34 @@ def save_inbound_defect_result(
     judgment = payload.judgment.strip().upper()
     if judgment not in JUDGMENT_NAMES:
         raise HTTPException(422, "지원하지 않는 판정값입니다.")
-    if payload.defect_qty > inbound_qty:
-        raise HTTPException(422, "불량수량은 입고수량을 초과할 수 없습니다.")
 
-    defect_type_code = (payload.defect_type_code or "").strip() or None
-    if payload.defect_qty > 0 and not defect_type_code:
-        raise HTTPException(422, "불량수량이 있으면 불량유형을 선택해야 합니다.")
-    if defect_type_code:
-        valid_code = (
-            db.query(CommonCodeModel)
-            .filter(
-                CommonCodeModel.group_code == "DEFECT_TYPE",
-                CommonCodeModel.code == defect_type_code,
-                CommonCodeModel.is_active == "Y",
-            )
-            .first()
-        )
-        if not valid_code:
-            raise HTTPException(422, "등록되지 않았거나 사용 중지된 불량유형입니다.")
+    detail_payload = payload.defect_items or []
+    if detail_payload:
+        merged = {}
+        for row in detail_payload:
+            code = row.defect_type_code.strip()
+            merged[code] = merged.get(code, 0.0) + float(row.defect_qty)
+        defect_items = [{"code": code, "qty": qty} for code, qty in merged.items() if qty > 0]
+        defect_qty = sum(row["qty"] for row in defect_items)
+    else:
+        defect_qty = float(payload.defect_qty or 0)
+        code = (payload.defect_type_code or "").strip()
+        defect_items = [{"code": code, "qty": defect_qty}] if defect_qty > 0 and code else []
+
+    if defect_qty > inbound_qty:
+        raise HTTPException(422, "불량수량 합계는 입고수량을 초과할 수 없습니다.")
+    if defect_qty > 0 and not defect_items:
+        raise HTTPException(422, "불량수량이 있으면 불량유형을 입력해야 합니다.")
+
+    valid_codes = {
+        row.code for row in db.query(CommonCodeModel).filter(
+            CommonCodeModel.group_code == "DEFECT_TYPE",
+            CommonCodeModel.is_active == "Y",
+        ).all()
+    }
+    invalid = [row["code"] for row in defect_items if row["code"] not in valid_codes]
+    if invalid:
+        raise HTTPException(422, "등록되지 않았거나 사용 중지된 불량유형입니다: " + ", ".join(invalid))
 
     result = (
         db.query(QualityInboundResult)
@@ -304,14 +357,27 @@ def save_inbound_defect_result(
             inbound_item_id=inbound_item_id,
         )
         db.add(result)
+        db.flush()
 
     result.inbound_id = master.id
     result.inspection_status = "COMPLETED"
-    result.defect_qty = float(payload.defect_qty)
-    result.defect_type_code = defect_type_code
+    result.defect_qty = float(defect_qty)
+    result.defect_type_code = defect_items[0]["code"] if len(defect_items) == 1 else None
     result.judgment = judgment
     result.remark = (payload.remark or "").strip() or None
     result.updated_by = _current_user_name(current_user)
+
+    db.query(QualityInboundDefectDetail).filter(
+        QualityInboundDefectDetail.result_id == result.id
+    ).delete(synchronize_session=False)
+    for row in defect_items:
+        db.add(QualityInboundDefectDetail(
+            result_id=result.id,
+            source_type=source_type,
+            inbound_item_id=inbound_item_id,
+            defect_type_code=row["code"],
+            defect_qty=float(row["qty"]),
+        ))
 
     if source_type == "GENERAL":
         item.inspection_status = "COMPLETED"
@@ -322,6 +388,7 @@ def save_inbound_defect_result(
         "message": "입고 품질 결과를 저장했습니다.",
         "inspection_status": result.inspection_status,
         "inspection_status_name": INSPECTION_STATUS_NAMES[result.inspection_status],
+        "defect_qty": result.defect_qty,
         "judgment": result.judgment,
         "judgment_name": JUDGMENT_NAMES[result.judgment],
     }
