@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from models.equipment import EquipmentMaster
+from models.inventory_adjustment import InventoryAdjustmentModel
 from models.lot_consumption import LotConsumptionModel
 from models.lot_relation import LotRelationModel
 from models.packing import PackingLotAllocation, PackingMaster
@@ -177,6 +178,12 @@ def _available_qty(
     if current_run_id:
         run_query = run_query.filter(ProductionRun.id != current_run_id)
     reserved_run = run_query.scalar() or 0.0
+    adjustment_query = db.query(func.coalesce(func.sum(InventoryAdjustmentModel.adjustment_qty), 0.0)).filter(
+        InventoryAdjustmentModel.lot_no == lot_no
+    )
+    if item_id:
+        adjustment_query = adjustment_query.filter(InventoryAdjustmentModel.item_id == item_id)
+    adjustment_qty = adjustment_query.scalar() or 0.0
     return max(
         float(base_qty)
         - float(consumed_process)
@@ -184,7 +191,8 @@ def _available_qty(
         - float(packed)
         - float(reserved_subcontract)
         - float(sample_used)
-        - float(reserved_run),
+        - float(reserved_run)
+        + float(adjustment_qty),
         0.0,
     )
 
