@@ -25,7 +25,7 @@
       <div id="msg" class="qm-msg"></div>
     </div>
     <div class="qm-card">
-      <div class="qm-search"><input id="keyword" placeholder="코드 / 검사항목 / 검사방법"><button class="qm-btn primary" id="search-btn">조회</button></div>
+      <div class="qm-search"><input id="keyword" placeholder="코드 / 검사항목 / 검사방법"><button class="qm-btn primary" id="search-btn">조회</button><button class="qm-btn light" id="reset-btn">초기화</button></div>
       <table class="qm-table"><thead><tr><th>순서</th><th>코드</th><th>검사항목</th><th>검사방법</th><th>단위</th><th>유형</th><th>사용</th></tr></thead><tbody id="body"></tbody></table>
     </div>
   </div>
@@ -43,7 +43,7 @@ async function load(){const p=new URLSearchParams();if($('keyword').value.trim()
 function payload(){return{item_code:$('item-code').value.trim(),item_name:$('item-name').value.trim(),inspection_method:$('inspection-method').value.trim()||null,default_unit:$('default-unit').value.trim()||null,data_type:$('data-type').value,sort_order:Number($('sort-order').value||1),is_active:$('is-active').value,note:$('note').value.trim()||null};}
 $('save-btn').onclick=async()=>{try{const id=$('row-id').value;const r=await fetch(id?`/api/quality/inspection-items/${id}`:'/api/quality/inspection-items',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())});const d=await r.json();if(!r.ok)throw new Error(d.detail||'저장 실패');fill(d);msg('저장했습니다.','ok');await load();}catch(e){msg(e.message,'error')}};
 $('delete-btn').onclick=async()=>{const id=$('row-id').value;if(!id||!confirm('이 검사항목을 삭제하시겠습니까?'))return;try{const r=await fetch(`/api/quality/inspection-items/${id}`,{method:'DELETE'});const d=await r.json();if(!r.ok)throw new Error(d.detail||'삭제 실패');clearForm();msg(d.message,'ok');await load();}catch(e){msg(e.message,'error')}};
-$('new-btn').onclick=clearForm;$('search-btn').onclick=()=>load().catch(e=>msg(e.message,'error'));
+$('new-btn').onclick=clearForm;$('search-btn').onclick=()=>load().catch(e=>msg(e.message,'error'));$('reset-btn').onclick=()=>{$('keyword').value='';load().catch(e=>msg(e.message,'error'));$('keyword').focus();};
 $('body').onclick=e=>{const tr=e.target.closest('tr[data-id]');if(!tr)return;const x=rows.find(v=>String(v.id)===tr.dataset.id);if(x)fill(x)};
 load().catch(e=>msg(e.message,'error'));
 })();
