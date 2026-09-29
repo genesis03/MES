@@ -100,7 +100,7 @@
   const $=id=>document.getElementById(id);
   const esc=v=>{const s=document.createElement('span');s.textContent=v??'';return s.innerHTML;};
   const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6});
-  let defectTypes=[], popupGroups=[], selectedGroup=null, selectedRows=[], flatLots=[];
+  let defectTypes=[], popupGroups=[], popupSelected=null, selectedGroup=null, selectedRows=[], flatLots=[];
 
   function dateOffset(days){const d=new Date();d.setDate(d.getDate()+days);return d.toISOString().slice(0,10);}
   function setMsg(text,type=''){$('qi-msg').className='qi-msg'+(type?' '+type:'');$('qi-msg').textContent=text||'';}
@@ -137,7 +137,7 @@
     const r=await fetch('/api/quality/inbound-defects?'+p.toString()); const d=await r.json();
     if(!r.ok)throw new Error(d.detail||'입고 조회 실패');
     popupGroups=groupInboundRows(d.items||[]);
-    selectedGroup=null;$('qp-apply').disabled=true;
+    popupSelected=null;$('qp-apply').disabled=true;
     $('qp-body').innerHTML=popupGroups.length?popupGroups.map((g,i)=>`<tr data-index="${i}">
       <td>${esc(g.source_name)}</td><td>${esc(g.inbound_no)}</td><td>${esc(g.inbound_date)}</td><td>${esc(g.partner_name)}</td>
       <td>${esc(g.order_no)}</td><td style="text-align:left">${esc(g.part_summary)}</td><td style="text-align:right">${fmt(g.inbound_qty)}</td><td>${esc(g.status_summary)}</td>
@@ -151,7 +151,7 @@
     $('qi-search-popup').classList.add('show');
     searchPopup().catch(e=>alert(e.message));
   }
-  function closeSearch(){$('qi-search-popup').classList.remove('show');selectedGroup=null;$('qp-apply').disabled=true;}
+  function closeSearch(){$('qi-search-popup').classList.remove('show');popupSelected=null;$('qp-apply').disabled=true;}
 
   function flattenSelectedRows(rows){
     const result=[];
@@ -261,9 +261,9 @@
   $('qp-search').addEventListener('click',()=>searchPopup().catch(e=>alert(e.message)));
   $('qp-reset').addEventListener('click',()=>{['qp-no','qp-start','qp-end','qp-partner','qp-part'].forEach(id=>$(id).value='');$('qp-kind').value='ALL';searchPopup().catch(e=>alert(e.message));});
   ['qp-no','qp-partner','qp-part'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchPopup().catch(err=>alert(err.message));}}));
-  $('qp-body').addEventListener('click',e=>{const tr=e.target.closest('tr[data-index]');if(!tr)return;[...$('qp-body').querySelectorAll('tr')].forEach(x=>x.classList.remove('selected'));tr.classList.add('selected');selectedGroup=popupGroups[Number(tr.dataset.index)];$('qp-apply').disabled=false;});
-  $('qp-body').addEventListener('dblclick',e=>{const tr=e.target.closest('tr[data-index]');if(!tr)return;selectedGroup=popupGroups[Number(tr.dataset.index)];renderSelected();closeSearch();});
-  $('qp-apply').addEventListener('click',()=>{if(!selectedGroup)return;renderSelected();closeSearch();});
+  $('qp-body').addEventListener('click',e=>{const tr=e.target.closest('tr[data-index]');if(!tr)return;[...$('qp-body').querySelectorAll('tr')].forEach(x=>x.classList.remove('selected'));tr.classList.add('selected');popupSelected=popupGroups[Number(tr.dataset.index)];$('qp-apply').disabled=false;});
+  $('qp-body').addEventListener('dblclick',e=>{const tr=e.target.closest('tr[data-index]');if(!tr)return;popupSelected=popupGroups[Number(tr.dataset.index)];selectedGroup=popupSelected;renderSelected();closeSearch();});
+  $('qp-apply').addEventListener('click',()=>{if(!popupSelected)return;selectedGroup=popupSelected;renderSelected();closeSearch();});
   $('qi-search-popup').addEventListener('click',e=>{if(e.target===$('qi-search-popup'))closeSearch();});
 
   loadOptions().catch(e=>setMsg(e.message,'error'));
