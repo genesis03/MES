@@ -38,6 +38,18 @@ INBOUND_STATUS_NAMES = {
 }
 
 
+def _normalized_inbound_status(value: Optional[str]) -> str:
+    code = str(value or "").strip().upper()
+    # 과거 일반구매 입고 데이터 중 상태 공란이 있는 레코드는
+    # 실제 입고가 생성된 건이므로 확정 입고로 정규화합니다.
+    return code or "CONFIRMED"
+
+
+def _normalized_inbound_status_name(value: Optional[str]) -> str:
+    code = _normalized_inbound_status(value)
+    return INBOUND_STATUS_NAMES.get(code, code)
+
+
 def _warehouse_name_map(db: Session) -> dict[str, str]:
     return {
         row.warehouse_code: row.warehouse_name
@@ -206,7 +218,14 @@ def inquiry_inbounds(
     if status:
         if status not in INBOUND_STATUS_NAMES:
             raise HTTPException(422, "지원하지 않는 구매 상태입니다.")
-        query = query.filter(PurchaseInboundMaster.status == status)
+        if status == "CONFIRMED":
+            query = query.filter(or_(
+                PurchaseInboundMaster.status == "CONFIRMED",
+                PurchaseInboundMaster.status == "",
+                PurchaseInboundMaster.status.is_(None),
+            ))
+        else:
+            query = query.filter(PurchaseInboundMaster.status == status)
 
     total = query.count()
     rows = (
@@ -239,8 +258,8 @@ def inquiry_inbounds(
                 "storage_location": _display_name(item.storage_location, storage_map),
                 "inspection_status": item.inspection_status,
                 "note": item.note or master.note or "",
-                "status": master.status,
-                "status_name": INBOUND_STATUS_NAMES.get(master.status, master.status),
+                "status": _normalized_inbound_status(master.status),
+                "status_name": _normalized_inbound_status_name(master.status),
             }
             for master, item, linked_po_no, product in rows
         ],
