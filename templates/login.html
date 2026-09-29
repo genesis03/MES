@@ -118,6 +118,7 @@
             const data = await res.json();
 
             if (res.ok && data.status === "success") {
+                localStorage.setItem(`mes:last-activity:${data.username || username}`, String(Date.now()));
                 window.location.href = "/shipping";
             } else {
                 errorDiv.innerText = data.detail || "로그인 정보가 올바르지 않습니다.";
