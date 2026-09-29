@@ -1,11 +1,13 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import get_current_user
+from models.inventory_adjustment import InventoryAdjustmentModel
 from models.lot_consumption import LotConsumptionModel
 from models.lot_relation import LotRelationModel
 from models.models import ItemMasterModel, PurchaseInboundItem, PurchaseInboundMaster, StorageLocationModel
@@ -16,6 +18,14 @@ from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboun
 from models.subcontract_outbound import SubcontractOutboundItem, SubcontractOutboundLot, SubcontractOutboundMaster
 
 router = APIRouter(tags=["Inventory LOT Location"])
+
+
+class InventoryAdjustmentInput(BaseModel):
+    item_id: int
+    lot_no: str = Field(min_length=1, max_length=100)
+    after_qty: float = Field(ge=0)
+    reason: str = Field(min_length=1, max_length=100)
+    note: Optional[str] = Field(None, max_length=1000)
 
 
 def _used_qty(db: Session, lot_no: str, item_id: int | None = None) -> float:
@@ -48,6 +58,15 @@ def _used_qty(db: Session, lot_no: str, item_id: int | None = None) -> float:
         or 0.0
     )
     return float(consumed) + float(related) + float(packed) + float(subcontract_reserved) + float(sample_used)
+
+
+def _adjustment_qty(db: Session, lot_no: str, item_id: int | None = None) -> float:
+    query = db.query(func.coalesce(func.sum(InventoryAdjustmentModel.adjustment_qty), 0.0)).filter(
+        InventoryAdjustmentModel.lot_no == lot_no
+    )
+    if item_id:
+        query = query.filter(InventoryAdjustmentModel.item_id == item_id)
+    return float(query.scalar() or 0.0)
 
 
 def _storage_map(db: Session) -> dict[str, str]:
@@ -131,7 +150,7 @@ def inventory_lots_with_current_location(
             "source": "구매입고", "item_id": item.item_id, "part_no": part.part_no if part else item.part_no, "part_name": part.part_name if part else "",
             "lot_no": item.internal_lot_no,
             "created_at": master.created_at.strftime("%Y-%m-%d %H:%M:%S") if master.created_at else master.inbound_date,
-            "lot_qty": qty, "used_qty": used, "remaining_qty": max(qty - used, 0.0),
+            "lot_qty": qty, "used_qty": used, "adjustment_qty": _adjustment_qty(db, item.internal_lot_no, item.item_id), "remaining_qty": max(qty - used + _adjustment_qty(db, item.internal_lot_no, item.item_id), 0.0),
             "storage_location": _storage_display(_current_storage(db, item.internal_lot_no, item.storage_location), names),
         })
 
@@ -152,7 +171,7 @@ def inventory_lots_with_current_location(
             "source": "생산", "item_id": lot.item_id, "part_no": part.part_no if part else lot.part_no, "part_name": part.part_name if part else "",
             "lot_no": lot.lot_no,
             "created_at": lot.created_at.strftime("%Y-%m-%d %H:%M:%S") if lot.created_at else "",
-            "lot_qty": qty, "used_qty": used, "remaining_qty": max(qty - used, 0.0),
+            "lot_qty": qty, "used_qty": used, "adjustment_qty": _adjustment_qty(db, lot.lot_no, lot.item_id), "remaining_qty": max(qty - used + _adjustment_qty(db, lot.lot_no, lot.item_id), 0.0),
             "storage_location": _storage_display(_current_storage(db, lot.lot_no, lot.storage_location), names),
         })
 
@@ -196,7 +215,7 @@ def inventory_status(
         return {"items": [], "total": 0, "stock_qty": 0.0}
 
     def add_stock(item_id: int, lot_no: str, lot_qty: float, original_location: Optional[str]):
-        remaining = max(float(lot_qty or 0) - _used_qty(db, lot_no, item_id), 0.0)
+        remaining = max(float(lot_qty or 0) - _used_qty(db, lot_no, item_id) + _adjustment_qty(db, lot_no, item_id), 0.0)
         if remaining <= 1e-9:
             return
         location_code = _current_storage(db, lot_no, original_location)
@@ -249,3 +268,205 @@ def inventory_status(
     rows.sort(key=lambda row: (row["part_no"], row["storage_location"]))
     total_qty = sum(float(row["stock_qty"] or 0) for row in rows)
     return {"items": rows, "total": len(rows), "stock_qty": total_qty}
+
+
+def _lot_base_info(db: Session, item_id: int, lot_no: str):
+    purchase = (
+        db.query(PurchaseInboundItem, PurchaseInboundMaster)
+        .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
+        .filter(
+            PurchaseInboundMaster.status == "CONFIRMED",
+            PurchaseInboundItem.item_id == item_id,
+            PurchaseInboundItem.internal_lot_no == lot_no,
+        )
+        .first()
+    )
+    if purchase:
+        item, _master = purchase
+        return float(item.inbound_qty or 0), item.storage_location, "구매입고"
+
+    lot = (
+        db.query(ProductionLotModel)
+        .filter(
+            ProductionLotModel.item_id == item_id,
+            ProductionLotModel.lot_no == lot_no,
+            ProductionLotModel.status == "ACTIVE",
+        )
+        .one_or_none()
+    )
+    if lot:
+        return float(lot.lot_qty or 0), lot.storage_location, "생산"
+    return None
+
+
+@router.get("/api/inventory/adjustments/lots")
+def inventory_adjustment_lots(
+    keyword: Optional[str] = Query(None, max_length=100),
+    limit: int = Query(200, ge=1, le=1000),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    q = str(keyword or "").strip()
+    names = _storage_map(db)
+    item_query = db.query(ItemMasterModel)
+    if q:
+        item_query = item_query.filter(
+            or_(
+                ItemMasterModel.part_no.ilike(f"%{q}%"),
+                ItemMasterModel.part_name.ilike(f"%{q}%"),
+            )
+        )
+    items = item_query.limit(limit).all()
+    item_map = {row.id: row for row in items}
+    item_ids = list(item_map)
+
+    rows = []
+    if item_ids:
+        purchase_rows = (
+            db.query(PurchaseInboundItem, PurchaseInboundMaster)
+            .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
+            .filter(
+                PurchaseInboundMaster.status == "CONFIRMED",
+                PurchaseInboundItem.item_id.in_(item_ids),
+                PurchaseInboundItem.internal_lot_no.isnot(None),
+                PurchaseInboundItem.internal_lot_no != "",
+            )
+            .all()
+        )
+        for item, master in purchase_rows:
+            if q and q.lower() not in str(item.internal_lot_no or "").lower():
+                part = item_map.get(item.item_id)
+                if part and q.lower() not in part.part_no.lower() and q.lower() not in (part.part_name or "").lower():
+                    continue
+            base_qty = float(item.inbound_qty or 0)
+            used_qty = _used_qty(db, item.internal_lot_no, item.item_id)
+            adjustment_qty = _adjustment_qty(db, item.internal_lot_no, item.item_id)
+            current_qty = max(base_qty - used_qty + adjustment_qty, 0.0)
+            part = item_map.get(item.item_id)
+            rows.append({
+                "source": "구매입고",
+                "item_id": item.item_id,
+                "part_no": part.part_no if part else item.part_no,
+                "part_name": part.part_name if part else "",
+                "lot_no": item.internal_lot_no,
+                "storage_location": _storage_display(_current_storage(db, item.internal_lot_no, item.storage_location), names),
+                "current_qty": current_qty,
+                "unit": part.unit if part else item.unit,
+                "created_at": master.inbound_date,
+            })
+
+        production_rows = (
+            db.query(ProductionLotModel)
+            .filter(ProductionLotModel.item_id.in_(item_ids), ProductionLotModel.status == "ACTIVE")
+            .all()
+        )
+        for lot in production_rows:
+            if q and q.lower() not in str(lot.lot_no or "").lower():
+                part = item_map.get(lot.item_id)
+                if part and q.lower() not in part.part_no.lower() and q.lower() not in (part.part_name or "").lower():
+                    continue
+            base_qty = float(lot.lot_qty or 0)
+            used_qty = _used_qty(db, lot.lot_no, lot.item_id)
+            adjustment_qty = _adjustment_qty(db, lot.lot_no, lot.item_id)
+            current_qty = max(base_qty - used_qty + adjustment_qty, 0.0)
+            part = item_map.get(lot.item_id)
+            rows.append({
+                "source": "생산",
+                "item_id": lot.item_id,
+                "part_no": part.part_no if part else lot.part_no,
+                "part_name": part.part_name if part else "",
+                "lot_no": lot.lot_no,
+                "storage_location": _storage_display(_current_storage(db, lot.lot_no, lot.storage_location), names),
+                "current_qty": current_qty,
+                "unit": part.unit if part else "EA",
+                "created_at": lot.created_at.strftime("%Y-%m-%d") if lot.created_at else "",
+            })
+
+    rows.sort(key=lambda row: (row["part_no"], row["lot_no"]))
+    return {"items": rows[:limit], "total": min(len(rows), limit)}
+
+
+@router.post("/api/inventory/adjustments")
+def create_inventory_adjustment(
+    payload: InventoryAdjustmentInput,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    lot_no = payload.lot_no.strip()
+    item = db.get(ItemMasterModel, payload.item_id)
+    if item is None:
+        raise HTTPException(404, "품목을 찾을 수 없습니다.")
+
+    base = _lot_base_info(db, payload.item_id, lot_no)
+    if base is None:
+        raise HTTPException(404, "조정할 LOT를 찾을 수 없습니다.")
+    base_qty, original_location, _source = base
+    current_qty = max(
+        base_qty - _used_qty(db, lot_no, payload.item_id) + _adjustment_qty(db, lot_no, payload.item_id),
+        0.0,
+    )
+    after_qty = float(payload.after_qty)
+    adjustment_qty = after_qty - current_qty
+    if abs(adjustment_qty) <= 1e-9:
+        raise HTTPException(422, "현재 재고와 조정 후 재고가 같습니다.")
+
+    location_code = _current_storage(db, lot_no, original_location)
+    row = InventoryAdjustmentModel(
+        item_id=item.id,
+        part_no=item.part_no,
+        lot_no=lot_no,
+        storage_location=location_code or None,
+        before_qty=current_qty,
+        adjustment_qty=adjustment_qty,
+        after_qty=after_qty,
+        reason=payload.reason.strip(),
+        note=(payload.note or "").strip() or None,
+        created_by=getattr(current_user, "username", None),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {
+        "id": row.id,
+        "item_id": row.item_id,
+        "part_no": row.part_no,
+        "lot_no": row.lot_no,
+        "before_qty": row.before_qty,
+        "adjustment_qty": row.adjustment_qty,
+        "after_qty": row.after_qty,
+        "reason": row.reason,
+        "created_by": row.created_by,
+        "created_at": row.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
+    }
+
+
+@router.get("/api/inventory/adjustments/history")
+def inventory_adjustment_history(
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    rows = (
+        db.query(InventoryAdjustmentModel)
+        .order_by(InventoryAdjustmentModel.created_at.desc(), InventoryAdjustmentModel.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return {
+        "items": [
+            {
+                "id": row.id,
+                "part_no": row.part_no,
+                "lot_no": row.lot_no,
+                "storage_location": _storage_display(row.storage_location, _storage_map(db)),
+                "before_qty": row.before_qty,
+                "adjustment_qty": row.adjustment_qty,
+                "after_qty": row.after_qty,
+                "reason": row.reason,
+                "note": row.note or "",
+                "created_by": row.created_by or "",
+                "created_at": row.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
+            }
+            for row in rows
+        ]
+    }
