@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Float, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 
 from core.database import Base
 
@@ -21,5 +21,22 @@ class QualityInboundResult(Base):
     judgment = Column(String(20), nullable=True)
     remark = Column(Text, nullable=True)
     updated_by = Column(String(50), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+
+
+class QualityInboundDefectDetail(Base):
+    __tablename__ = "quality_inbound_defect_details"
+    __table_args__ = (
+        UniqueConstraint("result_id", "defect_type_code", name="uq_quality_inbound_defect_result_type"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    result_id = Column(Integer, ForeignKey("quality_inbound_results.id"), nullable=False, index=True)
+    source_type = Column(String(20), nullable=False, index=True)
+    inbound_item_id = Column(Integer, nullable=False, index=True)
+    defect_type_code = Column(String(30), nullable=False, index=True)
+    defect_qty = Column(Float, nullable=False, default=0.0)
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
