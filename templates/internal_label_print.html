@@ -11,15 +11,15 @@
 .internal-label-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9pt}
 .internal-label-table td{border-bottom:1px solid #111;border-right:1px solid #111;padding:.85mm 1mm;vertical-align:middle;height:5.4mm;box-sizing:border-box}
 .internal-label-table td:last-child{border-right:0}
-.internal-label-table .k{width:18%;font-weight:900;text-align:center;white-space:nowrap}
+.internal-label-table col.c1{width:16%}
+.internal-label-table col.c2{width:45%}
+.internal-label-table col.c3{width:5%}
+.internal-label-table col.c4{width:34%}
+.internal-label-table .k{font-weight:900;text-align:center;white-space:nowrap}
 .internal-label-table .v{font-weight:800}
 .internal-label-table .wide{font-size:8.5pt;overflow:hidden}
-.internal-label-table .half-k{width:16%;font-weight:900;text-align:center;white-space:nowrap}
-.internal-label-table .half-v{width:34%;font-weight:800;overflow:hidden}
-.internal-label-table tr:nth-child(3) td:nth-child(2),
-.internal-label-table tr:nth-child(4) td:nth-child(2){width:45%}
-.internal-label-table tr:nth-child(3) td:nth-child(3),
-.internal-label-table tr:nth-child(4) td:nth-child(3){width:5%}
+.internal-label-table .half-k{font-weight:900;text-align:center;white-space:nowrap}
+.internal-label-table .half-v{font-weight:800;overflow:hidden}
 .internal-extra{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #111}
 .internal-extra div{border-right:1px solid #111;text-align:center;padding:.75mm .5mm;font-size:8pt}
 .internal-extra div:last-child{border-right:0}
@@ -48,7 +48,9 @@ function render(){
     const extra=(row.extras||[]).length?`<div class="internal-extra">${row.extras.map(x=>`<div>${esc(x.label)}<b>${fmt(x.value)}</b></div>`).join('')}</div>`:'';
     return `<section class="internal-label-page"><div class="internal-label-box">
       <div class="internal-label-title">${esc(row.title)}</div>
-      <table class="internal-label-table"><tbody>
+      <table class="internal-label-table">
+        <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
+        <tbody>
         <tr><td class="k">품번</td><td class="v" colspan="3">${esc(row.part_no)}</td></tr>
         <tr><td class="k">품명</td><td class="v wide" colspan="3">${esc(row.part_name)}</td></tr>
         <tr><td class="half-k">LOT</td><td class="half-v">${esc(row.lot_no)}</td><td class="half-k">수량</td><td class="half-v">${fmt(row.qty)} ${esc(row.unit)}</td></tr>
