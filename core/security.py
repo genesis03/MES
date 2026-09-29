@@ -32,8 +32,10 @@ class MockAdminUser:
         return f"<MockAdminUser {self.username}>"
 
 
-# 환경변수 우선 적용 (미설정 시 개발용 기본 시크릿 유지)
+# 환경변수 우선 적용 (미설정 시 개발용 기본값 유지)
 SECRET_KEY = os.getenv("SECRET_KEY", "unicore-cloud-secret-key-2026")
+DEFAULT_ADMIN_PASSWORD = os.getenv("DEFAULT_ADMIN_PASSWORD", "admin1234")
+DEFAULT_USER_PASSWORD = os.getenv("DEFAULT_USER_PASSWORD", "user1234")
 
 # 기본 권한 체계 정의 (계층형 세부 권한 구조)
 DEFAULT_PERMISSIONS = {
@@ -334,7 +336,7 @@ def init_default_accounts(db: Optional[Session] = None) -> None:
         if not admin_user:
             admin_data = {
                 "username": "admin",
-                "password_hash": hash_password("admin1234"),
+                "password_hash": hash_password(DEFAULT_ADMIN_PASSWORD),
                 "role": "admin",
                 "created_at": now_str,
             }
@@ -350,7 +352,7 @@ def init_default_accounts(db: Optional[Session] = None) -> None:
         if not regular_user:
             user_data = {
                 "username": "user",
-                "password_hash": hash_password("user1234"),
+                "password_hash": hash_password(DEFAULT_USER_PASSWORD),
                 "role": "user",
                 "created_at": now_str,
             }
