@@ -367,6 +367,7 @@
                     <li class="submenu-item"><a href="/quality/inbound-standards" id="nav-quality-inbound-standards">품번별 입고검사 기준서</a></li>
                     <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
                     <li class="submenu-item"><a href="/quality/inbound-defects" id="nav-quality-inbound-defects">입고 품목 불량 처리</a></li>
+                    <li class="submenu-item"><a href="/quality/production-defects" id="nav-quality-production-defects">생산 LOT 불량 처리</a></li>
                 </ul>
             </li>
             {% endif %}
@@ -563,7 +564,8 @@
                 "/inventory/lot-usage-trace": "nav-inventory-lot-usage-trace",
                 "/quality/inspection-items": "nav-quality-inspection-items",
                 "/quality/inbound-standards": "nav-quality-inbound-standards",
-                "/quality/inbound-defects": "nav-quality-inbound-defects"
+                "/quality/inbound-defects": "nav-quality-inbound-defects",
+                "/quality/production-defects": "nav-quality-production-defects"
             };
             const activeNavId = routeMap[currentPath];
             if (activeNavId) {
