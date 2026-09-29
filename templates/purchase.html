@@ -91,7 +91,7 @@
         <div class="po-search-field"><label>거래처</label><input id="po-search-partner"></div>
         <div class="po-search-field"><label>품번</label><input id="po-search-part"></div>
         <div class="po-search-field"><label>상태</label><select id="po-search-status"><option value="">전체</option><option value="ORDERED">발주완료</option><option value="PARTIAL">부분입고</option><option value="COMPLETED">입고완료</option><option value="CANCELLED">취소</option></select></div>
-        <div class="po-search-actions"><button class="po-btn po-btn-primary" type="button" id="po-search-submit">조회</button></div>
+        <div class="po-search-actions"><button class="po-btn po-btn-primary" type="button" id="po-search-submit">조회</button><button class="po-btn" type="button" id="po-search-reset">초기화</button></div>
       </div>
       <table class="po-search-table mes-popup-table"><thead><tr><th>발주번호</th><th>거래처</th><th>발주일</th><th>상태</th><th>품목수</th></tr></thead><tbody id="po-search-body"><tr><td colspan="5">조회 중...</td></tr></tbody></table>
       <div id="po-search-message" class="po-lookup-hint" style="margin-top:8px"></div>
@@ -101,4 +101,4 @@
 </div>
 
 {% endblock %}
-{% block extra_script %}<script src="/static/purchase_orders.js?v=20260923-2"></script>{% endblock %}
+{% block extra_script %}<script src="/static/purchase_orders.js?v=20260928-3"></script>{% endblock %}
