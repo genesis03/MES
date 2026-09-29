@@ -2,6 +2,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -15,7 +16,12 @@ from models.models import (
     PurchaseOrderMaster,
     StorageLocationModel,
 )
+from models.inventory_adjustment import InventoryAdjustmentModel
+from models.lot_consumption import LotConsumptionModel
+from models.lot_relation import LotRelationModel
+from models.packing import PackingLotAllocation, PackingMaster
 from models.quality import QualityInboundDefectDetail, QualityInboundLotDefect, QualityInboundResult
+from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundLot, SubcontractInboundMaster
 
 router = APIRouter(prefix="/api/quality", tags=["Quality"])
@@ -134,10 +140,77 @@ def _lot_defects_for_results(db: Session, result_ids):
     return grouped
 
 
+def _used_qty(db: Session, lot_no: str, item_id: int | None = None) -> float:
+    consumed = (
+        db.query(func.coalesce(func.sum(LotConsumptionModel.consumed_qty), 0.0))
+        .filter(LotConsumptionModel.lot_no == lot_no)
+        .scalar()
+        or 0.0
+    )
+    related = (
+        db.query(func.coalesce(func.sum(LotRelationModel.consumed_qty), 0.0))
+        .filter(LotRelationModel.parent_lot_no == lot_no)
+        .scalar()
+        or 0.0
+    )
+    packed = (
+        db.query(func.coalesce(func.sum(PackingLotAllocation.allocated_qty), 0.0))
+        .join(PackingMaster, PackingMaster.id == PackingLotAllocation.packing_id)
+        .filter(
+            PackingLotAllocation.source_lot_no == lot_no,
+            PackingMaster.status == "PACKED",
+        )
+        .scalar()
+        or 0.0
+    )
+    subcontract_query = (
+        db.query(func.coalesce(func.sum(SubcontractLotAllocation.allocated_qty), 0.0))
+        .join(SubcontractOrderItem, SubcontractOrderItem.id == SubcontractLotAllocation.order_item_id)
+        .join(SubcontractOrderMaster, SubcontractOrderMaster.id == SubcontractOrderItem.order_id)
+        .filter(
+            SubcontractLotAllocation.lot_no == lot_no,
+            SubcontractOrderMaster.status.in_(["DRAFT", "LOT_ALLOCATING", "ORDERED"]),
+        )
+    )
+    if item_id:
+        subcontract_query = subcontract_query.filter(SubcontractOrderItem.previous_item_id == item_id)
+    subcontract_reserved = subcontract_query.scalar() or 0.0
+    sample_used = (
+        db.query(func.coalesce(func.sum(SubcontractInboundLot.sample_qty), 0.0))
+        .join(SubcontractInboundItem, SubcontractInboundItem.id == SubcontractInboundLot.inbound_item_id)
+        .join(SubcontractInboundMaster, SubcontractInboundMaster.id == SubcontractInboundItem.inbound_id)
+        .filter(
+            SubcontractInboundMaster.status == "RECEIVED",
+            SubcontractInboundLot.child_lot_no == lot_no,
+        )
+        .scalar()
+        or 0.0
+    )
+    return float(consumed) + float(related) + float(packed) + float(subcontract_reserved) + float(sample_used)
+
+
+def _adjustment_qty(db: Session, lot_no: str, item_id: int | None = None) -> float:
+    query = db.query(func.coalesce(func.sum(InventoryAdjustmentModel.adjustment_qty), 0.0)).filter(
+        InventoryAdjustmentModel.lot_no == lot_no
+    )
+    if item_id:
+        query = query.filter(InventoryAdjustmentModel.item_id == item_id)
+    return float(query.scalar() or 0.0)
+
+
+def _available_qty(db: Session, lot_no: str, lot_qty: float, item_id: int | None = None) -> float:
+    return max(float(lot_qty or 0) - _used_qty(db, lot_no, item_id) + _adjustment_qty(db, lot_no, item_id), 0.0)
+
+
 def _source_lots(db: Session, source_type: str, item):
     if source_type == "GENERAL":
         lot_no = (item.internal_lot_no or item.supplier_lot_no or "").strip()
-        return [{"lot_no": lot_no, "lot_qty": float(item.inbound_qty or 0)}] if lot_no else []
+        lot_qty = float(item.inbound_qty or 0)
+        return [{
+            "lot_no": lot_no,
+            "lot_qty": lot_qty,
+            "available_qty": _available_qty(db, lot_no, lot_qty, item.item_id),
+        }] if lot_no else []
 
     rows = (
         db.query(SubcontractInboundLot)
@@ -145,14 +218,18 @@ def _source_lots(db: Session, source_type: str, item):
         .order_by(SubcontractInboundLot.id.asc())
         .all()
     )
-    return [
-        {
-            "lot_no": (row.child_lot_no or row.source_lot_no or "").strip(),
-            "lot_qty": float(row.good_qty or 0),
-        }
-        for row in rows
-        if (row.child_lot_no or row.source_lot_no or "").strip()
-    ]
+    result = []
+    for row in rows:
+        lot_no = (row.child_lot_no or row.source_lot_no or "").strip()
+        if not lot_no:
+            continue
+        lot_qty = float(row.good_qty or 0)
+        result.append({
+            "lot_no": lot_no,
+            "lot_qty": lot_qty,
+            "available_qty": _available_qty(db, lot_no, lot_qty, item.item_id),
+        })
+    return result
 
 
 def _result_fields(result, fallback_status, defect_names, detail_rows=None, lot_detail_rows=None):
@@ -408,6 +485,7 @@ def save_inbound_defect_result(
 
     source_lots = _source_lots(db, source_type, item)
     lot_qty_map = {row["lot_no"]: float(row["lot_qty"] or 0) for row in source_lots}
+    available_qty_map = {row["lot_no"]: float(row["available_qty"] or 0) for row in source_lots}
 
     defect_lots = []
     aggregate = {}
@@ -427,8 +505,8 @@ def save_inbound_defect_result(
                 merged[code] = merged.get(code, 0.0) + float(row.defect_qty)
             items = [{"code": code, "qty": qty} for code, qty in merged.items() if qty > 0]
             lot_defect_qty = sum(row["qty"] for row in items)
-            if lot_defect_qty > lot_qty_map[lot_no] + 1e-9:
-                raise HTTPException(422, f"{lot_no} 불량합계가 LOT 수량을 초과합니다.")
+            if lot_defect_qty > available_qty_map[lot_no] + 1e-9:
+                raise HTTPException(422, f"{lot_no} 불량합계가 처리 가능 수량을 초과합니다.")
             if items:
                 defect_lots.append({
                     "lot_no": lot_no,
