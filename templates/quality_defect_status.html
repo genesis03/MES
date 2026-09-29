@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}불량 현황{% endblock %}
+{% block extra_head %}
+<style>
+.ds-wrap{padding:16px}.ds-wrap h1{font-size:20px;margin:0 0 12px}.ds-filter{display:flex;flex-wrap:wrap;gap:8px;align-items:end;background:#fff;border:1px solid #dbe2eb;border-radius:8px;padding:12px;margin-bottom:12px}
+.ds-field{display:flex;flex-direction:column;gap:4px}.ds-field label{font-size:11px;font-weight:700;color:#64748b}.ds-field input,.ds-field select{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;min-width:140px}
+.ds-btn{height:34px;border:0;border-radius:4px;padding:0 14px;font-weight:700;cursor:pointer}.ds-primary{background:#2563eb;color:#fff}.ds-light{background:#e2e8f0;color:#334155}
+.ds-summary{display:flex;gap:10px;margin-bottom:12px}.ds-card{background:#fff;border:1px solid #dbe2eb;border-radius:7px;padding:10px 16px;min-width:160px}.ds-card span{display:block;font-size:11px;color:#64748b}.ds-card strong{font-size:20px}.ds-card.bad strong{color:#dc2626}
+.ds-tablebox{background:#fff;border:1px solid #dbe2eb;border-radius:8px;overflow:auto;max-height:68vh}.ds-table{width:100%;border-collapse:collapse;font-size:12px}.ds-table th,.ds-table td{border:1px solid #e2e8f0;padding:7px;text-align:center;white-space:nowrap}.ds-table th{position:sticky;top:0;background:#f1f5f9;z-index:2}.ds-left{text-align:left!important}.ds-num{text-align:right!important}
+</style>
+{% endblock %}
+{% block content %}
+<div class="ds-wrap">
+  <h1>불량 현황</h1>
+  <div class="ds-filter">
+    <div class="ds-field"><label>시작일</label><input type="date" id="ds-start"></div>
+    <div class="ds-field"><label>종료일</label><input type="date" id="ds-end"></div>
+    <div class="ds-field"><label>구분</label>
+      <select id="ds-source">
+        <option value="ALL">전체</option>
+        <option value="GENERAL">입고-일반구매</option>
+        <option value="SUBCONTRACT">입고-외주가공</option>
+        <option value="PRODUCTION_RUN">생산실적</option>
+        <option value="PRODUCTION_LOT">생산 LOT</option>
+      </select>
+    </div>
+    <div class="ds-field"><label>품번</label><input id="ds-part" placeholder="품번"></div>
+    <div class="ds-field"><label>불량유형</label><select id="ds-type"><option value="">전체</option></select></div>
+    <button class="ds-btn ds-primary" id="ds-search">조회</button>
+    <button class="ds-btn ds-light" id="ds-reset">초기화</button>
+  </div>
+
+  <div class="ds-summary">
+    <div class="ds-card"><span>등록 건수</span><strong id="ds-count">0</strong></div>
+    <div class="ds-card bad"><span>총 불량수량</span><strong id="ds-total">0</strong></div>
+  </div>
+
+  <div class="ds-tablebox">
+    <table class="ds-table">
+      <thead><tr><th>일자</th><th>구분</th><th>품번</th><th>품명</th><th>공정</th><th>거래처</th><th>LOT NO</th><th>기준수량</th><th>불량수량</th><th>불량유형</th><th>등록자</th></tr></thead>
+      <tbody id="ds-body"><tr><td colspan="11">조회 중...</td></tr></tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block extra_script %}
+<script>
+(function(){
+  const $=function(id){return document.getElementById(id)};
+  const esc=function(v){const s=document.createElement('span');s.textContent=v==null?'':v;return s.innerHTML};
+  const fmt=function(v){return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6})};
+  function dateOffset(days){const d=new Date();d.setDate(d.getDate()+days);return d.toISOString().slice(0,10)}
+  async function search(){
+    const p=new URLSearchParams({source:$('ds-source').value,limit:'5000'});
+    if($('ds-start').value)p.set('start_date',$('ds-start').value);
+    if($('ds-end').value)p.set('end_date',$('ds-end').value);
+    if($('ds-part').value.trim())p.set('part_no',$('ds-part').value.trim());
+    if($('ds-type').value)p.set('defect_type_code',$('ds-type').value);
+    $('ds-body').innerHTML='<tr><td colspan="11">조회 중...</td></tr>';
+    const r=await fetch('/api/quality/defect-status?'+p.toString());const d=await r.json();
+    if(!r.ok){$('ds-body').innerHTML='<tr><td colspan="11">'+esc(d.detail||'조회 실패')+'</td></tr>';return}
+    if($('ds-type').options.length<=1){
+      (d.defect_types||[]).forEach(function(x){const o=document.createElement('option');o.value=x.code;o.textContent=x.name;$('ds-type').appendChild(o)});
+    }
+    $('ds-count').textContent=fmt(d.total);$('ds-total').textContent=fmt(d.total_defect_qty);
+    const rows=d.items||[];
+    $('ds-body').innerHTML=rows.length?rows.map(function(x){
+      const defects=(x.defect_items||[]).map(function(y){return esc(y.name)+' '+fmt(y.qty)}).join(' / ');
+      return '<tr><td>'+esc(x.date)+'</td><td>'+esc(x.source_name)+'</td><td>'+esc(x.part_no)+'</td><td class="ds-left">'+esc(x.part_name)+'</td><td>'+esc(x.process_name)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(x.lot_no)+'</td><td class="ds-num">'+fmt(x.base_qty)+'</td><td class="ds-num">'+fmt(x.defect_qty)+'</td><td class="ds-left">'+defects+'</td><td>'+esc(x.created_by)+'</td></tr>';
+    }).join(''):'<tr><td colspan="11">조회 결과가 없습니다.</td></tr>';
+  }
+  function reset(){$('ds-start').value=dateOffset(-30);$('ds-end').value=dateOffset(0);$('ds-source').value='ALL';$('ds-part').value='';$('ds-type').value='';search()}
+  $('ds-search').addEventListener('click',search);$('ds-reset').addEventListener('click',reset);$('ds-part').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();search()}});
+  $('ds-start').value=dateOffset(-30);$('ds-end').value=dateOffset(0);search();
+})();
+</script>
+{% endblock %}
