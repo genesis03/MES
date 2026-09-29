@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}생산 LOT 불량 처리{% endblock %}
+{% block extra_head %}
+<style>
+.pd-wrap{padding:16px}.pd-wrap h1{font-size:20px;margin:0 0 12px}.pd-card{border:1px solid #d8e0ea;border-radius:8px;background:#fff;padding:14px;margin-bottom:12px}
+.pd-row{display:grid;grid-template-columns:170px 120px 1fr;gap:8px;align-items:end}.pd-field{display:flex;flex-direction:column;gap:4px}.pd-field label{font-size:11px;font-weight:700;color:#64748b}
+.pd-field input{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px}.pd-btn{height:34px;border:0;border-radius:4px;padding:0 14px;font-weight:700;cursor:pointer}.pd-primary{background:#2563eb;color:#fff}.pd-save{background:#0f766e;color:#fff}.pd-light{background:#e2e8f0;color:#334155}.pd-danger{background:#dc2626;color:#fff}
+.pd-info{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:8px 12px}.pd-info div{background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:8px}.pd-info span{display:block;font-size:10px;color:#64748b}.pd-info strong{font-size:12px}
+.pd-defects{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:8px 12px;margin-top:12px}.pd-defect{display:flex;align-items:center;gap:7px}.pd-defect label{min-width:54px;font-size:12px;font-weight:700}.pd-defect input{width:80px;height:30px;border:1px solid #cbd5e1;border-radius:4px;text-align:right;padding:0 6px}
+.pd-bottom{display:grid;grid-template-columns:180px 180px 1fr 120px;gap:10px;align-items:end;margin-top:12px}.pd-summary{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px;background:#f8fafc}
+.pd-table{width:100%;border-collapse:collapse;font-size:12px}.pd-table th,.pd-table td{border:1px solid #dbe2eb;padding:7px;text-align:center;white-space:nowrap}.pd-table th{background:#f1f5f9}.pd-left{text-align:left!important}.pd-num{text-align:right!important}.pd-active{color:#b91c1c;font-weight:800}.pd-cancelled{color:#64748b}
+.pd-popup{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);align-items:center;justify-content:center;z-index:1300}.pd-popup.show{display:flex}.pd-popup-box{width:min(1120px,96vw);max-height:88vh;background:#fff;border-radius:8px;overflow:hidden;display:flex;flex-direction:column}.pd-popup-head,.pd-popup-foot{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid #e2e8f0}.pd-popup-foot{justify-content:flex-end;border-top:1px solid #e2e8f0;border-bottom:0}.pd-popup-body{padding:14px;overflow:auto}.pd-search{display:grid;grid-template-columns:1fr 120px;gap:8px;margin-bottom:10px}.pd-search input{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px}.pd-popup tbody tr{cursor:pointer}.pd-popup tbody tr:hover,.pd-popup tbody tr.sel{background:#eff6ff}.pd-msg{min-height:18px;font-size:12px;margin-top:8px}.pd-msg.ok{color:#15803d}.pd-msg.err{color:#b91c1c}
+@media(max-width:1000px){.pd-info{grid-template-columns:repeat(2,1fr)}.pd-defects{grid-template-columns:repeat(3,1fr)}.pd-bottom{grid-template-columns:1fr 1fr}.pd-row{grid-template-columns:1fr 100px}}
+</style>
+{% endblock %}
+{% block content %}
+<div class="pd-wrap">
+  <h1>생산 LOT 불량 처리</h1>
+  <div class="pd-card">
+    <div class="pd-row">
+      <div class="pd-field"><label>불량 처리 LOT</label><input id="pd-lot" placeholder="LOT 조회/스캔" autocomplete="off"></div>
+      <button class="pd-btn pd-primary" id="pd-open" type="button">조회</button><div></div>
+    </div>
+  </div>
+
+  <div class="pd-card" id="pd-editor" style="display:none">
+    <div class="pd-info">
+      <div><span>품번</span><strong id="i-part"></strong></div><div><span>품명</span><strong id="i-name"></strong></div>
+      <div><span>공정</span><strong id="i-process"></strong></div><div><span>저장위치</span><strong id="i-location"></strong></div>
+      <div><span>LOT 수량</span><strong id="i-lotqty"></strong></div><div><span>처리 가능 수량</span><strong id="i-available"></strong></div>
+      <div><span>생성일</span><strong id="i-created"></strong></div>
+    </div>
+    <div class="pd-defects" id="pd-defects"></div>
+    <div class="pd-bottom">
+      <div class="pd-field"><label>불량일자</label><input type="date" id="pd-date"></div>
+      <div class="pd-field"><label>불량합계</label><input class="pd-summary" id="pd-total" value="0" readonly></div>
+      <div class="pd-field"><label>Comment</label><input id="pd-remark" placeholder="불량 관련 메모"></div>
+      <button class="pd-btn pd-save" id="pd-save" type="button">저장</button>
+    </div>
+    <div class="pd-msg" id="pd-msg"></div>
+  </div>
+
+  <div class="pd-card">
+    <div style="font-weight:800;margin-bottom:8px">생산 LOT 불량 등록 이력</div>
+    <div style="overflow:auto">
+      <table class="pd-table">
+        <thead><tr><th>등록일시</th><th>불량일자</th><th>품번</th><th>품명</th><th>LOT NO</th><th>불량유형</th><th>불량합계</th><th>등록자</th><th>상태</th><th>Comment</th><th>관리</th></tr></thead>
+        <tbody id="pd-history"><tr><td colspan="11">조회 중...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="pd-popup" id="pd-popup">
+  <div class="pd-popup-box">
+    <div class="pd-popup-head"><strong>불량 처리 LOT 조회</strong><button class="pd-btn pd-light" type="button" id="pd-close">닫기</button></div>
+    <div class="pd-popup-body">
+      <div class="pd-search"><input id="pd-keyword" placeholder="LOT NO / 품번 / 품명"><button class="pd-btn pd-primary" id="pd-search" type="button">조회</button></div>
+      <div style="overflow:auto;max-height:55vh">
+        <table class="pd-table">
+          <thead><tr><th>LOT NO</th><th>공정</th><th>품번</th><th>품명</th><th>LOT 수량</th><th>처리 가능 수량</th><th>저장위치</th><th>생성일</th></tr></thead>
+          <tbody id="pd-lot-body"><tr><td colspan="8">조회해 주세요.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="pd-popup-foot"><button class="pd-btn pd-primary" id="pd-apply" type="button" disabled>적용</button></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_script %}
+<script>
+(function(){
+  const IS_ADMIN={{ 'true' if is_admin else 'false' }};
+  const $=function(id){return document.getElementById(id)};
+  const esc=function(v){const s=document.createElement('span');s.textContent=v==null?'':v;return s.innerHTML};
+  const fmt=function(v){return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6})};
+  let defectTypes=[], lots=[], selected=null, popupSelected=null;
+
+  function today(){return new Date().toISOString().slice(0,10)}
+  function msg(t,ok){$('pd-msg').textContent=t||'';$('pd-msg').className='pd-msg '+(ok?'ok':'err')}
+  async function jf(url,opt){const r=await fetch(url,opt);const d=await r.json();if(!r.ok)throw new Error(d.detail||'처리 실패');return d}
+
+  async function loadOptions(){
+    const d=await jf('/api/quality/production-defects/options');
+    defectTypes=d.defect_types||[];
+    $('pd-defects').innerHTML=defectTypes.map(function(x){
+      return '<div class="pd-defect"><label>'+esc(x.name)+'</label><input type="number" min="0" step="any" data-code="'+esc(x.code)+'" value="0"></div>';
+    }).join('');
+    $('pd-defects').querySelectorAll('input').forEach(function(x){x.addEventListener('input',updateTotal)});
+  }
+  function updateTotal(){
+    const total=[...$('pd-defects').querySelectorAll('input')].reduce(function(s,x){return s+Number(x.value||0)},0);
+    $('pd-total').value=fmt(total);
+    if(selected && total>Number(selected.available_qty||0))msg('불량합계가 처리 가능 수량을 초과합니다.',false);else msg('',false);
+  }
+  async function searchLots(){
+    const q=new URLSearchParams({limit:'500'});const k=$('pd-keyword').value.trim();if(k)q.set('keyword',k);
+    const d=await jf('/api/quality/production-defects/lots?'+q.toString());lots=d.items||[];popupSelected=null;$('pd-apply').disabled=true;
+    $('pd-lot-body').innerHTML=lots.length?lots.map(function(x,i){
+      return '<tr data-i="'+i+'"><td>'+esc(x.lot_no)+'</td><td>'+esc(x.process_name)+'</td><td>'+esc(x.part_no)+'</td><td class="pd-left">'+esc(x.part_name)+'</td><td class="pd-num">'+fmt(x.lot_qty)+'</td><td class="pd-num">'+fmt(x.available_qty)+'</td><td>'+esc(x.storage_location_name)+'</td><td>'+esc(x.created_at)+'</td></tr>';
+    }).join(''):'<tr><td colspan="8">처리 가능한 생산 LOT가 없습니다.</td></tr>';
+  }
+  function openPopup(){$('pd-keyword').value=$('pd-lot').value.trim();$('pd-popup').classList.add('show');searchLots().catch(function(e){alert(e.message)})}
+  function closePopup(){$('pd-popup').classList.remove('show')}
+  function applyLot(x){
+    selected=x;$('pd-lot').value=x.lot_no;$('pd-editor').style.display='block';
+    $('i-part').textContent=x.part_no||'';$('i-name').textContent=x.part_name||'';$('i-process').textContent=x.process_name||'';
+    $('i-location').textContent=x.storage_location_name||'';$('i-lotqty').textContent=fmt(x.lot_qty)+' '+(x.unit||'');
+    $('i-available').textContent=fmt(x.available_qty)+' '+(x.unit||'');$('i-created').textContent=x.created_at||'';
+    $('pd-defects').querySelectorAll('input').forEach(function(el){el.value=0});$('pd-remark').value='';$('pd-date').value=today();updateTotal();
+  }
+  async function save(){
+    if(!selected)return;
+    const defect_items=[...$('pd-defects').querySelectorAll('input')].map(function(x){return {defect_type_code:x.dataset.code,defect_qty:Number(x.value||0)}}).filter(function(x){return x.defect_qty>0});
+    if(!defect_items.length){msg('불량수량을 입력해 주세요.',false);return}
+    const total=defect_items.reduce(function(s,x){return s+x.defect_qty},0);
+    if(total>Number(selected.available_qty||0)){msg('불량합계가 처리 가능 수량을 초과합니다.',false);return}
+    if(!confirm(selected.lot_no+'에 불량 '+fmt(total)+'개를 등록하시겠습니까?'))return;
+    try{
+      const d=await jf('/api/quality/production-defects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({production_lot_id:selected.production_lot_id,defect_date:$('pd-date').value,defect_items:defect_items,remark:$('pd-remark').value||null})});
+      msg('저장했습니다. 현재 처리 가능 수량 '+fmt(d.remaining_qty),true);
+      selected.available_qty=d.remaining_qty;$('i-available').textContent=fmt(d.remaining_qty)+' '+(selected.unit||'');
+      $('pd-defects').querySelectorAll('input').forEach(function(el){el.value=0});$('pd-remark').value='';updateTotal();await loadHistory();
+    }catch(e){msg(e.message,false)}
+  }
+  async function loadHistory(){
+    const d=await jf('/api/quality/production-defects/history?limit=300');const rows=d.items||[];
+    $('pd-history').innerHTML=rows.length?rows.map(function(x){
+      const detail=(x.defect_items||[]).map(function(y){return esc(y.name)+' '+fmt(y.qty)}).join(' / ');
+      const state=x.status==='ACTIVE'?'<span class="pd-active">유효</span>':'<span class="pd-cancelled">취소</span>';
+      const action=IS_ADMIN&&x.status==='ACTIVE'?'<button class="pd-btn pd-danger" style="height:28px" data-cancel="'+x.id+'">취소</button>':(x.status==='CANCELLED'?esc(x.cancel_reason):'');
+      return '<tr><td>'+esc(x.created_at)+'</td><td>'+esc(x.defect_date)+'</td><td>'+esc(x.part_no)+'</td><td class="pd-left">'+esc(x.part_name)+'</td><td>'+esc(x.lot_no)+'</td><td class="pd-left">'+detail+'</td><td class="pd-num">'+fmt(x.defect_qty)+'</td><td>'+esc(x.created_by)+'</td><td>'+state+'</td><td class="pd-left">'+esc(x.remark)+'</td><td>'+action+'</td></tr>';
+    }).join(''):'<tr><td colspan="11">등록 이력이 없습니다.</td></tr>';
+  }
+  async function cancelDefect(id){
+    const reason=prompt('취소 사유를 입력해 주세요.');if(reason===null)return;if(!reason.trim()){alert('취소 사유가 필요합니다.');return}
+    if(!confirm('이 불량 등록을 취소하고 LOT 가용수량을 복원하시겠습니까?'))return;
+    try{
+      await jf('/api/quality/production-defects/'+id+'/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason:reason.trim()})});
+      await loadHistory();
+      if(selected){const d=await jf('/api/quality/production-defects/lots?keyword='+encodeURIComponent(selected.lot_no));const exact=(d.items||[]).find(function(x){return x.production_lot_id===selected.production_lot_id});if(exact)applyLot(exact)}
+    }catch(e){alert(e.message)}
+  }
+
+  $('pd-open').addEventListener('click',openPopup);$('pd-lot').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();openPopup()}});
+  $('pd-close').addEventListener('click',closePopup);$('pd-search').addEventListener('click',function(){searchLots().catch(function(e){alert(e.message)})});
+  $('pd-keyword').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();searchLots().catch(function(x){alert(x.message)})}});
+  $('pd-lot-body').addEventListener('click',function(e){const tr=e.target.closest('tr[data-i]');if(!tr)return;[...$('pd-lot-body').querySelectorAll('tr')].forEach(function(x){x.classList.remove('sel')});tr.classList.add('sel');popupSelected=lots[Number(tr.dataset.i)];$('pd-apply').disabled=false});
+  $('pd-lot-body').addEventListener('dblclick',function(e){const tr=e.target.closest('tr[data-i]');if(!tr)return;applyLot(lots[Number(tr.dataset.i)]);closePopup()});
+  $('pd-apply').addEventListener('click',function(){if(popupSelected){applyLot(popupSelected);closePopup()}});
+  $('pd-save').addEventListener('click',save);$('pd-history').addEventListener('click',function(e){const b=e.target.closest('[data-cancel]');if(b)cancelDefect(Number(b.dataset.cancel))});
+  $('pd-date').value=today();Promise.all([loadOptions(),loadHistory()]).catch(function(e){msg(e.message,false)});
+})();
+</script>
+{% endblock %}
