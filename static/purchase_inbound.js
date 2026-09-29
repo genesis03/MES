@@ -175,6 +175,12 @@
     $('pi-po-popup-count').textContent = pickerOrders.length + '건';
   }
 
+  function resetOrderPicker() {
+    ['pi-po-search-no','pi-po-start','pi-po-end','pi-po-search-part'].forEach(id => { $(id).value = ''; });
+    searchOrderPicker();
+    $('pi-po-search-no').focus();
+  }
+
   async function searchOrderPicker() {
     const params = new URLSearchParams();
     const values = {
@@ -352,6 +358,12 @@
     $('pi-inbound-popup-count').textContent = inboundPickerRows.length + '건';
   }
 
+  function resetInboundPicker() {
+    ['pi-inbound-search-no','pi-inbound-start','pi-inbound-end','pi-inbound-search-partner','pi-inbound-search-part','pi-inbound-search-po','pi-inbound-search-lot'].forEach(id => { $(id).value = ''; });
+    searchInboundPicker();
+    $('pi-inbound-search-no').focus();
+  }
+
   async function searchInboundPicker() {
     const params = new URLSearchParams();
     const values = {
@@ -416,9 +428,9 @@
     const required = [
       'pi-form','pi-date','pi-vendor','pi-manager','pi-po-no','pi-inbound-no','pi-inbound-search-btn','pi-status','pi-note',
       'pi-load-po','pi-lines','pi-location-options','pi-new','pi-save','pi-confirm','pi-message',
-      'pi-po-dialog','pi-po-x','pi-po-search-no','pi-po-start','pi-po-end','pi-po-search-part','pi-po-search-btn',
+      'pi-po-dialog','pi-po-x','pi-po-search-no','pi-po-start','pi-po-end','pi-po-search-part','pi-po-search-btn','pi-po-search-reset',
       'pi-po-popup-body','pi-po-popup-message','pi-po-popup-count','pi-po-select','pi-po-close',
-      'pi-inbound-dialog','pi-inbound-x','pi-inbound-search-no','pi-inbound-start','pi-inbound-end','pi-inbound-search-partner','pi-inbound-search-part','pi-inbound-search-po','pi-inbound-search-lot','pi-inbound-search-submit','pi-inbound-popup-body','pi-inbound-popup-message','pi-inbound-popup-count','pi-inbound-select','pi-inbound-close'
+      'pi-inbound-dialog','pi-inbound-x','pi-inbound-search-no','pi-inbound-start','pi-inbound-end','pi-inbound-search-partner','pi-inbound-search-part','pi-inbound-search-po','pi-inbound-search-lot','pi-inbound-search-submit','pi-inbound-search-reset','pi-inbound-popup-body','pi-inbound-popup-message','pi-inbound-popup-count','pi-inbound-select','pi-inbound-close'
     ];
     const missing = required.filter(id => !$(id));
     if (missing.length) {
@@ -432,6 +444,7 @@
     $('pi-inbound-close').addEventListener('click', closeInboundPicker);
     $('pi-inbound-select').addEventListener('click', chooseInboundPicker);
     $('pi-inbound-search-submit').addEventListener('click', searchInboundPicker);
+    $('pi-inbound-search-reset').addEventListener('click', resetInboundPicker);
     ['pi-inbound-search-no','pi-inbound-start','pi-inbound-end','pi-inbound-search-partner','pi-inbound-search-part','pi-inbound-search-po','pi-inbound-search-lot'].forEach(id => $(id).addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); searchInboundPicker(); } }));
     $('pi-inbound-dialog').addEventListener('cancel', event => { event.preventDefault(); closeInboundPicker(); });
     $('pi-load-po').addEventListener('click', event => { event.preventDefault(); openOrderPicker(); });
@@ -439,6 +452,7 @@
     $('pi-po-close').addEventListener('click', closeOrderPicker);
     $('pi-po-select').addEventListener('click', choosePickerOrder);
     $('pi-po-search-btn').addEventListener('click', searchOrderPicker);
+    $('pi-po-search-reset').addEventListener('click', resetOrderPicker);
     ['pi-po-search-no', 'pi-po-search-part'].forEach(id => $(id).addEventListener('keydown', event => {
       if (event.key === 'Enter') { event.preventDefault(); searchOrderPicker(); }
     }));
