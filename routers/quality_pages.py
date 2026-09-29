@@ -18,3 +18,18 @@ def inbound_defects_page(request: Request, current_user=Depends(get_current_user
             "user": current_user,
         },
     )
+
+
+@router.get("/quality/production-defects", response_class=HTMLResponse)
+def production_defects_page(request: Request, current_user=Depends(get_current_user)):
+    username = str(getattr(current_user, "username", "") or "").strip().lower()
+    role = str(getattr(current_user, "role", "") or "").strip().upper()
+    return templates.TemplateResponse(
+        request=request,
+        name="quality_production_defects.html",
+        context={
+            "request": request,
+            "user": current_user,
+            "is_admin": username == "admin" or role in {"ADMIN", "SUPERADMIN"},
+        },
+    )
