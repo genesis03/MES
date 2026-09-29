@@ -222,6 +222,7 @@
 
         <div style="margin-left: auto; display: flex; gap: 6px;">
             <button type="button" class="btn-action btn-search" onclick="loadPartners()">조회</button>
+            <button type="button" class="btn-action" style="background:#e2e8f0;color:#334155;" onclick="resetPartnerSearch()">초기화</button>
             <button type="button" class="btn-action btn-create" onclick="openCreateModal()">신규</button>
         </div>
     </div>
@@ -400,6 +401,14 @@ let currentContacts = [];
 document.addEventListener("DOMContentLoaded", function() {
     loadPartners();
 });
+
+function resetPartnerSearch() {
+    document.getElementById("searchCode").value = "";
+    document.getElementById("searchName").value = "";
+    document.getElementById("searchType").value = "";
+    document.getElementById("searchStatus").value = "Y";
+    loadPartners();
+}
 
 // 거래처 목록 로드
 async function loadPartners() {
