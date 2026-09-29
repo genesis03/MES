@@ -5,14 +5,14 @@
 .qi-wrap h1{font-size:24px;margin:0 0 5px}.qi-sub{font-size:13px;color:#64748b;margin-bottom:14px}.qi-filter{display:flex;flex-wrap:wrap;gap:8px;align-items:end;background:#fff;border:1px solid #cbd5e1;border-radius:7px;padding:12px;margin-bottom:10px}.qi-field{display:flex;flex-direction:column;gap:4px}.qi-field label{font-size:11px;font-weight:700;color:#64748b}.qi-field input,.qi-field select{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px;min-width:130px;background:#fff}.qi-btn{height:34px;border:0;border-radius:4px;padding:0 14px;font-weight:700;cursor:pointer}.qi-primary{background:#2563eb;color:#fff}.qi-light{background:#e2e8f0;color:#334155}.qi-save{background:#0f766e;color:#fff}.qi-summary{display:flex;gap:18px;margin:10px 0;font-size:13px;font-weight:700;color:#475569}.qi-tablebox{background:#fff;border:1px solid #cbd5e1;border-radius:7px;overflow:auto}.qi-table{width:100%;border-collapse:collapse;min-width:1560px;font-size:12px}.qi-table th{background:#f1f5f9;padding:9px 7px;border-bottom:2px solid #cbd5e1;white-space:nowrap}.qi-table td{padding:7px;border-bottom:1px solid #e2e8f0;text-align:center;white-space:nowrap}.qi-table input,.qi-table select{height:30px;border:1px solid #cbd5e1;border-radius:4px;padding:0 6px;background:#fff}.qi-table .qty{width:92px;text-align:right}.qi-table .remark{width:180px}.qi-left{text-align:left!important}.badge{display:inline-block;border-radius:12px;padding:3px 8px;font-weight:700}.badge-general{background:#dbeafe;color:#1d4ed8}.badge-sub{background:#ede9fe;color:#6d28d9}.badge-wait{background:#fef3c7;color:#a16207}.badge-done{background:#dcfce7;color:#15803d}.badge-reject{background:#fee2e2;color:#b91c1c}.qi-empty{padding:36px!important;color:#94a3b8}.qi-msg{margin-top:8px;min-height:18px;font-size:12px;color:#64748b}.qi-msg.error{color:#dc2626}.qi-msg.ok{color:#15803d}
 .qi-actions{display:flex;gap:5px;justify-content:center}.qi-normal{background:#059669;color:#fff}.qi-defect{background:#dc2626;color:#fff}.qi-edit{background:#2563eb;color:#fff}
 .qi-modal{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);align-items:center;justify-content:center;z-index:1100}.qi-modal.show{display:flex}
-.qi-modal-box{width:min(860px,96vw);background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(15,23,42,.28);overflow:hidden}
+.qi-modal-box{width:min(1500px,98vw);max-height:92vh;background:#fff;border-radius:8px;box-shadow:0 20px 60px rgba(15,23,42,.28);overflow:hidden;display:flex;flex-direction:column}
 .qi-modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #e2e8f0}.qi-modal-head h2{font-size:16px;margin:0}
-.qi-modal-body{padding:14px 16px}.qi-info-grid{display:grid;grid-template-columns:110px 1fr 110px 1fr;gap:8px 10px;margin-bottom:14px}.qi-info-grid .label{color:#64748b;font-weight:700}.qi-info-grid .value{font-weight:700}
+.qi-modal-body{padding:14px 16px;overflow:auto}.qi-info-grid{display:grid;grid-template-columns:110px 1fr 110px 1fr;gap:8px 10px;margin-bottom:14px}.qi-info-grid .label{color:#64748b;font-weight:700}.qi-info-grid .value{font-weight:700}
 .qi-form-grid{display:grid;grid-template-columns:120px 1fr;gap:10px;align-items:center}.qi-form-grid input,.qi-form-grid select,.qi-form-grid textarea{border:1px solid #cbd5e1;border-radius:4px;padding:8px 10px;font:inherit}.qi-form-grid textarea{min-height:72px;resize:vertical}
 .qi-modal-foot{display:flex;justify-content:flex-end;gap:7px;padding:10px 16px;border-top:1px solid #e2e8f0}
 .qi-defect-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 14px}.qi-sum-box{border:1px solid #cbd5e1;border-radius:6px;padding:10px 12px;background:#f8fafc}.qi-sum-box span{display:block;font-size:11px;color:#64748b;margin-bottom:3px}.qi-sum-box strong{font-size:18px}.qi-sum-box.defect strong{color:#dc2626}.qi-sum-box.good strong{color:#15803d}
-.qi-defect-title{font-weight:800;margin:4px 0 8px}.qi-defect-grid{display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:7px;margin-bottom:14px}.qi-defect-cell{border:1px solid #dbe3ec;border-radius:5px;padding:8px;background:#fff}.qi-defect-cell label{display:block;font-size:12px;font-weight:700;margin-bottom:5px}.qi-defect-cell input{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;text-align:right;box-sizing:border-box}
-@media(max-width:760px){.qi-defect-grid{grid-template-columns:repeat(2,minmax(120px,1fr))}.qi-info-grid{grid-template-columns:100px 1fr}.qi-defect-summary{grid-template-columns:1fr}}
+.qi-defect-title{font-weight:800;margin:4px 0 8px}.qi-lot-table-wrap{overflow:auto;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:14px}.qi-lot-table{border-collapse:collapse;width:max-content;min-width:100%;font-size:12px}.qi-lot-table th,.qi-lot-table td{border:1px solid #e2e8f0;padding:7px;text-align:center;white-space:nowrap}.qi-lot-table th{background:#f1f5f9;position:sticky;top:0;z-index:1}.qi-lot-table .lot-col{min-width:160px;text-align:left}.qi-lot-table .qty-col{min-width:92px;text-align:right}.qi-lot-table .defect-col{min-width:88px}.qi-lot-table input{width:74px;height:32px;border:1px solid #cbd5e1;border-radius:4px;padding:0 6px;text-align:right}.qi-lot-total{font-weight:800;color:#dc2626}.qi-lot-good{font-weight:800;color:#15803d}
+@media(max-width:760px){.qi-info-grid{grid-template-columns:100px 1fr}.qi-defect-summary{grid-template-columns:1fr}}
 </style>
 {% endblock %}
 {% block content %}
@@ -52,8 +52,13 @@
         <div class="qi-sum-box defect"><span>불량합계</span><strong id="qm-sum-defect">0</strong></div>
         <div class="qi-sum-box good"><span>정상수량</span><strong id="qm-sum-good">0</strong></div>
       </div>
-      <div class="qi-defect-title">불량유형별 수량</div>
-      <div class="qi-defect-grid" id="qm-defect-grid"></div>
+      <div class="qi-defect-title">LOT별 불량유형 수량</div>
+      <div class="qi-lot-table-wrap">
+        <table class="qi-lot-table">
+          <thead id="qm-lot-head"></thead>
+          <tbody id="qm-lot-body"></tbody>
+        </table>
+      </div>
       <div class="qi-form-grid">
         <label>판정 *</label><select id="qm-judgment"></select>
         <label>비고</label><textarea id="qm-remark" maxlength="1000"></textarea>
@@ -129,28 +134,67 @@
     }catch(e){setMsg(e.message,'error');}
   }
 
-  function renderDefectGrid(){
+  function renderLotDefectTable(){
     if(!selectedRow)return;
-    const existing=new Map((selectedRow.defect_items||[]).map(x=>[x.defect_type_code,Number(x.defect_qty||0)]));
-    $('qm-defect-grid').innerHTML=defectTypes.map(x=>`<div class="qi-defect-cell"><label>${esc(x.name)}</label><input class="qm-defect-input" data-code="${esc(x.code)}" type="number" min="0" step="any" value="${existing.get(x.code)||''}" placeholder="0"></div>`).join('');
-    document.querySelectorAll('.qm-defect-input').forEach(el=>el.addEventListener('input',updateDefectSummary));
+    const lots=(selectedRow.lots||[]).filter(x=>x.lot_no);
+    const savedLots=new Map((selectedRow.defect_lots||[]).map(x=>[x.lot_no,x]));
+    const legacyItems=selectedRow.defect_items||[];
+    const firstLot=lots[0]?.lot_no||'';
+
+    $('qm-lot-head').innerHTML='<tr><th class="lot-col">LOT</th><th class="qty-col">LOT 수량</th>'+
+      defectTypes.map(x=>`<th class="defect-col">${esc(x.name)}</th>`).join('')+
+      '<th class="qty-col">불량합계</th><th class="qty-col">정상수량</th></tr>';
+
+    $('qm-lot-body').innerHTML=lots.map(lot=>{
+      const saved=savedLots.get(lot.lot_no);
+      const detailMap=new Map((saved?.defect_items||[]).map(x=>[x.defect_type_code,Number(x.defect_qty||0)]));
+      if(!saved && lot.lot_no===firstLot && !(selectedRow.defect_lots||[]).length){
+        legacyItems.forEach(x=>detailMap.set(x.defect_type_code,Number(x.defect_qty||0)));
+      }
+      return `<tr data-lot="${esc(lot.lot_no)}" data-lot-qty="${Number(lot.lot_qty||0)}">
+        <td class="lot-col">${esc(lot.lot_no)}</td>
+        <td class="qty-col">${fmt(lot.lot_qty)}</td>
+        ${defectTypes.map(x=>`<td><input class="qm-lot-defect-input" data-code="${esc(x.code)}" type="number" min="0" step="any" value="${detailMap.get(x.code)||''}" placeholder="0"></td>`).join('')}
+        <td class="qty-col qi-lot-total">0</td>
+        <td class="qty-col qi-lot-good">${fmt(lot.lot_qty)}</td>
+      </tr>`;
+    }).join('');
+
+    document.querySelectorAll('.qm-lot-defect-input').forEach(el=>el.addEventListener('input',updateDefectSummary));
+    updateDefectSummary();
   }
 
-  function currentDefectItems(){
-    return [...document.querySelectorAll('.qm-defect-input')].map(el=>({
-      defect_type_code:el.dataset.code,
-      defect_qty:Number(el.value||0)
-    })).filter(x=>Number.isFinite(x.defect_qty)&&x.defect_qty>0);
+  function currentDefectLots(){
+    return [...document.querySelectorAll('#qm-lot-body tr[data-lot]')].map(tr=>{
+      const items=[...tr.querySelectorAll('.qm-lot-defect-input')].map(el=>({
+        defect_type_code:el.dataset.code,
+        defect_qty:Number(el.value||0)
+      })).filter(x=>Number.isFinite(x.defect_qty)&&x.defect_qty>0);
+      return {
+        lot_no:tr.dataset.lot,
+        lot_qty:Number(tr.dataset.lotQty||0),
+        defect_items:items
+      };
+    });
   }
 
   function updateDefectSummary(){
     if(!selectedRow)return;
+    const lots=currentDefectLots();
+    let defect=0;
+    document.querySelectorAll('#qm-lot-body tr[data-lot]').forEach((tr,index)=>{
+      const lot=lots[index];
+      const subtotal=(lot?.defect_items||[]).reduce((s,x)=>s+x.defect_qty,0);
+      const lotQty=Number(tr.dataset.lotQty||0);
+      defect+=subtotal;
+      tr.querySelector('.qi-lot-total').textContent=fmt(subtotal);
+      tr.querySelector('.qi-lot-good').textContent=fmt(Math.max(lotQty-subtotal,0));
+      tr.querySelector('.qi-lot-total').style.color=subtotal>lotQty?'#b91c1c':'';
+    });
     const inbound=Number(selectedRow.inbound_qty||0);
-    const defect=currentDefectItems().reduce((s,x)=>s+x.defect_qty,0);
-    const good=Math.max(inbound-defect,0);
     $('qm-sum-inbound').textContent=fmt(inbound);
     $('qm-sum-defect').textContent=fmt(defect);
-    $('qm-sum-good').textContent=fmt(good);
+    $('qm-sum-good').textContent=fmt(Math.max(inbound-defect,0));
     $('qm-sum-defect').style.color=defect>inbound?'#b91c1c':'';
   }
 
@@ -163,25 +207,26 @@
     $('qm-judgment').innerHTML=optionHtml(judgments,selectedRow.judgment||'REJECT','선택');
     if(!selectedRow.judgment)$('qm-judgment').value='REJECT';
     $('qm-remark').value=selectedRow.quality_remark||'';
-    renderDefectGrid();
-    updateDefectSummary();
+    renderLotDefectTable();
     $('qi-defect-modal').classList.add('show');
-    const first=$('.qm-defect-input'); if(first)first.focus();
+    const first=document.querySelector('.qm-lot-defect-input'); if(first)first.focus();
   }
 
   function closeDefect(){selectedRow=null;$('qi-defect-modal').classList.remove('show');}
 
   async function saveDefect(){
     if(!selectedRow)return;
-    const items=currentDefectItems();
-    const qty=items.reduce((s,x)=>s+x.defect_qty,0);
+    const lots=currentDefectLots();
+    const qty=lots.reduce((sum,lot)=>sum+lot.defect_items.reduce((s,x)=>s+x.defect_qty,0),0);
+    const invalidLot=lots.find(lot=>lot.defect_items.reduce((s,x)=>s+x.defect_qty,0)>Number(lot.lot_qty||0));
     const judgment=$('qm-judgment').value;
     const remark=$('qm-remark').value.trim();
-    if(qty<=0){alert('불량유형별 수량을 1개 이상 입력해 주세요.');return;}
-    if(qty>Number(selectedRow.inbound_qty||0)){alert('불량합계는 입고수량을 초과할 수 없습니다.');return;}
+    if(qty<=0){alert('LOT별 불량수량을 1개 이상 입력해 주세요.');return;}
+    if(invalidLot){alert(`${invalidLot.lot_no}의 불량합계가 LOT 수량을 초과합니다.`);return;}
+    if(qty>Number(selectedRow.inbound_qty||0)){alert('전체 불량합계는 입고수량을 초과할 수 없습니다.');return;}
     if(!judgment){alert('판정을 선택해 주세요.');return;}
     try{
-      await postResult(selectedRow,{defect_qty:qty,defect_type_code:null,defect_items:items,judgment,remark:remark||null});
+      await postResult(selectedRow,{defect_qty:qty,defect_type_code:null,defect_lots:lots,judgment,remark:remark||null});
       const inboundNo=selectedRow.inbound_no, partNo=selectedRow.part_no;
       closeDefect();
       setMsg(`${inboundNo} / ${partNo} 불량합계 ${fmt(qty)}를 저장했습니다.`,'ok');
