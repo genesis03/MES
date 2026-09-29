@@ -157,7 +157,7 @@
         const saved=savedLots.get(lot.lot_no);
         const detail=new Map((saved?.defect_items||[]).map(x=>[x.defect_type_code,Number(x.defect_qty||0)]));
         if(!saved && !(row.defect_lots||[]).length && idx===0)legacy.forEach(x=>detail.set(x.defect_type_code,Number(x.defect_qty||0)));
-        result.push({row,lot_no:lot.lot_no,lot_qty:Number(lot.lot_qty||0),detail});
+        result.push({row,lot_no:lot.lot_no,lot_qty:Number(lot.lot_qty||0),available_qty:Number(lot.available_qty||0),detail});
       });
     });
     return result;
@@ -180,11 +180,11 @@
     $('qi-main-head').innerHTML='<tr><th>No.</th><th class="partno">품번</th><th class="partname">품명</th><th class="location">저장위치</th><th class="lot">LOT NO</th><th>LOT 수량</th><th>처리 가능 수량</th><th>정상수량</th><th>불량합계</th>'+
       defectTypes.map(x=>`<th class="defect-col">${esc(x.name)}</th>`).join('')+'</tr>';
 
-    $('qi-main-body').innerHTML=flatLots.length?flatLots.map((x,i)=>`<tr data-index="${i}" data-item-id="${x.row.inbound_item_id}" data-lot="${esc(x.lot_no)}" data-lot-qty="${x.lot_qty}">
+    $('qi-main-body').innerHTML=flatLots.length?flatLots.map((x,i)=>`<tr data-index="${i}" data-item-id="${x.row.inbound_item_id}" data-lot="${esc(x.lot_no)}" data-lot-qty="${x.lot_qty}" data-available-qty="${x.available_qty}">
       <td>${i+1}</td><td>${esc(x.row.part_no)}</td><td class="left">${esc(x.row.part_name)}</td><td>${esc(x.row.storage_location||'')}</td><td>${esc(x.lot_no)}</td>
       <td class="num">${fmt(x.lot_qty)} ${esc(x.row.unit||'')}</td>
-      <td class="num">${fmt(x.lot_qty)} ${esc(x.row.unit||'')}</td>
-      <td class="num qi-lot-good">${fmt(x.lot_qty)}</td><td class="num qi-lot-defect">0</td>
+      <td class="num">${fmt(x.available_qty)} ${esc(x.row.unit||'')}</td>
+      <td class="num qi-lot-good">${fmt(x.available_qty)}</td><td class="num qi-lot-defect">0</td>
       ${defectTypes.map(t=>`<td><input class="qi-defect-input" data-code="${esc(t.code)}" type="number" min="0" step="any" value="${x.detail.get(t.code)||''}" placeholder="0"></td>`).join('')}
     </tr>`).join(''):'<tr><td colspan="8" class="qi-empty">LOT 정보가 없습니다.</td></tr>';
     document.querySelectorAll('.qi-defect-input').forEach(el=>el.addEventListener('input',updateTotals));
@@ -193,13 +193,13 @@
 
   function lotPayloadFromTr(tr){
     const defect_items=[...tr.querySelectorAll('.qi-defect-input')].map(el=>({defect_type_code:el.dataset.code,defect_qty:Number(el.value||0)})).filter(x=>Number.isFinite(x.defect_qty)&&x.defect_qty>0);
-    return {lot_no:tr.dataset.lot,lot_qty:Number(tr.dataset.lotQty||0),defect_items};
+    return {lot_no:tr.dataset.lot,lot_qty:Number(tr.dataset.lotQty||0),available_qty:Number(tr.dataset.availableQty||0),defect_items};
   }
 
   function updateTotals(){
     let totalInbound=0,totalDefect=0;
     document.querySelectorAll('#qi-main-body tr[data-index]').forEach(tr=>{
-      const lot=lotPayloadFromTr(tr), subtotal=lot.defect_items.reduce((s,x)=>s+x.defect_qty,0), qty=lot.lot_qty;
+      const lot=lotPayloadFromTr(tr), subtotal=lot.defect_items.reduce((s,x)=>s+x.defect_qty,0), qty=lot.available_qty;
       totalInbound+=qty;totalDefect+=subtotal;
       tr.querySelector('.qi-lot-defect').textContent=fmt(subtotal);
       tr.querySelector('.qi-lot-good').textContent=fmt(Math.max(qty-subtotal,0));
@@ -213,7 +213,7 @@
     const payloadByItem=new Map();
     trs.forEach(tr=>{
       const itemId=Number(tr.dataset.itemId), lot=lotPayloadFromTr(tr);
-      if(lot.defect_items.reduce((s,x)=>s+x.defect_qty,0)>lot.lot_qty)throw new Error(`${lot.lot_no} 불량합계가 처리 가능 수량을 초과합니다.`);
+      if(lot.defect_items.reduce((s,x)=>s+x.defect_qty,0)>lot.available_qty)throw new Error(`${lot.lot_no} 불량합계가 처리 가능 수량을 초과합니다.`);
       if(!payloadByItem.has(itemId))payloadByItem.set(itemId,[]);
       payloadByItem.get(itemId).push({lot_no:lot.lot_no,defect_items:lot.defect_items});
     });
