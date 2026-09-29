@@ -19,6 +19,7 @@ from models.production_run import ProductionRun, ProductionRunLotAllocation, Pro
 from models.sales import ShipmentBox, ShipmentItem, ShipmentMaster
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from services.shipping_lot_service import next_shipping_lot_no
+from services.production_defect_service import active_production_defect_qty
 
 router = APIRouter(tags=["Packing"])
 templates = Jinja2Templates(directory="templates")
@@ -103,7 +104,8 @@ def _lot_available(db: Session, lot: ProductionLotModel) -> float:
         )
         .scalar() or 0.0
     )
-    return max(float(lot.lot_qty or 0) - consumed - related - reserved_run - reserved_subcontract - _packed_qty(db, lot.lot_no), 0.0)
+    defected = active_production_defect_qty(db, lot.lot_no, lot.item_id)
+    return max(float(lot.lot_qty or 0) - consumed - related - reserved_run - reserved_subcontract - _packed_qty(db, lot.lot_no) - defected, 0.0)
 
 
 def _packing_source_item_ids(db: Session, finished_item_id: int) -> list[int]:
