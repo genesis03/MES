@@ -52,6 +52,15 @@ def inventory_adjustments_page(request: Request, current_user=Depends(get_curren
     )
 
 
+@router.get("/inventory/movements", response_class=HTMLResponse)
+def inventory_movements_page(request: Request, current_user=Depends(get_current_user)):
+    return templates.TemplateResponse(
+        request=request,
+        name="inventory_movements.html",
+        context={"request": request, "user": current_user},
+    )
+
+
 def _used_qty(db: Session, lot_no: str, item_id: int | None = None) -> float:
     consumed = (
         db.query(func.coalesce(func.sum(LotConsumptionModel.consumed_qty), 0.0))
