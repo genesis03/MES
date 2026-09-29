@@ -1,0 +1,10 @@
+[Unit]
+Description=Run MES SQLite backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+Unit=mes-backup.service
+
+[Install]
+WantedBy=timers.target
