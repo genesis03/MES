@@ -46,6 +46,7 @@ def _label(
     *, title: str, part_no: str, part_name: str, lot_no: str, qty: float,
     unit: str, date: str, process: str, storage: str, extras: list[dict] | None = None,
     date_label: str = "기준일", operator: str = "", shift: str = "",
+    equipment: str = "", compact_production: bool = False,
 ) -> dict:
     return {
         "title": title,
@@ -60,6 +61,8 @@ def _label(
         "storage": storage or "",
         "operator": operator or "",
         "shift": shift or "",
+        "equipment": equipment or "",
+        "compact_production": bool(compact_production),
         "extras": extras or [],
     }
 
@@ -118,12 +121,14 @@ def _production_labels(db: Session, performance_id: int) -> list[dict]:
         process=_process_text(db, performance.process_code, "조립" if is_assembly else "가공"),
         storage=_storage_text(db, lot.storage_location),
         operator=str(performance.operator_name or "").strip(),
+        equipment=str(performance.equipment_name or performance.equipment_code or "").strip(),
         shift={"DAY": "주간", "NIGHT": "야간"}.get(str(performance.shift_type or "").strip().upper(), str(performance.shift_type or "").strip()),
+        compact_production=True,
         extras=[
             {"label": "양품", "value": good},
             {"label": "불량", "value": defect},
             {"label": "SET-UP", "value": setup},
-            {"label": "생산", "value": production},
+            {"label": "총생산", "value": production},
         ],
     )]
 
