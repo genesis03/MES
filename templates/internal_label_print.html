@@ -31,6 +31,8 @@
 .internal-barcode .barcode-svg{width:100%;height:22mm;display:block;shape-rendering:crispEdges;margin:0 auto}
 .internal-lot-text{font-family:Consolas,monospace;font-weight:900;font-size:8pt;margin-top:.35mm;letter-spacing:.2px;line-height:1}
 .internal-company{text-align:center;font-size:8.5pt;font-weight:900;margin-top:2mm;padding:.35mm 0 .65mm;line-height:1}
+.internal-label-box.production-label .internal-label-title{padding:.9mm 1mm}
+.internal-label-box.production-label .internal-company{margin-top:0}
 @media print{.sidebar,.internal-print-toolbar{display:none!important}.main-content{padding:0!important}.internal-label-page{margin:0!important}.internal-label-box{box-shadow:none!important}}
 </style>
 {% endblock %}
@@ -49,7 +51,8 @@ function render(){
   const root=document.getElementById('internalLabels');
   root.innerHTML=INTERNAL_LABELS.map(row=>{
     const extra=(row.extras||[]).length?`<div class="internal-extra">${row.extras.map(x=>`<div class="extra-label">${esc(x.label)}</div><div class="extra-value">${fmt(x.value)}</div>`).join('')}</div>`:'';
-    return `<section class="internal-label-page"><div class="internal-label-box">
+    const productionClass=(row.operator||row.shift)?' production-label':'';
+    return `<section class="internal-label-page"><div class="internal-label-box${productionClass}">
       <div class="internal-label-title">${esc(row.title)}</div>
       <table class="internal-label-table">
         <colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"></colgroup>
