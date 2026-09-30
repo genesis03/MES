@@ -34,6 +34,7 @@ class ProductionDefectItemInput(BaseModel):
 class ProductionDefectCreateInput(BaseModel):
     production_lot_id: int = Field(gt=0)
     defect_date: str = Field(min_length=10, max_length=10)
+    defect_reason_code: str = Field(min_length=1, max_length=30)
     defect_items: List[ProductionDefectItemInput] = Field(min_length=1)
     remark: Optional[str] = Field(default=None, max_length=1000)
 
@@ -59,6 +60,18 @@ def _defect_types(db: Session):
         db.query(CommonCodeModel)
         .filter(
             CommonCodeModel.group_code == "DEFECT_TYPE",
+            CommonCodeModel.is_active == "Y",
+        )
+        .order_by(CommonCodeModel.sort_order.asc(), CommonCodeModel.id.asc())
+        .all()
+    )
+
+
+def _defect_reasons(db: Session):
+    return (
+        db.query(CommonCodeModel)
+        .filter(
+            CommonCodeModel.group_code == "PRODUCTION_DEFECT_REASON",
             CommonCodeModel.is_active == "Y",
         )
         .order_by(CommonCodeModel.sort_order.asc(), CommonCodeModel.id.asc())
@@ -209,7 +222,11 @@ def production_defect_options(
         "defect_types": [
             {"code": row.code, "name": row.code_name}
             for row in _defect_types(db)
-        ]
+        ],
+        "defect_reasons": [
+            {"code": row.code, "name": row.code_name}
+            for row in _defect_reasons(db)
+        ],
     }
 
 
@@ -260,9 +277,13 @@ def production_defect_lots(
 def create_production_defect(
     payload: ProductionDefectCreateInput,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(require_admin_user),
 ):
     defect_date = _validate_date(payload.defect_date)
+    reason_code = payload.defect_reason_code.strip()
+    allowed_reasons = {row.code for row in _defect_reasons(db)}
+    if reason_code not in allowed_reasons:
+        raise HTTPException(422, "등록되지 않았거나 사용 중지된 불량 사유입니다.")
     lot = db.get(ProductionLotModel, payload.production_lot_id)
     if lot is None or lot.status != "ACTIVE":
         raise HTTPException(404, "불량 처리할 생산 LOT를 찾을 수 없습니다.")
@@ -300,6 +321,7 @@ def create_production_defect(
         available_qty_before=available,
         defect_date=defect_date,
         defect_qty=total,
+        defect_reason_code=reason_code,
         status="ACTIVE",
         remark=(payload.remark or "").strip() or None,
         created_by=_username(current_user) or None,
@@ -352,6 +374,7 @@ def production_defect_history(
         if defect_ids else []
     )
     names = {row.code: row.code_name for row in _defect_types(db)}
+    reason_names = {row.code: row.code_name for row in _defect_reasons(db)}
     detail_map = {}
     for detail in detail_rows:
         detail_map.setdefault(detail.defect_id, []).append({
@@ -376,6 +399,8 @@ def production_defect_history(
                 "available_qty_before": float(row.available_qty_before or 0),
                 "defect_date": row.defect_date,
                 "defect_qty": float(row.defect_qty or 0),
+                "defect_reason_code": row.defect_reason_code or "",
+                "defect_reason_name": reason_names.get(row.defect_reason_code, row.defect_reason_code or ""),
                 "status": row.status,
                 "remark": row.remark or "",
                 "created_by": row.created_by or "",
