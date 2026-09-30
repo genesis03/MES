@@ -45,6 +45,7 @@ def _process_text(db: Session, code: str | None, fallback: str = "") -> str:
 def _label(
     *, title: str, part_no: str, part_name: str, lot_no: str, qty: float,
     unit: str, date: str, process: str, storage: str, extras: list[dict] | None = None,
+    date_label: str = "기준일", operator: str = "", shift: str = "",
 ) -> dict:
     return {
         "title": title,
@@ -54,8 +55,11 @@ def _label(
         "qty": float(qty or 0),
         "unit": unit or "EA",
         "date": date or "",
+        "date_label": date_label or "기준일",
         "process": process or "",
         "storage": storage or "",
+        "operator": operator or "",
+        "shift": shift or "",
         "extras": extras or [],
     }
 
@@ -110,8 +114,11 @@ def _production_labels(db: Session, performance_id: int) -> list[dict]:
         qty=good,
         unit=(item.unit if item else "EA") or "EA",
         date=performance.performance_date,
+        date_label="생산일",
         process=_process_text(db, performance.process_code, "조립" if is_assembly else "가공"),
         storage=_storage_text(db, lot.storage_location),
+        operator=str(performance.operator_name or "").strip(),
+        shift={"DAY": "주간", "NIGHT": "야간"}.get(str(performance.shift_type or "").strip().upper(), str(performance.shift_type or "").strip()),
         extras=[
             {"label": "양품", "value": good},
             {"label": "불량", "value": defect},
