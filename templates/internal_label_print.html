@@ -31,8 +31,20 @@
 .internal-barcode .barcode-svg{width:100%;height:22mm;display:block;shape-rendering:crispEdges;margin:0 auto}
 .internal-lot-text{font-family:Consolas,monospace;font-weight:900;font-size:8pt;margin-top:.35mm;letter-spacing:.2px;line-height:1}
 .internal-company{text-align:center;font-size:8.5pt;font-weight:900;margin-top:2mm;padding:.35mm 0 .65mm;line-height:1}
-.internal-label-box.production-label .internal-label-title{padding:.9mm 1mm}
-.internal-label-box.production-label .internal-company{margin-top:0}
+.internal-label-box.production-label .internal-label-title{padding:.55mm 1mm}
+.internal-label-box.production-label .internal-company{margin-top:0;padding:.15mm 0 .35mm}
+.internal-label-box.production-label .internal-label-table td{height:4.45mm;padding:.38mm .7mm}
+.internal-label-box.production-label .internal-label-table .storage-row{display:none}
+.internal-label-box.production-label .production-worker-row td{padding:0;height:4.45mm}
+.internal-label-box.production-label .production-worker-grid{display:grid;grid-template-columns:14% 21% 12% 21% 12% 20%;height:100%}
+.internal-label-box.production-label .production-worker-grid span{display:flex;align-items:center;padding:0 .55mm;border-right:1px solid #111;overflow:hidden;white-space:nowrap;font-size:8.2pt}
+.internal-label-box.production-label .production-worker-grid span:nth-child(odd){font-weight:900;justify-content:center}
+.internal-label-box.production-label .production-worker-grid span:last-child{border-right:0}
+.internal-label-box.production-label .internal-extra{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:3.7mm 3.9mm;border-bottom:1px solid #111}
+.internal-label-box.production-label .internal-extra .extra-label,.internal-label-box.production-label .internal-extra .extra-value{padding:0 .3mm;font-size:7.8pt;border-right:1px solid #111}
+.internal-label-box.production-label .internal-extra .extra-value{font-size:8.8pt;font-weight:900}
+.internal-label-box.production-label .internal-extra .extra-label:nth-child(7),.internal-label-box.production-label .internal-extra .extra-value:nth-child(8){border-right:0}
+.internal-label-box.production-label .internal-barcode{min-height:27mm;padding-top:.35mm}
 @media print{.sidebar,.internal-print-toolbar{display:none!important}.main-content{padding:0!important}.internal-label-page{margin:0!important}.internal-label-box{box-shadow:none!important}}
 </style>
 {% endblock %}
@@ -50,8 +62,15 @@ const fmt=v=>{const n=Number(v||0);return Number.isInteger(n)?n.toLocaleString('
 function render(){
   const root=document.getElementById('internalLabels');
   root.innerHTML=INTERNAL_LABELS.map(row=>{
-    const extra=(row.extras||[]).length?`<div class="internal-extra">${row.extras.map(x=>`<div class="extra-label">${esc(x.label)}</div><div class="extra-value">${fmt(x.value)}</div>`).join('')}</div>`:'';
-    const productionClass=(row.operator||row.shift)?' production-label':'';
+    const productionClass=row.compact_production?' production-label':'';
+    const extra=(row.extras||[]).length
+      ? (row.compact_production
+          ? `<div class="internal-extra">${row.extras.map(x=>`<div class="extra-label">${esc(x.label)}</div>`).join('')}${row.extras.map(x=>`<div class="extra-value">${fmt(x.value)}</div>`).join('')}</div>`
+          : `<div class="internal-extra">${row.extras.map(x=>`<div class="extra-label">${esc(x.label)}</div><div class="extra-value">${fmt(x.value)}</div>`).join('')}</div>`)
+      : '';
+    const workerRow=row.compact_production
+      ? `<tr class="production-worker-row"><td colspan="4"><div class="production-worker-grid"><span>작업자</span><span>${esc(row.operator)}</span><span>호기</span><span>${esc(row.equipment)}</span><span>주/야</span><span>${esc(row.shift)}</span></div></td></tr>`
+      : ((row.operator||row.shift)?`<tr><td class="half-k">작업자</td><td class="half-v">${esc(row.operator)}</td><td class="half-k">주/야</td><td class="half-v">${esc(row.shift)}</td></tr>`:'');
     return `<section class="internal-label-page"><div class="internal-label-box${productionClass}">
       <div class="internal-label-title">${esc(row.title)}</div>
       <table class="internal-label-table">
@@ -61,7 +80,7 @@ function render(){
         <tr><td class="k">품명</td><td class="v wide" colspan="3">${esc(row.part_name)}</td></tr>
         <tr><td class="half-k">LOT</td><td class="half-v">${esc(row.lot_no)}</td><td class="half-k">수량</td><td class="half-v">${fmt(row.qty)} ${esc(row.unit)}</td></tr>
         <tr><td class="half-k">${esc(row.date_label||'기준일')}</td><td class="half-v">${esc(row.date)}</td><td class="half-k">공정</td><td class="half-v">${esc(row.process)}</td></tr>
-        ${(row.operator||row.shift)?`<tr><td class="half-k">작업자</td><td class="half-v">${esc(row.operator)}</td><td class="half-k">주/야</td><td class="half-v">${esc(row.shift)}</td></tr>`:''}
+        ${workerRow}
         <tr class="storage-row"><td class="k storage-k">저장위치</td><td class="v wide" colspan="3">${esc(row.storage)}</td></tr>
       </tbody></table>${extra}
       <div class="internal-barcode">${Code128Engine.createSVG(String(row.lot_no||''))}<div class="internal-lot-text">${esc(row.lot_no)}</div></div>
