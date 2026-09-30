@@ -100,7 +100,8 @@ def _production_labels(db: Session, performance_id: int) -> list[dict]:
     is_assembly = str(performance.performance_type or "").upper() == "ASSEMBLY"
     good = float(performance.good_qty or 0)
     defect = float(performance.defect_qty or 0)
-    production = good + defect + float(performance.setup_qty or 0)
+    setup = float(performance.setup_qty or 0)
+    production = good + defect + setup
     return [_label(
         title="조립 LOT" if is_assembly else "생산 LOT",
         part_no=item.part_no if item else order.part_no,
@@ -114,6 +115,7 @@ def _production_labels(db: Session, performance_id: int) -> list[dict]:
         extras=[
             {"label": "양품", "value": good},
             {"label": "불량", "value": defect},
+            {"label": "SET-UP", "value": setup},
             {"label": "생산", "value": production},
         ],
     )]
