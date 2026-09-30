@@ -16,6 +16,7 @@ class QualityProductionDefect(Base):
     available_qty_before = Column(Float, nullable=False, default=0.0)
     defect_date = Column(String(10), nullable=False, index=True)
     defect_qty = Column(Float, nullable=False, default=0.0)
+    defect_reason_code = Column(String(30), nullable=True, index=True)
     status = Column(String(20), nullable=False, default="ACTIVE", index=True)
     remark = Column(Text, nullable=True)
     created_by = Column(String(100), nullable=True)
