@@ -57,7 +57,8 @@ function render(){
         <tr><td class="k">품번</td><td class="v" colspan="3">${esc(row.part_no)}</td></tr>
         <tr><td class="k">품명</td><td class="v wide" colspan="3">${esc(row.part_name)}</td></tr>
         <tr><td class="half-k">LOT</td><td class="half-v">${esc(row.lot_no)}</td><td class="half-k">수량</td><td class="half-v">${fmt(row.qty)} ${esc(row.unit)}</td></tr>
-        <tr><td class="half-k">기준일</td><td class="half-v">${esc(row.date)}</td><td class="half-k">공정</td><td class="half-v">${esc(row.process)}</td></tr>
+        <tr><td class="half-k">${esc(row.date_label||'기준일')}</td><td class="half-v">${esc(row.date)}</td><td class="half-k">공정</td><td class="half-v">${esc(row.process)}</td></tr>
+        ${(row.operator||row.shift)?`<tr><td class="half-k">작업자</td><td class="half-v">${esc(row.operator)}</td><td class="half-k">주/야</td><td class="half-v">${esc(row.shift)}</td></tr>`:''}
         <tr class="storage-row"><td class="k storage-k">저장위치</td><td class="v wide" colspan="3">${esc(row.storage)}</td></tr>
       </tbody></table>${extra}
       <div class="internal-barcode">${Code128Engine.createSVG(String(row.lot_no||''))}<div class="internal-lot-text">${esc(row.lot_no)}</div></div>
