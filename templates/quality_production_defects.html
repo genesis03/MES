@@ -4,13 +4,13 @@
 <style>
 .pd-wrap{padding:16px}.pd-wrap h1{font-size:20px;margin:0 0 12px}.pd-card{border:1px solid #d8e0ea;border-radius:8px;background:#fff;padding:14px;margin-bottom:12px}
 .pd-row{display:grid;grid-template-columns:170px 120px 1fr;gap:8px;align-items:end}.pd-field{display:flex;flex-direction:column;gap:4px}.pd-field label{font-size:11px;font-weight:700;color:#64748b}
-.pd-field input{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px}.pd-btn{height:34px;border:0;border-radius:4px;padding:0 14px;font-weight:700;cursor:pointer}.pd-primary{background:#2563eb;color:#fff}.pd-save{background:#0f766e;color:#fff}.pd-light{background:#e2e8f0;color:#334155}.pd-danger{background:#dc2626;color:#fff}
+.pd-field input,.pd-field select{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px;background:#fff}.pd-btn{height:34px;border:0;border-radius:4px;padding:0 14px;font-weight:700;cursor:pointer}.pd-primary{background:#2563eb;color:#fff}.pd-save{background:#0f766e;color:#fff}.pd-light{background:#e2e8f0;color:#334155}.pd-danger{background:#dc2626;color:#fff}
 .pd-info{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:8px 12px}.pd-info div{background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;padding:8px}.pd-info span{display:block;font-size:10px;color:#64748b}.pd-info strong{font-size:12px}
-.pd-defects{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:8px 12px;margin-top:12px}.pd-defect{display:flex;align-items:center;gap:7px}.pd-defect label{min-width:54px;font-size:12px;font-weight:700}.pd-defect input{width:80px;height:30px;border:1px solid #cbd5e1;border-radius:4px;text-align:right;padding:0 6px}
-.pd-bottom{display:grid;grid-template-columns:180px 180px 1fr 120px;gap:10px;align-items:end;margin-top:12px}.pd-summary{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px;background:#f8fafc}
+.pd-defects{display:flex;flex-wrap:nowrap;gap:10px;margin-top:12px;overflow-x:auto;padding-bottom:2px}.pd-defect{display:flex;align-items:center;gap:5px;flex:1 1 0;min-width:95px}.pd-defect label{min-width:36px;font-size:11px;font-weight:700;white-space:nowrap}.pd-defect input{width:58px;height:30px;border:1px solid #cbd5e1;border-radius:4px;text-align:right;padding:0 5px}
+.pd-bottom{display:grid;grid-template-columns:160px 160px 180px 1fr 120px;gap:10px;align-items:end;margin-top:12px}.pd-summary{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px;background:#f8fafc}
 .pd-table{width:100%;border-collapse:collapse;font-size:12px}.pd-table th,.pd-table td{border:1px solid #dbe2eb;padding:7px;text-align:center;white-space:nowrap}.pd-table th{background:#f1f5f9}.pd-left{text-align:left!important}.pd-num{text-align:right!important}.pd-active{color:#b91c1c;font-weight:800}.pd-cancelled{color:#64748b}
 .pd-popup{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);align-items:center;justify-content:center;z-index:1300}.pd-popup.show{display:flex}.pd-popup-box{width:min(1120px,96vw);max-height:88vh;background:#fff;border-radius:8px;overflow:hidden;display:flex;flex-direction:column}.pd-popup-head,.pd-popup-foot{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid #e2e8f0}.pd-popup-foot{justify-content:flex-end;border-top:1px solid #e2e8f0;border-bottom:0}.pd-popup-body{padding:14px;overflow:auto}.pd-search{display:grid;grid-template-columns:1fr 120px;gap:8px;margin-bottom:10px}.pd-search input{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px}.pd-popup tbody tr{cursor:pointer}.pd-popup tbody tr:hover,.pd-popup tbody tr.sel{background:#eff6ff}.pd-msg{min-height:18px;font-size:12px;margin-top:8px}.pd-msg.ok{color:#15803d}.pd-msg.err{color:#b91c1c}
-@media(max-width:1000px){.pd-info{grid-template-columns:repeat(2,1fr)}.pd-defects{grid-template-columns:repeat(3,1fr)}.pd-bottom{grid-template-columns:1fr 1fr}.pd-row{grid-template-columns:1fr 100px}}
+@media(max-width:1000px){.pd-info{grid-template-columns:repeat(2,1fr)}.pd-bottom{grid-template-columns:1fr 1fr}.pd-row{grid-template-columns:1fr 100px}}
 </style>
 {% endblock %}
 {% block content %}
@@ -34,6 +34,7 @@
     <div class="pd-bottom">
       <div class="pd-field"><label>불량일자</label><input type="date" id="pd-date"></div>
       <div class="pd-field"><label>불량합계</label><input class="pd-summary" id="pd-total" value="0" readonly></div>
+      <div class="pd-field"><label>불량 사유</label><select id="pd-reason"><option value="">선택</option></select></div>
       <div class="pd-field"><label>Comment</label><input id="pd-remark" placeholder="불량 관련 메모"></div>
       <button class="pd-btn pd-save" id="pd-save" type="button">저장</button>
     </div>
@@ -44,8 +45,8 @@
     <div style="font-weight:800;margin-bottom:8px">생산 LOT 불량 등록 이력</div>
     <div style="overflow:auto">
       <table class="pd-table">
-        <thead><tr><th>등록일시</th><th>불량일자</th><th>품번</th><th>품명</th><th>LOT NO</th><th>불량유형</th><th>불량합계</th><th>등록자</th><th>상태</th><th>Comment</th><th>관리</th></tr></thead>
-        <tbody id="pd-history"><tr><td colspan="11">조회 중...</td></tr></tbody>
+        <thead><tr><th>등록일시</th><th>불량일자</th><th>품번</th><th>품명</th><th>LOT NO</th><th>불량유형</th><th>불량합계</th><th>불량 사유</th><th>등록자</th><th>상태</th><th>Comment</th><th>관리</th></tr></thead>
+        <tbody id="pd-history"><tr><td colspan="12">조회 중...</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -74,7 +75,7 @@
   const $=function(id){return document.getElementById(id)};
   const esc=function(v){const s=document.createElement('span');s.textContent=v==null?'':v;return s.innerHTML};
   const fmt=function(v){return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6})};
-  let defectTypes=[], lots=[], selected=null, popupSelected=null;
+  let defectTypes=[], defectReasons=[], lots=[], selected=null, popupSelected=null;
 
   function today(){return new Date().toISOString().slice(0,10)}
   function msg(t,ok){$('pd-msg').textContent=t||'';$('pd-msg').className='pd-msg '+(ok?'ok':'err')}
@@ -83,6 +84,8 @@
   async function loadOptions(){
     const d=await jf('/api/quality/production-defects/options');
     defectTypes=d.defect_types||[];
+    defectReasons=d.defect_reasons||[];
+    $('pd-reason').innerHTML='<option value="">선택</option>'+defectReasons.map(function(x){return '<option value="'+esc(x.code)+'">'+esc(x.name)+'</option>'}).join('');
     $('pd-defects').innerHTML=defectTypes.map(function(x){
       return '<div class="pd-defect"><label>'+esc(x.name)+'</label><input type="number" min="0" step="any" data-code="'+esc(x.code)+'" value="0"></div>';
     }).join('');
@@ -107,20 +110,22 @@
     $('i-part').textContent=x.part_no||'';$('i-name').textContent=x.part_name||'';$('i-process').textContent=x.process_name||'';
     $('i-location').textContent=x.storage_location_name||'';$('i-lotqty').textContent=fmt(x.lot_qty)+' '+(x.unit||'');
     $('i-available').textContent=fmt(x.available_qty)+' '+(x.unit||'');$('i-created').textContent=x.created_at||'';
-    $('pd-defects').querySelectorAll('input').forEach(function(el){el.value=0});$('pd-remark').value='';$('pd-date').value=today();updateTotal();
+    $('pd-defects').querySelectorAll('input').forEach(function(el){el.value=0});$('pd-reason').value='';$('pd-remark').value='';$('pd-date').value=today();updateTotal();
   }
   async function save(){
     if(!selected)return;
     const defect_items=[...$('pd-defects').querySelectorAll('input')].map(function(x){return {defect_type_code:x.dataset.code,defect_qty:Number(x.value||0)}}).filter(function(x){return x.defect_qty>0});
     if(!defect_items.length){msg('불량수량을 입력해 주세요.',false);return}
+    const reason=$('pd-reason').value;
+    if(!reason){msg('불량 사유를 선택해 주세요.',false);return}
     const total=defect_items.reduce(function(s,x){return s+x.defect_qty},0);
     if(total>Number(selected.available_qty||0)){msg('불량합계가 처리 가능 수량을 초과합니다.',false);return}
     if(!confirm(selected.lot_no+'에 불량 '+fmt(total)+'개를 등록하시겠습니까?'))return;
     try{
-      const d=await jf('/api/quality/production-defects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({production_lot_id:selected.production_lot_id,defect_date:$('pd-date').value,defect_items:defect_items,remark:$('pd-remark').value||null})});
+      const d=await jf('/api/quality/production-defects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({production_lot_id:selected.production_lot_id,defect_date:$('pd-date').value,defect_reason_code:reason,defect_items:defect_items,remark:$('pd-remark').value||null})});
       msg('저장했습니다. 현재 처리 가능 수량 '+fmt(d.remaining_qty),true);
       selected.available_qty=d.remaining_qty;$('i-available').textContent=fmt(d.remaining_qty)+' '+(selected.unit||'');
-      $('pd-defects').querySelectorAll('input').forEach(function(el){el.value=0});$('pd-remark').value='';updateTotal();await loadHistory();
+      $('pd-defects').querySelectorAll('input').forEach(function(el){el.value=0});$('pd-reason').value='';$('pd-remark').value='';updateTotal();await loadHistory();
     }catch(e){msg(e.message,false)}
   }
   async function loadHistory(){
@@ -129,8 +134,8 @@
       const detail=(x.defect_items||[]).map(function(y){return esc(y.name)+' '+fmt(y.qty)}).join(' / ');
       const state=x.status==='ACTIVE'?'<span class="pd-active">유효</span>':'<span class="pd-cancelled">취소</span>';
       const action=IS_ADMIN&&x.status==='ACTIVE'?'<button class="pd-btn pd-danger" style="height:28px" data-cancel="'+x.id+'">취소</button>':(x.status==='CANCELLED'?esc(x.cancel_reason):'');
-      return '<tr><td>'+esc(x.created_at)+'</td><td>'+esc(x.defect_date)+'</td><td>'+esc(x.part_no)+'</td><td class="pd-left">'+esc(x.part_name)+'</td><td>'+esc(x.lot_no)+'</td><td class="pd-left">'+detail+'</td><td class="pd-num">'+fmt(x.defect_qty)+'</td><td>'+esc(x.created_by)+'</td><td>'+state+'</td><td class="pd-left">'+esc(x.remark)+'</td><td>'+action+'</td></tr>';
-    }).join(''):'<tr><td colspan="11">등록 이력이 없습니다.</td></tr>';
+      return '<tr><td>'+esc(x.created_at)+'</td><td>'+esc(x.defect_date)+'</td><td>'+esc(x.part_no)+'</td><td class="pd-left">'+esc(x.part_name)+'</td><td>'+esc(x.lot_no)+'</td><td class="pd-left">'+detail+'</td><td class="pd-num">'+fmt(x.defect_qty)+'</td><td>'+esc(x.defect_reason_name)+'</td><td>'+esc(x.created_by)+'</td><td>'+state+'</td><td class="pd-left">'+esc(x.remark)+'</td><td>'+action+'</td></tr>';
+    }).join(''):'<tr><td colspan="12">등록 이력이 없습니다.</td></tr>';
   }
   async function cancelDefect(id){
     const reason=prompt('취소 사유를 입력해 주세요.');if(reason===null)return;if(!reason.trim()){alert('취소 사유가 필요합니다.');return}
