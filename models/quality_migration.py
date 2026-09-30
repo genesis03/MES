@@ -18,6 +18,13 @@ DEFECT_TYPE_SEED = (
     ("12", "형상"),
 )
 
+PRODUCTION_DEFECT_REASON_SEED = (
+    ("PROCESS", "공정 불량"),
+    ("POST_PROCESS", "후공정 불량"),
+    ("INSPECTION", "검사 불량"),
+    ("OTHER", "기타"),
+)
+
 
 def ensure_quality_master_data(engine):
     """품질 입고검사에서 사용하는 표준 불량유형을 공통코드 마스터에 보장합니다."""
@@ -59,3 +66,48 @@ def ensure_quality_master_data(engine):
                     "created_at": now_str,
                 },
             )
+
+        reason_existing = {
+            row[0]
+            for row in connection.execute(
+                text("SELECT code FROM common_codes WHERE group_code = :group_code"),
+                {"group_code": "PRODUCTION_DEFECT_REASON"},
+            ).fetchall()
+        }
+        for sort_order, (code, code_name) in enumerate(PRODUCTION_DEFECT_REASON_SEED, start=1):
+            if code in reason_existing:
+                continue
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO common_codes (
+                        group_code, group_name, code, code_name,
+                        sort_order, is_active, note, created_at
+                    ) VALUES (
+                        :group_code, :group_name, :code, :code_name,
+                        :sort_order, 'Y', :note, :created_at
+                    )
+                    """
+                ),
+                {
+                    "group_code": "PRODUCTION_DEFECT_REASON",
+                    "group_name": "생산 LOT 불량 사유",
+                    "code": code,
+                    "code_name": code_name,
+                    "sort_order": sort_order,
+                    "note": "생산 LOT 관리자 불량 처리 사유",
+                    "created_at": now_str,
+                },
+            )
+
+        if "quality_production_defects" in inspector.get_table_names():
+            defect_columns = {
+                col["name"] for col in inspect(connection).get_columns("quality_production_defects")
+            }
+            if "defect_reason_code" not in defect_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE quality_production_defects "
+                        "ADD COLUMN defect_reason_code VARCHAR(30)"
+                    )
+                )
