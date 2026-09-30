@@ -17,14 +17,16 @@
 .internal-label-table col.c4{width:30%}
 .internal-label-table .k{font-weight:900;text-align:center;white-space:nowrap}
 .internal-label-table .storage-k{font-size:7.2pt;letter-spacing:-.2px;padding-left:.45mm;padding-right:.45mm}
+.internal-label-table .storage-row td{height:5.4mm;padding-top:.85mm;padding-bottom:.85mm}
 .internal-label-table .v{font-weight:800}
 .internal-label-table .wide{font-size:8.5pt;overflow:hidden}
 .internal-label-table .half-k{font-weight:900;text-align:center;white-space:nowrap}
 .internal-label-table .half-v{font-weight:800;overflow:hidden}
-.internal-extra{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #111}
-.internal-extra div{border-right:1px solid #111;text-align:center;padding:.75mm .5mm;font-size:8pt}
+.internal-extra{display:grid;grid-template-columns:repeat(8,1fr);border-bottom:1px solid #111}
+.internal-extra div{border-right:1px solid #111;text-align:center;padding:.75mm .45mm;font-size:8pt;display:flex;align-items:center;justify-content:center}
 .internal-extra div:last-child{border-right:0}
-.internal-extra b{display:block;font-size:9pt;margin-top:.25mm}
+.internal-extra .extra-label{font-weight:800;white-space:nowrap}
+.internal-extra .extra-value{font-size:9pt;font-weight:900}
 .internal-barcode{margin-top:auto;padding:1.1mm 2.2mm .35mm;text-align:center;min-height:25mm;display:flex;flex-direction:column;justify-content:flex-end}
 .internal-barcode .barcode-svg{width:100%;height:22mm;display:block;shape-rendering:crispEdges;margin:0 auto}
 .internal-lot-text{font-family:Consolas,monospace;font-weight:900;font-size:8pt;margin-top:.35mm;letter-spacing:.2px;line-height:1}
@@ -46,7 +48,7 @@ const fmt=v=>{const n=Number(v||0);return Number.isInteger(n)?n.toLocaleString('
 function render(){
   const root=document.getElementById('internalLabels');
   root.innerHTML=INTERNAL_LABELS.map(row=>{
-    const extra=(row.extras||[]).length?`<div class="internal-extra">${row.extras.map(x=>`<div>${esc(x.label)}<b>${fmt(x.value)}</b></div>`).join('')}</div>`:'';
+    const extra=(row.extras||[]).length?`<div class="internal-extra">${row.extras.map(x=>`<div class="extra-label">${esc(x.label)}</div><div class="extra-value">${fmt(x.value)}</div>`).join('')}</div>`:'';
     return `<section class="internal-label-page"><div class="internal-label-box">
       <div class="internal-label-title">${esc(row.title)}</div>
       <table class="internal-label-table">
@@ -56,7 +58,7 @@ function render(){
         <tr><td class="k">품명</td><td class="v wide" colspan="3">${esc(row.part_name)}</td></tr>
         <tr><td class="half-k">LOT</td><td class="half-v">${esc(row.lot_no)}</td><td class="half-k">수량</td><td class="half-v">${fmt(row.qty)} ${esc(row.unit)}</td></tr>
         <tr><td class="half-k">기준일</td><td class="half-v">${esc(row.date)}</td><td class="half-k">공정</td><td class="half-v">${esc(row.process)}</td></tr>
-        <tr><td class="k storage-k">저장위치</td><td class="v wide" colspan="3">${esc(row.storage)}</td></tr>
+        <tr class="storage-row"><td class="k storage-k">저장위치</td><td class="v wide" colspan="3">${esc(row.storage)}</td></tr>
       </tbody></table>${extra}
       <div class="internal-barcode">${Code128Engine.createSVG(String(row.lot_no||''))}<div class="internal-lot-text">${esc(row.lot_no)}</div></div>
       <div class="internal-company">(주)유니코어텍</div>
