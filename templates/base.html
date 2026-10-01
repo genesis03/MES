@@ -300,7 +300,7 @@
 
             <!-- 4. 생산관리 -->
             {% if user %}
-            <li class="menu-item{% if request.url.path.startswith('/production/') %} open{% endif %}" id="productionMenu" data-perm-key="production">
+            <li class="menu-item{% if request.url.path.startswith('/production/') and not request.url.path.startswith('/production/packing') %} open{% endif %}" id="productionMenu" data-perm-key="production">
                 <div class="menu-title" onclick="toggleAccordion('productionMenu')">
                     <span>생산관리</span>
                     <span class="arrow-icon">▼</span>
@@ -313,10 +313,8 @@
                     <li class="submenu-item"><a href="/production/performance/machining" id="nav-production-machining">가공 실적 등록</a></li>
                     <li class="submenu-item"><a href="/production/performance/assembly" id="nav-production-assembly">조립 실적 등록</a></li>
                     <li class="submenu-item"><a href="/production/rework" id="nav-production-rework">수정품 가공 처리 (리워크)</a></li>
-                    <li class="submenu-item"><a href="/production/packing" id="nav-production-packing">포장(출고LOT) 처리</a></li>
                     <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
                     <li class="submenu-item"><a href="/production/performance/status" id="nav-production-status">생산 실적 현황</a></li>
-                    <li class="submenu-item"><a href="/production/packing/status" id="nav-production-packing-status">포장현황</a></li>
                     <li class="submenu-item"><a href="/production/equipment/status" id="nav-production-equipment">설비 가동 현황 (OEE)</a></li>
                 </ul>
             </li>
@@ -324,11 +322,14 @@
 
             <!-- 5. 출고관리 -->
             {% if user %}
-            <li class="menu-item{% if request.url.path.startswith('/shipping') or request.url.path == '/sales/shipping' %} open{% endif %}" id="shippingMenu" data-perm-key="shipping">
+            <li class="menu-item{% if request.url.path.startswith('/shipping') or request.url.path == '/sales/shipping' or request.url.path.startswith('/production/packing') %} open{% endif %}" id="shippingMenu" data-perm-key="shipping">
                 <div class="menu-title" onclick="toggleAccordion('shippingMenu')">
                     <span>출고관리</span><span class="arrow-icon">▼</span>
                 </div>
                 <ul class="submenu">
+                    <li class="submenu-item"><a href="/production/packing" id="nav-production-packing">포장 처리</a></li>
+                    <li class="submenu-item"><a href="/production/packing/status" id="nav-production-packing-status">포장 현황</a></li>
+                    <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
                     <li class="submenu-item"><a href="/sales/shipping" id="nav-sales-shipping">출고 입력</a></li>
                     <li class="submenu-item"><a href="/shipping/inquiry" id="nav-shipping-inquiry">출고 내역 조회</a></li>
                     <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
