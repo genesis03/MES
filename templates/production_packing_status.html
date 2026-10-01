@@ -113,14 +113,14 @@ async function loadRows(){
   }
 }
 function resetFilters(){
-  $('startDate').value=localDate(-7);
+  $('startDate').value=localDate(-30);
   $('endDate').value=localDate(0);
   $('partNo').value='';
   $('lotNo').value='';
   loadRows();
 }
 document.addEventListener('DOMContentLoaded',()=>{
-  $('startDate').value=localDate(-7);
+  $('startDate').value=localDate(-30);
   $('endDate').value=localDate(0);
   $('searchBtn').addEventListener('click',loadRows);
   $('resetBtn').addEventListener('click',resetFilters);
