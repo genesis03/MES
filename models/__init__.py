@@ -33,6 +33,7 @@ from models.audit_log import AuditLogModel
 from models.inventory_adjustment import InventoryAdjustmentModel
 from models.inventory_movement import InventoryMovementModel
 from models.item_identity import ItemPartNoHistory, install_item_identity_events
+from models.document import ItemRevision, ItemDocument, DocumentFile
 
 
 # 신규/수정 업무행은 품번과 함께 영구 item_id를 자동 연결합니다.
@@ -64,8 +65,11 @@ ensure_shipping_lot_registry(engine)
 ensure_item_identity_columns(engine)
 ensure_item_part_no_fk_removed(engine)
 ensure_item_identity_not_null(engine)
+from models.document_migration import ensure_document_codes
+ensure_document_codes(engine)
 
 __all__ = [
+    "ItemRevision", "ItemDocument", "DocumentFile",
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
     "LotRelationModel", "LotConsumptionModel",
     "ProductionLotModel",

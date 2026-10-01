@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}도면 관리{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="/static/css/drawing_management.css">
+<div id="drawingApp" data-can-write="{{ 'true' if can_write_documents else 'false' }}">
+    <div class="drawing-heading"><div><h2>도면 관리</h2><p>품목별 도면과 개정 이력을 관리합니다.</p></div><a href="/basic-info/items" class="drawing-link">품목 정보 관리</a></div>
+    <form id="drawingSearch" class="drawing-search">
+        <label>품번 / 품명<input id="drawingKeyword" placeholder="이전 품번도 검색 가능"></label>
+        <label>도면번호<input id="drawingNoSearch" placeholder="도면번호 검색"></label>
+        <label>등록 상태<select id="drawingState"><option value="">전체</option><option value="CURRENT">현재 도면 있음</option><option value="MISSING">현재 도면 없음</option></select></label>
+        <button type="submit">조회</button><button type="button" id="drawingReset" class="secondary">초기화</button>
+    </form>
+    <p id="drawingMessage" class="drawing-message" role="status" aria-live="polite"></p>
+    <div class="drawing-layout">
+        <section class="drawing-panel drawing-items"><div class="drawing-panel-title">품목 목록 <span id="drawingItemCount"></span></div>
+            <div class="drawing-table-scroll"><table><thead><tr><th>품번 / 품명</th><th>현재 도면</th></tr></thead><tbody id="drawingItemRows"></tbody></table></div>
+        </section>
+        <section class="drawing-panel drawing-detail">
+            <div id="drawingEmpty" class="drawing-empty">품목을 선택해 주세요.</div>
+            <div id="drawingDetail" hidden>
+                <div class="drawing-detail-heading"><div><h3 id="drawingItemTitle"></h3><p id="drawingItemMeta"></p></div>
+                    <button id="drawingNewRevision" type="button" data-write>최초 등록</button></div>
+                <div class="drawing-revisions"><label>Revision 이력<select id="drawingRevision"></select></label><span id="drawingRevisionStatus" class="drawing-badge"></span></div>
+                <p id="drawingRevisionMeta" class="drawing-muted"></p>
+                <div class="drawing-actions"><button id="drawingRevise" type="button" data-write>개정 등록</button><button id="drawingActivate" type="button" data-write>현재 사용 적용</button><button id="drawingRetire" type="button" class="danger" data-write>Revision 폐기</button></div>
+                <div id="drawingDocuments"></div>
+                <form id="drawingUpload" class="drawing-upload" hidden>
+                    <h3>초안 도면 등록</h3><p class="drawing-muted">초안 저장 후 현재 사용 적용을 실행해 주세요. PDF와 CAD 원본을 함께 등록할 수 있습니다.</p>
+                    <div class="drawing-form-grid">
+                        <label>도면번호<input name="document_no" maxlength="100"></label><label>문서 표기 Revision<input name="document_revision" maxlength="50"></label>
+                        <label class="full">도면 제목 <span>*</span><input name="title" required maxlength="200"></label>
+                        <label class="full">도면 파일 <span>*</span><input id="drawingFiles" name="files" type="file" multiple required><small id="drawingFileHelp"></small></label>
+                        <label class="full">비고<textarea name="note" maxlength="8000" rows="2"></textarea></label>
+                    </div><button type="submit" data-write>도면 초안 저장</button>
+                </form>
+            </div>
+        </section>
+    </div>
+    <dialog id="drawingRevisionDialog"><form id="drawingRevisionForm">
+        <h3 id="drawingRevisionDialogTitle">Revision 등록</h3>
+        <label>품목 Revision <span>*</span><input id="drawingRevisionCode" required maxlength="50"></label>
+        <label>개정 사유<textarea id="drawingChangeReason" maxlength="4000" rows="3"></textarea></label>
+        <label>비고<textarea id="drawingRevisionNote" maxlength="8000" rows="2"></textarea></label>
+        <p class="drawing-muted">새 초안에는 이번 Revision에 사용할 파일을 등록합니다. 기존 Revision의 파일은 그대로 보존됩니다.</p>
+        <div class="drawing-actions"><button type="submit" data-write>초안 생성</button><button id="drawingRevisionCancel" type="button" class="secondary">닫기</button></div>
+    </form></dialog>
+    <dialog id="drawingPreviewDialog" class="drawing-preview"><div class="drawing-preview-heading"><strong id="drawingPreviewTitle"></strong><button id="drawingPreviewClose" type="button" class="secondary">닫기</button></div><iframe id="drawingPreviewFrame" title="도면 미리보기" sandbox="allow-same-origin"></iframe></dialog>
+</div>
+<script src="/static/drawing_management.js"></script>
+{% endblock %}

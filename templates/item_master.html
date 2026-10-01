@@ -258,6 +258,9 @@
             <button class="btn-action" style="background:#e2e8f0;color:#334155;" onclick="resetItemSearch()">초기화</button>
         </div>
         <div class="action-btn-group">
+            {% if can_access_drawings %}
+            <button id="itemDrawingButton" class="btn-action btn-search" onclick="openItemDrawings()" disabled>도면 조회</button>
+            {% endif %}
             <button class="btn-action btn-delete" onclick="handleDeleteItem()">삭제</button>
             <button class="btn-action btn-new" onclick="initNewForm()">신규</button>
             <button class="btn-action btn-save" onclick="handleSaveItem()">저장</button>
@@ -344,6 +347,7 @@
                     <div class="form-field">
                         <label class="field-label">리비전 (Revision) <span class="required">*</span></label>
                         <input type="text" id="detailRevision" class="field-input" value="Rev.00">
+                        <small id="itemDrawingStatus" style="color:#64748b;"></small>
                     </div>
 
                     <!-- 규격 / 사양 -->
@@ -429,6 +433,11 @@
     };
     let ITEMS_LIST = [];
     let CURRENT_ITEM_ID = null;
+
+    function openItemDrawings() {
+        if (!CURRENT_ITEM_ID) return;
+        window.location.href = `/basic-info/drawings?item_id=${encodeURIComponent(CURRENT_ITEM_ID)}`;
+    }
 
     // 1. 기준정보 룩업 조회 및 드롭다운 초기화
     async function initLookupData() {
@@ -601,6 +610,12 @@
         document.getElementById('detailPartName').value = item.part_name;
         document.getElementById('detailItemGroup').value = item.item_group || "";
         document.getElementById('detailRevision').value = item.revision || "Rev.00";
+        document.getElementById('detailRevision').readOnly = !!item.revision_managed;
+        document.getElementById('itemDrawingStatus').textContent = item.revision_managed
+            ? `${item.has_current_drawing ? '현재 사용 도면 있음' : '현재 사용 도면 없음'} · Revision 변경은 도면 관리에서 처리`
+            : '현재 사용 도면 미등록';
+        const drawingButton = document.getElementById('itemDrawingButton');
+        if (drawingButton) drawingButton.disabled = false;
         document.getElementById('detailSpec').value = item.spec || "";
         document.getElementById('detailSnp').value = item.snp || 0;
         document.getElementById('detailMoq').value = item.moq || 0;
@@ -634,6 +649,10 @@
         document.getElementById('detailMaterialType').value = "";
         document.getElementById('detailItemGroup').value = "";
         document.getElementById('detailRevision').value = "Rev.00";
+        document.getElementById('detailRevision').readOnly = false;
+        document.getElementById('itemDrawingStatus').textContent = '품목 저장 후 도면을 등록할 수 있습니다.';
+        const drawingButton = document.getElementById('itemDrawingButton');
+        if (drawingButton) drawingButton.disabled = true;
         document.getElementById('detailSpec').value = "";
         document.getElementById('detailUnit').value = "EA";
         document.getElementById('detailSnp').value = "0";

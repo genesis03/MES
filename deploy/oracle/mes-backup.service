@@ -1,9 +1,9 @@
 [Unit]
-Description=MES SQLite daily backup
+Description=MES database and technical document daily backup
 Requires=docker.service
 After=docker.service
 
 [Service]
 Type=oneshot
 WorkingDirectory=/home/ubuntu/MES
-ExecStart=/usr/bin/docker compose -f docker-compose.oracle.yml exec -T mes python deploy/oracle/backup_db.py --source /data/manual_labels.db --backup-dir /data/backup --retention-days 14
+ExecStart=/usr/bin/docker compose -f docker-compose.oracle.yml exec -T mes python deploy/oracle/backup_db.py --source /data/manual_labels.db --documents-root /data/documents --backup-dir /data/backup --retention-days 14

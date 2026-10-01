@@ -9,6 +9,7 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL:-sqlite:////data/manual_labels.db}
+      DOCUMENT_STORAGE_ROOT: ${DOCUMENT_STORAGE_ROOT:-/data/documents}
       SECRET_KEY: ${SECRET_KEY}
       DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD}
       DEFAULT_USER_PASSWORD: ${DEFAULT_USER_PASSWORD}

@@ -60,6 +60,8 @@ ports:
 
 ## 5. 운영 DB 수동 백업
 
+도면관리 도입 후에는 DB와 원본을 함께 보관해야 합니다. 통합 ZIP 백업/복구와 영구 저장 경로는 [도면 관리 운영 안내](../../docs/drawing_management.md)를 따르세요. 아래 DB-only 명령은 기존 운영 호환용이며 문서 파일은 포함하지 않습니다.
+
 실행 중인 SQLite DB를 단순 `cp`하지 않고 SQLite backup API를 사용합니다.
 
 ```bash

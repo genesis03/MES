@@ -25,6 +25,8 @@ manual_labels.db
 *.db-shm
 
 # Backup / output
+data/
+!data/.gitkeep
 backup/
 output/
 *.bak

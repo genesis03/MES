@@ -15,6 +15,8 @@ _INSTALLED = False
 
 _SENSITIVE_FIELDS = {"password_hash"}
 _DOCUMENT_KEYS = (
+    "document_no",
+    "revision_code",
     "order_no",
     "po_no",
     "inbound_no",

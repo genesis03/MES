@@ -75,6 +75,12 @@ def item_usage_summary(db: Session, item_id: int) -> list[dict]:
                 "count": count,
             })
 
+    # 문서는 품번 호환 컬럼 없이 item_id로 연결합니다. 폐기 이력도 삭제 방지 대상입니다.
+    from models.document import ItemRevision
+    revision_count = db.query(ItemRevision).filter(ItemRevision.item_id == item_id).count()
+    if revision_count:
+        result.append({"table": "item_revisions", "column": "item_id", "count": revision_count})
+
     return result
 
 

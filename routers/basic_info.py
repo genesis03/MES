@@ -19,6 +19,9 @@ from core.security import (
 from models.item_identity import ItemPartNoHistory
 from models.models import ItemMasterModel, ProcessModel
 from services.item_identity_service import item_usage_summary, rename_item_part_no
+from models.document import ItemDocument, ItemRevision
+from models.document_migration import DRAWING_TYPE
+from services.document_service import has_document_access, lock_item
 
 # 절대 경로 기준 templates 디렉터리 설정
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -70,7 +73,7 @@ async def item_master_page(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request=request,
         name="item_master.html",
-        context={"user": user}
+        context={"user": user, "can_access_drawings": has_document_access(user)}
     )
 
 
@@ -113,6 +116,11 @@ async def get_items(
     items = query.order_by(ItemMasterModel.part_no.asc()).all()
     process_rows = db.query(ProcessModel).all()
     process_name_by_code = {p.process_code: p.process_name for p in process_rows}
+    managed_ids = {row[0] for row in db.query(ItemRevision.item_id).distinct().all()}
+    current_drawing_ids = {row[0] for row in db.query(ItemRevision.item_id).join(
+        ItemDocument, ItemDocument.revision_id == ItemRevision.id
+    ).filter(ItemRevision.status == "CURRENT", ItemDocument.document_type == DRAWING_TYPE,
+             ItemDocument.retired_at.is_(None)).distinct().all()}
 
     data = [
         {
@@ -121,6 +129,8 @@ async def get_items(
             "vehicle_model": it.vehicle_model or "",
             "part_name": it.part_name,
             "revision": it.revision,
+            "revision_managed": it.id in managed_ids,
+            "has_current_drawing": it.id in current_drawing_ids,
             "spec": it.spec or "",
             "account_type": it.account_type,
             "material_type": it.material_type,
@@ -209,9 +219,10 @@ async def update_item(request: Request, db: Session = Depends(get_db)):
     if not item_id:
         raise HTTPException(status_code=400, detail="품목 식별자(ID)가 누락되었습니다.")
 
-    target = db.query(ItemMasterModel).filter(ItemMasterModel.id == item_id).first()
-    if not target:
-        raise HTTPException(status_code=404, detail="해당 품목을 찾을 수 없습니다.")
+    target = lock_item(db, int(item_id), require_active=False)
+    managed = db.query(ItemRevision.id).filter(ItemRevision.item_id == target.id).first()
+    if managed and str(body.get("revision", target.revision)).strip() != target.revision:
+        raise HTTPException(status_code=409, detail="도면 이력이 있는 품목의 Revision은 도면 관리에서 개정/적용해 주세요.")
 
     new_part_no = str(body.get("part_no", target.part_no)).strip()
     if not new_part_no:
@@ -302,9 +313,7 @@ async def delete_item(request: Request, db: Session = Depends(get_db)):
     if not item_id:
         raise HTTPException(status_code=400, detail="품목 식별자(ID)가 누락되었습니다.")
 
-    target = db.query(ItemMasterModel).filter(ItemMasterModel.id == item_id).first()
-    if not target:
-        raise HTTPException(status_code=404, detail="해당 품목을 찾을 수 없습니다.")
+    target = lock_item(db, int(item_id), require_active=False)
 
     usage = item_usage_summary(db, target.id)
     if usage:
