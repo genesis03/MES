@@ -92,7 +92,8 @@ const selectedInboundIds=new Set();
 const escInbound=(v)=>{const e=document.createElement('span');e.textContent=v??'';return e.innerHTML;};
 
 function changeInboundType(type,btn){inboundType=type;document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));btn.classList.add('active');loadInboundInquiry();}
-function resetInboundInquiry(){['inboundStartDate','inboundEndDate','inboundNo','inboundPoNo','inboundPartner','inboundPartNo','inboundLot'].forEach(id=>document.getElementById(id).value='');document.getElementById('inboundStatus').value='';loadInboundInquiry();}
+function localDate(offsetDays=0){const d=new Date();d.setDate(d.getDate()+offsetDays);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
+function resetInboundInquiry(){document.getElementById('inboundStartDate').value=localDate(-30);document.getElementById('inboundEndDate').value=localDate(0);['inboundNo','inboundPoNo','inboundPartner','inboundPartNo','inboundLot'].forEach(id=>document.getElementById(id).value='');document.getElementById('inboundStatus').value='';loadInboundInquiry();}
 function statusClass(status){if(status==='DRAFT')return 'st-draft';if(status==='CANCELLED')return 'st-cancelled';return 'st-confirmed';}
 
 function updateInboundSelection(){
@@ -159,6 +160,6 @@ async function loadInboundInquiry(){
     }catch(e){body.innerHTML=`<tr><td colspan="19" class="empty" style="color:#dc2626;">${escInbound(e.message)}</td></tr>`;}
 }
 
-document.addEventListener('DOMContentLoaded',loadInboundInquiry);
+document.addEventListener('DOMContentLoaded',()=>{document.getElementById('inboundStartDate').value=localDate(-30);document.getElementById('inboundEndDate').value=localDate(0);loadInboundInquiry();});
 </script>
 {% endblock %}
