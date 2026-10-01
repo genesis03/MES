@@ -40,7 +40,8 @@ const n=v=>Number(v||0);
 async function responseData(r){const t=await r.text();if(!t)return{};try{return JSON.parse(t);}catch(_){return{detail:t};}}
 async function jf(url){const r=await fetch(url);const d=await responseData(r);if(!r.ok)throw new Error(d.detail||'조회 실패');return d;}
 async function loadProcesses(){const rows=await jf('/api/production/processes');processCode.innerHTML='<option value="">전체</option>'+rows.map(x=>`<option value="${x.process_code}">${x.process_name}</option>`).join('');}
-function resetFilters(){startDate.value='';endDate.value='';performanceType.value='';processCode.value='';workOrderNo.value='';partNo.value='';operatorName.value='';loadRows();}
+function localDate(offsetDays=0){const d=new Date();d.setDate(d.getDate()+offsetDays);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
+function resetFilters(){startDate.value=localDate(-30);endDate.value=localDate(0);performanceType.value='';processCode.value='';workOrderNo.value='';partNo.value='';operatorName.value='';loadRows();}
 async function deletePerformance(id, outputLot, downstreamUsed){
   if(downstreamUsed){alert(`생산 LOT ${outputLot||''}가 다음 공정/외주에서 이미 사용되어 실적을 삭제할 수 없습니다.`);return;}
   if(!confirm(`생산실적을 삭제하시겠습니까?\n\n생산 LOT: ${outputLot||'-'}\n투입 원자재 LOT 사용량은 복원됩니다.`))return;
@@ -62,6 +63,6 @@ async function loadRows(){
     }).join(''):'<tr><td colspan="18" class="empty">조회된 생산실적이 없습니다.</td></tr>';
   }catch(e){body.innerHTML=`<tr><td colspan="18" class="empty" style="color:#b91c1c">${e.message}</td></tr>`;}
 }
-document.addEventListener('DOMContentLoaded',async()=>{await loadProcesses();await loadRows();});
+document.addEventListener('DOMContentLoaded',async()=>{startDate.value=localDate(-30);endDate.value=localDate(0);await loadProcesses();await loadRows();});
 </script>
 {% endblock %}
