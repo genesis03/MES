@@ -73,6 +73,15 @@
     if (path === '/api/packing' && upperMethod === 'POST') {
       state.packingId = Number(data?.id || 0) || null;
       state.packingLots = Array.isArray(data?.waiting_lots) ? data.waiting_lots.filter(Boolean) : [];
+    } else if (path === '/api/packing/records' && upperMethod === 'GET') {
+      const rows = Array.isArray(data) ? data : [];
+      const active = rows.find(row =>
+        Number(row?.id || 0) > 0 &&
+        Array.isArray(row?.waiting_lots) &&
+        row.waiting_lots.length > 0
+      );
+      state.packingId = active ? Number(active.id) : null;
+      state.packingLots = active ? active.waiting_lots.filter(Boolean) : [];
     }
 
     if (path === '/api/sales/shipping-entry/direct-confirm' && upperMethod === 'POST') {
