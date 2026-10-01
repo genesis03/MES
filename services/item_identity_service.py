@@ -81,6 +81,12 @@ def item_usage_summary(db: Session, item_id: int) -> list[dict]:
     if revision_count:
         result.append({"table": "item_revisions", "column": "item_id", "count": revision_count})
 
+    # FMEA 문서는 품번 스냅샷과 무관하게 영구 item_id로 삭제를 보호합니다.
+    from models.fmea import FmeaDocument
+    fmea_count = db.query(FmeaDocument).filter(FmeaDocument.item_id == item_id).count()
+    if fmea_count:
+        result.append({"table": "fmea_documents", "column": "item_id", "count": fmea_count})
+
     return result
 
 

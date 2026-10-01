@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.security import get_current_user
+from services.inspection_standard_access import get_inspection_user, inspection_context
 from models.models import ItemMasterModel
 from models.quality_standard import (
     QualityInboundStandard,
@@ -143,20 +143,20 @@ def _validate_standard_items(db: Session, payload_items: list[StandardItemPayloa
 
 
 @router.get("/quality/inspection-items", response_class=HTMLResponse)
-def inspection_items_page(request: Request, current_user=Depends(get_current_user)):
+def inspection_items_page(request: Request, current_user=Depends(get_inspection_user)):
     return templates.TemplateResponse(
         request=request,
         name="quality_inspection_items.html",
-        context={"request": request, "user": current_user},
+        context={"request": request, "user": current_user, **inspection_context(current_user)},
     )
 
 
 @router.get("/quality/inbound-standards", response_class=HTMLResponse)
-def inbound_standards_page(request: Request, current_user=Depends(get_current_user)):
+def inbound_standards_page(request: Request, current_user=Depends(get_inspection_user)):
     return templates.TemplateResponse(
         request=request,
         name="quality_inbound_standards.html",
-        context={"request": request, "user": current_user},
+        context={"request": request, "user": current_user, **inspection_context(current_user)},
     )
 
 
@@ -165,7 +165,7 @@ def list_inspection_items(
     keyword: Optional[str] = None,
     active_only: bool = False,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_inspection_user),
 ):
     query = db.query(QualityInspectionItemMaster)
     if active_only:
@@ -185,7 +185,7 @@ def list_inspection_items(
 def create_inspection_item(
     payload: InspectionItemPayload,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_inspection_user),
 ):
     code = payload.item_code.strip().upper()
     name = payload.item_name.strip()
@@ -217,7 +217,7 @@ def update_inspection_item(
     item_id: int,
     payload: InspectionItemPayload,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_inspection_user),
 ):
     row = db.get(QualityInspectionItemMaster, item_id)
     if not row:
@@ -249,7 +249,7 @@ def update_inspection_item(
 def delete_inspection_item(
     item_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_inspection_user),
 ):
     row = db.get(QualityInspectionItemMaster, item_id)
     if not row:
@@ -265,7 +265,7 @@ def delete_inspection_item(
 @router.get("/api/quality/inbound-standards/options")
 def inbound_standard_options(
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_inspection_user),
 ):
     products = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == "Y").order_by(ItemMasterModel.part_no).all()
     items = db.query(QualityInspectionItemMaster).filter(QualityInspectionItemMaster.is_active == "Y").order_by(
@@ -282,7 +282,7 @@ def list_inbound_standards(
     part_no: Optional[str] = None,
     active_only: bool = False,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_inspection_user),
 ):
     query = db.query(QualityInboundStandard)
     if part_no:
@@ -297,7 +297,7 @@ def list_inbound_standards(
 def get_inbound_standard(
     standard_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_inspection_user),
 ):
     row = db.get(QualityInboundStandard, standard_id)
     if not row:
@@ -340,7 +340,7 @@ def _deactivate_other_revisions(db: Session, item_id: int, exclude_id: Optional[
 def create_inbound_standard(
     payload: StandardPayload,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_inspection_user),
 ):
     part_no = payload.part_no.strip()
     revision = payload.revision.strip()
@@ -379,7 +379,7 @@ def update_inbound_standard(
     standard_id: int,
     payload: StandardPayload,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_inspection_user),
 ):
     row = db.get(QualityInboundStandard, standard_id)
     if not row:
@@ -416,7 +416,7 @@ def update_inbound_standard(
 def delete_inbound_standard(
     standard_id: int,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(get_inspection_user),
 ):
     row = db.get(QualityInboundStandard, standard_id)
     if not row:

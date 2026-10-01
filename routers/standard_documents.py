@@ -7,6 +7,9 @@ from sqlalchemy.orm import Session
 from core.config import BASE_DIR
 from core.database import get_db
 from core.security import check_admin_permission, get_current_user_optional, parse_user_permissions
+from services.inspection_standard_access import (
+    INSPECTION_MENU_PATH, STANDARD_PATH, MASTER_PATH, inspection_level,
+)
 
 router = APIRouter(tags=["Standard Documents"])
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -17,19 +20,9 @@ PLANNED_PAGES = {
         "title": "CP 관리",
         "description": "품목·공정별 관리계획서를 관리하는 기능을 준비 중입니다.",
     },
-    "/standard-documents/process-fmea": {
-        "title": "공정 FMEA",
-        "description": "기존 genesis03/FMEA 양식을 활용한 공정 FMEA 작성·개정 기능을 준비 중입니다.",
-        "detail": "공정 기능, 고장 형태·영향·원인, 예방·검출 관리, S/O/D·RPN, 개선 조치와 조치 후 평가를 다룰 예정입니다. 설계 FMEA가 아닌 공정 FMEA로 구성합니다.",
-    },
     "/standard-documents/work-standards": {
         "title": "작업표준서 관리",
         "description": "품목·공정별 작업표준서와 개정 이력을 관리하는 기능을 준비 중입니다.",
-    },
-    "/standard-documents/inspection-standards": {
-        "title": "검사기준서 관리",
-        "description": "검사항목·규격·공차·단위·방법·샘플 수량과 개정 이력을 관리하는 기능을 준비 중입니다.",
-        "detail": "향후 입고성적서·공정순회검사·출고성적서에서 해당 기준의 검사항목을 가져와 측정값 중심으로 입력할 예정입니다. 기존 품질관리의 입고검사 기준서는 그대로 유지합니다.",
     },
     "/standard-documents/packaging-specifications": {
         "title": "포장사양서 관리",
@@ -39,9 +32,7 @@ PLANNED_PAGES = {
 
 
 @router.get("/standard-documents/control-plans", response_class=HTMLResponse)
-@router.get("/standard-documents/process-fmea", response_class=HTMLResponse)
 @router.get("/standard-documents/work-standards", response_class=HTMLResponse)
-@router.get("/standard-documents/inspection-standards", response_class=HTMLResponse)
 @router.get("/standard-documents/packaging-specifications", response_class=HTMLResponse)
 def planned_document_page(request: Request, db: Session = Depends(get_db)):
     user = get_current_user_optional(request, db)
@@ -58,3 +49,14 @@ def planned_document_page(request: Request, db: Session = Depends(get_db)):
         request=request, name="standard_documents/planned.html",
         context={"user": user, "page": page},
     )
+
+
+@router.get(INSPECTION_MENU_PATH, response_class=HTMLResponse)
+def inspection_standards_entry(request: Request, db: Session = Depends(get_db)):
+    user = get_current_user_optional(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    for path in (STANDARD_PATH, MASTER_PATH):
+        if inspection_level(user, path) in {"READ", "WRITE"}:
+            return RedirectResponse(path, status_code=303)
+    raise HTTPException(403, "검사기준서 관리 조회 권한이 없습니다.")

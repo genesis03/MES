@@ -258,10 +258,12 @@
             .filter(menu => menu.dataset.permKey && menu.dataset.permKey !== 'admin')
             .map(menu => {
                 const title = menu.querySelector('.menu-title span');
-                const items = Array.from(menu.querySelectorAll('.submenu a[href]')).map(link => ({
-                    path: link.getAttribute('href'),
-                    label: (link.textContent || '').trim()
-                })).filter(item => item.path && item.label);
+                const items = Array.from(menu.querySelectorAll('.submenu a[href]')).flatMap(link => {
+                    if (link.dataset.permissionItems) {
+                        try { return JSON.parse(link.dataset.permissionItems); } catch (e) { return []; }
+                    }
+                    return [{path: link.getAttribute('href'), label: (link.textContent || '').trim()}];
+                }).filter(item => item.path && item.label);
                 return {
                     key: menu.dataset.permKey,
                     label: title ? title.textContent.trim() : menu.dataset.permKey,
@@ -283,7 +285,8 @@
 
         // 도면은 메뉴 위치만 옮겼으므로 구형 계정의 기초정보 권한을 보존합니다.
         // 새 문서 메뉴에는 기초정보 권한을 자동 적용하지 않습니다.
-        const legacyGroupKey = item.path === '/basic-info/drawings' ? 'basic_info' : group.key;
+        const legacyGroupKey = item.path === '/basic-info/drawings' ? 'basic_info'
+            : ['/quality/inbound-standards','/quality/inspection-items'].includes(item.path) ? 'quality' : group.key;
         const parent = permissions && permissions[legacyGroupKey];
         if (!parent || !parent.enabled) return 'NONE';
 

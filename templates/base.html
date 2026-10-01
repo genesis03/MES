@@ -263,7 +263,7 @@
 
             <!-- 표준문서 관리: 도면 주소/권한은 기존 값을 유지합니다. -->
             {% if user %}
-            <li class="menu-item{% if request.url.path == '/basic-info/drawings' or request.url.path.startswith('/standard-documents/') %} open{% endif %}" id="standardDocumentsMenu" data-perm-key="standard_documents">
+            <li class="menu-item{% if request.url.path == '/basic-info/drawings' or request.url.path.startswith('/standard-documents/') or request.url.path in ['/quality/inbound-standards', '/quality/inspection-items'] %} open{% endif %}" id="standardDocumentsMenu" data-perm-key="standard_documents">
                 <div class="menu-title" onclick="toggleAccordion('standardDocumentsMenu')">
                     <span>표준문서 관리</span>
                     <span class="arrow-icon">▼</span>
@@ -273,7 +273,7 @@
                     <li class="submenu-item"><a href="/standard-documents/control-plans" id="nav-control-plans">CP 관리</a></li>
                     <li class="submenu-item"><a href="/standard-documents/process-fmea" id="nav-process-fmea">공정 FMEA</a></li>
                     <li class="submenu-item"><a href="/standard-documents/work-standards" id="nav-work-standards">작업표준서 관리</a></li>
-                    <li class="submenu-item"><a href="/standard-documents/inspection-standards" id="nav-inspection-standards">검사기준서 관리</a></li>
+                    <li class="submenu-item"><a href="/standard-documents/inspection-standards" id="nav-inspection-standards" data-permission-paths="/quality/inbound-standards,/quality/inspection-items" data-permission-items='[{"path":"/quality/inbound-standards","label":"입고검사 기준서"},{"path":"/quality/inspection-items","label":"검사항목 마스터"}]'>검사기준서 관리</a></li>
                     <li class="submenu-item"><a href="/standard-documents/packaging-specifications" id="nav-packaging-specifications">포장사양서 관리</a></li>
                 </ul>
             </li>
@@ -379,11 +379,9 @@
 
             <!-- 7. 품질관리 -->
             {% if user %}
-            <li class="menu-item{% if request.url.path.startswith('/quality/') %} open{% endif %}" id="qualityMenu" data-perm-key="quality">
+            <li class="menu-item{% if request.url.path.startswith('/quality/') and request.url.path not in ['/quality/inbound-standards', '/quality/inspection-items'] %} open{% endif %}" id="qualityMenu" data-perm-key="quality">
                 <div class="menu-title" onclick="toggleAccordion('qualityMenu')"><span>품질관리</span><span class="arrow-icon">▼</span></div>
                 <ul class="submenu">
-                    <li class="submenu-item"><a href="/quality/inspection-items" id="nav-quality-inspection-items">검사항목 MASTER</a></li>
-                    <li class="submenu-item"><a href="/quality/inbound-standards" id="nav-quality-inbound-standards">품번별 입고검사 기준서</a></li>
                     <li style="border-top:1px dashed #334155;margin:6px 12px;"></li>
                     <li class="submenu-item"><a href="/quality/inbound-defects" id="nav-quality-inbound-defects">입고 품목 불량 처리</a></li>
                     <li class="submenu-item"><a href="/quality/production-defects" id="nav-quality-production-defects">생산 LOT 불량 처리</a></li>
@@ -554,8 +552,11 @@
                 const links = Array.from(menu.querySelectorAll('.submenu a[href]'));
                 links.forEach(link => {
                     const href = (link.getAttribute('href') || '').replace(/\/$/, '') || '/';
-                    const matchedKey = Object.keys(menuAccess).find(key => ((key || '').replace(/\/$/, '') || '/') === href);
-                    const allowed = matchedKey ? canReadMenu(menuAccess[matchedKey]) : false;
+                    const permissionPaths = link.dataset.permissionPaths ? link.dataset.permissionPaths.split(',') : [href];
+                    const allowed = permissionPaths.some(path => {
+                        const matchedKey = Object.keys(menuAccess).find(key => ((key || '').replace(/\/$/, '') || '/') === path);
+                        return matchedKey ? canReadMenu(menuAccess[matchedKey]) : false;
+                    });
                     link.style.display = allowed ? '' : 'none';
                 });
                 const hasVisible = links.some(link => link.style.display !== 'none');
@@ -625,8 +626,8 @@
                 "/inventory/lots": "nav-inventory-lots",
                 "/inventory/lot-trace": "nav-inventory-lot-trace",
                 "/inventory/lot-usage-trace": "nav-inventory-lot-usage-trace",
-                "/quality/inspection-items": "nav-quality-inspection-items",
-                "/quality/inbound-standards": "nav-quality-inbound-standards",
+                "/quality/inspection-items": "nav-inspection-standards",
+                "/quality/inbound-standards": "nav-inspection-standards",
                 "/quality/inbound-defects": "nav-quality-inbound-defects",
                 "/quality/production-defects": "nav-quality-production-defects",
                 "/quality/defect-status": "nav-quality-defect-status"

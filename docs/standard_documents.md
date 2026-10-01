@@ -8,17 +8,17 @@
 |---|---|---|
 | 도면 관리 | /basic-info/drawings | 기존 도면 관리 화면 |
 | CP 관리 | /standard-documents/control-plans | 개발 예정 안내 |
-| 공정 FMEA | /standard-documents/process-fmea | 개발 예정 안내 |
+| 공정 FMEA | /standard-documents/process-fmea | 작성·저장·개정·조회·인쇄 |
 | 작업표준서 관리 | /standard-documents/work-standards | 개발 예정 안내 |
-| 검사기준서 관리 | /standard-documents/inspection-standards | 개발 예정 안내 |
+| 검사기준서 관리 | /standard-documents/inspection-standards | 입고검사 기준서 / 검사항목 마스터 두 탭 |
 | 포장사양서 관리 | /standard-documents/packaging-specifications | 개발 예정 안내 |
 
 - 도면은 사이드바 위치만 이동합니다. 기존 URL, item_id 연결, 파일 보관, Revision 정책, 생산실적/품목관리의 도면 보기 연결은 그대로 유지합니다.
-- 미구현 메뉴는 공통 안내 템플릿 `templates/standard_documents/planned.html`을 사용하고 `routers/standard_documents.py`에서 연결합니다. 작성/저장 API 또는 문서별 DB 테이블은 이번에 추가하지 않습니다.
+- CP/작업표준서/포장사양서의 미구현 메뉴는 공통 안내 템플릿 `templates/standard_documents/planned.html`을 사용합니다. 공정 FMEA는 독립 작성 화면을 제공하며 검사기준서는 기존 화면의 탭 구성을 사용합니다.
 - 관리자 사용자 관리의 권한 트리는 기존 사이드바 자동 생성 방식을 그대로 사용합니다. 새 그룹 키는 `standard_documents`입니다.
 - 도면의 기존 메뉴별 권한 키 `/basic-info/drawings`를 유지합니다. 구형 계정의 기초정보 권한도 도면에 한해 기존 판정/권한 편집 방식을 유지합니다.
 - 새 메뉴는 일반 계정에 자동 허용하지 않습니다. 관리자에게는 전체 메뉴가 표시되며, 일반 계정에는 개별 READ/WRITE 권한을 부여한 메뉴만 표시됩니다. 안내 화면도 서버에서 권한을 확인합니다.
-- 기존 품질관리의 입고검사 기준서 메뉴와 데이터는 그대로 유지합니다. 새 검사기준서 안내 화면이 이를 대체하거나 중복 생성하지 않습니다.
+- 기존 입고검사 기준서와 검사항목 마스터는 표준문서 관리의 검사기준서 관리 두 탭으로 모읍니다. 기존 URL/API/데이터와 각 탭의 권한 키는 유지하며 품질관리 사이드바에서 두 링크만 제거합니다.
 
 ## 이전 대화에서 확정한 방향
 
@@ -30,7 +30,7 @@
 - 기존 양식의 고장 형태, 영향, S/O/D, 원인, 예방·검출 관리, RPN, 권고 조치, 담당자/목표일, 조치 결과/완료일, 조치 후 S/O/D·RPN을 출발점으로 합니다.
 - 기존 양식에 설계관리 표현이 있더라도 MES에서는 공정 FMEA에 맞게 용어와 품목/공정 연결을 설계합니다. 제공된 양식만으로 특정 최신 FMEA 규격 준수를 주장하지 않습니다.
 - React/Flask 애플리케이션이나 별도 fmea.db를 MES에 복사하지 않습니다. FastAPI/Jinja2/SQLAlchemy 구조와 기존 품목·공정·사용자 마스터를 사용합니다.
-- 품목은 item_id로 연결하고 part_no는 표시용입니다. 작성 화면·DB·개정 정책은 다음 구현 전에 설명하고 승인받습니다.
+- 품목은 item_id로 연결하고 part_no는 표시용입니다. 승인된 1차 작성 화면·DB·개정 정책은 docs/process_fmea.md에 기록합니다.
 
 ### 문서와 검사 결과 구분
 

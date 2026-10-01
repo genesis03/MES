@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>공정 FMEA · {{ fmea.document_no }} · {{ fmea.revision_code }}</title>
+<style>
+body{font-family:"Malgun Gothic",sans-serif;color:#111;padding:18px;margin:0;font-size:11px}h1{text-align:center;font-size:22px;margin:0 0 14px}.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;border:1px solid #777;padding:10px;margin-bottom:10px}.note{white-space:pre-wrap;margin:8px 0}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:1900px;table-layout:fixed;font-size:10px}th,td{border:1px solid #888;padding:5px;vertical-align:top;word-break:break-word;white-space:pre-wrap}th{background:#eee}th.score{width:35px}.tools{display:flex;gap:12px;align-items:center;margin-bottom:14px}.tools button{background:#2563eb;color:#fff;border:0;border-radius:4px;padding:8px 16px;cursor:pointer}.readonly-note{color:#555;margin:10px 0}.row-date{display:block;margin-top:6px}
+@page{size:A3 landscape;margin:10mm}@media print{body{padding:0}.tools{display:none}.table-wrap{overflow:visible}table{min-width:0;font-size:8px}th,td{padding:3px}thead{display:table-header-group}tr{break-inside:avoid}h1{font-size:18px}.meta{font-size:10px}.score{width:25px!important}}
+</style></head><body>
+<div class="tools"><button onclick="window.print()">인쇄</button><span>브라우저 인쇄에서 PDF 저장도 가능합니다. 가로 방향 A3를 권장합니다.</span></div>
+<h1>공정 FMEA</h1>
+<div class="meta">
+<div>회사명: {{ fmea.company }}</div><div>FMEA 번호: {{ fmea.document_no }}</div><div>개정: {{ fmea.revision_code }}</div><div>상태: {{ status_label }}</div>
+<div>당시 품번: {{ fmea.part_no_snapshot }}</div><div>당시 품명: {{ fmea.part_name_snapshot }}</div><div>모델연도: {{ fmea.model_year }}</div><div>참여팀: {{ fmea.team }}</div>
+<div>작성자: {{ fmea.prepared_by }}</div><div>작성일: {{ fmea.date_prepared }}</div><div>기준 도면: {{ fmea.basis_revision_snapshot or '미연결' }}</div><div>현재 사용 적용: {{ fmea.activated_by }} {{ fmea.activated_at }}</div>
+</div>
+{% if fmea.change_reason %}<p class="note">개정 사유: {{ fmea.change_reason }}</p>{% endif %}
+{% if fmea.retire_reason %}<p class="note">폐기 사유: {{ fmea.retire_reason }}</p>{% endif %}
+{% if fmea.note %}<p class="note">비고: {{ fmea.note }}</p>{% endif %}
+<p class="readonly-note">등록된 해당 개정의 조회 전용 출력입니다. RPN = 심각도 × 발생도 × 검출도. 현재 사용 적용은 별도 승인 결재를 의미하지 않습니다.</p>
+<div class="table-wrap"><table><thead><tr>
+<th>공정</th><th>공정 기능</th><th>고장 형태</th><th>고장의 잠재적 영향</th><th class="score">S</th><th class="score">분류</th><th>고장의 잠재적 원인</th><th class="score">O</th><th>현 공정관리 예방</th><th>현 공정관리 검출</th><th class="score">D</th><th class="score">RPN</th><th>권고 조치</th><th>담당자 / 목표일</th><th>조치 내용 / 완료일</th><th class="score">후 S</th><th class="score">후 O</th><th class="score">후 D</th><th class="score">후 RPN</th><th>비고</th>
+</tr></thead><tbody>
+{% for row in fmea.rows %}<tr>
+<td>{{ row.process_name_snapshot or '' }}<br>{{ row.process_code_snapshot or '' }}</td><td>{{ row.function_text }}</td><td>{{ row.failure_mode }}</td><td>{{ row.effects }}</td><td>{{ row.severity if row.severity is not none else '' }}</td><td>{{ row.classification }}</td><td>{{ row.causes }}</td><td>{{ row.occurrence if row.occurrence is not none else '' }}</td><td>{{ row.prevention_controls }}</td><td>{{ row.detection_controls }}</td><td>{{ row.detection if row.detection is not none else '' }}</td><td>{{ row.rpn if row.rpn is not none else '' }}</td><td>{{ row.recommended_actions }}</td><td>{{ row.responsibility }}<span class="row-date">{{ row.target_date or '' }}</span></td><td>{{ row.actions_taken }}<span class="row-date">{{ row.completion_date or '' }}</span></td><td>{{ row.new_severity if row.new_severity is not none else '' }}</td><td>{{ row.new_occurrence if row.new_occurrence is not none else '' }}</td><td>{{ row.new_detection if row.new_detection is not none else '' }}</td><td>{{ row.new_rpn if row.new_rpn is not none else '' }}</td><td>{{ row.note }}</td>
+</tr>{% endfor %}
+</tbody></table></div></body></html>

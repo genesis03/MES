@@ -34,6 +34,7 @@ from models.inventory_adjustment import InventoryAdjustmentModel
 from models.inventory_movement import InventoryMovementModel
 from models.item_identity import ItemPartNoHistory, install_item_identity_events
 from models.document import ItemRevision, ItemDocument, DocumentFile
+from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
 
 
 # 신규/수정 업무행은 품번과 함께 영구 item_id를 자동 연결합니다.
@@ -70,6 +71,7 @@ ensure_document_codes(engine)
 
 __all__ = [
     "ItemRevision", "ItemDocument", "DocumentFile",
+    "FmeaDocument", "FmeaRevision", "FmeaRow",
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
     "LotRelationModel", "LotConsumptionModel",
     "ProductionLotModel",

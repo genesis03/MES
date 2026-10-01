@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}공정 FMEA{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="/static/css/process_fmea.css">
+{% endblock %}
+{% block content %}
+<div id="fmeaApp" data-can-write="{{ 'true' if can_write_fmea else 'false' }}" data-author="{{ default_prepared_by }}" data-team="{{ default_team }}" data-today="{{ today }}">
+  <div class="pf-head"><h1>공정 FMEA</h1>{% if can_write_fmea %}<button class="pf-btn primary" id="fmeaNew">신규 등록</button>{% endif %}</div>
+  <p class="pf-sub">품목별 공정 고장 분석 · 도면과 독립된 개정 관리 · RPN = 심각도 × 발생도 × 검출도</p>
+  <div class="pf-card no-print">
+    <div class="pf-search">
+      <input id="fmeaKeyword" aria-label="검색어" placeholder="품번 · 품명 · FMEA 번호">
+      <select id="fmeaState" aria-label="조회 상태"><option value="">전체 상태</option><option value="DRAFT">초안</option><option value="CURRENT">현재 사용</option><option value="SUPERSEDED">구버전</option><option value="RETIRED">폐기</option></select>
+      <button class="pf-btn primary" id="fmeaSearch">조회</button>
+      <button class="pf-btn light" id="fmeaReset">초기화</button>
+    </div>
+    <div class="pf-scroll"><table class="pf-list"><thead><tr><th>품번</th><th>품명</th><th>FMEA 번호</th><th>조회 개정</th><th>상태</th><th>현재 사용 개정</th><th>작성자</th><th>등록일</th><th>선택</th></tr></thead><tbody id="fmeaList"></tbody></table></div>
+  </div>
+  <p id="fmeaMessage" class="pf-message" role="status" aria-live="polite"></p>
+  <section id="fmeaEditor" class="pf-card" hidden>
+    <div class="pf-head"><h2 id="fmeaEditorTitle">신규 공정 FMEA</h2><div class="pf-search"><label for="fmeaRevisionSelect">개정 이력</label><select id="fmeaRevisionSelect"></select><span id="fmeaStatus" class="pf-status"></span></div></div>
+    <div class="pf-fields">
+      <label>품목 *<select id="fmeaItem"></select></label>
+      <label>FMEA 번호 *<input id="fmeaNumber" maxlength="100"></label>
+      <label>개정번호 *<input id="fmeaCode" maxlength="50" placeholder="개정번호 입력"></label>
+      <label>기준 도면 Revision<select id="fmeaBasis"><option value="">연결하지 않음</option></select></label>
+      <label>회사명<input id="fmeaCompany" maxlength="200"></label>
+      <label>모델연도<input id="fmeaModelYear" maxlength="100"></label>
+      <label>참여팀 / 부서<input id="fmeaTeam" maxlength="200"></label>
+      <label>작성자 *<input id="fmeaAuthor" maxlength="100"></label>
+      <label>작성일 *<input id="fmeaDate" type="date"></label>
+      <label class="pf-wide">비고<textarea id="fmeaNote" maxlength="8000"></textarea></label>
+    </div>
+    <p id="fmeaHistoryNote" class="pf-sub"></p>
+    <p id="fmeaChangeReason" class="pf-sub"></p>
+    <div class="pf-toolbar no-print">
+      {% if can_write_fmea %}
+      <button id="fmeaAddRow" class="pf-btn light">행 추가</button>
+      <button id="fmeaSave" class="pf-btn primary">초안 저장</button>
+      <button id="fmeaActivate" class="pf-btn primary">현재 사용 적용</button>
+      <button id="fmeaRevise" class="pf-btn primary">개정 등록</button>
+      <button id="fmeaRetire" class="pf-btn danger">Revision 폐기</button>
+      {% endif %}
+      <a id="fmeaPrint" class="pf-btn light" target="_blank" rel="noopener noreferrer" aria-disabled="true">인쇄</a>
+    </div>
+    <p class="pf-sub">공정은 기존 공정마스터에서 선택합니다. 적용된 분석표는 조회만 가능하며 변경은 개정 등록으로 진행합니다. 점수가 비어 있으면 RPN을 계산하지 않습니다.</p>
+    <div class="pf-scroll"><table class="pf-analysis"><thead><tr>
+      <th>공정</th><th>공정 기능</th><th>고장 형태</th><th>고장의 잠재적 영향</th><th>S<br>심각도</th><th>분류</th><th>고장의 잠재적 원인</th><th>O<br>발생도</th><th>현 공정관리 · 예방</th><th>현 공정관리 · 검출</th><th>D<br>검출도</th><th>RPN</th><th>권고 조치</th><th>담당자 / 목표일</th><th>조치 내용 / 완료일</th><th>조치 후 S</th><th>조치 후 O</th><th>조치 후 D</th><th>조치 후 RPN</th><th>비고</th><th class="no-print">행 제외</th>
+    </tr></thead><tbody id="fmeaRows"></tbody></table></div>
+  </section>
+</div>
+{% endblock %}
+{% block extra_script %}<script src="/static/process_fmea.js" defer></script>{% endblock %}

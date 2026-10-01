@@ -399,6 +399,9 @@ async def delete_process(request: Request, db: Session = Depends(get_db)):
     target = db.query(ProcessModel).filter(ProcessModel.id == body.get("id")).first()
     if not target:
         raise HTTPException(status_code=404, detail="공정 정보를 찾을 수 없습니다.")
+    from models.fmea import FmeaRow
+    if db.query(FmeaRow.id).filter(FmeaRow.process_code == target.process_code).first():
+        raise HTTPException(status_code=409, detail="FMEA 이력이 있는 공정은 삭제할 수 없습니다. 사용중지로 처리해 주세요.")
     db.delete(target)
     db.commit()
     return {"status": "success", "message": "공정이 삭제되었습니다."}

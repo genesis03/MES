@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% block title %}품번별 입고검사 기준서 - 품질관리{% endblock %}
+{% block title %}입고검사 기준서 - 표준문서 관리{% endblock %}
 {% block extra_head %}
 <style>
 .qs-wrap h1{font-size:24px;margin:0 0 5px}.qs-sub{font-size:13px;color:#64748b;margin-bottom:14px}.qs-grid{display:grid;grid-template-columns:360px 1fr;gap:14px}.qs-card{background:#fff;border:1px solid #cbd5e1;border-radius:7px;padding:14px}.qs-card h2{font-size:16px;margin:0 0 12px}.qs-field{display:flex;flex-direction:column;gap:4px;margin-bottom:9px}.qs-field label{font-size:11px;font-weight:700;color:#64748b}.qs-field input,.qs-field select,.qs-field textarea{border:1px solid #cbd5e1;border-radius:4px;padding:8px}.qs-field input,.qs-field select{height:34px}.qs-field textarea{min-height:60px;resize:vertical}.qs-actions{display:flex;gap:7px;flex-wrap:wrap}.qs-btn{height:34px;border:0;border-radius:4px;padding:0 13px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.light{background:#e2e8f0;color:#334155}.danger{background:#dc2626;color:#fff}.add{background:#0f766e;color:#fff}.qs-tablebox{overflow:auto}.qs-table{width:100%;border-collapse:collapse;font-size:12px;min-width:1100px}.qs-table th{background:#f1f5f9;padding:8px;border-bottom:2px solid #cbd5e1;white-space:nowrap}.qs-table td{padding:6px;border-bottom:1px solid #e2e8f0;text-align:center}.qs-table input,.qs-table select{height:30px;border:1px solid #cbd5e1;border-radius:4px;padding:0 6px;max-width:140px}.qs-list{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px}.qs-list th{background:#f8fafc;padding:7px;border-bottom:1px solid #cbd5e1}.qs-list td{padding:7px;border-bottom:1px solid #e2e8f0;text-align:center;cursor:pointer}.qs-msg{margin-top:9px;font-size:12px;min-height:18px}.ok{color:#15803d}.error{color:#dc2626}.badge{padding:3px 7px;border-radius:10px;font-weight:700}.on{background:#dcfce7;color:#15803d}.off{background:#e2e8f0;color:#64748b}@media(max-width:1100px){.qs-grid{grid-template-columns:1fr}}
 </style>
 {% endblock %}
 {% block content %}
+{% include "standard_documents/inspection_tabs.html" %}
 <div class="qs-wrap">
   <h1>품번별 입고검사 기준서</h1>
   <div class="qs-sub">검사항목 MASTER를 불러와 품번별 규격, 샘플수, 사용 REV를 설정합니다. 업체별 별도 기준은 두지 않습니다.</div>

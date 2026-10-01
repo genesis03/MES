@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% block title %}검사항목 MASTER - 품질관리{% endblock %}
+{% block title %}검사항목 마스터 - 표준문서 관리{% endblock %}
 {% block extra_head %}
 <style>
 .qm-wrap h1{font-size:24px;margin:0 0 5px}.qm-sub{font-size:13px;color:#64748b;margin-bottom:14px}.qm-grid{display:grid;grid-template-columns:360px 1fr;gap:14px}.qm-card{background:#fff;border:1px solid #cbd5e1;border-radius:7px;padding:14px}.qm-card h2{font-size:16px;margin:0 0 12px}.qm-field{display:flex;flex-direction:column;gap:4px;margin-bottom:9px}.qm-field label{font-size:11px;font-weight:700;color:#64748b}.qm-field input,.qm-field select,.qm-field textarea{border:1px solid #cbd5e1;border-radius:4px;padding:8px}.qm-field input,.qm-field select{height:34px}.qm-field textarea{min-height:70px;resize:vertical}.qm-actions{display:flex;gap:7px}.qm-btn{height:34px;border:0;border-radius:4px;padding:0 13px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.light{background:#e2e8f0;color:#334155}.danger{background:#dc2626;color:#fff}.qm-search{display:flex;gap:8px;margin-bottom:10px}.qm-search input{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px;min-width:240px}.qm-table{width:100%;border-collapse:collapse;font-size:12px}.qm-table th{background:#f1f5f9;padding:8px;border-bottom:2px solid #cbd5e1}.qm-table td{padding:8px;border-bottom:1px solid #e2e8f0;text-align:center}.qm-table tr{cursor:pointer}.qm-table tr:hover{background:#f8fafc}.qm-msg{margin-top:9px;font-size:12px;min-height:18px;color:#64748b}.ok{color:#15803d}.error{color:#dc2626}.badge{padding:3px 7px;border-radius:10px;font-weight:700}.on{background:#dcfce7;color:#15803d}.off{background:#e2e8f0;color:#64748b}@media(max-width:1000px){.qm-grid{grid-template-columns:1fr}}
 </style>
 {% endblock %}
 {% block content %}
+{% include "standard_documents/inspection_tabs.html" %}
 <div class="qm-wrap">
   <h1>검사항목 MASTER</h1>
   <div class="qm-sub">품번과 무관한 공통 검사항목을 관리합니다. 품번별 규격과 샘플수는 입고검사 기준서에서 설정합니다.</div>
