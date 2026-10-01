@@ -244,10 +244,13 @@ def _file_response(db, file_id, preview):
     if preview and row.extension not in {"pdf", "png", "jpg", "jpeg", "bmp"}:
         raise HTTPException(415, "이 형식은 다운로드하여 확인해 주세요.")
     path = check_file_integrity(row)
+    # PDF를 최상위 새 탭에서 표시합니다. CSP sandbox는 Chrome PDF 뷰어를 차단합니다.
+    # 미리보기는 기존 형식/권한/무결성 검사로 제한하고 다른 페이지의 삽입은 차단합니다.
+    policy = "frame-ancestors 'none'; base-uri 'none'; form-action 'none'" if preview else "sandbox"
     return FileResponse(path, media_type=row.media_type, filename=row.original_name,
                         content_disposition_type="inline" if preview else "attachment",
                         headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, no-store",
-                                 "Content-Security-Policy": "sandbox"})
+                                 "Content-Security-Policy": policy})
 
 
 @router.get("/api/documents/files/{file_id}/download")

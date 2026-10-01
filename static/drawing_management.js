@@ -120,7 +120,7 @@
                 <p class="drawing-muted">${escape(document.document_type_name)} · 도면번호 ${escape(document.document_no || '미입력')} · 문서 REV ${escape(document.document_revision || '미입력')}</p>
                 <p class="drawing-muted">등록 ${escape(document.created_by)} · ${escape(document.created_at)}${document.note ? ` · ${escape(document.note)}` : ''}${document.retire_reason ? ` · 폐기 사유: ${escape(document.retire_reason)}` : ''}</p>
                 ${document.files.map(file => `<div class="drawing-file"><span class="drawing-file-name">${escape(file.original_name)}<br><small>${(file.size_bytes / 1024).toFixed(1)} KB · ${escape(file.extension.toUpperCase())}</small></span>
-                    ${file.can_preview ? `<button type="button" class="secondary" data-preview-id="${file.id}" data-preview-name="${escape(file.original_name)}">미리보기 조회</button>` : ''}
+                    ${file.can_preview ? `<a href="${escape(file.preview_url)}" target="_blank" rel="noopener noreferrer">새 탭에서 보기</a>` : ''}
                     <a href="${escape(file.download_url)}">다운로드</a></div>`).join('')}
                 ${row.status === 'DRAFT' && !document.retired_at && state.canWrite ? `<button type="button" class="danger" data-write data-retire-document="${document.id}">문서 폐기</button>` : ''}
             </article>`).join('') : '<p class="drawing-muted">등록된 도면이 없습니다.</p>';
@@ -186,12 +186,6 @@
         run(async () => { await jsonPost(`/api/documents/revisions/${state.revision.id}/retire`, {reason: reason.trim()}); await loadItems(); message('Revision을 폐기 처리했습니다. 파일과 이력은 보존됩니다.'); });
     });
     $('drawingDocuments').addEventListener('click', event => {
-        const preview = event.target.closest('[data-preview-id]');
-        if (preview) {
-            $('drawingPreviewTitle').textContent = preview.dataset.previewName;
-            $('drawingPreviewFrame').src = `/api/documents/files/${preview.dataset.previewId}/preview`;
-            $('drawingPreviewDialog').showModal();
-        }
         const retire = event.target.closest('[data-retire-document]');
         if (retire) {
             const reason = prompt('이 초안 문서의 폐기 사유를 입력해 주세요. 파일은 보존됩니다.');
@@ -199,8 +193,6 @@
             run(async () => { await jsonPost(`/api/documents/${retire.dataset.retireDocument}/retire`, {reason: reason.trim()}); await selectRevision(state.revision.id); message('초안 문서를 폐기 처리했습니다.'); });
         }
     });
-    $('drawingPreviewClose').addEventListener('click', () => $('drawingPreviewDialog').close());
-    $('drawingPreviewDialog').addEventListener('close', () => { $('drawingPreviewFrame').src = 'about:blank'; });
     document.addEventListener('DOMContentLoaded', () => run(async () => {
         state.options = await api('/api/documents/options');
         $('drawingFiles').accept = state.options.allowed_extensions.map(extension => `.${extension}`).join(',');

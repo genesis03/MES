@@ -99,6 +99,32 @@ def activate(client, revision_id):
     return client.post(f"/api/documents/revisions/{revision_id}/activate")
 
 
+def test_preview_uses_native_viewer_without_pdf_sandbox(setup):
+    client, _, _ = setup
+    revision_id = revision(client).json()["id"]
+    file = upload(client, revision_id).json()["files"][0]
+    response = client.get(file["preview_url"])
+    assert response.status_code == 200
+    assert response.content == pdf_bytes()
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["content-disposition"].startswith("inline;")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["cache-control"] == "private, no-store"
+    policy = response.headers["content-security-policy"]
+    assert "sandbox" not in policy
+    assert "frame-ancestors 'none'" in policy
+    download = client.get(file["download_url"])
+    assert download.headers["content-disposition"].startswith("attachment;")
+    assert download.headers["content-security-policy"] == "sandbox"
+    page = client.get("/basic-info/drawings")
+    assert page.status_code == 200
+    assert "drawingPreviewDialog" not in page.text
+    assert "drawingPreviewFrame" not in page.text
+    script = (config.BASE_DIR / "static" / "drawing_management.js").read_text(encoding="utf-8")
+    assert 'target="_blank" rel="noopener noreferrer">새 탭에서 보기</a>' in script
+    assert "data-preview-id" not in script
+
+
 def test_revision_lifecycle_keeps_old_files_and_current_is_unique(setup):
     client, factory, root = setup
     first = revision(client).json()["id"]
