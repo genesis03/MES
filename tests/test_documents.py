@@ -121,7 +121,7 @@ def test_preview_uses_native_viewer_without_pdf_sandbox(setup):
     assert "drawingPreviewDialog" not in page.text
     assert "drawingPreviewFrame" not in page.text
     script = (config.BASE_DIR / "static" / "drawing_management.js").read_text(encoding="utf-8")
-    assert 'target="_blank" rel="noopener noreferrer" title="도면 보기" aria-label="도면 보기">${viewIcon}</a>' in script
+    assert 'target="_blank" rel="noopener noreferrer" title="도면 보기" aria-label="도면 보기">도면 보기</a>' in script
     assert 'title="다운로드" aria-label="다운로드">${downloadIcon}</a>' in script
     assert 'stroke="currentColor"' in script
     assert 'aria-hidden="true" focusable="false"' in script

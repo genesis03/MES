@@ -9,7 +9,7 @@
 #drawingApp label { display:flex; flex-direction:column; gap:7px; font-size:12px; font-weight:600; }
 #drawingApp input,#drawingApp select,#drawingApp textarea { box-sizing:border-box; border:1px solid #cbd5e1; border-radius:5px; padding:9px; font:inherit; color:#1e293b; background:white; min-width:0; }
 .drawing-search input { width:220px; }
-#drawingApp button { border:0; border-radius:5px; padding:10px 14px; background:#2563eb; color:white; font-size:13px; cursor:pointer; white-space:nowrap; }
+#drawingApp button,#drawingApp .drawing-view-link { border:0; border-radius:5px; padding:10px 14px; background:#2563eb; color:white; font-size:13px; cursor:pointer; white-space:nowrap; }
 #drawingApp button.secondary { background:#e2e8f0; color:#334155; }
 #drawingApp button.danger { background:#b45309; }
 #drawingApp button:disabled { opacity:.45; cursor:not-allowed; }
@@ -38,6 +38,8 @@
 .drawing-file { display:flex; flex-wrap:wrap; align-items:center; gap:10px; border-top:1px solid #f1f5f9; padding:10px 0; font-size:12px; }
 .drawing-file-name { flex:1; min-width:150px; }
 .drawing-file a { color:#2563eb; }
+.drawing-file .drawing-view-link { display:inline-flex; align-items:center; justify-content:center; text-decoration:none; flex-shrink:0; }
+#drawingApp .drawing-view-link:focus-visible { outline:2px solid #2563eb; outline-offset:3px; }
 .drawing-file .drawing-icon-link { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; box-sizing:border-box; border:1px solid currentColor; border-radius:5px; text-decoration:none; flex-shrink:0; }
 .drawing-icon-link svg { width:20px; height:20px; pointer-events:none; }
 .drawing-icon-link:hover { opacity:.75; }

@@ -6,7 +6,6 @@
     const statusName = {DRAFT: '초안', CURRENT: '현재 사용', SUPERSEDED: '구버전', RETIRED: '폐기'};
     const escape = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
     // 외부 아이콘 라이브러리 없이 기존 링크 색상을 따르는 SVG 아이콘입니다.
-    const viewIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 3h6v6M21 3l-9 9M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/></svg>';
     const downloadIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3v12M7 10l5 5 5-5M5 16v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg>';
 
     function message(text = '', error = false) {
@@ -123,7 +122,7 @@
                 <p class="drawing-muted">${escape(document.document_type_name)} · 도면번호 ${escape(document.document_no || '미입력')} · 문서 REV ${escape(document.document_revision || '미입력')}</p>
                 <p class="drawing-muted">등록 ${escape(document.created_by)} · ${escape(document.created_at)}${document.note ? ` · ${escape(document.note)}` : ''}${document.retire_reason ? ` · 폐기 사유: ${escape(document.retire_reason)}` : ''}</p>
                 ${document.files.map(file => `<div class="drawing-file"><span class="drawing-file-name">${escape(file.original_name)}<br><small>${(file.size_bytes / 1024).toFixed(1)} KB · ${escape(file.extension.toUpperCase())}</small></span>
-                    ${file.can_preview ? `<a class="drawing-icon-link" href="${escape(file.preview_url)}" target="_blank" rel="noopener noreferrer" title="도면 보기" aria-label="도면 보기">${viewIcon}</a>` : ''}
+                    ${file.can_preview ? `<a class="drawing-view-link" href="${escape(file.preview_url)}" target="_blank" rel="noopener noreferrer" title="도면 보기" aria-label="도면 보기">도면 보기</a>` : ''}
                     <a class="drawing-icon-link" href="${escape(file.download_url)}" title="다운로드" aria-label="다운로드">${downloadIcon}</a></div>`).join('')}
                 ${row.status === 'DRAFT' && !document.retired_at && state.canWrite ? `<button type="button" class="danger" data-write data-retire-document="${document.id}">문서 폐기</button>` : ''}
             </article>`).join('') : '<p class="drawing-muted">등록된 도면이 없습니다.</p>';
