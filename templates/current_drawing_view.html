@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ item.part_no }} · 현재 도면 보기</title>
+    <link rel="stylesheet" href="/static/css/drawing_management.css">
+    <style>
+        body{margin:0;background:#f8fafc;font-family:Arial,sans-serif}
+        #drawingApp{max-width:1000px;margin:24px auto;padding:0 16px}
+        .current-view{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:24px}
+    </style>
+</head>
+<body>
+<main id="drawingApp">
+    <section class="current-view">
+        <h2>{{ item.part_no }} · {{ item.part_name }}</h2>
+        <p class="drawing-muted">현재 사용 Revision: {{ revision.revision_code if revision else '없음' }}</p>
+        <p class="drawing-muted">현재 사용 도면만 표시합니다. 과거 생산 당시 사용한 도면을 의미하지 않습니다.</p>
+        {% for document in documents %}
+        <article class="drawing-document">
+            <h3>{{ document.title }}</h3>
+            <p class="drawing-muted">도면번호 {{ document.document_no or '미입력' }} · 문서 REV {{ document.document_revision or '미입력' }}</p>
+            {% for file in document.files %}
+            <div class="drawing-file">
+                <span class="drawing-file-name">{{ file.original_name }}<br><small>{{ file.extension|upper }}</small></span>
+                {% if file.can_preview %}<a class="drawing-view-link" href="{{ file.preview_url }}" title="도면 보기">도면 보기</a>{% else %}<span class="drawing-muted">다운로드하여 확인</span>{% endif %}
+                <a href="{{ file.download_url }}" title="다운로드">다운로드</a>
+            </div>
+            {% else %}<p class="drawing-muted">등록된 파일이 없습니다.</p>{% endfor %}
+        </article>
+        {% else %}<p>등록된 현재 사용 도면이 없습니다.</p>{% endfor %}
+    </section>
+</main>
+</body>
+</html>

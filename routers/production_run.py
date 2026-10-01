@@ -320,6 +320,7 @@ def _serialize_run(run: ProductionRun, db: Optional[Session] = None):
         "id": run.id,
         "work_order_id": run.work_order_id,
         "work_order_no": work_order.work_order_no if work_order else "",
+        "item_id": work_order.item_id if work_order else None,
         "part_no": part_no,
         "part_name": part_name,
         "performance_id": run.performance_id,

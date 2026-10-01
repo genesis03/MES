@@ -101,6 +101,38 @@ def drawing_items(keyword: str = "", drawing_no: str = "", drawing_state: str = 
             for item, revision_id, code, count in rows]
 
 
+
+
+@router.get("/api/documents/items/{item_id}/current-view", response_class=HTMLResponse)
+def current_drawing_view(item_id: int, request: Request, db: Session = Depends(get_db)):
+    user = get_current_user_optional(request, db)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    require_document_access(user)
+    item = db.get(ItemMasterModel, item_id)
+    if not item:
+        raise HTTPException(404, "품목을 찾을 수 없습니다.")
+    revision = db.scalar(select(ItemRevision).where(
+        ItemRevision.item_id == item_id, ItemRevision.status == "CURRENT"))
+    documents = []
+    if revision:
+        rows = db.scalars(select(ItemDocument).where(
+            ItemDocument.revision_id == revision.id,
+            ItemDocument.document_type == DRAWING_TYPE,
+            ItemDocument.retired_at.is_(None)
+        ).order_by(ItemDocument.id)).all()
+        documents = [document_dict(db, row) for row in rows]
+    previews = [file for document in documents for file in document["files"] if file["can_preview"]]
+    if len(previews) == 1:
+        # 기존 파일 응답의 형식/경로/크기/체크섬 검사를 그대로 사용합니다.
+        return _file_response(db, previews[0]["id"], True)
+    return templates.TemplateResponse(request=request, name="current_drawing_view.html",
+        context={"item": item, "revision": revision, "documents": documents},
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+                 "Content-Security-Policy": "frame-ancestors 'none'; base-uri 'none'; form-action 'none'; script-src 'none'",
+                 "Referrer-Policy": "no-referrer"})
+
+
 @router.get("/api/documents/items/{item_id}/revisions")
 def item_revisions(item_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
     require_document_access(user)

@@ -3,6 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from core.security import get_current_user
+from services.document_service import has_document_access
 
 router = APIRouter(tags=["Production Pages"])
 templates = Jinja2Templates(directory="templates")
@@ -48,6 +49,7 @@ def _production_run_page(request: Request, current_user, performance_type: str):
             "request": request,
             "user": current_user,
             "performance_type": performance_type,
+            "can_view_drawings": has_document_access(current_user),
             "page_title": "조립 실적 등록" if is_assembly else "가공 실적 등록",
             "action_label": "조립내역" if is_assembly else "가공내역",
         },
