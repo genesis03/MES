@@ -227,9 +227,15 @@ async function deleteSelectedOrders() {
   }
 }
 
+function localDate(offsetDays=0){
+  const d=new Date(); d.setDate(d.getDate()+offsetDays);
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
 function resetFilters(){
-  $('startDate').value='';
-  $('endDate').value='';
+  $('startDate').value=localDate(-30);
+  $('endDate').value=localDate(0);
   $('customerFilter').value='';
   $('orderNoFilter').value='';
   $('statusFilter').value='';
@@ -241,6 +247,8 @@ function resetFilters(){
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  $('startDate').value=localDate(-30);
+  $('endDate').value=localDate(0);
   $('searchBtn').addEventListener('click', () => searchOrders().catch(e => alert(e.message)));
   $('resetBtn').addEventListener('click', resetFilters);
   $('deleteSelectedBtn').addEventListener('click', deleteSelectedOrders);
