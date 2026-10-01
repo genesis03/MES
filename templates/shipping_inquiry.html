@@ -72,8 +72,9 @@ function updateSelection(){
   $('deleteSelectedBtn').textContent=`선택삭제 (${selectedIds.size})`;
 }
 function toggleSelected(id){selectedIds.has(id)?selectedIds.delete(id):selectedIds.add(id);updateSelection();}
+function localDate(offsetDays=0){const d=new Date();d.setDate(d.getDate()+offsetDays);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
 function resetFilters(){
-  $('startDate').value='';$('endDate').value='';$('customerId').value='';$('shipmentNo').value='';$('partSearch').value='';
+  $('startDate').value=localDate(-30);$('endDate').value=localDate(0);$('customerId').value='';$('shipmentNo').value='';$('partSearch').value='';
   selectedParts=[];candidateRows=[];activeIndex=-1;renderChips();hideSuggestions();loadRows();
 }
 async function loadRows(){try{const d=await jf('/api/shipping/inquiry?'+qs());rows=d.items||[];selectedIds.clear();render();updateSelection();showMsg('');}catch(e){showMsg(e.message)}}
@@ -96,7 +97,7 @@ async function deleteSelected(){
   try{for(const row of selectedRows){await jf('/api/shipping/inquiry/'+row.id,{method:'DELETE'});}showMsg(`${selectedRows.length}건의 출고 내역을 삭제했습니다.`,true);await loadRows();}catch(e){showMsg(e.message)}
 }
 document.addEventListener('DOMContentLoaded',async()=>{
-  const today=new Date().toISOString().slice(0,10);$('endDate').value=today;
+  $('startDate').value=localDate(-30);$('endDate').value=localDate(0);
   $('partSearch').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(searchParts,180);});
   $('partSearch').addEventListener('keydown',e=>{if(e.key==='ArrowDown'&&candidateRows.length){e.preventDefault();activeIndex=Math.min(activeIndex+1,candidateRows.length-1);renderSuggestions();}else if(e.key==='ArrowUp'&&candidateRows.length){e.preventDefault();activeIndex=Math.max(activeIndex-1,0);renderSuggestions();}else if(e.key==='Enter'){e.preventDefault();if(candidateRows.length)addPart(candidateRows[activeIndex>=0?activeIndex:0]);else loadRows();}else if(e.key==='Backspace'&&!$('partSearch').value&&selectedParts.length){selectedParts.pop();renderChips();}else if(e.key==='Escape')hideSuggestions();});
   document.addEventListener('click',e=>{if(!e.target.closest('.part-picker'))hideSuggestions();});
