@@ -27,7 +27,7 @@ from services.audit_log import (
 )
 
 from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, subcontract_inbound_lot_policy, subcontract_inbound_edit, purchase_unreceived, quality_pages, quality, quality_standard, quality_production_defects, quality_defect_status, production_pages, production, production_complete, production_run, production_run_delete, production_run_lot_fix, production_extra, inventory_lot_location, inventory, inventory_lot_trace, inventory_lot_trace_tree, inventory_lot_usage_trace, internal_labels, packing, sales, sales_order_policy, sales_shipping_direct, sales_shipping_direct_page, sales_shipping_fifo_auto, sales_shipping_partial_confirm, sales_shipping_entry, sales_order_delete, shipping_inquiry
-from routers import documents
+from routers import documents, standard_documents
 
 # 초기 계정 데이터 생성 트리거
 init_default_accounts()
@@ -186,6 +186,7 @@ app.include_router(manual.router)
 app.include_router(shipping.router)
 app.include_router(basic_info.router)
 app.include_router(documents.router)
+app.include_router(standard_documents.router)
 app.include_router(basic_info_workers.router)
 app.include_router(basic_info_equipment.router)
 app.include_router(bom.router)

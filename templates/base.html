@@ -242,9 +242,9 @@
         <ul class="sidebar-menu">
             {% if user %}
 
-            <!-- 1. 기초 정보 (PLM 기준정보) -->
+            <!-- 1. 기초 정보 -->
             {% if user %}
-            <li class="menu-item{% if request.url.path.startswith('/basic-info/') %} open{% endif %}" id="basicInfoMenu" data-perm-key="basic_info">
+            <li class="menu-item{% if request.url.path.startswith('/basic-info/') and request.url.path != '/basic-info/drawings' %} open{% endif %}" id="basicInfoMenu" data-perm-key="basic_info">
                 <div class="menu-title" onclick="toggleAccordion('basicInfoMenu')">
                     <span>기초 정보</span>
                     <span class="arrow-icon">▼</span>
@@ -253,11 +253,28 @@
                     <li class="submenu-item">
                         <a href="/basic-info/partners" id="nav-partners">거래처 관리</a>
                         <a href="/basic-info/items" id="nav-item-master">품목 정보 관리</a>
-                        <a href="/basic-info/drawings" id="nav-drawings">도면 관리</a>
                         <a href="/basic-info/bom" id="nav-sub-item">BOM 관리</a>
                         <a href="/basic-info/equipment" id="nav-equipment">설비 관리</a>
                         <a href="/basic-info/workers" id="nav-workers">작업자 관리</a>
                     </li>
+                </ul>
+            </li>
+            {% endif %}
+
+            <!-- 표준문서 관리: 도면 주소/권한은 기존 값을 유지합니다. -->
+            {% if user %}
+            <li class="menu-item{% if request.url.path == '/basic-info/drawings' or request.url.path.startswith('/standard-documents/') %} open{% endif %}" id="standardDocumentsMenu" data-perm-key="standard_documents">
+                <div class="menu-title" onclick="toggleAccordion('standardDocumentsMenu')">
+                    <span>표준문서 관리</span>
+                    <span class="arrow-icon">▼</span>
+                </div>
+                <ul class="submenu">
+                    <li class="submenu-item"><a href="/basic-info/drawings" id="nav-drawings">도면 관리</a></li>
+                    <li class="submenu-item"><a href="/standard-documents/control-plans" id="nav-control-plans">CP 관리</a></li>
+                    <li class="submenu-item"><a href="/standard-documents/process-fmea" id="nav-process-fmea">공정 FMEA</a></li>
+                    <li class="submenu-item"><a href="/standard-documents/work-standards" id="nav-work-standards">작업표준서 관리</a></li>
+                    <li class="submenu-item"><a href="/standard-documents/inspection-standards" id="nav-inspection-standards">검사기준서 관리</a></li>
+                    <li class="submenu-item"><a href="/standard-documents/packaging-specifications" id="nav-packaging-specifications">포장사양서 관리</a></li>
                 </ul>
             </li>
             {% endif %}
@@ -570,6 +587,11 @@
                 "/admin/processes-locations": "nav-admin-processes-locations",
                 "/basic-info/items": "nav-item-master",
                 "/basic-info/drawings": "nav-drawings",
+                "/standard-documents/control-plans": "nav-control-plans",
+                "/standard-documents/process-fmea": "nav-process-fmea",
+                "/standard-documents/work-standards": "nav-work-standards",
+                "/standard-documents/inspection-standards": "nav-inspection-standards",
+                "/standard-documents/packaging-specifications": "nav-packaging-specifications",
                 "/basic-info/bom": "nav-sub-item",
                 "/basic-info/partners": "nav-partners",
                 "/basic-info/equipment": "nav-equipment",

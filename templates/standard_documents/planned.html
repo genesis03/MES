@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }}{% endblock %}
+{% block extra_head %}
+<style>
+    .document-planned-head { margin-bottom:20px; }
+    .document-planned-head h1 { font-size:22px; margin-bottom:8px; }
+    .document-planned-head p { color:#64748b; font-size:13px; }
+    .document-planned-card { max-width:960px; background:#fff; border:1px solid var(--border-color); border-radius:8px; padding:24px; }
+    .document-planned-badge { display:inline-block; color:var(--primary-color); background:#eff6ff; padding:5px 10px; border-radius:6px; font-size:12px; font-weight:700; margin-bottom:14px; }
+    .document-planned-card h2 { font-size:17px; margin-bottom:12px; }
+    .document-planned-card p { font-size:14px; line-height:1.8; color:#475569; margin-bottom:10px; }
+    .document-planned-card .document-planned-note { margin:16px 0 0; border-top:1px solid var(--border-color); padding-top:14px; font-size:13px; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="document-planned-head">
+    <h1>{{ page.title }}</h1>
+    <p>표준문서 관리 · 품목과 공정에 연결되는 문서 관리</p>
+</div>
+<section class="document-planned-card">
+    <span class="document-planned-badge">개발 예정</span>
+    <h2>{{ page.title }}</h2>
+    <p>{{ page.description }}</p>
+    {% if page.detail %}<p>{{ page.detail }}</p>{% endif %}
+    <p class="document-planned-note">현재는 메뉴와 안내 화면만 제공하며 작성·등록·저장 기능은 아직 연결되지 않았습니다. 기존 문서와 검사 데이터는 변경하지 않습니다.</p>
+</section>
+{% endblock %}

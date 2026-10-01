@@ -206,6 +206,7 @@
                 const p = u.permissions || {};
                 const activeMenus = [];
                 if (p.basic_info && p.basic_info.enabled) activeMenus.push("기초");
+                if (p.standard_documents && p.standard_documents.enabled) activeMenus.push("표준문서");
                 if (p.sales && p.sales.enabled) activeMenus.push("영업");
                 if (p.purchase && p.purchase.enabled) activeMenus.push("구매");
                 if (p.production && p.production.enabled) activeMenus.push("생산");
@@ -280,7 +281,10 @@
             return ['NONE','READ','WRITE'].includes(level) ? level : 'NONE';
         }
 
-        const parent = permissions && permissions[group.key];
+        // 도면은 메뉴 위치만 옮겼으므로 구형 계정의 기초정보 권한을 보존합니다.
+        // 새 문서 메뉴에는 기초정보 권한을 자동 적용하지 않습니다.
+        const legacyGroupKey = item.path === '/basic-info/drawings' ? 'basic_info' : group.key;
+        const parent = permissions && permissions[legacyGroupKey];
         if (!parent || !parent.enabled) return 'NONE';
 
         if (group.key === 'shipping') {
