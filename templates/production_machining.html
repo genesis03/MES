@@ -69,7 +69,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
       <div><label>표시건수</label><select id="historyLimit"><option value="30" selected>30건</option><option value="50">50건</option><option value="100">100건</option></select></div>
       <div class="history-actions"><button class="btn primary" id="historySearchBtn" type="button" onclick="loadRunHistory()">조회</button><button class="btn secondary" type="button" onclick="resetRunHistory()">초기화</button></div>
     </div>
-    <div class="hint" style="margin-bottom:8px">기본 조회기간은 최근 1개월이며 최대 최근 30건을 표시합니다. 완료된 가동건은 상세 확인, 라벨 재출력, 삭제가 가능합니다.</div>
+    <div class="hint" style="margin-bottom:8px">기본 조회기간은 최근 30일이며 최대 최근 30건을 표시합니다. 완료된 가동건은 상세 확인, 라벨 재출력, 삭제가 가능합니다.</div>
     <div id="runHistory" class="history-wrap"></div>
   </div>
 </div>
@@ -135,7 +135,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
 <script>
 const PERFORMANCE_TYPE='{{ performance_type }}';
 const n=v=>Number(v||0);const today=new Date().toISOString().slice(0,10);let currentRun=null;let defects=[];let defectTypes=[];let selectedOrderId=null;let currentMaterialId=null;
-function oneMonthAgo(){const now=new Date();const day=now.getDate();now.setDate(1);now.setMonth(now.getMonth()-1);const lastDay=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();now.setDate(Math.min(day,lastDay));return now.toISOString().slice(0,10);}
+function oneMonthAgo(){const d=new Date();d.setDate(d.getDate()-30);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
 document.addEventListener('DOMContentLoaded',async()=>{performanceDate.value=today;historyStartDate.value=oneMonthAgo();historyEndDate.value=today;await loadProcesses();await loadDefectTypes();await loadRunHistory();['goodQty','setupQty'].forEach(id=>document.getElementById(id).addEventListener('input',updateProcessQty));scanLotInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scanLot();}});materialLotScanInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();assignMaterialLot();}});historyStatus.addEventListener('change',loadRunHistory);historyLimit.addEventListener('change',loadRunHistory);});
 async function jf(url,opt){const r=await fetch(url,opt);const d=await r.json();if(!r.ok)throw new Error(d.detail||'처리 실패');return d;}
 function msg(el,text,ok=false){el.textContent=text||'';el.className='msg '+(ok?'ok':'err');}
