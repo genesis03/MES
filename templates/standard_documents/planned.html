@@ -15,7 +15,7 @@
 {% block content %}
 <div class="document-planned-head">
     <h1>{{ page.title }}</h1>
-    <p>표준문서 관리 · 품목과 공정에 연결되는 문서 관리</p>
+    <p>{{ page.section | default("표준문서 관리 · 품목과 공정에 연결되는 문서 관리", true) }}</p>
 </div>
 <section class="document-planned-card">
     <span class="document-planned-badge">개발 예정</span>
