@@ -7,6 +7,7 @@
 | 메뉴명 | 경로 | 현재 상태 |
 |---|---|---|
 | 도면 관리 | /basic-info/drawings | 기존 도면 관리 화면 |
+| 공정흐름도 | /standard-documents/process-flows | 품목별 공정번호·명칭·순서·개정·인쇄 |
 | CP 관리 | /standard-documents/control-plans | 개발 예정 안내 |
 | 공정 FMEA | /standard-documents/process-fmea | 작성·저장·개정·조회·인쇄 |
 | 작업표준서 관리 | /standard-documents/work-standards | 개발 예정 안내 |
@@ -28,6 +29,7 @@
 - 참고 양식: https://github.com/genesis03/FMEA/blob/main/src/components/FMEAForm.tsx
 - 기본 정보 양식: https://github.com/genesis03/FMEA/blob/main/src/components/FMEAHeader.tsx
 - 기존 양식의 고장 형태, 영향, S/O/D, 원인, 예방·검출 관리, RPN, 권고 조치, 담당자/목표일, 조치 결과/완료일, 조치 후 S/O/D·RPN을 출발점으로 합니다.
+- 공정흐름과 공정흐름도는 별도 기능으로 분리하지 않습니다. 공정흐름도에서 직접 입력한 번호·명칭·순서를 FMEA가 참조하며 향후 CP도 같은 기준을 사용합니다. CP는 아직 개발 예정입니다.
 - 기존 양식에 설계관리 표현이 있더라도 MES에서는 공정 FMEA에 맞게 용어와 품목/공정 연결을 설계합니다. 제공된 양식만으로 특정 최신 FMEA 규격 준수를 주장하지 않습니다.
 - React/Flask 애플리케이션이나 별도 fmea.db를 MES에 복사하지 않습니다. FastAPI/Jinja2/SQLAlchemy 구조와 기존 품목·공정·사용자 마스터를 사용합니다.
 - 품목은 item_id로 연결하고 part_no는 표시용입니다. 승인된 1차 작성 화면·DB·개정 정책은 docs/process_fmea.md에 기록합니다.
@@ -46,4 +48,4 @@
 - Revision/현재 사용 정책과 파일 저장·권한 처리는 공통 기능을 재사용하되 문서별 적용 관계는 다음 설계에서 확정합니다.
 - GitHub main 직접 반영 후 사용자가 git pull하고 서버를 재시작하여 메뉴를 확인합니다.
 - 요청에 따라 이번 변경은 실행 테스트나 브라우저 점검을 하지 않습니다.
-- DB 파일 및 문서 원본은 수정하지 않았으며 Oracle 배포도 수행하지 않습니다.
+- GitHub DB 파일 및 문서 원본은 수정하지 않았습니다. 서버 재시작 시 기존 FMEA 연결 컬럼을 추가하므로 실제 DB를 먼저 백업합니다. Oracle 배포는 사용자의 로컬 확인 뒤 별도로 진행합니다.

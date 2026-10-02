@@ -270,6 +270,7 @@
                 </div>
                 <ul class="submenu">
                     <li class="submenu-item"><a href="/basic-info/drawings" id="nav-drawings">도면 관리</a></li>
+                    <li class="submenu-item"><a href="/standard-documents/process-flows" id="nav-process-flows">공정흐름도</a></li>
                     <li class="submenu-item"><a href="/standard-documents/control-plans" id="nav-control-plans">CP 관리</a></li>
                     <li class="submenu-item"><a href="/standard-documents/process-fmea" id="nav-process-fmea">공정 FMEA</a></li>
                     <li class="submenu-item"><a href="/standard-documents/work-standards" id="nav-work-standards">작업표준서 관리</a></li>
@@ -462,7 +463,7 @@
             if (!window.MES_READ_ONLY) return;
 
             document.body.classList.add('mes-readonly');
-            const allowPattern = /(조회|검색|초기화|닫기|불러오기|이전|다음|선택|적용|새로고침|엑셀|다운로드)/;
+            const allowPattern = /(조회|검색|초기화|닫기|불러오기|이전|다음|선택|적용|새로고침|엑셀|다운로드|인쇄)/;
 
             const lockWrites = root => {
                 (root || document).querySelectorAll('button,input[type="submit"],input[type="button"]').forEach(el => {
@@ -588,6 +589,7 @@
                 "/admin/processes-locations": "nav-admin-processes-locations",
                 "/basic-info/items": "nav-item-master",
                 "/basic-info/drawings": "nav-drawings",
+                "/standard-documents/process-flows": "nav-process-flows",
                 "/standard-documents/control-plans": "nav-control-plans",
                 "/standard-documents/process-fmea": "nav-process-fmea",
                 "/standard-documents/work-standards": "nav-work-standards",

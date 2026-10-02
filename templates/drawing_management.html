@@ -22,6 +22,8 @@
                     <button id="drawingNewRevision" type="button" data-write>최초 등록</button></div>
                 <div class="drawing-revisions"><label>Revision 이력<select id="drawingRevision"></select></label><span id="drawingRevisionStatus" class="drawing-badge"></span></div>
                 <p id="drawingRevisionMeta" class="drawing-muted"></p>
+                <h3 class="drawing-history-title">개정 이력</h3>
+                <div class="drawing-history-scroll"><table><thead><tr><th>개정번호</th><th>등록일</th><th>적용일</th><th>주요 개정 내용</th><th>등록자</th><th>상태</th><th>조회</th></tr></thead><tbody id="drawingRevisionHistory"></tbody></table></div>
                 <div class="drawing-actions"><button id="drawingRevise" type="button" data-write>개정 등록</button><button id="drawingActivate" type="button" data-write>현재 사용 적용</button><button id="drawingRetire" type="button" class="danger" data-write>Revision 폐기</button></div>
                 <div id="drawingDocuments"></div>
                 <form id="drawingUpload" class="drawing-upload" hidden>

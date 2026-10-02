@@ -1,7 +1,7 @@
 """공정 FMEA: 품목 연결, 독립 문서 개정, 분석행. 이력의 물리 삭제는 제공하지 않습니다."""
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, Column, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, Column, Date, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, text
 from core.database import Base
 
 
@@ -35,6 +35,12 @@ class FmeaRevision(Base):
     previous_revision_id = Column(Integer, ForeignKey("fmea_revisions.id", ondelete="RESTRICT"))
     basis_item_revision_id = Column(Integer, ForeignKey("item_revisions.id", ondelete="RESTRICT"))
     basis_revision_snapshot = Column(String(50))
+    flow_revision_id = Column(Integer, ForeignKey("process_flow_revisions.id", ondelete="RESTRICT"))
+    diff_tracking = Column(Boolean, nullable=False, default=True)
+    vehicle_model_snapshot = Column(String(100))
+    process_owner = Column(String(100))
+    completion_due_date = Column(Date)
+    mass_production_date = Column(Date)
     part_no_snapshot = Column(String(100), nullable=False)
     part_name_snapshot = Column(String(200), nullable=False)
     company = Column(String(200))
@@ -68,6 +74,9 @@ class FmeaRow(Base):
     id = Column(Integer, primary_key=True)
     revision_id = Column(Integer, ForeignKey("fmea_revisions.id", ondelete="RESTRICT"), nullable=False, index=True)
     sort_order = Column(Integer, nullable=False)
+    flow_step_id = Column(Integer, ForeignKey("process_flow_steps.id", ondelete="RESTRICT"))
+    previous_row_id = Column(Integer, ForeignKey("fmea_rows.id", ondelete="RESTRICT"))
+    action_not_applicable = Column(Boolean, nullable=False, default=False)
     # 기존 공정코드 변경 기능은 이 참조만 갱신하고 아래 인쇄용 스냅샷은 보존합니다.
     process_code = Column(String, ForeignKey("processes.process_code", ondelete="RESTRICT"), index=True)
     process_code_snapshot = Column(String(100))

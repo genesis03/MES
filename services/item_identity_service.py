@@ -87,6 +87,11 @@ def item_usage_summary(db: Session, item_id: int) -> list[dict]:
     if fmea_count:
         result.append({"table": "fmea_documents", "column": "item_id", "count": fmea_count})
 
+    from models.process_flow import ProcessFlowRevision
+    flow_count = db.query(ProcessFlowRevision).filter(ProcessFlowRevision.item_id == item_id).count()
+    if flow_count:
+        result.append({"table": "process_flow_revisions", "column": "item_id", "count": flow_count})
+
     return result
 
 

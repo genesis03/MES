@@ -5,6 +5,8 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from core.security import check_admin_permission, parse_user_permissions
 from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
 from models.models import ItemMasterModel
+from models.process_flow import ProcessFlowRevision, ProcessFlowStep
+from services.process_flow_service import flow_dict
 from services.document_service import lock_item
 
 FMEA_MENU_PATH = "/standard-documents/process-fmea"
@@ -12,9 +14,10 @@ ROW_FIELDS = (
     "process_code", "function_text", "failure_mode", "effects", "severity", "classification",
     "causes", "occurrence", "prevention_controls", "detection_controls", "detection",
     "recommended_actions", "responsibility", "target_date", "actions_taken", "completion_date",
-    "new_severity", "new_occurrence", "new_detection", "note",
+    "new_severity", "new_occurrence", "new_detection", "note", "flow_step_id", "action_not_applicable",
 )
-HEADER_FIELDS = ("company", "model_year", "team", "prepared_by", "date_prepared", "note")
+HEADER_FIELDS = ("company", "model_year", "team", "prepared_by", "date_prepared", "note",
+                 "process_owner", "completion_due_date", "mass_production_date")
 
 
 def has_fmea_access(user, action="READ"):
@@ -59,13 +62,19 @@ def lock_fmea_revision(db, revision_id, version, require_active=True):
     return item, document, revision
 
 
-def row_dict(row):
+def row_dict(row, steps=None):
     result = {field: getattr(row, field) for field in ROW_FIELDS}
     for field in ("target_date", "completion_date"):
         result[field] = result[field].isoformat() if result[field] else None
     result.update(id=row.id, sort_order=row.sort_order,
                   process_code_snapshot=row.process_code_snapshot,
                   process_name_snapshot=row.process_name_snapshot)
+    step = (steps or {}).get(row.flow_step_id)
+    result.update(flow_step_no=step.step_no if step else "",
+                  flow_step_name=step.step_name if step else "",
+                  flow_step_key_id=step.step_key_id if step else None,
+                  flow_sort_order=step.sort_order if step else None,
+                  previous_row_id=row.previous_row_id)
     for prefix in ("", "new_"):
         scores = [getattr(row, prefix + field) for field in ("severity", "occurrence", "detection")]
         result[prefix + "rpn"] = scores[0] * scores[1] * scores[2] if all(x is not None for x in scores) else None
@@ -91,8 +100,17 @@ def revision_dict(db, row, include_rows=True):
         activated_at=row.activated_at.isoformat(sep=" ", timespec="seconds") if row.activated_at else "",
         retire_reason=row.retire_reason or "",
     )
+    flow = db.get(ProcessFlowRevision, row.flow_revision_id) if row.flow_revision_id else None
+    result.update(flow_revision_id=row.flow_revision_id,
+                  flow_revision_code=flow.revision_code if flow else "",
+                  flow_status=flow.status if flow else "",
+                  flow_current_match=bool(flow and flow.status == "CURRENT"),
+                  vehicle_model_snapshot=row.vehicle_model_snapshot or "")
     if include_rows:
-        result["rows"] = [row_dict(x) for x in db.scalars(select(FmeaRow).where(
-            FmeaRow.revision_id == row.id, FmeaRow.retired_at.is_(None)
-        ).order_by(FmeaRow.sort_order, FmeaRow.id))]
+        result["flow"] = flow_dict(db, flow) if flow else None
+        rows = db.scalars(select(FmeaRow).where(FmeaRow.revision_id == row.id,
+                          FmeaRow.retired_at.is_(None)).order_by(FmeaRow.sort_order, FmeaRow.id)).all()
+        step_ids = {x.flow_step_id for x in rows if x.flow_step_id}
+        steps = {x.id: x for x in db.scalars(select(ProcessFlowStep).where(ProcessFlowStep.id.in_(step_ids)))}
+        result["rows"] = [row_dict(x, steps) for x in rows]
     return result

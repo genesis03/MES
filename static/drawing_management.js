@@ -31,6 +31,7 @@
     }
 
     function updateActions() {
+        renderRevisionHistory();
         const writable = state.canWrite && !state.busy && state.item?.is_active === 'Y';
         document.querySelectorAll('#drawingApp [data-write]').forEach(button => { button.disabled = !writable; });
         $('drawingNewRevision').hidden = state.revisions.length > 0;
@@ -58,6 +59,10 @@
                 <span class="drawing-item-name">${escape(item.part_name)}${item.is_active !== 'Y' ? ' · 사용중지' : ''}</span></button></td>
                 <td>${item.drawing_count ? `<span class="drawing-badge current">${escape(item.current_revision)}</span><small> ${item.drawing_count}건</small>` : '없음'}</td></tr>`).join('')
             : '<tr><td colspan="2">조회된 품목이 없습니다.</td></tr>';
+    }
+
+    function renderRevisionHistory() {
+        $('drawingRevisionHistory').innerHTML = state.revisions.length ? state.revisions.map(row => `<tr class="${row.id === state.revision?.id ? 'selected' : ''}"><td>${escape(row.revision_code)}</td><td>${escape(row.created_at)}</td><td>${escape(row.activated_at || '—')}</td><td>${escape(row.change_reason || (row.previous_revision_id ? '미기록' : '최초 등록'))}${row.retire_reason ? '<br>폐기: ' + escape(row.retire_reason) : ''}</td><td>${escape(row.created_by)}</td><td>${escape(statusName[row.status])}</td><td><button type="button" class="secondary" data-view-revision="${row.id}" ${state.busy ? 'disabled' : ''}>조회</button></td></tr>`).join('') : '<tr><td colspan="7">등록 이력이 없습니다.</td></tr>';
     }
 
     async function loadItems(preferredId = state.item?.item_id) {
@@ -147,6 +152,13 @@
     });
     $('drawingRevision').addEventListener('change', event => {
         if (!state.busy) selectRevision(Number(event.target.value)).catch(error => message(error.message, true));
+    });
+    $('drawingRevisionHistory').addEventListener('click', event => {
+        const button = event.target.closest('[data-view-revision]');
+        if (button && !state.busy) {
+            $('drawingRevision').value = button.dataset.viewRevision;
+            run(() => selectRevision(Number(button.dataset.viewRevision)));
+        }
     });
     $('drawingNewRevision').addEventListener('click', () => openRevision());
     $('drawingRevise').addEventListener('click', () => openRevision(state.revision));

@@ -5,7 +5,7 @@ if (!root) return;
 const el = id => document.getElementById(id);
 const canWrite = root.dataset.canWrite === 'true';
 const labels = {DRAFT:'초안',CURRENT:'현재 사용',SUPERSEDED:'구버전',RETIRED:'폐기'};
-let options = {items:[],processes:[]}, selected = null, rows = [], dirty = false, busy = false, loaded = false;
+let options = {items:[]}, selected = null, rows = [], dirty = false, busy = false, loaded = false, currentFlow = null, flowChoices = [];
 const textFields = ['function_text','failure_mode','effects','classification','causes','prevention_controls','detection_controls','recommended_actions','responsibility','actions_taken','note'];
 const scores = ['severity','occurrence','detection','new_severity','new_occurrence','new_detection'];
 const dateFields = ['target_date','completion_date'];
@@ -28,37 +28,67 @@ function updateControls(){
   if(el('fmeaRetire'))el('fmeaRetire').disabled=busy||!canWrite||!selected||selected.status==='RETIRED';
   if(el('fmeaNew'))el('fmeaNew').disabled=busy||!loaded;
   el('fmeaRevisionSelect').disabled=busy||!selected;
-  root.querySelectorAll('[data-remove-row]').forEach(x=>x.disabled=!write);
-  root.querySelectorAll('[data-select-document]').forEach(x=>x.disabled=busy);
+  root.querySelectorAll('[data-remove-row],[data-add-flow-row]').forEach(x=>x.disabled=!write);
+  root.querySelectorAll('[data-select-document],[data-history-revision]').forEach(x=>x.disabled=busy);
   ['fmeaSearch','fmeaReset'].forEach(id=>el(id).disabled=busy||!loaded);
   const print=el('fmeaPrint');print.removeAttribute('href');print.setAttribute('aria-disabled','true');
   if(selected&&!dirty&&!busy){print.href='/api/process-fmea/revisions/'+selected.id+'/print';print.setAttribute('aria-disabled','false');}
 }
 function markDirty(){dirty=true;updateControls();}
 function abandon(){return !dirty||confirm('저장하지 않은 입력이 있습니다. 입력을 버리고 이동할까요?');}
-function newRow(){const row={id:null,process_code:null};textFields.forEach(f=>row[f]='');scores.concat(dateFields).forEach(f=>row[f]=null);return row;}
+function newRow(step=null){const row={id:null,process_code:null,flow_step_id:step?.id||null,flow_step_key_id:step?.step_key_id||null,flow_step_no:step?.step_no||'',flow_step_name:step?.step_name||'',action_not_applicable:false};textFields.forEach(f=>row[f]='');scores.concat(dateFields).forEach(f=>row[f]=null);return row;}
 function rpn(row,prefix=''){const values=['severity','occurrence','detection'].map(f=>row[prefix+f]);return values.every(v=>Number.isInteger(v)&&v>=1&&v<=10)?values.reduce((a,b)=>a*b,1):'';}
 function cell(field,row,index,type='text'){
-  const attrs=' data-field="'+field+'" data-row="'+index+'" aria-label="'+esc(field)+'"';
-  if(type==='score')return '<td><select'+attrs+'><option value="">미평가</option>'+Array.from({length:10},(_,i)=>'<option value="'+(i+1)+'"'+(row[field]===i+1?' selected':'')+'>'+(i+1)+'</option>').join('')+'</select></td>';
-  if(type==='date')return '<input type="date"'+attrs+' value="'+esc(row[field]||'')+'">';
-  if(type==='input')return '<input'+attrs+' value="'+esc(row[field])+'" maxlength="'+(field==='classification'?50:100)+'">';
-  return '<td><textarea'+attrs+' maxlength="4000">'+esc(row[field])+'</textarea></td>';
+ const attrs=' data-field="'+field+'" data-row="'+index+'" aria-label="'+esc(field)+'"';
+ const isAction=['recommended_actions','actions_taken','new_severity','new_occurrence','new_detection'].includes(field);
+ if(row.action_not_applicable&&isAction)return '<td><div class="pf-cell"><output>N/A</output></div></td>';
+ if(type==='score')return '<td><div class="pf-cell"><select'+attrs+'><option value="">미평가</option>'+Array.from({length:10},(_,i)=>'<option value="'+(i+1)+'"'+(row[field]===i+1?' selected':'')+'>'+(i+1)+'</option>').join('')+'</select></div></td>';
+ if(type==='date')return '<input type="date"'+attrs+' value="'+esc(row[field]||'')+'">';
+ if(type==='input')return '<input'+attrs+' class="pf-center" value="'+esc(row[field])+'" maxlength="'+(field==='classification'?50:100)+'">';
+ return '<td><div class="pf-cell"><textarea'+attrs+' maxlength="4000">'+esc(row[field])+'</textarea></div></td>';
+}
+function balanceRows(){
+ el('fmeaRows').querySelectorAll('tr[data-analysis-row]').forEach(tr=>{
+  let height=112;
+  tr.querySelectorAll('textarea').forEach(area=>{area.style.height='0px';height=Math.max(height,area.scrollHeight+(area.closest('.pf-stack')?42:8));area.style.height='';});
+  tr.style.setProperty('--analysis-height',Math.min(height,360)+'px');
+ });
 }
 function renderRows(){
-  el('fmeaRows').innerHTML=rows.map((row,i)=>{
-    let processOptions='<option value="">공정 선택</option>'+options.processes.map(p=>'<option value="'+esc(p.code)+'"'+(p.code===row.process_code?' selected':'')+(p.is_active!=='Y'?' disabled':'')+'>'+esc(p.name+' · '+p.code+(p.is_active!=='Y'?' · 사용중지':''))+'</option>').join('');
-    if(row.process_code&&!options.processes.some(p=>p.code===row.process_code))processOptions+='<option selected value="'+esc(row.process_code)+'">'+esc(row.process_name_snapshot||row.process_code)+'</option>';
-    return '<tr><td><select data-field="process_code" data-row="'+i+'" aria-label="공정">'+processOptions+'</select>'+(selected&&selected.status!=='DRAFT'?'<small>당시: '+esc(row.process_name_snapshot)+' · '+esc(row.process_code_snapshot)+'</small>':'')+'</td>'+
-      cell('function_text',row,i)+cell('failure_mode',row,i)+cell('effects',row,i)+cell('severity',row,i,'score')+'<td>'+cell('classification',row,i,'input')+'</td>'+
-      cell('causes',row,i)+cell('occurrence',row,i,'score')+cell('prevention_controls',row,i)+cell('detection_controls',row,i)+cell('detection',row,i,'score')+
-      '<td><output data-rpn="'+i+'">'+rpn(row)+'</output></td>'+cell('recommended_actions',row,i)+
-      '<td>'+cell('responsibility',row,i,'input')+cell('target_date',row,i,'date')+'</td>'+
-      '<td><textarea data-field="actions_taken" data-row="'+i+'" aria-label="조치 내용" maxlength="4000">'+esc(row.actions_taken)+'</textarea>'+cell('completion_date',row,i,'date')+'</td>'+
-      cell('new_severity',row,i,'score')+cell('new_occurrence',row,i,'score')+cell('new_detection',row,i,'score')+
-      '<td><output data-new-rpn="'+i+'">'+rpn(row,'new_')+'</output></td>'+cell('note',row,i)+
-      '<td><button class="pf-btn light" data-remove-row="'+i+'"'+(!canWrite?' hidden':'')+'>제외</button></td></tr>';
-  }).join('');updateControls();
+ const stages=currentFlow?.steps||[],html=[];
+ const stageCell=(step,count)=>'<td rowspan="'+count+'" class="pf-stage-cell"><strong>'+esc(step.step_no)+'</strong><span>'+esc(step.step_name)+'</span>'+ (canWrite?'<button class="pf-btn light no-print" data-add-flow-row="'+step.id+'">분석행 추가</button>':'')+'</td>';
+ const render=(row,i,firstCell)=>{
+  const na=row.action_not_applicable;
+  const actionCheck='<label class="pf-na-check"><input type="checkbox" data-field="action_not_applicable" data-row="'+i+'"'+(na?' checked':'')+'>조치 해당없음</label>';
+  html.push('<tr data-analysis-row="'+i+'">'+firstCell+cell('function_text',row,i)+cell('failure_mode',row,i)+cell('effects',row,i)+cell('severity',row,i,'score')+'<td><div class="pf-cell">'+cell('classification',row,i,'input')+'</div></td>'+cell('causes',row,i)+cell('occurrence',row,i,'score')+cell('prevention_controls',row,i)+cell('detection_controls',row,i)+cell('detection',row,i,'score')+'<td><div class="pf-cell"><output data-rpn="'+i+'">'+rpn(row)+'</output></div></td>'+cell('recommended_actions',row,i)+'<td><div class="pf-cell pf-stack">'+actionCheck+(na?'<output>N/A</output>':cell('responsibility',row,i,'input')+cell('target_date',row,i,'date'))+'</div></td>'+(na?'<td><div class="pf-cell"><output>N/A</output></div></td>':'<td><div class="pf-cell pf-stack"><textarea data-field="actions_taken" data-row="'+i+'" aria-label="조치 내용" maxlength="4000">'+esc(row.actions_taken)+'</textarea>'+cell('completion_date',row,i,'date')+'</div></td>')+cell('new_severity',row,i,'score')+cell('new_occurrence',row,i,'score')+cell('new_detection',row,i,'score')+'<td><div class="pf-cell"><output data-new-rpn="'+i+'">'+(na?'N/A':rpn(row,'new_'))+'</output></div></td>'+cell('note',row,i)+'<td class="no-print"><div class="pf-cell"><button class="pf-btn light" data-remove-row="'+i+'"'+(!canWrite?' hidden':'')+'>제외</button></div></td></tr>');
+ };
+ stages.forEach(step=>{
+  const entries=rows.map((row,index)=>({row,index})).filter(x=>x.row.flow_step_id===step.id);
+  if(!entries.length)html.push('<tr>'+stageCell(step,1)+'<td colspan="20" class="pf-stage-cell">이 공정의 분석행을 추가해 주세요.</td></tr>');
+  else entries.forEach((x,j)=>render(x.row,x.index,j===0?stageCell(step,entries.length):''));
+ });
+ rows.forEach((row,i)=>{
+  if(stages.some(step=>step.id===row.flow_step_id))return;
+  const legacy=[row.flow_step_no||row.process_code_snapshot,row.flow_step_name||row.process_name_snapshot].filter(Boolean).join(' · ');
+  const choices='<option value="">공정 연결 선택</option>'+stages.map(step=>'<option value="'+step.id+'">'+esc(step.step_no+' · '+step.step_name)+'</option>').join('');
+  render(row,i,'<td class="pf-stage-cell"><strong>미연결</strong><span>'+esc(legacy||'기존 공정 정보 없음')+'</span>'+(canWrite?'<select data-field="flow_step_id" data-row="'+i+'" aria-label="기존 행의 공정 연결">'+choices+'</select>':'')+'</td>');
+ });
+ el('fmeaRows').innerHTML=html.join('');updateControls();requestAnimationFrame(balanceRows);
+}
+async function flowOptions(itemId,detail=null){
+ flowChoices=itemId?await request('/api/process-fmea/items/'+itemId+'/flows'):[];
+ if(detail?.flow&&!flowChoices.some(x=>x.id===detail.flow.id))flowChoices.push(detail.flow);
+ el('fmeaFlow').innerHTML='<option value="">공정흐름도 선택</option>'+flowChoices.map(x=>'<option value="'+x.id+'">'+esc(x.revision_code+' · '+labels[x.status])+'</option>').join('');
+ el('fmeaFlow').value=detail?.flow_revision_id||'';
+}
+function flowWarning(){
+ el('fmeaFlowWarning').textContent=!currentFlow?'공정흐름도를 먼저 등록·적용한 뒤 선택해 주세요. 기존 분석행은 공정번호를 추정해 연결하지 않습니다.':currentFlow.status!=='CURRENT'?'현재 사용 공정흐름도와 다릅니다. 기존 문서는 보존하며 새 개정에서 기준 공정을 검토해 주세요.':'기준 공정흐름도 '+currentFlow.revision_code+' · 공정번호·공정명·순서 일치';
+}
+async function historyAndChanges(detail,revisions){
+ el('fmeaHistory').innerHTML=revisions.map(r=>'<tr><td>'+esc(r.revision_code)+'</td><td>'+esc(r.created_at)+'<br>'+esc(r.activated_at||'미적용')+'</td><td>'+esc(r.change_reason||(r.previous_revision_id?'미기록':'최초 작성'))+'</td><td>'+esc(r.prepared_by)+' / '+esc(r.created_by)+'</td><td>미구현</td><td>미구현</td><td>'+esc(labels[r.status])+'</td><td><button class="pf-btn light" data-history-revision="'+r.id+'">조회</button></td></tr>').join('');
+ const difference=await request('/api/process-fmea/revisions/'+detail.id+'/changes');
+ el('fmeaDiffWarning').textContent=difference.warning|| (difference.previous_revision?'비교 기준: '+difference.previous_revision:'최초 작성');
+ el('fmeaDiffRows').innerHTML=difference.changes.length?difference.changes.map(x=>'<tr><td>'+esc(x.kind)+'</td><td>'+esc(x.process)+'</td><td>'+esc(x.field)+'</td><td>'+esc(x.before)+'</td><td>'+esc(x.after)+'</td></tr>').join(''):'<tr><td colspan="5">확인 가능한 변경 내역이 없습니다.</td></tr>';
 }
 async function basisOptions(itemId, value=null, snapshot=''){
   const revisions=itemId?await request('/api/process-fmea/items/'+itemId+'/drawing-revisions'):[];
@@ -72,11 +102,14 @@ async function list(){
   updateControls();
 }
 function fill(detail){
-  selected=detail;rows=detail.rows;dirty=false;el('fmeaEditor').hidden=false;
+  selected=detail;rows=detail.rows;currentFlow=detail.flow||null;dirty=false;el('fmeaEditor').hidden=false;
   el('fmeaEditorTitle').textContent=detail.part_no+' · '+detail.part_name+' · 공정 FMEA';
   el('fmeaItem').value=detail.item_id;el('fmeaNumber').value=detail.document_no;el('fmeaCode').value=detail.revision_code;
   const fields={fmeaCompany:'company',fmeaModelYear:'model_year',fmeaTeam:'team',fmeaAuthor:'prepared_by',fmeaDate:'date_prepared',fmeaNote:'note'};
   Object.entries(fields).forEach(([id,field])=>el(id).value=detail[field]||'');
+  el('fmeaOwner').value=detail.process_owner||'';el('fmeaDue').value=detail.completion_due_date||'';el('fmeaMassDate').value=detail.mass_production_date||'';el('fmeaVehicle').value=detail.vehicle_model_snapshot||'';
+  el('fmeaFlow').value=detail.flow_revision_id||'';
+  flowWarning();
   el('fmeaStatus').textContent=labels[detail.status];
   el('fmeaHistoryNote').textContent='당시 품번/품명: '+detail.part_no_snapshot+' · '+detail.part_name_snapshot+' | 등록: '+detail.created_by+' · '+detail.created_at+(detail.activated_at?' | 적용: '+detail.activated_by+' · '+detail.activated_at:'');
   el('fmeaChangeReason').textContent=(detail.change_reason?'개정 사유: '+detail.change_reason:'')+(detail.retire_reason?' | 폐기 사유: '+detail.retire_reason:'');
@@ -86,21 +119,28 @@ async function selectRevision(revisionId){
   const detail=await request('/api/process-fmea/revisions/'+revisionId);
   const revisions=await request('/api/process-fmea/documents/'+detail.document_id+'/revisions');
   await basisOptions(detail.item_id,detail.basis_item_revision_id,detail.basis_revision_snapshot);
+  await flowOptions(detail.item_id,detail);
   fill(detail);
   el('fmeaRevisionSelect').innerHTML=revisions.map(r=>'<option value="'+r.id+'">'+esc(r.revision_code+' · '+labels[r.status])+'</option>').join('');
   el('fmeaRevisionSelect').value=detail.id;
+  await historyAndChanges(detail,revisions);
 }
 async function startNew(){
-  selected=null;rows=[newRow()];dirty=false;el('fmeaEditor').hidden=false;el('fmeaEditorTitle').textContent='신규 공정 FMEA';
+  selected=null;rows=[];currentFlow=null;flowChoices=[];dirty=false;el('fmeaEditor').hidden=false;el('fmeaEditorTitle').textContent='신규 공정 FMEA';
   ['fmeaNumber','fmeaCode','fmeaCompany','fmeaModelYear','fmeaNote'].forEach(id=>el(id).value='');
   el('fmeaItem').value='';el('fmeaTeam').value=root.dataset.team;el('fmeaAuthor').value=root.dataset.author;el('fmeaDate').value=root.dataset.today;
   el('fmeaStatus').textContent='신규 · 초안';el('fmeaRevisionSelect').innerHTML='';el('fmeaHistoryNote').textContent='';el('fmeaChangeReason').textContent='';
+  ['fmeaOwner','fmeaDue','fmeaMassDate','fmeaVehicle'].forEach(id=>el(id).value='');
+  el('fmeaHistory').innerHTML='';el('fmeaDiffRows').innerHTML='';el('fmeaDiffWarning').textContent='';el('fmeaChanges').open=false;
+  await flowOptions(null);flowWarning();
   await basisOptions(null);renderRows();message('품목과 FMEA 번호·개정번호를 입력한 뒤 초안을 저장해 주세요.');
 }
 function payload(){
   return {company:el('fmeaCompany').value,model_year:el('fmeaModelYear').value,team:el('fmeaTeam').value,prepared_by:el('fmeaAuthor').value,date_prepared:el('fmeaDate').value,
     basis_item_revision_id:el('fmeaBasis').value?Number(el('fmeaBasis').value):null,note:el('fmeaNote').value,
-    rows:rows.map(r=>{const data={id:r.id||null,process_code:r.process_code||null};textFields.concat(scores,dateFields).forEach(f=>data[f]=r[f]);return data;})};
+    flow_revision_id:el('fmeaFlow').value?Number(el('fmeaFlow').value):null,
+    process_owner:el('fmeaOwner').value,completion_due_date:el('fmeaDue').value||null,mass_production_date:el('fmeaMassDate').value||null,
+    rows:rows.map(r=>{const data={id:r.id||null,process_code:r.process_code||null,flow_step_id:r.flow_step_id||null,action_not_applicable:!!r.action_not_applicable};textFields.concat(scores,dateFields).forEach(f=>data[f]=r[f]);return data;})};
 }
 async function task(fn){
   if(busy)return;busy=true;updateControls();
@@ -113,20 +153,59 @@ el('fmeaKeyword').addEventListener('keydown',event=>{if(event.key==='Enter')task
 el('fmeaList').addEventListener('click',event=>{const button=event.target.closest('[data-select-document]');if(button&&!busy&&abandon())task(async()=>{await selectRevision(Number(button.dataset.revisionId));message('공정 FMEA를 조회했습니다.');});});
 el('fmeaRevisionSelect').addEventListener('change',()=>{const id=Number(el('fmeaRevisionSelect').value);if(!abandon()){el('fmeaRevisionSelect').value=selected.id;return;}task(()=>selectRevision(id));});
 root.querySelector('.pf-fields').addEventListener('input',()=>{if(editable())markDirty();});
-el('fmeaItem').addEventListener('change',()=>task(async()=>{await basisOptions(Number(el('fmeaItem').value));markDirty();}));
+el('fmeaItem').addEventListener('change',()=>task(async()=>{
+ const itemId=Number(el('fmeaItem').value);await basisOptions(itemId);await flowOptions(itemId);
+ currentFlow=null;el('fmeaVehicle').value=options.items.find(x=>x.id===itemId)?.vehicle_model||'';
+ flowWarning();renderRows();markDirty();
+}));
+el('fmeaFlow').addEventListener('change',()=>{
+ if(!editable()||busy)return;
+ const next=flowChoices.find(x=>x.id===Number(el('fmeaFlow').value))||null;
+ if(!next){currentFlow=null;flowWarning();renderRows();markDirty();return;}
+ rows.forEach(row=>{
+  const step=next.steps.find(x=>x.step_key_id===row.flow_step_key_id);
+  if(step){row.flow_step_id=step.id;row.flow_step_no=step.step_no;row.flow_step_name=step.step_name;}
+ });
+ next.steps.forEach(step=>{if(!rows.some(row=>row.flow_step_id===step.id))rows.push(newRow(step));});
+ currentFlow=next;flowWarning();renderRows();markDirty();
+});
+el('fmeaHistory').addEventListener('click',event=>{
+ const button=event.target.closest('[data-history-revision]');
+ if(button&&!busy&&abandon())task(()=>selectRevision(Number(button.dataset.historyRevision)));
+});
 el('fmeaRows').addEventListener('input',event=>{
-  const field=event.target.dataset.field,index=Number(event.target.dataset.row);if(!field||!editable()||busy)return;
+  const field=event.target.dataset.field,index=Number(event.target.dataset.row);if(!field||field==='action_not_applicable'||field==='flow_step_id'||!editable()||busy)return;
   rows[index][field]=scores.includes(field)?(event.target.value?Number(event.target.value):null):dateFields.includes(field)?(event.target.value||null):event.target.value;
   el('fmeaRows').querySelector('[data-rpn="'+index+'"]').textContent=rpn(rows[index]);
-  el('fmeaRows').querySelector('[data-new-rpn="'+index+'"]').textContent=rpn(rows[index],'new_');markDirty();
+  el('fmeaRows').querySelector('[data-new-rpn="'+index+'"]').textContent=rows[index].action_not_applicable?'N/A':rpn(rows[index],'new_');markDirty();requestAnimationFrame(balanceRows);
+});
+el('fmeaRows').addEventListener('change',event=>{
+ if(!editable()||busy)return;
+ const field=event.target.dataset.field,index=Number(event.target.dataset.row);
+ if(field==='flow_step_id'){
+  const step=currentFlow?.steps.find(x=>x.id===Number(event.target.value));if(!step)return;
+  Object.assign(rows[index],{flow_step_id:step.id,flow_step_key_id:step.step_key_id,flow_step_no:step.step_no,flow_step_name:step.step_name});
+  markDirty();renderRows();
+ }else if(field==='action_not_applicable'){
+  const row=rows[index],checked=event.target.checked;
+  const actionFields=['recommended_actions','responsibility','target_date','actions_taken','completion_date','new_severity','new_occurrence','new_detection'];
+  if(checked&&actionFields.some(f=>row[f]!==null&&row[f]!==''&&row[f]!==undefined)){
+   if(!confirm('조치 해당없음으로 바꾸면 이 초안의 조치 입력을 비웁니다. 기존 개정 이력은 보존됩니다. 계속할까요?')){event.target.checked=false;return;}
+  }
+  row.action_not_applicable=checked;
+  if(checked)actionFields.forEach(f=>row[f]=scores.includes(f)||dateFields.includes(f)?null:'');
+  markDirty();renderRows();
+ }
 });
 el('fmeaRows').addEventListener('click',event=>{
+  const add=event.target.closest('[data-add-flow-row]');
+  if(add&&editable()&&!busy){if(rows.length>=500){message('분석행은 최대 500개입니다.',true);return;}const step=currentFlow.steps.find(x=>x.id===Number(add.dataset.addFlowRow));rows.push(newRow(step));markDirty();renderRows();return;}
   const button=event.target.closest('[data-remove-row]');if(!button||!editable()||busy)return;
   const index=Number(button.dataset.removeRow);
   if(rows[index].id&&!confirm('이 초안에서 행을 제외할까요? 저장된 행은 이력으로 보존됩니다.'))return;
   rows.splice(index,1);dirty=true;renderRows();
 });
-if(el('fmeaAddRow'))el('fmeaAddRow').addEventListener('click',()=>{if(rows.length>=500){message('분석행은 최대 500개입니다.',true);return;}rows.push(newRow());dirty=true;renderRows();});
+if(el('fmeaAddRow'))el('fmeaAddRow').addEventListener('click',()=>{if(rows.length>=500){message('분석행은 최대 500개입니다.',true);return;}rows.push(newRow(currentFlow?.steps[0]||null));dirty=true;renderRows();});
 if(el('fmeaSave'))el('fmeaSave').addEventListener('click',()=>task(async()=>{
   const body=payload();let result;
   if(selected){body.version=selected.version;result=await request('/api/process-fmea/revisions/'+selected.id,'PUT',body);}
@@ -153,6 +232,6 @@ window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();
 task(async()=>{
   options=await request('/api/process-fmea/options');
   el('fmeaItem').innerHTML='<option value="">품목 선택</option>'+options.items.map(x=>'<option value="'+x.id+'"'+(x.is_active!=='Y'?' disabled':'')+'>'+esc(x.part_no+' · '+x.part_name+(x.is_active!=='Y'?' · 사용중지':''))+'</option>').join('');
-  loaded=true;await list();message('목록에서 공정 FMEA를 선택하거나 신규 등록하세요.');
+  loaded=true;await list();message('공정흐름도를 먼저 적용한 뒤 FMEA를 작성하세요. 기존 FMEA는 그대로 조회할 수 있습니다.');
 });
 })();

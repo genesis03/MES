@@ -34,6 +34,7 @@ from models.inventory_adjustment import InventoryAdjustmentModel
 from models.inventory_movement import InventoryMovementModel
 from models.item_identity import ItemPartNoHistory, install_item_identity_events
 from models.document import ItemRevision, ItemDocument, DocumentFile
+from models.process_flow import ProcessFlowRevision, ProcessFlowStepKey, ProcessFlowStep
 from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
 
 
@@ -42,6 +43,8 @@ install_item_identity_events()
 
 # 테이블 일괄 자동 생성 트리거
 Base.metadata.create_all(bind=engine)
+from models.plm_flow_migration import ensure_plm_flow_columns
+ensure_plm_flow_columns(engine)
 from models.purchase_migration import ensure_purchase_entry_columns
 from models.subcontract_inbound_migration import ensure_subcontract_inbound_columns
 from models.quality_migration import ensure_quality_master_data
@@ -71,6 +74,7 @@ ensure_document_codes(engine)
 
 __all__ = [
     "ItemRevision", "ItemDocument", "DocumentFile",
+    "ProcessFlowRevision", "ProcessFlowStepKey", "ProcessFlowStep",
     "FmeaDocument", "FmeaRevision", "FmeaRow",
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
     "LotRelationModel", "LotConsumptionModel",

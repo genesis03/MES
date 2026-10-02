@@ -12,7 +12,9 @@ from core.security import get_current_user, get_current_user_optional
 from models.document import ItemRevision
 from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
 from models.item_identity import ItemPartNoHistory
-from models.models import ItemMasterModel, ProcessModel
+from models.models import ItemMasterModel
+from models.process_flow import ProcessFlowRevision
+from services.process_flow_service import flow_dict, flow_steps, usable_flow
 from services.document_service import actor_name, lock_item
 from services.fmea_service import (
     FMEA_MENU_PATH, HEADER_FIELDS, ROW_FIELDS, commit_fmea, get_revision, has_fmea_access,
@@ -32,11 +34,17 @@ class HeaderPayload(BaseModel):
     date_prepared: date
     basis_item_revision_id: int | None = Field(default=None, gt=0)
     note: str = Field(default="", max_length=8000)
+    flow_revision_id: int | None = Field(default=None, gt=0)
+    process_owner: str = Field(default="", max_length=100)
+    completion_due_date: date | None = None
+    mass_production_date: date | None = None
 
 
 class RowPayload(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     id: int | None = Field(default=None, gt=0)
+    flow_step_id: int | None = Field(default=None, gt=0)
+    action_not_applicable: bool = False
     process_code: str | None = Field(default=None, max_length=100)
     function_text: str = Field(default="", max_length=4000)
     failure_mode: str = Field(default="", max_length=4000)
@@ -93,6 +101,10 @@ def _header(db, revision, item, payload):
         raise HTTPException(422, "같은 품목의 폐기되지 않은 기준 도면 Revision을 선택해 주세요.")
     revision.basis_item_revision_id = basis.id if basis else None
     revision.basis_revision_snapshot = basis.revision_code if basis else None
+    if payload.flow_revision_id:
+        usable_flow(db, item.id, payload.flow_revision_id)
+    revision.flow_revision_id = payload.flow_revision_id
+    revision.vehicle_model_snapshot = item.vehicle_model
     revision.part_no_snapshot, revision.part_name_snapshot = item.part_no, item.part_name
 
 
@@ -102,17 +114,21 @@ def _save_rows(db, revision, payload_rows, user):
     ids = [row.id for row in payload_rows if row.id is not None]
     if len(ids) != len(set(ids)) or any(row_id not in existing for row_id in ids):
         raise HTTPException(422, "분석행이 중복되었거나 다른 개정의 행이 포함되어 있습니다.")
-    processes = {row.process_code: row for row in db.scalars(select(ProcessModel))}
+    steps = {x.id: x for x in flow_steps(db, revision.flow_revision_id)} if revision.flow_revision_id else {}
     for index, payload in enumerate(payload_rows, 1):
-        process = processes.get(payload.process_code) if payload.process_code else None
-        if payload.process_code and (not process or process.is_active != "Y"):
-            raise HTTPException(422, f"{index}행: 사용 가능한 공정마스터를 선택해 주세요.")
+        if payload.flow_step_id and payload.flow_step_id not in steps:
+            raise HTTPException(422, f"{index}행: 선택한 공정흐름도의 공정으로 연결해 주세요. 기존 행을 임의로 변경하지 않습니다.")
         row = existing[payload.id] if payload.id else FmeaRow(revision_id=revision.id)
         for field in ROW_FIELDS:
-            setattr(row, field, getattr(payload, field))
-        row.process_code = process.process_code if process else None
-        row.process_code_snapshot = process.process_code if process else None
-        row.process_name_snapshot = process.process_name if process else None
+            if field != "process_code":
+                setattr(row, field, getattr(payload, field))
+        if payload.flow_step_id:
+            row.process_code = None
+        if row.action_not_applicable:
+            fields = ("recommended_actions", "responsibility", "target_date", "actions_taken",
+                      "completion_date", "new_severity", "new_occurrence", "new_detection")
+            if any(getattr(row, field) not in (None, "") for field in fields):
+                raise HTTPException(422, f"{index}행: 조치 해당없음과 조치 내용을 동시에 저장할 수 없습니다.")
         row.sort_order = index
         db.add(row)
     # 초안에서 제외한 저장 행도 삭제하지 않고 이력으로 남깁니다.
@@ -137,11 +153,18 @@ def fmea_page(request: Request, db: Session = Depends(get_db)):
 def options(db: Session = Depends(get_db), user=Depends(get_current_user)):
     require_fmea_access(user)
     return {
-        "items": [{"id": x.id, "part_no": x.part_no, "part_name": x.part_name, "is_active": x.is_active}
+        "items": [{"id": x.id, "part_no": x.part_no, "part_name": x.part_name, "is_active": x.is_active, "vehicle_model": x.vehicle_model or ""}
                   for x in db.scalars(select(ItemMasterModel).order_by(ItemMasterModel.part_no))],
-        "processes": [{"code": x.process_code, "name": x.process_name, "is_active": x.is_active}
-                      for x in db.scalars(select(ProcessModel).order_by(ProcessModel.sort_order, ProcessModel.id))],
+
     }
+
+
+@router.get("/api/process-fmea/items/{item_id}/flows")
+def item_flows(item_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    require_fmea_access(user)
+    return [flow_dict(db, x) for x in db.scalars(select(ProcessFlowRevision).where(
+        ProcessFlowRevision.item_id == item_id, ProcessFlowRevision.status.in_(("CURRENT", "SUPERSEDED"))
+    ).order_by(ProcessFlowRevision.sequence.desc()))]
 
 
 @router.get("/api/process-fmea/items/{item_id}/drawing-revisions")
@@ -252,6 +275,7 @@ def revise(revision_id: int, payload: RevisePayload, db: Session = Depends(get_d
         change_reason=payload.change_reason, basis_item_revision_id=previous.basis_item_revision_id,
         basis_revision_snapshot=previous.basis_revision_snapshot, part_no_snapshot=item.part_no,
         part_name_snapshot=item.part_name, created_by_id=user.id, created_by=actor_name(user),
+        flow_revision_id=previous.flow_revision_id, vehicle_model_snapshot=item.vehicle_model, diff_tracking=True,
     )
     for field in HEADER_FIELDS:
         setattr(row, field, getattr(previous, field))
@@ -259,7 +283,7 @@ def revise(revision_id: int, payload: RevisePayload, db: Session = Depends(get_d
     db.add(row)
     db.flush()
     for old in db.scalars(select(FmeaRow).where(FmeaRow.revision_id == previous.id, FmeaRow.retired_at.is_(None))):
-        copied = FmeaRow(revision_id=row.id, sort_order=old.sort_order,
+        copied = FmeaRow(revision_id=row.id, sort_order=old.sort_order, previous_row_id=old.id,
                         process_code_snapshot=old.process_code_snapshot, process_name_snapshot=old.process_name_snapshot)
         for field in ROW_FIELDS:
             setattr(copied, field, getattr(old, field))
@@ -282,20 +306,25 @@ def activate(revision_id: int, payload: VersionPayload, db: Session = Depends(ge
                       FmeaRow.retired_at.is_(None)).order_by(FmeaRow.sort_order)).all()
     if not rows:
         raise HTTPException(422, "분석행을 1개 이상 작성해 주세요.")
-    processes = {x.process_code: x for x in db.scalars(select(ProcessModel))}
+    if not revision.flow_revision_id:
+        raise HTTPException(422, "공정흐름도를 먼저 등록·적용한 뒤 FMEA에서 선택해 주세요.")
+    flow = usable_flow(db, item.id, revision.flow_revision_id)
+    if flow.status != "CURRENT":
+        raise HTTPException(422, "현재 사용 공정흐름도와 일치하도록 초안의 기준을 변경해 주세요.")
+    steps = {x.id: x for x in flow_steps(db, flow.id)}
+    if not steps or {x.flow_step_id for x in rows} != set(steps):
+        raise HTTPException(422, "공정흐름도의 모든 공정에 분석행을 연결해 주세요. 미연결·추가 공정은 적용할 수 없습니다.")
+    rows.sort(key=lambda x: (steps[x.flow_step_id].sort_order, x.sort_order))
     for index, row in enumerate(rows, 1):
-        process = processes.get(row.process_code)
-        if not process or process.is_active != "Y":
-            raise HTTPException(422, f"{index}행: 사용 가능한 공정을 선택해 주세요.")
         for field in ("function_text", "failure_mode", "effects", "causes"):
             if not (getattr(row, field) or "").strip():
                 raise HTTPException(422, f"{index}행: 기능·고장 형태·영향·원인을 모두 입력해 주세요.")
         if any(getattr(row, f) is None for f in ("severity", "occurrence", "detection")):
             raise HTTPException(422, f"{index}행: 심각도·발생도·검출도를 모두 평가해 주세요.")
         new_scores = [getattr(row, f) for f in ("new_severity", "new_occurrence", "new_detection")]
-        if any(x is not None for x in new_scores) and any(x is None for x in new_scores):
+        if not row.action_not_applicable and any(x is not None for x in new_scores) and any(x is None for x in new_scores):
             raise HTTPException(422, f"{index}행: 조치 후 평가는 세 점수를 모두 입력하거나 모두 비워 주세요.")
-        row.process_code_snapshot, row.process_name_snapshot = process.process_code, process.process_name
+        row.sort_order = index
     now = datetime.now()
     for old in db.scalars(select(FmeaRevision).where(
         FmeaRevision.document_id == document.id, FmeaRevision.status == "CURRENT")):
@@ -333,6 +362,23 @@ def print_revision(revision_id: int, request: Request, db: Session = Depends(get
     require_fmea_access(user)
     revision = get_revision(db, revision_id)
     labels = {"DRAFT": "초안", "CURRENT": "현재 사용", "SUPERSEDED": "구버전", "RETIRED": "폐기"}
+    history = [revision_dict(db, x, False) for x in db.scalars(select(FmeaRevision).where(
+        FmeaRevision.document_id == revision.document_id, FmeaRevision.sequence <= revision.sequence).order_by(FmeaRevision.sequence))]
+    data = revision_dict(db, revision)
+    groups = []
+    for analysis in sorted(data["rows"], key=lambda x: (x["flow_sort_order"] or 1000000, x["sort_order"])):
+        key = analysis["flow_step_id"] or ("legacy", analysis["id"])
+        if not groups or groups[-1]["key"] != key:
+            groups.append({"key": key, "rows": []})
+        groups[-1]["rows"].append(analysis)
     return templates.TemplateResponse(request=request, name="standard_documents/fmea_print.html",
-        context={"fmea": revision_dict(db, revision), "status_label": labels[revision.status]},
+        context={"fmea": data, "status_label": labels[revision.status], "history": history,
+                 "status_labels": labels, "groups": groups},
         headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/api/process-fmea/revisions/{revision_id}/changes")
+def changes(revision_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    require_fmea_access(user)
+    from services.fmea_change_service import fmea_changes
+    return fmea_changes(db, get_revision(db, revision_id))

@@ -1,24 +1,32 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>공정 FMEA · {{ fmea.document_no }} · {{ fmea.revision_code }}</title>
 <style>
-body{font-family:"Malgun Gothic",sans-serif;color:#111;padding:18px;margin:0;font-size:11px}h1{text-align:center;font-size:22px;margin:0 0 14px}.meta{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;border:1px solid #777;padding:10px;margin-bottom:10px}.note{white-space:pre-wrap;margin:8px 0}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:1900px;table-layout:fixed;font-size:10px}th,td{border:1px solid #888;padding:5px;vertical-align:top;word-break:break-word;white-space:pre-wrap}th{background:#eee}th.score{width:35px}.tools{display:flex;gap:12px;align-items:center;margin-bottom:14px}.tools button{background:#2563eb;color:#fff;border:0;border-radius:4px;padding:8px 16px;cursor:pointer}.readonly-note{color:#555;margin:10px 0}.row-date{display:block;margin-top:6px}
-@page{size:A3 landscape;margin:10mm}@media print{body{padding:0}.tools{display:none}.table-wrap{overflow:visible}table{min-width:0;font-size:8px}th,td{padding:3px}thead{display:table-header-group}tr{break-inside:avoid}h1{font-size:18px}.meta{font-size:10px}.score{width:25px!important}}
+body{font-family:"Malgun Gothic",sans-serif;color:#111;margin:0;padding:18px;font-size:11px}h1{text-align:center;font-size:22px;margin:0 0 10px}.tools{display:flex;gap:12px;margin-bottom:12px}.tools button{background:#2563eb;color:#fff;border:0;border-radius:4px;padding:8px 16px;cursor:pointer}.header-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;margin:8px 0 12px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #888;padding:5px;vertical-align:middle;white-space:pre-wrap;overflow-wrap:anywhere}.header-grid th{background:#fed7aa}.header-grid td{text-align:center}.note{white-space:pre-wrap;margin:8px 0;color:#475569}.table-wrap{overflow:auto}.analysis{min-width:2050px;font-size:10px;table-layout:fixed}.analysis th{background:#333;color:#fff;text-align:center}.analysis td{vertical-align:top}.analysis .score{width:34px;text-align:center}.stage{text-align:center;vertical-align:middle!important;width:110px}.stage strong{display:block;margin-bottom:8px}.row-date{display:block;margin-top:6px}.history{font-size:10px}.history td:nth-child(3){text-align:left}
+@page{size:A3 landscape;margin:10mm}@media print{body{padding:0}.tools{display:none}.table-wrap{overflow:visible}.analysis{min-width:0;font-size:8px}th,td{padding:3px}.analysis .score{width:25px}thead{display:table-header-group}tr{break-inside:avoid}h1{font-size:18px}.header-grid{font-size:10px}}
 </style></head><body>
-<div class="tools"><button onclick="window.print()">인쇄</button><span>브라우저 인쇄에서 PDF 저장도 가능합니다. 가로 방향 A3를 권장합니다.</span></div>
-<h1>공정 FMEA</h1>
-<div class="meta">
-<div>회사명: {{ fmea.company }}</div><div>FMEA 번호: {{ fmea.document_no }}</div><div>개정: {{ fmea.revision_code }}</div><div>상태: {{ status_label }}</div>
-<div>당시 품번: {{ fmea.part_no_snapshot }}</div><div>당시 품명: {{ fmea.part_name_snapshot }}</div><div>모델연도: {{ fmea.model_year }}</div><div>참여팀: {{ fmea.team }}</div>
-<div>작성자: {{ fmea.prepared_by }}</div><div>작성일: {{ fmea.date_prepared }}</div><div>기준 도면: {{ fmea.basis_revision_snapshot or '미연결' }}</div><div>현재 사용 적용: {{ fmea.activated_by }} {{ fmea.activated_at }}</div>
-</div>
-{% if fmea.change_reason %}<p class="note">개정 사유: {{ fmea.change_reason }}</p>{% endif %}
-{% if fmea.retire_reason %}<p class="note">폐기 사유: {{ fmea.retire_reason }}</p>{% endif %}
-{% if fmea.note %}<p class="note">비고: {{ fmea.note }}</p>{% endif %}
-<p class="readonly-note">등록된 해당 개정의 조회 전용 출력입니다. RPN = 심각도 × 발생도 × 검출도. 현재 사용 적용은 별도 승인 결재를 의미하지 않습니다.</p>
-<div class="table-wrap"><table><thead><tr>
-<th>공정</th><th>공정 기능</th><th>고장 형태</th><th>고장의 잠재적 영향</th><th class="score">S</th><th class="score">분류</th><th>고장의 잠재적 원인</th><th class="score">O</th><th>현 공정관리 예방</th><th>현 공정관리 검출</th><th class="score">D</th><th class="score">RPN</th><th>권고 조치</th><th>담당자 / 목표일</th><th>조치 내용 / 완료일</th><th class="score">후 S</th><th class="score">후 O</th><th class="score">후 D</th><th class="score">후 RPN</th><th>비고</th>
-</tr></thead><tbody>
-{% for row in fmea.rows %}<tr>
-<td>{{ row.process_name_snapshot or '' }}<br>{{ row.process_code_snapshot or '' }}</td><td>{{ row.function_text }}</td><td>{{ row.failure_mode }}</td><td>{{ row.effects }}</td><td>{{ row.severity if row.severity is not none else '' }}</td><td>{{ row.classification }}</td><td>{{ row.causes }}</td><td>{{ row.occurrence if row.occurrence is not none else '' }}</td><td>{{ row.prevention_controls }}</td><td>{{ row.detection_controls }}</td><td>{{ row.detection if row.detection is not none else '' }}</td><td>{{ row.rpn if row.rpn is not none else '' }}</td><td>{{ row.recommended_actions }}</td><td>{{ row.responsibility }}<span class="row-date">{{ row.target_date or '' }}</span></td><td>{{ row.actions_taken }}<span class="row-date">{{ row.completion_date or '' }}</span></td><td>{{ row.new_severity if row.new_severity is not none else '' }}</td><td>{{ row.new_occurrence if row.new_occurrence is not none else '' }}</td><td>{{ row.new_detection if row.new_detection is not none else '' }}</td><td>{{ row.new_rpn if row.new_rpn is not none else '' }}</td><td>{{ row.note }}</td>
-</tr>{% endfor %}
-</tbody></table></div></body></html>
+<div class="tools"><button onclick="window.print()">인쇄</button><span>A3 가로 방향 권장 · 브라우저에서 PDF 저장 가능</span></div>
+<h1>잠재적 고장형태 및 영향분석 (공정 FMEA)</h1><p>사명: {{ fmea.company }}</p>
+<div class="header-grid">
+<table><tbody>
+<tr><th>FMEA NO</th><td>{{ fmea.document_no }}</td><th>공정책임</th><td>{{ fmea.process_owner }}</td></tr>
+<tr><th>적용차종</th><td>{{ fmea.vehicle_model_snapshot }}</td><th>완료예정일</th><td>{{ fmea.completion_due_date or '' }}</td></tr>
+<tr><th>양산적용일</th><td>{{ fmea.mass_production_date or '' }}</td><th>상호기능팀원</th><td rowspan="3">{{ fmea.team }}</td></tr>
+<tr><th>품번</th><td colspan="2">{{ fmea.part_no_snapshot }}</td></tr><tr><th>품명</th><td colspan="2">{{ fmea.part_name_snapshot }}</td></tr>
+<tr><th>기준 공정흐름도</th><td>{{ fmea.flow_revision_code or '미연결' }}</td><th>기준 도면</th><td>{{ fmea.basis_revision_snapshot or '미연결' }}</td></tr>
+</tbody></table>
+<table class="history"><thead><tr><th>개정</th><th>일자</th><th>주요 개정 내용</th><th>작성자</th><th>검토</th><th>승인</th></tr></thead><tbody>
+{% for revision in history %}<tr><td>{{ revision.revision_code }}</td><td>{{ revision.date_prepared }}</td><td>{{ revision.change_reason or ('미기록' if revision.previous_revision_id else '최초 작성') }}</td><td>{{ revision.prepared_by }}</td><td>—</td><td>—</td></tr>{% endfor %}
+</tbody></table></div>
+<p class="note">선택 개정: {{ fmea.revision_code }} · {{ status_label }}. 검토·승인 결재는 미구현이며 현재 사용 적용은 승인 서명을 의미하지 않습니다.</p>
+{% if fmea.model_year %}<p class="note">기존 모델연도 정보: {{ fmea.model_year }}</p>{% endif %}
+{% if fmea.note %}<p class="note">비고: {{ fmea.note }}</p>{% endif %}{% if fmea.retire_reason %}<p class="note">폐기 사유: {{ fmea.retire_reason }}</p>{% endif %}
+<div class="table-wrap"><table class="analysis"><thead><tr>
+<th rowspan="2" class="stage">공정번호<br>공정명</th><th rowspan="2">공정의 기능</th><th rowspan="2">잠재적 고장형태</th><th rowspan="2">고장의 잠재적 영향</th><th rowspan="2" class="score">S</th><th rowspan="2" class="score">특별특성</th><th rowspan="2">고장의 잠재적 원인</th><th rowspan="2" class="score">O</th><th colspan="2">현 공정관리</th><th rowspan="2" class="score">D</th><th rowspan="2" class="score">RPN</th><th rowspan="2">권고 조치사항</th><th rowspan="2">담당자 / 완료예정일</th><th colspan="5">조치결과</th><th rowspan="2">비고</th>
+</tr><tr><th>예방</th><th>검출</th><th>조치내용 / 완료일</th><th class="score">S</th><th class="score">O</th><th class="score">D</th><th class="score">RPN</th></tr></thead><tbody>
+{% for group in groups %}{% for row in group.rows %}<tr>
+{% if loop.first %}<td rowspan="{{ group.rows|length }}" class="stage">{% if row.flow_step_id %}<strong>{{ row.flow_step_no }}</strong>{{ row.flow_step_name }}{% else %}<strong>공정흐름도 미연결</strong>{{ row.process_name_snapshot or '' }}{% endif %}</td>{% endif %}
+<td>{{ row.function_text }}</td><td>{{ row.failure_mode }}</td><td>{{ row.effects }}</td><td class="score">{{ row.severity if row.severity is not none else '' }}</td><td class="score">{{ row.classification }}</td><td>{{ row.causes }}</td><td class="score">{{ row.occurrence if row.occurrence is not none else '' }}</td><td>{{ row.prevention_controls }}</td><td>{{ row.detection_controls }}</td><td class="score">{{ row.detection if row.detection is not none else '' }}</td><td class="score">{{ row.rpn if row.rpn is not none else '' }}</td>
+<td>{{ 'N/A' if row.action_not_applicable else row.recommended_actions }}</td><td>{% if row.action_not_applicable %}N/A{% else %}{{ row.responsibility }}<span class="row-date">{{ row.target_date or '' }}</span>{% endif %}</td><td>{% if row.action_not_applicable %}N/A{% else %}{{ row.actions_taken }}<span class="row-date">{{ row.completion_date or '' }}</span>{% endif %}</td>
+<td class="score">{{ 'N/A' if row.action_not_applicable else (row.new_severity if row.new_severity is not none else '') }}</td><td class="score">{{ 'N/A' if row.action_not_applicable else (row.new_occurrence if row.new_occurrence is not none else '') }}</td><td class="score">{{ 'N/A' if row.action_not_applicable else (row.new_detection if row.new_detection is not none else '') }}</td><td class="score">{{ 'N/A' if row.action_not_applicable else (row.new_rpn if row.new_rpn is not none else '') }}</td><td>{{ row.note }}</td>
+</tr>{% endfor %}{% endfor %}</tbody></table></div><p class="note">RPN (Risk Priority Number) = 심각도 × 발생도 × 검출도. 저장된 해당 개정의 조회 전용 출력입니다.</p>
+</body></html>

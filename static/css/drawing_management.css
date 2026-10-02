@@ -55,3 +55,8 @@
 #drawingApp [hidden] { display:none!important; }
 @media(max-width:1050px) { .drawing-layout { grid-template-columns:1fr; } .drawing-table-scroll { max-height:280px; } }
 @media(max-width:650px) { .drawing-form-grid { grid-template-columns:1fr; } .drawing-heading,.drawing-detail-heading { align-items:start; flex-direction:column; } .drawing-search input { width:100%; } .drawing-search label { flex:1 1 100%; } }
+
+.drawing-history-title { margin-top:20px!important; }
+.drawing-history-scroll { overflow:auto; max-height:300px; border:1px solid #e2e8f0; border-radius:5px; }
+.drawing-history-scroll table { min-width:700px; }
+#drawingApp .drawing-history-scroll button { padding:6px 10px; }
