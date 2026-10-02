@@ -25,8 +25,8 @@
             return;
         }
         const seconds = Math.max(0, Math.ceil((deadline - performance.now()) / 1000));
-        const time = seconds > 60 ? Math.ceil(seconds / 60) + '분' :
-            String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+        const time = String(Math.floor(seconds / 60)).padStart(2, '0') + ':' +
+            String(seconds % 60).padStart(2, '0');
         panel.textContent = seconds ? '자동 로그아웃까지 ' + time : '로그인 만료 확인 중…';
         const warning = seconds <= Math.min(120, timeoutSeconds / 10);
         panel.classList.toggle('is-warning', warning);
