@@ -17,6 +17,7 @@ COLUMNS = {
     },
     "fmea_rows": {
         "flow_step_id": "INTEGER REFERENCES process_flow_steps(id)",
+        "flow_step_name_snapshot": "VARCHAR(200)",
         "previous_row_id": "INTEGER REFERENCES fmea_rows(id)",
         "action_not_applicable": "BOOLEAN NOT NULL DEFAULT FALSE",
     },
@@ -36,4 +37,13 @@ def ensure_plm_flow_columns(engine):
             for name, definition in columns.items():
                 if name not in present:
                     connection.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN "{name}" {definition}'))
-    # 기존 Revision·분석행·점수·공정코드·등록일의 자동 백필/재연결은 하지 않습니다.
+    # 명시적 FK로 연결된 당시 공정명만 보존합니다. 연결/번호/점수는 추정하거나 변경하지 않습니다.
+    with engine.begin() as connection:
+        tables = set(inspect(connection).get_table_names())
+        if {"fmea_rows", "process_flow_steps"}.issubset(tables):
+            connection.execute(text("""
+                UPDATE fmea_rows SET flow_step_name_snapshot = (
+                    SELECT step_name FROM process_flow_steps WHERE id = fmea_rows.flow_step_id
+                ) WHERE flow_step_name_snapshot IS NULL AND flow_step_id IS NOT NULL
+                AND EXISTS (SELECT 1 FROM process_flow_steps WHERE id = fmea_rows.flow_step_id)
+            """))

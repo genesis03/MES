@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}공정흐름도{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=compact-preview-1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=correction-layout-2">{% endblock %}
 {% block content %}
 <div id="flowApp" data-can-write="{{ 'true' if can_write_flow else 'false' }}">
   <div class="flow-head no-print"><h1>공정흐름도</h1>{% if can_write_flow %}<button id="flowNew" class="flow-btn primary no-print">신규 등록</button>{% endif %}</div>
@@ -17,8 +17,12 @@
     </div>
     <p id="flowMeta" class="flow-note no-print"></p>
     <div class="flow-tools no-print">
-    {% if can_write_flow %}<button id="flowAdd" class="flow-btn light">공정 추가</button><button id="flowSave" class="flow-btn primary">초안 저장</button><button id="flowActivate" class="flow-btn primary">현재 사용 적용</button><button id="flowRevise" class="flow-btn primary">개정 등록</button><button id="flowRetire" class="flow-btn danger">Revision 폐기</button>{% endif %}
+    {% if can_write_flow %}<button id="flowAdd" class="flow-btn light">공정 추가</button><button id="flowSave" class="flow-btn primary">초안 저장</button><button id="flowActivate" class="flow-btn primary">현재 사용 적용</button><button id="flowCorrect" class="flow-btn primary">오타 정정</button><button id="flowCorrectCancel" class="flow-btn light" hidden>정정 취소</button><button id="flowRevise" class="flow-btn primary">개정 등록</button><button id="flowRetire" class="flow-btn danger">Revision 폐기</button>{% endif %}
     <button id="flowPrint" class="flow-btn light">인쇄</button></div>
+    <div id="flowCorrectionPanel" class="flow-correction-panel no-print" hidden>
+      <label for="flowCorrectionReason">정정 사유 *</label><textarea id="flowCorrectionReason" maxlength="4000" rows="2"></textarea>
+      <p class="flow-note">공정명·문서/공정 비고의 오타만 정정합니다. 개정번호는 유지하며 변경 전·후 내용과 정정자를 기록합니다. 공정번호·기호·순서·기술 내용 변경은 개정 등록해 주세요.</p>
+    </div>
     <div class="flow-workspace">
       <div class="flow-input-pane no-print">
         <div class="flow-scroll no-print"><table class="flow-edit"><thead><tr><th>기호 명칭 / 기호</th><th>공정번호 / 공정명</th><th>비고</th><th>순서 / 삭제</th></tr></thead><tbody id="flowSteps"></tbody></table></div>
@@ -29,9 +33,10 @@
       <div id="flowDiagram" class="flow-diagram"></div>
     </section>
     </div>
+    <h3 class="no-print">오타 정정 이력 · 선택한 개정</h3><div class="flow-scroll no-print"><table><thead><tr><th>정정일시</th><th>정정자</th><th>정정 사유</th><th>대상 / 항목</th><th>정정 전</th><th>정정 후</th></tr></thead><tbody id="flowCorrectionHistory"></tbody></table></div>
     <h3 class="no-print">개정 이력</h3><div class="flow-scroll no-print"><table><thead><tr><th>개정번호</th><th>등록일 / 적용일</th><th>주요 개정 내용</th><th>등록자</th><th>상태</th><th class="no-print">조회</th></tr></thead><tbody id="flowHistory"></tbody></table></div>
 
   </section>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/process_flow.js" defer></script>{% endblock %}
+{% block extra_script %}<script src="/static/process_flow.js?v=correction-layout-2" defer></script>{% endblock %}

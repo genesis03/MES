@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -9,6 +10,8 @@ from sqlalchemy.orm import Session
 from core.config import BASE_DIR
 from core.database import get_db
 from core.security import get_current_user, get_current_user_optional
+from models.audit_log import AuditLogModel
+from models.fmea import FmeaRow
 from models.models import ItemMasterModel
 from models.process_flow import ProcessFlowRevision, ProcessFlowStep, ProcessFlowStepKey
 from services.document_service import actor_name, lock_item
@@ -55,6 +58,19 @@ class VersionPayload(BaseModel):
 class RevisePayload(VersionPayload):
     revision_code: str = Field(min_length=1, max_length=50)
     change_reason: str = Field(min_length=1, max_length=4000)
+
+
+class CorrectionStepPayload(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    id: int = Field(gt=0)
+    step_name: str = Field(min_length=1, max_length=200)
+    note: str = Field(default="", max_length=4000)
+
+
+class CorrectionPayload(VersionPayload):
+    reason: str = Field(min_length=1, max_length=4000)
+    note: str = Field(default="", max_length=8000)
+    steps: list[CorrectionStepPayload] = Field(min_length=1, max_length=500)
 
 
 class RetirePayload(VersionPayload):
@@ -165,6 +181,65 @@ def save(revision_id: int, payload: SavePayload, db: Session = Depends(get_db), 
     row.version += 1
     commit_fmea(db)
     return flow_dict(db, row)
+
+
+@router.get("/api/process-flows/{revision_id}/corrections")
+def correction_history(revision_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    require_flow_access(user)
+    get_flow(db, revision_id)
+    logs = db.scalars(select(AuditLogModel).where(
+        AuditLogModel.table_name == "process_flow_revisions",
+        AuditLogModel.record_id == str(revision_id), AuditLogModel.action == "CORRECT"
+    ).order_by(AuditLogModel.id.desc())).all()
+    return [{"id": x.id, "corrected_at": x.event_at, "corrected_by": x.username,
+             **json.loads(x.after_json)} for x in logs]
+
+
+@router.post("/api/process-flows/{revision_id}/correct")
+def correct(revision_id: int, payload: CorrectionPayload, request: Request,
+            db: Session = Depends(get_db), user=Depends(get_current_user)):
+    require_flow_access(user, "WRITE")
+    _, revision = lock_flow(db, revision_id, payload.version)
+    if revision.status != "CURRENT":
+        raise HTTPException(409, "현재 사용 문서만 오타 정정할 수 있습니다. 초안은 바로 수정해 주세요.")
+    steps = flow_steps(db, revision.id)
+    if [x.id for x in payload.steps] != [x.id for x in steps]:
+        raise HTTPException(422, "오타 정정에서는 공정 추가·삭제·순서 변경을 할 수 없습니다.")
+    changes = []
+    if (revision.note or "") != payload.note:
+        changes.append({"step_no": "", "field": "문서 비고", "before": revision.note or "", "after": payload.note})
+    for step, entry in zip(steps, payload.steps):
+        for field, label in (("step_name", "공정명"), ("note", "공정 비고")):
+            before, after = getattr(step, field) or "", getattr(entry, field)
+            if before != after:
+                changes.append({"step_no": step.step_no, "field": label, "before": before, "after": after})
+    if not changes:
+        raise HTTPException(422, "정정된 내용이 없습니다.")
+    # 기존/구형 FMEA도 수정 전 명칭을 보존합니다. 같은 품목 잠금 안에서 원자적으로 처리합니다.
+    ids = [x.id for x in steps]
+    names = {x.id: x.step_name for x in steps}
+    for linked in db.scalars(select(FmeaRow).where(
+        FmeaRow.flow_step_id.in_(ids), FmeaRow.flow_step_name_snapshot.is_(None))):
+        linked.flow_step_name_snapshot = names[linked.flow_step_id]
+    before = {"revision_code": revision.revision_code, "version": revision.version,
+              "note": revision.note or "", "steps": [
+                  {"id": x.id, "step_no": x.step_no, "step_name": x.step_name, "note": x.note or ""} for x in steps]}
+    revision.note, revision.updated_at = payload.note, datetime.now()
+    for step, entry in zip(steps, payload.steps):
+        step.step_name, step.note = entry.step_name, entry.note
+    revision.version += 1
+    after = {"revision_code": revision.revision_code, "reason": payload.reason,
+             "version": revision.version, "changes": changes}
+    db.add(AuditLogModel(event_at=revision.updated_at.strftime("%Y-%m-%d %H:%M:%S.%f"),
+        user_id=user.id, username=actor_name(user), action="CORRECT",
+        table_name="process_flow_revisions", record_id=str(revision.id),
+        document_no=revision.revision_code, menu_path=FLOW_MENU_PATH,
+        request_path=request.url.path, request_method=request.method,
+        ip_address=request.client.host if request.client else None,
+        changed_fields=",".join(sorted({x["field"] for x in changes})),
+        before_json=json.dumps(before, ensure_ascii=False), after_json=json.dumps(after, ensure_ascii=False)))
+    commit_fmea(db)
+    return flow_dict(db, revision)
 
 
 @router.post("/api/process-flows/{revision_id}/revise", status_code=201)

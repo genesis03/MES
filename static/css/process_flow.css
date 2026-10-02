@@ -83,3 +83,19 @@
  .flow-workspace>.flow-sheet>h3{font-size:16px}
  .flow-workspace .flow-document-meta{font-size:12px}
 }
+
+/* 기존 비고 폭 절반을 기호 칸 40%, 미리보기 60%로 재배분합니다. */
+.flow-workspace{grid-template-columns:minmax(0,var(--flow-left-width,7fr)) minmax(280px,1fr)}
+.flow-input-pane .flow-edit{min-width:var(--flow-table-min,816px)}
+.flow-input-pane .flow-edit th,.flow-input-pane .flow-edit td{box-sizing:border-box}
+.flow-input-pane .flow-edit th:first-child,.flow-input-pane .flow-edit td:first-child{width:var(--flow-symbol-width,287px)}
+.flow-input-pane .flow-edit th:nth-child(2),.flow-input-pane .flow-edit td:nth-child(2){width:305px}
+.flow-input-pane .flow-edit th:nth-child(3),.flow-input-pane .flow-edit td:nth-child(3){width:var(--flow-note-width,106px)}
+.flow-input-pane .flow-edit th:last-child,.flow-input-pane .flow-edit td:last-child{width:153px}
+.flow-correction-panel{margin:12px 0;padding:12px;border:1px solid #bfdbfe;background:#eff6ff;border-radius:6px}
+.flow-correction-panel[hidden]{display:none}
+.flow-correction-panel label{display:block;font-size:13px;margin-bottom:6px}
+.flow-correction-panel textarea{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;padding:8px;font-size:13px;resize:vertical}
+#flowCorrectionHistory td{white-space:pre-wrap;overflow-wrap:anywhere;max-width:300px}
+@media screen and (max-width:1200px){.flow-workspace{grid-template-columns:minmax(0,1fr)}}
+@media print{.flow-workspace{display:block}}

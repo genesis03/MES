@@ -75,6 +75,7 @@ class FmeaRow(Base):
     revision_id = Column(Integer, ForeignKey("fmea_revisions.id", ondelete="RESTRICT"), nullable=False, index=True)
     sort_order = Column(Integer, nullable=False)
     flow_step_id = Column(Integer, ForeignKey("process_flow_steps.id", ondelete="RESTRICT"))
+    flow_step_name_snapshot = Column(String(200))
     previous_row_id = Column(Integer, ForeignKey("fmea_rows.id", ondelete="RESTRICT"))
     action_not_applicable = Column(Boolean, nullable=False, default=False)
     # 기존 공정코드 변경 기능은 이 참조만 갱신하고 아래 인쇄용 스냅샷은 보존합니다.

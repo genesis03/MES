@@ -74,7 +74,8 @@ def row_dict(row, steps=None):
                   process_name_snapshot=row.process_name_snapshot)
     step = (steps or {}).get(row.flow_step_id)
     result.update(flow_step_no=step.step_no if step else "",
-                  flow_step_name=step.step_name if step else "",
+                  flow_step_name=(row.flow_step_name_snapshot if row.flow_step_name_snapshot is not None
+                                  else step.step_name if step else ""),
                   flow_symbol_code=step.symbol_code if step else "",
                   flow_symbol_name=step.symbol_name_snapshot if step else "",
                   flow_symbol_shape=step.symbol_shape_snapshot if step else "",
@@ -120,4 +121,16 @@ def revision_dict(db, row, include_rows=True):
         step_ids = {x.flow_step_id for x in rows if x.flow_step_id}
         steps = {x.id: x for x in db.scalars(select(ProcessFlowStep).where(ProcessFlowStep.id.in_(step_ids)))}
         result["rows"] = [row_dict(x, steps) for x in rows]
+        if row.status == "DRAFT":
+            for analysis in result["rows"]:
+                step = steps.get(analysis["flow_step_id"])
+                if step:
+                    analysis["flow_step_name"] = step.step_name
+        if result["flow"] and row.status != "DRAFT":
+            # 조회/인쇄의 공정 묶음도 기존 FMEA에 보존된 명칭으로 표시합니다.
+            names = {x.flow_step_id: x.flow_step_name_snapshot for x in rows
+                     if x.flow_step_id and x.flow_step_name_snapshot is not None}
+            for step in result["flow"]["steps"]:
+                if step["id"] in names:
+                    step["step_name"] = names[step["id"]]
     return result

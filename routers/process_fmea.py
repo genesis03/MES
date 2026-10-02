@@ -120,6 +120,11 @@ def _save_rows(db, revision, payload_rows, user):
         if payload.flow_step_id and payload.flow_step_id not in steps:
             raise HTTPException(422, f"{index}행: 선택한 공정흐름도의 공정으로 연결해 주세요. 기존 행을 임의로 변경하지 않습니다.")
         row = existing[payload.id] if payload.id else FmeaRow(revision_id=revision.id)
+        old_step_id = row.flow_step_id
+        if payload.flow_step_id and (old_step_id != payload.flow_step_id or row.flow_step_name_snapshot is None):
+            row.flow_step_name_snapshot = steps[payload.flow_step_id].step_name
+        elif not payload.flow_step_id:
+            row.flow_step_name_snapshot = None
         for field in ROW_FIELDS:
             if field != "process_code":
                 setattr(row, field, getattr(payload, field))
@@ -286,7 +291,8 @@ def revise(revision_id: int, payload: RevisePayload, db: Session = Depends(get_d
     db.flush()
     for old in db.scalars(select(FmeaRow).where(FmeaRow.revision_id == previous.id, FmeaRow.retired_at.is_(None))):
         copied = FmeaRow(revision_id=row.id, sort_order=old.sort_order, previous_row_id=old.id,
-                        process_code_snapshot=old.process_code_snapshot, process_name_snapshot=old.process_name_snapshot)
+                        process_code_snapshot=old.process_code_snapshot, process_name_snapshot=old.process_name_snapshot,
+                        flow_step_name_snapshot=old.flow_step_name_snapshot)
         for field in ROW_FIELDS:
             setattr(copied, field, getattr(old, field))
         db.add(copied)
@@ -327,6 +333,7 @@ def activate(revision_id: int, payload: VersionPayload, db: Session = Depends(ge
         if not row.action_not_applicable and any(x is not None for x in new_scores) and any(x is None for x in new_scores):
             raise HTTPException(422, f"{index}행: 조치 후 평가는 세 점수를 모두 입력하거나 모두 비워 주세요.")
         row.sort_order = index
+        row.flow_step_name_snapshot = steps[row.flow_step_id].step_name
     now = datetime.now()
     for old in db.scalars(select(FmeaRevision).where(
         FmeaRevision.document_id == document.id, FmeaRevision.status == "CURRENT")):
