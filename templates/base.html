@@ -38,12 +38,22 @@
         }
 
         .sidebar-brand {
+            display: flex;
+            align-items: baseline;
+            gap: 2px;
+            white-space: nowrap;
             padding: 18px 20px;
             font-size: 16px;
             font-weight: 900;
             color: #ffffff;
             letter-spacing: -0.5px;
             border-bottom: 1px solid #334155;
+        }
+
+        .sidebar-brand-credit {
+            font-size: 8px;
+            font-weight: 400;
+            letter-spacing: 0;
         }
 
         .sidebar-user-panel {
@@ -251,7 +261,7 @@
 <body>
 
     <nav class="sidebar no-print">
-        <div class="sidebar-brand">출하관리</div>
+        <div class="sidebar-brand"><span>MES</span><span class="sidebar-brand-credit">MADE BY QUALITY</span></div>
 
         {% if user %}
         <div class="sidebar-user-panel">
