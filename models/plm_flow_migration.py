@@ -9,6 +9,7 @@ COLUMNS = {
     },
     "fmea_revisions": {
         "flow_revision_id": "INTEGER REFERENCES process_flow_revisions(id)",
+        "flow_snapshot_json": "TEXT",
         "diff_tracking": "BOOLEAN NOT NULL DEFAULT FALSE",
         "vehicle_model_snapshot": "VARCHAR(100)",
         "process_owner": "VARCHAR(100)",

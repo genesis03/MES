@@ -36,6 +36,7 @@ class FmeaRevision(Base):
     basis_item_revision_id = Column(Integer, ForeignKey("item_revisions.id", ondelete="RESTRICT"))
     basis_revision_snapshot = Column(String(50))
     flow_revision_id = Column(Integer, ForeignKey("process_flow_revisions.id", ondelete="RESTRICT"))
+    flow_snapshot_json = Column(Text)
     diff_tracking = Column(Boolean, nullable=False, default=True)
     vehicle_model_snapshot = Column(String(100))
     process_owner = Column(String(100))

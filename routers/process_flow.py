@@ -16,10 +16,10 @@ from models.models import ItemMasterModel
 from models.process_flow import ProcessFlowRevision, ProcessFlowStep, ProcessFlowStepKey
 from services.document_service import actor_name, lock_item
 from services.standard_document_item_service import require_finished_item, selectable_finished_items
-from services.fmea_service import commit_fmea
+from services.fmea_service import commit_fmea, preserve_linked_fmea_flows
 from services.process_flow_symbols import flow_symbol_options, resolve_flow_symbol, SUPPORTED_SHAPES
 from services.process_flow_service import (
-    FLOW_MENU_PATH, flow_dict, flow_steps, get_flow, has_flow_access, lock_flow, require_flow_access,
+    FLOW_MENU_PATH, flow_dict, step_dict, flow_steps, get_flow, has_flow_access, lock_flow, require_flow_access,
 )
 
 router = APIRouter(tags=["Process Flow"])
@@ -71,6 +71,11 @@ class CorrectionPayload(VersionPayload):
     reason: str = Field(min_length=1, max_length=4000)
     note: str = Field(default="", max_length=8000)
     steps: list[CorrectionStepPayload] = Field(min_length=1, max_length=500)
+
+
+class EditPayload(SavePayload):
+    reason: str = Field(min_length=1, max_length=4000)
+    steps: list[StepPayload] = Field(min_length=1, max_length=500)
 
 
 class RetirePayload(VersionPayload):
@@ -189,10 +194,67 @@ def correction_history(revision_id: int, db: Session = Depends(get_db), user=Dep
     get_flow(db, revision_id)
     logs = db.scalars(select(AuditLogModel).where(
         AuditLogModel.table_name == "process_flow_revisions",
-        AuditLogModel.record_id == str(revision_id), AuditLogModel.action == "CORRECT"
+        AuditLogModel.record_id == str(revision_id), AuditLogModel.action.in_(("CORRECT", "AMEND"))
     ).order_by(AuditLogModel.id.desc())).all()
     return [{"id": x.id, "corrected_at": x.event_at, "corrected_by": x.username,
              **json.loads(x.after_json)} for x in logs]
+
+
+@router.post("/api/process-flows/{revision_id}/edit")
+def edit_current(revision_id: int, payload: EditPayload, request: Request,
+                 db: Session = Depends(get_db), user=Depends(get_current_user)):
+    require_flow_access(user, "WRITE")
+    _, revision = lock_flow(db, revision_id, payload.version)
+    if revision.status != "CURRENT":
+        raise HTTPException(409, "현재 사용 문서에서 수정해 주세요. 초안은 초안 저장을 사용합니다.")
+    for index, entry in enumerate(payload.steps, 1):
+        if not entry.symbol_code:
+            raise HTTPException(422, f"{index}번째 공정의 기호를 선택해 주세요.")
+        resolve_flow_symbol(db, entry.symbol_code)
+    before = flow_dict(db, revision)
+    preserve_linked_fmea_flows(db, revision)
+    _save_steps(db, revision, payload.steps, user)
+    revision.note, revision.updated_at = payload.note, datetime.now()
+    db.flush()
+    after_flow = flow_dict(db, revision)
+    old_steps = {x["id"]: x for x in before["steps"]}
+    new_steps = {x["id"]: x for x in after_flow["steps"]}
+    changes = []
+    if before["note"] != after_flow["note"]:
+        changes.append({"step_no": "", "field": "문서 비고", "before": before["note"], "after": after_flow["note"]})
+    labels = {"step_no": "공정번호", "step_name": "공정명", "symbol_code": "기호 코드",
+              "symbol_name": "기호 명칭", "symbol_shape": "기호 도형", "sort_order": "공정순서", "note": "공정 비고"}
+    for step_id, step in new_steps.items():
+        old = old_steps.get(step_id)
+        if old is None:
+            changes.append({"step_no": step["step_no"], "field": "공정 추가", "before": "",
+                            "after": json.dumps(step, ensure_ascii=False)})
+            continue
+        for field, label in labels.items():
+            if old[field] != step[field]:
+                changes.append({"step_no": step["step_no"], "field": label,
+                                "before": str(old[field]), "after": str(step[field])})
+    for step_id, step in old_steps.items():
+        if step_id not in new_steps:
+            changes.append({"step_no": step["step_no"], "field": "공정 삭제 · 이력 보존",
+                            "before": json.dumps(step, ensure_ascii=False), "after": ""})
+    if not changes:
+        db.rollback()
+        raise HTTPException(422, "수정된 내용이 없습니다.")
+    revision.version += 1
+    after_flow["version"] = revision.version
+    after = {"revision_code": revision.revision_code, "reason": payload.reason,
+             "version": revision.version, "changes": changes, "flow": after_flow}
+    db.add(AuditLogModel(event_at=revision.updated_at.strftime("%Y-%m-%d %H:%M:%S.%f"),
+        user_id=user.id, username=actor_name(user), action="AMEND",
+        table_name="process_flow_revisions", record_id=str(revision.id),
+        document_no=revision.revision_code, menu_path=FLOW_MENU_PATH,
+        request_path=request.url.path, request_method=request.method,
+        ip_address=request.client.host if request.client else None,
+        changed_fields=",".join(sorted({x["field"] for x in changes})),
+        before_json=json.dumps(before, ensure_ascii=False), after_json=json.dumps(after, ensure_ascii=False)))
+    commit_fmea(db)
+    return flow_dict(db, revision)
 
 
 @router.post("/api/process-flows/{revision_id}/correct")
@@ -215,6 +277,7 @@ def correct(revision_id: int, payload: CorrectionPayload, request: Request,
                 changes.append({"step_no": step.step_no, "field": label, "before": before, "after": after})
     if not changes:
         raise HTTPException(422, "정정된 내용이 없습니다.")
+    preserve_linked_fmea_flows(db, revision)
     # 기존/구형 FMEA도 수정 전 명칭을 보존합니다. 같은 품목 잠금 안에서 원자적으로 처리합니다.
     ids = [x.id for x in steps]
     names = {x.id: x.step_name for x in steps}

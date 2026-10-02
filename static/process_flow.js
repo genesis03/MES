@@ -37,22 +37,20 @@ async function request(url,method='GET',body){
  const r=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
  const d=await r.json();if(!r.ok){const e=Error(errorText(d.detail));e.details=d.detail;throw e;}return d;
 }
-function editable(){return write&&ready&&(!selected||selected.status==='DRAFT')&&(!selected||selected.item_selectable===true);}
+function editable(){return write&&ready&&(!selected||selected.status==='DRAFT'||(correcting&&selected.status==='CURRENT'))&&(!selected||selected.item_selectable===true);}
 function correctable(){return write&&ready&&selected?.status==='CURRENT'&&selected.item_selectable===true;}
 function textEditable(){return editable()||(correcting&&correctable());}
 function controls(){
  const edit=editable()&&!busy;
  root.querySelectorAll('.flow-fields input,.flow-fields select,.flow-fields textarea,#flowSteps input,#flowSteps select,#flowSteps textarea,[data-step-op]').forEach(x=>x.disabled=!edit);
- if(correcting&&correctable()){
-  root.querySelectorAll('#flowSteps [data-field="step_name"],#flowSteps [data-field="note"],#flowNote').forEach(x=>x.disabled=busy);
- }
- if(el('flowCorrect')){el('flowCorrect').disabled=busy||!correctable();el('flowCorrect').textContent=correcting?'정정 저장':'오타 정정';}
+ if(el('flowCorrect')){el('flowCorrect').disabled=busy||!correctable();el('flowCorrect').textContent=correcting?'수정 저장':'수정';}
  if(el('flowCorrectCancel')){el('flowCorrectCancel').hidden=!correcting;el('flowCorrectCancel').disabled=busy;}
  el('flowCorrectionPanel').hidden=!correcting;el('flowCorrectionReason').disabled=busy||!correcting;
  el('flowItem').disabled=!!selected||!edit;el('flowCode').disabled=!!selected||!edit;
- ['flowSave','flowAdd'].forEach(id=>{if(el(id))el(id).disabled=!edit;});
+ if(el('flowSave'))el('flowSave').disabled=!edit||correcting;
+ if(el('flowAdd'))el('flowAdd').disabled=!edit;
  if(el('flowNew'))el('flowNew').disabled=busy||!ready;
- if(el('flowActivate'))el('flowActivate').disabled=!selected||!edit;
+ if(el('flowActivate'))el('flowActivate').disabled=!selected||!edit||selected.status!=='DRAFT';
  if(el('flowRevise'))el('flowRevise').disabled=busy||!write||!selected||selected.status==='DRAFT'||selected.item_selectable!==true||correcting;
  if(el('flowRetire'))el('flowRetire').disabled=busy||!write||!selected||selected.status==='RETIRED'||correcting;
  el('flowPrint').disabled=busy||!selected||dirty||correcting;
@@ -102,7 +100,7 @@ async function history(itemId){
 }
 async function correctionHistory(){
  const logs=selected?await request('/api/process-flows/'+selected.id+'/corrections'):[];
- el('flowCorrectionHistory').innerHTML=logs.length?logs.flatMap(log=>log.changes.map(change=>'<tr><td>'+esc(log.corrected_at)+'</td><td>'+esc(log.corrected_by)+'</td><td>'+esc(log.reason)+'</td><td>'+esc(change.step_no||'문서')+' · '+esc(change.field)+'</td><td>'+esc(change.before)+'</td><td>'+esc(change.after)+'</td></tr>')).join(''):'<tr><td colspan="6">오타 정정 이력이 없습니다.</td></tr>';
+ el('flowCorrectionHistory').innerHTML=logs.length?logs.flatMap(log=>log.changes.map(change=>'<tr><td>'+esc(log.corrected_at)+'</td><td>'+esc(log.corrected_by)+'</td><td>'+esc(log.reason)+'</td><td>'+esc(change.step_no||'문서')+' · '+esc(change.field)+'</td><td>'+esc(change.before)+'</td><td>'+esc(change.after)+'</td></tr>')).join(''):'<tr><td colspan="6">수정 이력이 없습니다.</td></tr>';
 }
 function fill(x){
  el('flowItem').querySelectorAll('[data-historical-item]').forEach(option=>option.remove());
@@ -124,13 +122,12 @@ root.addEventListener('click',e=>{
  const b=e.target.closest('[data-flow-id]');if(b&&!busy&&abandon())task(()=>select(Number(b.dataset.flowId)));
  const op=e.target.closest('[data-step-op]');if(!op||!editable()||busy)return;
  const i=Number(op.dataset.index);
- if(op.dataset.stepOp==='remove'){if(steps[i].id&&!confirm('이 초안에서 공정 행을 삭제할까요? 기존 이력은 보존됩니다.'))return;steps.splice(i,1);}
+ if(op.dataset.stepOp==='remove'){if(steps[i].id&&!confirm('이 문서에서 공정 행을 삭제할까요? 기존 이력은 보존됩니다.'))return;steps.splice(i,1);}
  else{const j=i+(op.dataset.stepOp==='up'?-1:1);if(j<0||j>=steps.length)return;[steps[i],steps[j]]=[steps[j],steps[i]];}
  dirty=true;renderSteps();
 });
 el('flowSteps').oninput=e=>{
  const field=e.target.dataset.field;if(!field||field==='symbol_code'||!textEditable()||busy)return;
- if(correcting&&!['step_name','note'].includes(field))return;
  steps[Number(e.target.dataset.index)][field]=e.target.value;e.target.removeAttribute('aria-invalid');dirty=true;diagram();controls();
 };
 el('flowSteps').onchange=e=>{
@@ -156,11 +153,12 @@ function validateSteps(requireSymbols=false){
  return true;
 }
 if(el('flowAdd'))el('flowAdd').onclick=()=>{
+ if(!editable()||busy)return;
  if(steps.length>=500){message('공정은 최대 500개입니다.',true);return;}
  steps.push({id:null,step_no:'',step_name:'',note:'',symbol_code:'',symbol_name:'',symbol_shape:''});dirty=true;renderSteps();
 };
 if(el('flowSave'))el('flowSave').onclick=()=>{
- if(!editable()||busy)return;
+ if(!editable()||busy||correcting)return;
  if(!selected&&!Number(el('flowItem').value)){message('완제품 품목을 선택해 주세요.',true);el('flowItem').focus();return;}
  if(!selected&&!el('flowCode').value.trim()){message('공정흐름도 개정번호를 입력해 주세요.',true);el('flowCode').focus();return;}
  if(!validateSteps())return;
@@ -173,18 +171,19 @@ if(el('flowSave'))el('flowSave').onclick=()=>{
 };
 if(el('flowCorrect'))el('flowCorrect').onclick=()=>{
  if(!correctable()||busy)return;
- if(!correcting){correcting=true;el('flowCorrectionReason').value='';controls();message('오타만 정정해 주세요. 공정명·비고만 수정 가능하며 개정번호는 유지됩니다. 기술·업무 내용 변경은 개정 등록해 주세요.');return;}
+ if(!correcting){correcting=true;el('flowCorrectionReason').value='';controls();message('기호·공정번호·공정명·비고·순서와 공정 추가/삭제를 수정할 수 있습니다. 개정번호는 유지되며 수정 사유와 변경 이력을 남깁니다.');return;}
  const reason=el('flowCorrectionReason').value.trim();
- if(!reason){message('정정 사유를 입력해 주세요.',true);el('flowCorrectionReason').focus();return;}
- if(!dirty){message('정정된 내용이 없습니다.',true);return;}
- if(!validateSteps())return;
- if(!confirm('개정번호를 유지하고 오타를 정정할까요? 기존 FMEA 표기는 유지되며 변경 전·후 이력이 기록됩니다.'))return;
+ if(!reason){message('수정 사유를 입력해 주세요.',true);el('flowCorrectionReason').focus();return;}
+ if(!dirty){message('수정된 내용이 없습니다.',true);return;}
+ if(!steps.length){message('공정을 1개 이상 등록해 주세요.',true);return;}
+ if(!validateSteps(true))return;
+ if(!confirm('개정번호를 유지하고 수정 내용을 저장할까요? 기존 FMEA 공정 정보는 보존되며 변경 전·후 이력이 기록됩니다.'))return;
  task(async()=>{
-  const result=await request('/api/process-flows/'+selected.id+'/correct','POST',{
+  const result=await request('/api/process-flows/'+selected.id+'/edit','POST',{
    version:selected.version,reason,note:el('flowNote').value,
-   steps:steps.map(s=>({id:s.id,step_name:s.step_name,note:s.note||''}))
+   steps:steps.map(s=>({id:s.id||null,step_no:s.step_no,step_name:s.step_name,symbol_code:s.symbol_code||'',note:s.note||''}))
   });
-  fill(result);await history(result.item_id);await correctionHistory();await list();message('오타를 정정했습니다. 개정번호와 기존 FMEA 표기는 유지됩니다.');
+  fill(result);await history(result.item_id);await correctionHistory();await list();message('수정했습니다. 개정번호와 기존 FMEA 공정 정보는 유지됩니다.');
  });
 };
 if(el('flowCorrectCancel'))el('flowCorrectCancel').onclick=()=>{

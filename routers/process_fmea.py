@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -342,6 +343,7 @@ def activate(revision_id: int, payload: VersionPayload, db: Session = Depends(ge
         old.status, old.superseded_at = "SUPERSEDED", now
         old.version += 1
     db.flush()
+    revision.flow_snapshot_json = json.dumps(flow_dict(db, flow), ensure_ascii=False)
     revision.status, revision.activated_at = "CURRENT", now
     revision.activated_by_id, revision.activated_by = user.id, actor_name(user)
     revision.part_no_snapshot, revision.part_name_snapshot = item.part_no, item.part_name

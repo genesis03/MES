@@ -1,4 +1,6 @@
 """공정 FMEA 권한/직렬화/동시 수정 방지. 파일 도면의 현재 사용 상태는 변경하지 않습니다."""
+import json
+from types import SimpleNamespace
 from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -6,7 +8,7 @@ from core.security import check_admin_permission, parse_user_permissions
 from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
 from models.models import ItemMasterModel
 from models.process_flow import ProcessFlowRevision, ProcessFlowStep
-from services.process_flow_service import flow_dict
+from services.process_flow_service import flow_dict, step_dict
 from services.document_service import lock_item
 from services.standard_document_item_service import is_selectable_finished_item, require_finished_item
 
@@ -65,6 +67,37 @@ def lock_fmea_revision(db, revision_id, version, require_active=True):
     return item, document, revision
 
 
+def preserve_linked_fmea_flows(db, flow):
+    """적용된 FMEA의 기준 흐름도를 수정 전에 고정합니다. 기존 저장본은 덮어쓰지 않습니다."""
+    for revision in db.scalars(select(FmeaRevision).where(
+        FmeaRevision.flow_revision_id == flow.id, FmeaRevision.status != "DRAFT",
+        FmeaRevision.flow_snapshot_json.is_(None))):
+        snapshot = flow_dict(db, flow)
+        analyses = db.scalars(select(FmeaRow).where(
+            FmeaRow.revision_id == revision.id, FmeaRow.retired_at.is_(None))).all()
+        names = {x.flow_step_id: x.flow_step_name_snapshot for x in analyses
+                 if x.flow_step_id and x.flow_step_name_snapshot is not None}
+        missing = {x.flow_step_id for x in analyses if x.flow_step_id} - {x["id"] for x in snapshot["steps"]}
+        if missing:
+            snapshot["steps"].extend(step_dict(x) for x in db.scalars(select(ProcessFlowStep).where(
+                ProcessFlowStep.id.in_(missing))))
+        for step in snapshot["steps"]:
+            if step["id"] in names:
+                if step["step_name"] != names[step["id"]]:
+                    snapshot["version"] = None
+                step["step_name"] = names[step["id"]]
+        snapshot["steps"].sort(key=lambda x: (x["sort_order"], x["id"]))
+        revision.flow_snapshot_json = json.dumps(snapshot, ensure_ascii=False)
+
+
+def frozen_steps(snapshot):
+    return {x["id"]: SimpleNamespace(
+        step_no=x["step_no"], step_name=x["step_name"], step_key_id=x["step_key_id"],
+        sort_order=x["sort_order"], symbol_code=x.get("symbol_code", ""),
+        symbol_name_snapshot=x.get("symbol_name", ""), symbol_shape_snapshot=x.get("symbol_shape", "")
+    ) for x in snapshot["steps"]}
+
+
 def row_dict(row, steps=None):
     result = {field: getattr(row, field) for field in ROW_FIELDS}
     for field in ("target_date", "completion_date"):
@@ -109,17 +142,21 @@ def revision_dict(db, row, include_rows=True):
         retire_reason=row.retire_reason or "",
     )
     flow = db.get(ProcessFlowRevision, row.flow_revision_id) if row.flow_revision_id else None
+    snapshot = json.loads(row.flow_snapshot_json) if row.flow_snapshot_json and row.status != "DRAFT" else None
     result.update(flow_revision_id=row.flow_revision_id,
                   flow_revision_code=flow.revision_code if flow else "",
                   flow_status=flow.status if flow else "",
-                  flow_current_match=bool(flow and flow.status == "CURRENT"),
+                  flow_current_match=bool(flow and flow.status == "CURRENT" and (
+                      not snapshot or snapshot.get("version") == flow.version)),
                   vehicle_model_snapshot=row.vehicle_model_snapshot or "")
     if include_rows:
-        result["flow"] = flow_dict(db, flow) if flow else None
+        result["flow"] = snapshot or (flow_dict(db, flow) if flow else None)
         rows = db.scalars(select(FmeaRow).where(FmeaRow.revision_id == row.id,
                           FmeaRow.retired_at.is_(None)).order_by(FmeaRow.sort_order, FmeaRow.id)).all()
         step_ids = {x.flow_step_id for x in rows if x.flow_step_id}
         steps = {x.id: x for x in db.scalars(select(ProcessFlowStep).where(ProcessFlowStep.id.in_(step_ids)))}
+        if snapshot:
+            steps.update(frozen_steps(snapshot))
         result["rows"] = [row_dict(x, steps) for x in rows]
         if row.status == "DRAFT":
             for analysis in result["rows"]:

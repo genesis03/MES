@@ -83,7 +83,7 @@ async function flowOptions(itemId,detail=null){
 }
 function flowWarning(){
  if(selected&&!selected.item_selectable){el('fmeaFlowWarning').textContent='완제품 선택 대상이 아닙니다. 기존 이력은 조회 전용이며 폐기만 가능합니다.';return;}
- el('fmeaFlowWarning').textContent=!currentFlow?'공정흐름도를 먼저 등록·적용한 뒤 선택해 주세요. 기존 분석행은 공정번호를 추정해 연결하지 않습니다.':currentFlow.status!=='CURRENT'?'현재 사용 공정흐름도와 다릅니다. 기존 문서는 보존하며 새 개정에서 기준 공정을 검토해 주세요.':'기준 공정흐름도 '+currentFlow.revision_code+' · 공정번호·공정명·순서 일치';
+ el('fmeaFlowWarning').textContent=!currentFlow?'공정흐름도를 먼저 등록·적용한 뒤 선택해 주세요. 기존 분석행은 공정번호를 추정해 연결하지 않습니다.':selected&&selected.status!=='DRAFT'&&selected.flow_current_match===false?'기준 공정흐름도 내용이 수정되었습니다. 이 FMEA는 당시 공정번호·명칭·기호·순서를 보존합니다. 새 개정에서 최신 공정과의 일치 여부를 검토해 주세요.':currentFlow.status!=='CURRENT'?'현재 사용 공정흐름도와 다릅니다. 기존 문서는 보존하며 새 개정에서 기준 공정을 검토해 주세요.':'기준 공정흐름도 '+currentFlow.revision_code+' · 공정번호·공정명·순서 일치';
 }
 async function historyAndChanges(detail,revisions){
  el('fmeaHistory').innerHTML=revisions.map(r=>'<tr><td>'+esc(r.revision_code)+'</td><td>'+esc(r.created_at)+'<br>'+esc(r.activated_at||'미적용')+'</td><td>'+esc(r.change_reason||(r.previous_revision_id?'미기록':'최초 작성'))+'</td><td>'+esc(r.prepared_by)+' / '+esc(r.created_by)+'</td><td>미구현</td><td>미구현</td><td>'+esc(labels[r.status])+'</td><td><button class="pf-btn light" data-history-revision="'+r.id+'">조회</button></td></tr>').join('');
