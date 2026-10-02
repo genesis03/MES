@@ -96,7 +96,7 @@ def drawing_items(keyword: str = "", drawing_no: str = "", drawing_state: str = 
         raise HTTPException(422, "조회 상태가 올바르지 않습니다.")
     rows = db.execute(query.order_by(ItemMasterModel.part_no)).all()
     return [{"item_id": item.id, "part_no": item.part_no, "part_name": item.part_name,
-             "master_revision": item.revision, "is_active": item.is_active,
+             "is_active": item.is_active,
              "current_revision_id": revision_id, "current_revision": code, "drawing_count": count}
             for item, revision_id, code, count in rows]
 
@@ -192,7 +192,8 @@ def upload_document(revision_id: int, title: str = Form(...), document_no: str =
         if not title.strip() or len(title.strip()) > 200 or len(document_no.strip()) > 100 or len(document_revision.strip()) > 50 or len(note) > 8000:
             raise HTTPException(422, "문서 제목 또는 입력 길이가 올바르지 않습니다.")
         row = ItemDocument(revision_id=revision.id, document_type=document_type, document_no=document_no.strip() or None,
-                           title=title.strip(), document_revision=document_revision.strip() or None, note=note.strip() or None,
+                           title=title.strip(), document_revision=(revision.revision_code if document_type == DRAWING_TYPE
+                               else document_revision.strip() or None), note=note.strip() or None,
                            created_by_id=user.id, created_by=actor_name(user))
         db.add(row)
         db.flush()
@@ -233,8 +234,6 @@ def activate_revision(revision_id: int, db: Session = Depends(get_db), user=Depe
     # 고유 인덱스가 새 CURRENT를 검사하기 전에 이전 CURRENT를 먼저 해제합니다.
     db.flush()
     revision.status, revision.activated_at, revision.activated_by_id = "CURRENT", now, user.id
-    item.revision = revision.revision_code
-    item.updated_at = now.strftime("%Y-%m-%d %H:%M:%S")
     _commit(db)
     return revision_dict(revision)
 
@@ -247,7 +246,7 @@ def retire_revision(revision_id: int, payload: ReasonPayload, db: Session = Depe
         raise HTTPException(409, "이미 폐기된 Revision입니다.")
     revision.status, revision.retired_at, revision.retired_by_id = "RETIRED", datetime.now(), user.id
     revision.retire_reason = payload.reason
-    # 현재 도면 폐기 후 자동으로 구버전을 재적용하지 않습니다. 품목 revision은 마지막 적용값을 보존합니다.
+    # 현재 도면 폐기 후 구버전을 자동 재적용하지 않습니다. 기존 품목 revision 값도 수정하지 않습니다.
     _commit(db)
     return revision_dict(revision)
 

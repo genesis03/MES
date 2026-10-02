@@ -72,6 +72,8 @@ ensure_item_part_no_fk_removed(engine)
 ensure_item_identity_not_null(engine)
 from models.document_migration import ensure_document_codes
 ensure_document_codes(engine)
+from models.process_flow_symbol_migration import ensure_process_flow_symbol_codes
+ensure_process_flow_symbol_codes(engine)
 
 __all__ = [
     "AuthSession",

@@ -14,6 +14,7 @@ from models.process_flow import ProcessFlowRevision, ProcessFlowStep, ProcessFlo
 from services.document_service import actor_name, lock_item
 from services.standard_document_item_service import require_finished_item, selectable_finished_items
 from services.fmea_service import commit_fmea
+from services.process_flow_symbols import flow_symbol_options, resolve_flow_symbol, SUPPORTED_SHAPES
 from services.process_flow_service import (
     FLOW_MENU_PATH, flow_dict, flow_steps, get_flow, has_flow_access, lock_flow, require_flow_access,
 )
@@ -27,6 +28,7 @@ class StepPayload(BaseModel):
     id: int | None = Field(default=None, gt=0)
     step_no: str = Field(min_length=1, max_length=50)
     step_name: str = Field(min_length=1, max_length=200)
+    symbol_code: str = Field(default="", max_length=50)
     note: str = Field(default="", max_length=4000)
 
 
@@ -75,6 +77,17 @@ def _save_steps(db, revision, payload_steps, user):
             db.add(key)
             db.flush()
             row = ProcessFlowStep(revision_id=revision.id, step_key_id=key.id)
+        # 같은 기호의 저장된 명칭/도형은 공통코드 이름 변경으로 덮어쓰지 않습니다.
+        # 구형 화면이 기호 필드를 보내지 않으면 이미 저장된 기호를 지우지 않습니다.
+        if "symbol_code" in payload.model_fields_set:
+            if payload.symbol_code:
+                if (payload.symbol_code != row.symbol_code or not row.symbol_name_snapshot
+                        or row.symbol_shape_snapshot not in SUPPORTED_SHAPES):
+                    symbol = resolve_flow_symbol(db, payload.symbol_code)
+                    row.symbol_code = symbol["code"]
+                    row.symbol_name_snapshot, row.symbol_shape_snapshot = symbol["name"], symbol["shape"]
+            else:
+                row.symbol_code = row.symbol_name_snapshot = row.symbol_shape_snapshot = None
         row.step_no, row.step_name, row.note = payload.step_no, payload.step_name, payload.note
         row.sort_order = index
         db.add(row)
@@ -98,6 +111,12 @@ def options(db: Session = Depends(get_db), user=Depends(get_current_user)):
     require_flow_access(user)
     return [{"id": x.id, "part_no": x.part_no, "part_name": x.part_name, "is_active": x.is_active}
             for x in selectable_finished_items(db)]
+
+
+@router.get("/api/process-flows/symbols")
+def symbols(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    require_flow_access(user)
+    return flow_symbol_options(db)
 
 
 @router.get("/api/process-flows")
@@ -167,7 +186,9 @@ def revise(revision_id: int, payload: RevisePayload, db: Session = Depends(get_d
     db.flush()
     for old in flow_steps(db, previous.id):
         db.add(ProcessFlowStep(revision_id=row.id, step_key_id=old.step_key_id, sort_order=old.sort_order,
-                               step_no=old.step_no, step_name=old.step_name, note=old.note))
+                               step_no=old.step_no, step_name=old.step_name, note=old.note,
+                               symbol_code=old.symbol_code, symbol_name_snapshot=old.symbol_name_snapshot,
+                               symbol_shape_snapshot=old.symbol_shape_snapshot))
     commit_fmea(db)
     return flow_dict(db, row)
 
@@ -184,6 +205,10 @@ def activate(revision_id: int, payload: VersionPayload, db: Session = Depends(ge
     numbers = [x.step_no.casefold() for x in steps]
     if len(numbers) != len(set(numbers)) or any(not x.step_no.strip() or not x.step_name.strip() for x in steps):
         raise HTTPException(422, "공정번호·공정명을 확인해 주세요.")
+    for index, step in enumerate(steps, 1):
+        if not step.symbol_code or not step.symbol_name_snapshot or step.symbol_shape_snapshot not in SUPPORTED_SHAPES:
+            raise HTTPException(422, f"{index}번째 공정의 기호를 선택해 주세요.")
+        resolve_flow_symbol(db, step.symbol_code)
     now = datetime.now()
     for old in db.scalars(select(ProcessFlowRevision).where(
         ProcessFlowRevision.item_id == item.id, ProcessFlowRevision.status == "CURRENT")):

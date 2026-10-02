@@ -20,16 +20,16 @@
             <div id="drawingDetail" hidden>
                 <div class="drawing-detail-heading"><div><h3 id="drawingItemTitle"></h3><p id="drawingItemMeta"></p></div>
                     <button id="drawingNewRevision" type="button" data-write>최초 등록</button></div>
-                <div class="drawing-revisions"><label>Revision 이력<select id="drawingRevision"></select></label><span id="drawingRevisionStatus" class="drawing-badge"></span></div>
+                <div class="drawing-revisions"><label>도면 개정 이력<select id="drawingRevision"></select></label><span id="drawingRevisionStatus" class="drawing-badge"></span></div>
                 <p id="drawingRevisionMeta" class="drawing-muted"></p>
                 <h3 class="drawing-history-title">개정 이력</h3>
                 <div class="drawing-history-scroll"><table><thead><tr><th>개정번호</th><th>등록일</th><th>적용일</th><th>주요 개정 내용</th><th>등록자</th><th>상태</th><th>조회</th></tr></thead><tbody id="drawingRevisionHistory"></tbody></table></div>
-                <div class="drawing-actions"><button id="drawingRevise" type="button" data-write>개정 등록</button><button id="drawingActivate" type="button" data-write>현재 사용 적용</button><button id="drawingRetire" type="button" class="danger" data-write>Revision 폐기</button></div>
+                <div class="drawing-actions"><button id="drawingRevise" type="button" data-write>개정 등록</button><button id="drawingActivate" type="button" data-write>현재 사용 적용</button><button id="drawingRetire" type="button" class="danger" data-write>도면 개정 폐기</button></div>
                 <div id="drawingDocuments"></div>
                 <form id="drawingUpload" class="drawing-upload" hidden>
                     <h3>초안 도면 등록</h3><p class="drawing-muted">초안 저장 후 현재 사용 적용을 실행해 주세요. PDF와 CAD 원본을 함께 등록할 수 있습니다.</p>
                     <div class="drawing-form-grid">
-                        <label>도면번호<input name="document_no" maxlength="100"></label><label>문서 표기 Revision<input name="document_revision" maxlength="50"></label>
+                        <label>도면번호<input name="document_no" maxlength="100"></label><p class="drawing-muted">도면 개정번호는 선택한 개정에서 자동 적용됩니다.</p>
                         <label class="full">도면 제목 <span>*</span><input name="title" required maxlength="200"></label>
                         <label class="full">도면 파일 <span>*</span><input id="drawingFiles" name="files" type="file" multiple required><small id="drawingFileHelp"></small></label>
                         <label class="full">비고<textarea name="note" maxlength="8000" rows="2"></textarea></label>
@@ -39,11 +39,11 @@
         </section>
     </div>
     <dialog id="drawingRevisionDialog"><form id="drawingRevisionForm">
-        <h3 id="drawingRevisionDialogTitle">Revision 등록</h3>
-        <label>품목 Revision <span>*</span><input id="drawingRevisionCode" required maxlength="50"></label>
+        <h3 id="drawingRevisionDialogTitle">도면 개정 등록</h3>
+        <label>도면 개정번호 <span>*</span><input id="drawingRevisionCode" required maxlength="50"></label>
         <label>개정 사유<textarea id="drawingChangeReason" maxlength="4000" rows="3"></textarea></label>
         <label>비고<textarea id="drawingRevisionNote" maxlength="8000" rows="2"></textarea></label>
-        <p class="drawing-muted">새 초안에는 이번 Revision에 사용할 파일을 등록합니다. 기존 Revision의 파일은 그대로 보존됩니다.</p>
+        <p class="drawing-muted">새 초안에는 이번 도면 개정에 사용할 파일을 등록합니다. 기존 개정의 파일은 그대로 보존됩니다.</p>
         <div class="drawing-actions"><button type="submit" data-write>초안 생성</button><button id="drawingRevisionCancel" type="button" class="secondary">닫기</button></div>
     </form></dialog>
 </div>

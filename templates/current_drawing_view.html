@@ -15,12 +15,12 @@
 <main id="drawingApp">
     <section class="current-view">
         <h2>{{ item.part_no }} · {{ item.part_name }}</h2>
-        <p class="drawing-muted">현재 사용 Revision: {{ revision.revision_code if revision else '없음' }}</p>
+        <p class="drawing-muted">현재 사용 도면 개정번호: {{ revision.revision_code if revision else '없음' }}</p>
         <p class="drawing-muted">현재 사용 도면만 표시합니다. 과거 생산 당시 사용한 도면을 의미하지 않습니다.</p>
         {% for document in documents %}
         <article class="drawing-document">
             <h3>{{ document.title }}</h3>
-            <p class="drawing-muted">도면번호 {{ document.document_no or '미입력' }} · 문서 REV {{ document.document_revision or '미입력' }}</p>
+            <p class="drawing-muted">도면번호 {{ document.document_no or '미입력' }} · 도면 개정번호 {{ revision.revision_code }}{% if document.document_revision and document.document_revision != revision.revision_code %} · 기존 파일 표기 개정번호 {{ document.document_revision }}{% endif %}</p>
             {% for file in document.files %}
             <div class="drawing-file">
                 <span class="drawing-file-name">{{ file.original_name }}<br><small>{{ file.extension|upper }}</small></span>

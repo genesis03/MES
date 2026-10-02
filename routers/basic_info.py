@@ -116,7 +116,6 @@ async def get_items(
     items = query.order_by(ItemMasterModel.part_no.asc()).all()
     process_rows = db.query(ProcessModel).all()
     process_name_by_code = {p.process_code: p.process_name for p in process_rows}
-    managed_ids = {row[0] for row in db.query(ItemRevision.item_id).distinct().all()}
     current_drawing_ids = {row[0] for row in db.query(ItemRevision.item_id).join(
         ItemDocument, ItemDocument.revision_id == ItemRevision.id
     ).filter(ItemRevision.status == "CURRENT", ItemDocument.document_type == DRAWING_TYPE,
@@ -128,8 +127,6 @@ async def get_items(
             "part_no": it.part_no,
             "vehicle_model": it.vehicle_model or "",
             "part_name": it.part_name,
-            "revision": it.revision,
-            "revision_managed": it.id in managed_ids,
             "has_current_drawing": it.id in current_drawing_ids,
             "spec": it.spec or "",
             "account_type": it.account_type,
@@ -182,7 +179,6 @@ async def create_item(request: Request, db: Session = Depends(get_db)):
         part_no=part_no,
         vehicle_model=str(body.get("vehicle_model", "")).strip() or None,
         part_name=part_name,
-        revision=str(body.get("revision", "Rev.00")).strip(),
         spec=str(body.get("spec", "")).strip() or None,
         account_type=account_type,
         material_type=material_type,
@@ -220,9 +216,7 @@ async def update_item(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="품목 식별자(ID)가 누락되었습니다.")
 
     target = lock_item(db, int(item_id), require_active=False)
-    managed = db.query(ItemRevision.id).filter(ItemRevision.item_id == target.id).first()
-    if managed and str(body.get("revision", target.revision)).strip() != target.revision:
-        raise HTTPException(status_code=409, detail="도면 이력이 있는 품목의 Revision은 도면 관리에서 개정/적용해 주세요.")
+    # 기존 revision 컬럼은 이력 보존용입니다. 구형 클라이언트의 revision 입력도 반영하지 않습니다.
 
     new_part_no = str(body.get("part_no", target.part_no)).strip()
     if not new_part_no:
@@ -247,7 +241,6 @@ async def update_item(request: Request, db: Session = Depends(get_db)):
 
     target.vehicle_model = str(body.get("vehicle_model", "")).strip() or None
     target.part_name = str(body.get("part_name", target.part_name)).strip()
-    target.revision = str(body.get("revision", target.revision)).strip()
     target.spec = str(body.get("spec", "")).strip() or None
     target.account_type = str(body.get("account_type", target.account_type)).strip()
     target.material_type = str(body.get("material_type", target.material_type)).strip()

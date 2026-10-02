@@ -47,7 +47,7 @@ class ItemMasterModel(Base):
     part_no = Column(String, unique=True, nullable=False, index=True) # 품번 (고유키, 필수)
     vehicle_model = Column(String, nullable=True)                      # 차종 (선택 입력)
     part_name = Column(String, nullable=False)                         # 품명 (필수)
-    revision = Column(String, nullable=False, default="Rev.00")        # 설계 리비전
+    revision = Column(String, nullable=False, default="Rev.00")        # 구형 데이터 보존용; 품목 입력/도면 개정과 연동하지 않음
     spec = Column(String, nullable=True)                               # 규격/사양
 
     account_type = Column(String, nullable=False)                      # 계정유형

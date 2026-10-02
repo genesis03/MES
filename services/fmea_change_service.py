@@ -12,6 +12,8 @@ HEADER_LABELS = {
 }
 ROW_LABELS = {
     "flow_step_no": "공정번호", "flow_step_name": "공정명", "flow_sort_order": "공정순서",
+    "flow_symbol_code": "공정 기호 코드", "flow_symbol_name": "공정 기호 명칭",
+    "flow_symbol_shape": "공정 기호 도형",
     "function_text": "공정 기능", "failure_mode": "고장 형태", "effects": "잠재적 영향",
     "severity": "심각도", "classification": "특별특성", "causes": "잠재적 원인", "occurrence": "발생도",
     "prevention_controls": "공정관리 예방", "detection_controls": "공정관리 검출", "detection": "검출도", "rpn": "RPN",

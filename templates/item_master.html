@@ -343,10 +343,9 @@
                         <input type="text" id="detailItemGroup" class="field-input" placeholder="품목 그룹 명칭">
                     </div>
 
-                    <!-- 리비전 (Revision) -->
+                    <!-- 도면 상태만 표시하며 개정번호는 도면 관리에서 관리합니다. -->
                     <div class="form-field">
-                        <label class="field-label">리비전 (Revision) <span class="required">*</span></label>
-                        <input type="text" id="detailRevision" class="field-input" value="Rev.00">
+                        <label class="field-label">도면 등록 상태</label>
                         <small id="itemDrawingStatus" style="color:#64748b;"></small>
                     </div>
 
@@ -609,11 +608,9 @@
         document.getElementById('detailVehicleModel').value = item.vehicle_model || "";
         document.getElementById('detailPartName').value = item.part_name;
         document.getElementById('detailItemGroup').value = item.item_group || "";
-        document.getElementById('detailRevision').value = item.revision || "Rev.00";
-        document.getElementById('detailRevision').readOnly = !!item.revision_managed;
-        document.getElementById('itemDrawingStatus').textContent = item.revision_managed
-            ? `${item.has_current_drawing ? '현재 사용 도면 있음' : '현재 사용 도면 없음'} · Revision 변경은 도면 관리에서 처리`
-            : '현재 사용 도면 미등록';
+        document.getElementById('itemDrawingStatus').textContent = item.has_current_drawing
+            ? '현재 사용 도면 있음'
+            : '현재 사용 도면 없음';
         const drawingButton = document.getElementById('itemDrawingButton');
         if (drawingButton) drawingButton.disabled = false;
         document.getElementById('detailSpec').value = item.spec || "";
@@ -648,8 +645,6 @@
         document.getElementById('detailAccountType').value = "";
         document.getElementById('detailMaterialType').value = "";
         document.getElementById('detailItemGroup').value = "";
-        document.getElementById('detailRevision').value = "Rev.00";
-        document.getElementById('detailRevision').readOnly = false;
         document.getElementById('itemDrawingStatus').textContent = '품목 저장 후 도면을 등록할 수 있습니다.';
         const drawingButton = document.getElementById('itemDrawingButton');
         if (drawingButton) drawingButton.disabled = true;
@@ -704,7 +699,6 @@
             account_type: accountType,
             material_type: materialType,
             item_group: document.getElementById('detailItemGroup').value.trim(),
-            revision: document.getElementById('detailRevision').value.trim() || "Rev.00",
             spec: document.getElementById('detailSpec').value.trim(),
             unit: document.getElementById('detailUnit').value || "EA",
             snp: Number(document.getElementById('detailSnp').value) || 0,

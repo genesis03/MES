@@ -146,7 +146,8 @@ def test_revision_lifecycle_keeps_old_files_and_current_is_unique(setup):
     with factory() as db:
         assert db.get(ItemRevision, first).status == "SUPERSEDED"
         assert db.get(ItemRevision, second).status == "CURRENT"
-        assert db.get(ItemMasterModel, 1).revision == "Rev.01"
+        # 도면 개정은 구형 품목 Revision 값을 갱신하지 않습니다.
+        assert db.get(ItemMasterModel, 1).revision == "Rev.00"
         assert db.scalar(select(func.count()).select_from(ItemRevision).where(ItemRevision.status == "CURRENT")) == 1
         stored = db.get(DocumentFile, file["id"])
         assert (root / "documents" / stored.relative_path).read_bytes() == pdf_bytes()
@@ -252,12 +253,14 @@ def test_server_permissions_and_forged_source_header(setup, name, can_read):
     assert client.post(f"/api/documents/revisions/{first}/retire", json={"reason":"x"}).status_code == 403
 
 
-def test_item_rename_revision_guard_and_delete_protection(setup):
+def test_item_rename_ignores_legacy_revision_and_keeps_delete_protection(setup):
     client, factory, _ = setup
     first = revision(client).json()["id"]
     file = upload(client, first).json()["files"][0]
     assert activate(client, first).status_code == 200
-    assert client.post("/api/basic-info/items/update", json={"id":1,"part_no":"RENAMED","revision":"Rev.01"}).status_code == 409
+    assert client.post("/api/basic-info/items/update", json={"id":1,"part_no":"RENAMED","revision":"Rev.01"}).status_code == 200
+    with factory() as db:
+        assert db.get(ItemMasterModel, 1).revision == "Rev.00"
     assert client.post("/api/basic-info/items/update", json={"id":1,"part_no":"RENAMED","revision":"Rev.00"}).status_code == 200
     assert client.get("/api/documents/items?keyword=PART-A").json()[0]["item_id"] == 1
     assert client.get(file["download_url"]).status_code == 200
@@ -278,7 +281,7 @@ def test_concurrent_activation_and_older_draft_cannot_replace_newer(setup):
     assert sorted(response.status_code for response in responses) == [200,409]
     assert activate(client, first).status_code == 409
     with factory() as db:
-        assert db.get(ItemMasterModel, 1).revision == "Rev.01"
+        assert db.get(ItemMasterModel, 1).revision == "Rev.00"
         assert db.scalar(select(func.count()).select_from(ItemRevision).where(ItemRevision.status == "CURRENT")) == 1
 
 

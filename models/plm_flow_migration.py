@@ -1,7 +1,12 @@
-"""기존 FMEA 내용은 보존하고 연결/비교용 nullable 컬럼만 추가합니다."""
+"""기존 FMEA/공정 내용은 보존하고 연결/기호/비교용 추가 컬럼만 생성합니다."""
 from sqlalchemy import inspect, text
 
 COLUMNS = {
+    "process_flow_steps": {
+        "symbol_code": "VARCHAR(50)",
+        "symbol_name_snapshot": "VARCHAR(200)",
+        "symbol_shape_snapshot": "VARCHAR(50)",
+    },
     "fmea_revisions": {
         "flow_revision_id": "INTEGER REFERENCES process_flow_revisions(id)",
         "diff_tracking": "BOOLEAN NOT NULL DEFAULT FALSE",

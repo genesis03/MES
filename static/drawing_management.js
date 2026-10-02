@@ -88,7 +88,7 @@
         $('drawingUpload').reset();
         $('drawingDetail').hidden = false; $('drawingEmpty').hidden = true;
         $('drawingItemTitle').textContent = `${state.item.part_no} · ${state.item.part_name}`;
-        $('drawingItemMeta').textContent = `품목 ID ${itemId} · ${state.item.current_revision ? `현재 사용 ${state.item.current_revision}` : '현재 사용 Revision 없음'}${state.item.is_active !== 'Y' ? ' · 사용중지' : ''}`;
+        $('drawingItemMeta').textContent = `품목 ID ${itemId} · ${state.item.current_revision ? `현재 사용 ${state.item.current_revision}` : '현재 사용 도면 개정 없음'}${state.item.is_active !== 'Y' ? ' · 사용중지' : ''}`;
         renderItems(); updateActions();
         const rows = await api(`/api/documents/items/${itemId}/revisions`);
         if (request !== state.itemRequest) return;
@@ -101,7 +101,7 @@
         } else {
             $('drawingRevisionStatus').textContent = '미등록';
             $('drawingRevisionStatus').classList.remove('current');
-            $('drawingRevisionMeta').textContent = '최초 등록으로 Revision 초안을 생성해 주세요.';
+            $('drawingRevisionMeta').textContent = '최초 등록으로 도면 개정 초안을 생성해 주세요.';
             updateActions();
         }
         const url = new URL(window.location.href);
@@ -124,7 +124,7 @@
         $('drawingDocuments').innerHTML = documents.length ? documents.map(document => `
             <article class="drawing-document ${document.retired_at ? 'retired' : ''}">
                 <h3>${escape(document.title)} ${document.retired_at ? '<span class="drawing-badge">폐기</span>' : ''}</h3>
-                <p class="drawing-muted">${escape(document.document_type_name)} · 도면번호 ${escape(document.document_no || '미입력')} · 문서 REV ${escape(document.document_revision || '미입력')}</p>
+                <p class="drawing-muted">${escape(document.document_type_name)} · 도면번호 ${escape(document.document_no || '미입력')} · 도면 개정번호 ${escape(row.revision_code)}${document.document_revision && document.document_revision !== row.revision_code ? ` · 기존 파일 표기 개정번호 ${escape(document.document_revision)}` : ''}</p>
                 <p class="drawing-muted">등록 ${escape(document.created_by)} · ${escape(document.created_at)}${document.note ? ` · ${escape(document.note)}` : ''}${document.retire_reason ? ` · 폐기 사유: ${escape(document.retire_reason)}` : ''}</p>
                 ${document.files.map(file => `<div class="drawing-file"><span class="drawing-file-name">${escape(file.original_name)}<br><small>${(file.size_bytes / 1024).toFixed(1)} KB · ${escape(file.extension.toUpperCase())}</small></span>
                     ${file.can_preview ? `<a class="drawing-view-link" href="${escape(file.preview_url)}" target="_blank" rel="noopener noreferrer" title="도면 보기" aria-label="도면 보기">도면 보기</a>` : ''}
@@ -136,9 +136,9 @@
 
     function openRevision(previous = null) {
         state.previousId = previous?.id || null;
-        $('drawingRevisionDialogTitle').textContent = previous ? '개정 등록' : '최초 Revision 등록';
+        $('drawingRevisionDialogTitle').textContent = previous ? '개정 등록' : '최초 도면 개정 등록';
         $('drawingRevisionForm').reset();
-        $('drawingRevisionCode').value = previous ? '' : state.item.master_revision;
+        $('drawingRevisionCode').value = '';
         $('drawingChangeReason').required = !!previous;
         $('drawingRevisionDialog').showModal();
         $('drawingRevisionCode').focus();
@@ -173,7 +173,7 @@
             await loadItems();
             $('drawingRevision').value = String(row.id);
             await selectRevision(row.id);
-            message('Revision 초안을 생성했습니다. 이번 Revision에 사용할 도면 파일을 등록해 주세요.');
+            message('도면 개정 초안을 생성했습니다. 이번 개정에 사용할 도면 파일을 등록해 주세요.');
         });
     });
     $('drawingUpload').addEventListener('submit', event => {
@@ -191,13 +191,13 @@
         });
     });
     $('drawingActivate').addEventListener('click', () => {
-        if (!confirm(`[${state.revision.revision_code}]을 현재 사용으로 적용하시겠습니까? 기존 현재 Revision은 구버전으로 전환됩니다.`)) return;
-        run(async () => { await jsonPost(`/api/documents/revisions/${state.revision.id}/activate`, {}); await loadItems(); message('현재 사용 도면을 적용했습니다. 품목마스터 Revision도 갱신했습니다.'); });
+        if (!confirm(`[${state.revision.revision_code}]을 현재 사용으로 적용하시겠습니까? 기존 현재 사용 도면 개정은 구버전으로 전환됩니다.`)) return;
+        run(async () => { await jsonPost(`/api/documents/revisions/${state.revision.id}/activate`, {}); await loadItems(); message('현재 사용 도면 개정을 적용했습니다. 품목 정보와 다른 문서의 개정번호는 변경하지 않습니다.'); });
     });
     $('drawingRetire').addEventListener('click', () => {
-        const reason = prompt('폐기 사유를 입력해 주세요. 이력과 파일은 보존됩니다. 현재 사용 Revision을 폐기하면 사용 도면이 없는 상태가 됩니다.');
+        const reason = prompt('폐기 사유를 입력해 주세요. 이력과 파일은 보존됩니다. 현재 사용 도면 개정을 폐기하면 사용 도면이 없는 상태가 됩니다.');
         if (!reason?.trim()) return;
-        run(async () => { await jsonPost(`/api/documents/revisions/${state.revision.id}/retire`, {reason: reason.trim()}); await loadItems(); message('Revision을 폐기 처리했습니다. 파일과 이력은 보존됩니다.'); });
+        run(async () => { await jsonPost(`/api/documents/revisions/${state.revision.id}/retire`, {reason: reason.trim()}); await loadItems(); message('도면 개정을 폐기 처리했습니다. 파일과 이력은 보존됩니다.'); });
     });
     $('drawingDocuments').addEventListener('click', event => {
         const retire = event.target.closest('[data-retire-document]');

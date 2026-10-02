@@ -32,7 +32,9 @@ def flow_steps(db, revision_id):
 
 def step_dict(row):
     return {"id": row.id, "step_key_id": row.step_key_id, "sort_order": row.sort_order,
-            "step_no": row.step_no, "step_name": row.step_name, "note": row.note or ""}
+            "step_no": row.step_no, "step_name": row.step_name, "note": row.note or "",
+            "symbol_code": row.symbol_code or "", "symbol_name": row.symbol_name_snapshot or "",
+            "symbol_shape": row.symbol_shape_snapshot or ""}
 
 
 def flow_dict(db, row, include_steps=True):
