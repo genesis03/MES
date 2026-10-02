@@ -17,14 +17,14 @@ async function request(url, method='GET', body) {
   if(!response.ok) {const detail=data.detail;throw Error(Array.isArray(detail)?detail.map(x=>x.loc.join('.')+': '+x.msg).join('\n'):detail||'요청 처리에 실패했습니다.');}
   return data;
 }
-function editable(){return canWrite&&loaded&&(!selected||selected.status==='DRAFT')&&(!selected||selected.item_active==='Y');}
+function editable(){return canWrite&&loaded&&(!selected||selected.status==='DRAFT')&&(!selected||selected.item_selectable===true);}
 function updateControls(){
   const write=editable()&&!busy;
   root.querySelectorAll('.pf-fields input,.pf-fields select,.pf-fields textarea,#fmeaRows input,#fmeaRows textarea,#fmeaRows select').forEach(x=>x.disabled=!write);
   el('fmeaItem').disabled=!!selected||!write;el('fmeaNumber').disabled=!!selected||!write;el('fmeaCode').disabled=!!selected||!write;
   ['fmeaAddRow','fmeaSave'].forEach(id=>{if(el(id))el(id).disabled=!write;});
   if(el('fmeaActivate'))el('fmeaActivate').disabled=!selected||!write;
-  if(el('fmeaRevise'))el('fmeaRevise').disabled=busy||!canWrite||!selected||selected.item_active!=='Y'||!['CURRENT','SUPERSEDED'].includes(selected.status);
+  if(el('fmeaRevise'))el('fmeaRevise').disabled=busy||!canWrite||!selected||selected.item_selectable!==true||!['CURRENT','SUPERSEDED'].includes(selected.status);
   if(el('fmeaRetire'))el('fmeaRetire').disabled=busy||!canWrite||!selected||selected.status==='RETIRED';
   if(el('fmeaNew'))el('fmeaNew').disabled=busy||!loaded;
   el('fmeaRevisionSelect').disabled=busy||!selected;
@@ -82,6 +82,7 @@ async function flowOptions(itemId,detail=null){
  el('fmeaFlow').value=detail?.flow_revision_id||'';
 }
 function flowWarning(){
+ if(selected&&!selected.item_selectable){el('fmeaFlowWarning').textContent='완제품 선택 대상이 아닙니다. 기존 이력은 조회 전용이며 폐기만 가능합니다.';return;}
  el('fmeaFlowWarning').textContent=!currentFlow?'공정흐름도를 먼저 등록·적용한 뒤 선택해 주세요. 기존 분석행은 공정번호를 추정해 연결하지 않습니다.':currentFlow.status!=='CURRENT'?'현재 사용 공정흐름도와 다릅니다. 기존 문서는 보존하며 새 개정에서 기준 공정을 검토해 주세요.':'기준 공정흐름도 '+currentFlow.revision_code+' · 공정번호·공정명·순서 일치';
 }
 async function historyAndChanges(detail,revisions){
@@ -102,6 +103,8 @@ async function list(){
   updateControls();
 }
 function fill(detail){
+  el('fmeaItem').querySelectorAll('[data-historical-item]').forEach(option=>option.remove());
+  if(!Array.from(el('fmeaItem').options).some(option=>option.value===String(detail.item_id))){el('fmeaItem').insertAdjacentHTML('beforeend','<option data-historical-item disabled value="'+Number(detail.item_id)+'">'+esc(detail.part_no+' · '+detail.part_name+' · 기존 이력 조회 전용')+'</option>');}
   selected=detail;rows=detail.rows;currentFlow=detail.flow||null;dirty=false;el('fmeaEditor').hidden=false;
   el('fmeaEditorTitle').textContent=detail.part_no+' · '+detail.part_name+' · 공정 FMEA';
   el('fmeaItem').value=detail.item_id;el('fmeaNumber').value=detail.document_no;el('fmeaCode').value=detail.revision_code;
@@ -126,6 +129,7 @@ async function selectRevision(revisionId){
   await historyAndChanges(detail,revisions);
 }
 async function startNew(){
+  el('fmeaItem').querySelectorAll('[data-historical-item]').forEach(option=>option.remove());
   selected=null;rows=[];currentFlow=null;flowChoices=[];dirty=false;el('fmeaEditor').hidden=false;el('fmeaEditorTitle').textContent='신규 공정 FMEA';
   ['fmeaNumber','fmeaCode','fmeaCompany','fmeaModelYear','fmeaNote'].forEach(id=>el(id).value='');
   el('fmeaItem').value='';el('fmeaTeam').value=root.dataset.team;el('fmeaAuthor').value=root.dataset.author;el('fmeaDate').value=root.dataset.today;
@@ -231,7 +235,7 @@ if(el('fmeaRetire'))el('fmeaRetire').addEventListener('click',()=>{
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
 task(async()=>{
   options=await request('/api/process-fmea/options');
-  el('fmeaItem').innerHTML='<option value="">품목 선택</option>'+options.items.map(x=>'<option value="'+x.id+'"'+(x.is_active!=='Y'?' disabled':'')+'>'+esc(x.part_no+' · '+x.part_name+(x.is_active!=='Y'?' · 사용중지':''))+'</option>').join('');
+  el('fmeaItem').innerHTML='<option value="">완제품 품목 선택</option>'+options.items.map(x=>'<option value="'+x.id+'"'+(x.is_active!=='Y'?' disabled':'')+'>'+esc(x.part_no+' · '+x.part_name+(x.is_active!=='Y'?' · 사용중지':''))+'</option>').join('');
   loaded=true;await list();message('공정흐름도를 먼저 적용한 뒤 FMEA를 작성하세요. 기존 FMEA는 그대로 조회할 수 있습니다.');
 });
 })();

@@ -12,6 +12,7 @@ from core.security import get_current_user, get_current_user_optional
 from models.models import ItemMasterModel
 from models.process_flow import ProcessFlowRevision, ProcessFlowStep, ProcessFlowStepKey
 from services.document_service import actor_name, lock_item
+from services.standard_document_item_service import require_finished_item, selectable_finished_items
 from services.fmea_service import commit_fmea
 from services.process_flow_service import (
     FLOW_MENU_PATH, flow_dict, flow_steps, get_flow, has_flow_access, lock_flow, require_flow_access,
@@ -96,7 +97,7 @@ def flow_page(request: Request, db: Session = Depends(get_db)):
 def options(db: Session = Depends(get_db), user=Depends(get_current_user)):
     require_flow_access(user)
     return [{"id": x.id, "part_no": x.part_no, "part_name": x.part_name, "is_active": x.is_active}
-            for x in db.scalars(select(ItemMasterModel).order_by(ItemMasterModel.part_no))]
+            for x in selectable_finished_items(db)]
 
 
 @router.get("/api/process-flows")
@@ -120,6 +121,7 @@ def detail(revision_id: int, db: Session = Depends(get_db), user=Depends(get_cur
 def create(payload: CreatePayload, db: Session = Depends(get_db), user=Depends(get_current_user)):
     require_flow_access(user, "WRITE")
     item = lock_item(db, payload.item_id)
+    require_finished_item(db, item)
     if db.scalar(select(ProcessFlowRevision.id).where(ProcessFlowRevision.item_id == item.id)):
         raise HTTPException(409, "공정흐름도 이력이 있습니다. 기존 문서에서 개정 등록해 주세요.")
     row = ProcessFlowRevision(item_id=item.id, revision_code=payload.revision_code, sequence=1,

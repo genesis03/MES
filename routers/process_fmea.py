@@ -16,6 +16,7 @@ from models.models import ItemMasterModel
 from models.process_flow import ProcessFlowRevision
 from services.process_flow_service import flow_dict, flow_steps, usable_flow
 from services.document_service import actor_name, lock_item
+from services.standard_document_item_service import require_finished_item, selectable_finished_items
 from services.fmea_service import (
     FMEA_MENU_PATH, HEADER_FIELDS, ROW_FIELDS, commit_fmea, get_revision, has_fmea_access,
     lock_fmea_revision, require_fmea_access, revision_dict,
@@ -154,7 +155,7 @@ def options(db: Session = Depends(get_db), user=Depends(get_current_user)):
     require_fmea_access(user)
     return {
         "items": [{"id": x.id, "part_no": x.part_no, "part_name": x.part_name, "is_active": x.is_active, "vehicle_model": x.vehicle_model or ""}
-                  for x in db.scalars(select(ItemMasterModel).order_by(ItemMasterModel.part_no))],
+                  for x in selectable_finished_items(db)],
 
     }
 
@@ -226,6 +227,7 @@ def detail(revision_id: int, db: Session = Depends(get_db), user=Depends(get_cur
 def create_document(payload: CreatePayload, db: Session = Depends(get_db), user=Depends(get_current_user)):
     require_fmea_access(user, "WRITE")
     item = lock_item(db, payload.item_id)
+    require_finished_item(db, item)
     duplicate = db.scalar(select(FmeaDocument.id).where(FmeaDocument.item_id == item.id,
         func.lower(FmeaDocument.document_no) == payload.document_no.lower()))
     if duplicate:

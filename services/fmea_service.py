@@ -8,6 +8,7 @@ from models.models import ItemMasterModel
 from models.process_flow import ProcessFlowRevision, ProcessFlowStep
 from services.process_flow_service import flow_dict
 from services.document_service import lock_item
+from services.standard_document_item_service import is_selectable_finished_item, require_finished_item
 
 FMEA_MENU_PATH = "/standard-documents/process-fmea"
 ROW_FIELDS = (
@@ -55,6 +56,8 @@ def lock_fmea_revision(db, revision_id, version, require_active=True):
     revision = get_revision(db, revision_id)
     document = db.get(FmeaDocument, revision.document_id)
     item = lock_item(db, document.item_id, require_active=require_active)
+    if require_active:
+        require_finished_item(db, item)
     revision = db.scalar(select(FmeaRevision).where(FmeaRevision.id == revision_id)
                          .with_for_update().execution_options(populate_existing=True))
     if revision.version != version:
@@ -90,6 +93,7 @@ def revision_dict(db, row, include_rows=True):
         part_no=item.part_no if item else row.part_no_snapshot,
         part_name=item.part_name if item else row.part_name_snapshot,
         item_active=item.is_active if item else "N",
+        item_selectable=is_selectable_finished_item(db, item),
         part_no_snapshot=row.part_no_snapshot, part_name_snapshot=row.part_name_snapshot,
         revision_code=row.revision_code, sequence=row.sequence, version=row.version, status=row.status,
         basis_item_revision_id=row.basis_item_revision_id, basis_revision_snapshot=row.basis_revision_snapshot,

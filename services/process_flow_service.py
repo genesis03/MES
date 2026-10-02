@@ -4,6 +4,7 @@ from core.security import check_admin_permission, parse_user_permissions
 from models.process_flow import ProcessFlowRevision, ProcessFlowStep
 from models.models import ItemMasterModel
 from services.document_service import lock_item
+from services.standard_document_item_service import is_selectable_finished_item, require_finished_item
 
 FLOW_MENU_PATH = "/standard-documents/process-flows"
 
@@ -39,6 +40,7 @@ def flow_dict(db, row, include_steps=True):
     result = {
         "id": row.id, "item_id": row.item_id, "part_no": item.part_no if item else row.part_no_snapshot,
         "part_name": item.part_name if item else row.part_name_snapshot, "item_active": item.is_active if item else "N",
+        "item_selectable": is_selectable_finished_item(db, item),
         "part_no_snapshot": row.part_no_snapshot, "part_name_snapshot": row.part_name_snapshot,
         "revision_code": row.revision_code, "sequence": row.sequence, "version": row.version, "status": row.status,
         "previous_revision_id": row.previous_revision_id, "change_reason": row.change_reason or "",
@@ -62,6 +64,8 @@ def get_flow(db, revision_id):
 def lock_flow(db, revision_id, version, require_active=True):
     row = get_flow(db, revision_id)
     item = lock_item(db, row.item_id, require_active=require_active)
+    if require_active:
+        require_finished_item(db, item)
     row = db.scalar(select(ProcessFlowRevision).where(ProcessFlowRevision.id == revision_id)
                     .with_for_update().execution_options(populate_existing=True))
     if row.version != version:

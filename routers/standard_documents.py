@@ -17,8 +17,8 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # 화면 제목/안내만 정의합니다. 업무 마스터나 문서 유형 공통코드를 대신하지 않습니다.
 PLANNED_PAGES = {
     "/standard-documents/control-plans": {
-        "title": "CP 관리",
-        "description": "품목·공정별 관리계획서를 관리하는 기능을 준비 중입니다.",
+        "title": "관리계획서",
+        "description": "완제품 품목만 선택하는 관리계획서 기능을 준비 중입니다. 기존 품목마스터의 자재유형 기준을 사용합니다.",
     },
     "/standard-documents/work-standards": {
         "title": "작업표준서 관리",
@@ -26,7 +26,7 @@ PLANNED_PAGES = {
     },
     "/standard-documents/packaging-specifications": {
         "title": "포장사양서 관리",
-        "description": "품목별 포장사양서와 개정 이력을 관리하는 기능을 준비 중입니다.",
+        "description": "완제품 품목만 선택하는 포장사양서·개정 이력 기능을 준비 중입니다. 기존 품목마스터의 자재유형 기준을 사용합니다.",
     },
 }
 

@@ -8,7 +8,7 @@
 |---|---|---|
 | 도면 관리 | /basic-info/drawings | 기존 도면 관리 화면 |
 | 공정흐름도 | /standard-documents/process-flows | 품목별 공정번호·명칭·순서·개정·인쇄 |
-| CP 관리 | /standard-documents/control-plans | 개발 예정 안내 |
+| 관리계획서 | /standard-documents/control-plans | 개발 예정 안내 |
 | 공정 FMEA | /standard-documents/process-fmea | 작성·저장·개정·조회·인쇄 |
 | 작업표준서 관리 | /standard-documents/work-standards | 개발 예정 안내 |
 | 검사기준서 관리 | /standard-documents/inspection-standards | 입고검사 기준서 / 검사항목 마스터 두 탭 |
@@ -41,6 +41,16 @@
 - 성적서는 검사기준서의 검사항목과 규격을 가져오고 측정값 외 추가 입력을 최소화합니다.
 - 기준 Revision 및 당시 규격의 스냅샷을 보존하여 이후 기준 개정이 과거 검사 결과를 바꾸지 않게 설계합니다.
 - 기존 검사항목 마스터와 입고검사 기준을 재사용할 수 있는 범위를 먼저 확인합니다. 입고 기준을 모든 검사 유형에 임의 적용하지 않습니다.
+
+## 완제품 전용 품목 정책
+
+- 공정흐름도, 관리계획서(CP), 공정 FMEA, 포장사양서는 완제품 품목만 선택합니다.
+- 품목마스터 material_type과 기존 MATERIAL_TYPE 공통코드 FINISHED(완제품)를 사용합니다. 품번 문자열이나 계정유형으로 추정하지 않습니다.
+- 현재 구현된 공정흐름도/FMEA 선택 목록은 사용 중인 완제품만 반환하며 등록·수정·개정·적용 API도 같은 조건을 검사합니다.
+- 품목 분류 변경/사용중지 또는 기존 비완제품 문서는 삭제하지 않습니다. 목록·내용·인쇄 이력을 유지하고 조회 전용으로 표시하며 사유를 남기는 폐기는 허용합니다.
+- 관리계획서/포장사양서는 아직 개발 예정 화면입니다. 해당 화면에 완제품 전용 정책을 명시하며 실제 작성 기능 구현 시 services/standard_document_item_service.py의 공통 조건을 재사용합니다.
+- 도면 관리, 작업표준서 및 검사기준서의 품목 범위는 이번에 변경하지 않습니다.
+- 메뉴명만 CP 관리에서 관리계획서로 변경합니다. 기존 /standard-documents/control-plans 경로/권한 키는 유지합니다.
 
 ## 공통 원칙과 적용
 

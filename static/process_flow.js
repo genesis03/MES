@@ -7,7 +7,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 let selected=null,steps=[],records=[],busy=false,dirty=false,ready=false;
 function message(t,error=false){el('flowMessage').textContent=t;el('flowMessage').className=error?'flow-error':'';}
 async function request(url,method='GET',body){const r=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const d=await r.json();if(!r.ok)throw Error(Array.isArray(d.detail)?d.detail.map(x=>x.loc.join('.')+': '+x.msg).join('\n'):d.detail||'요청 실패');return d;}
-function editable(){return write&&ready&&(!selected||selected.status==='DRAFT')&&(!selected||selected.item_active==='Y');}
+function editable(){return write&&ready&&(!selected||selected.status==='DRAFT')&&(!selected||selected.item_selectable===true);}
 function controls(){
  const edit=editable()&&!busy;
  root.querySelectorAll('.flow-fields input,.flow-fields select,.flow-fields textarea,#flowSteps input,#flowSteps textarea,[data-step-op]').forEach(x=>x.disabled=!edit);
@@ -15,7 +15,7 @@ function controls(){
  ['flowSave','flowAdd'].forEach(id=>{if(el(id))el(id).disabled=!edit;});
  if(el('flowNew'))el('flowNew').disabled=busy||!ready;
  if(el('flowActivate'))el('flowActivate').disabled=!selected||!edit;
- if(el('flowRevise'))el('flowRevise').disabled=busy||!write||!selected||selected.status==='DRAFT'||selected.item_active!=='Y';
+ if(el('flowRevise'))el('flowRevise').disabled=busy||!write||!selected||selected.status==='DRAFT'||selected.item_selectable!==true;
  if(el('flowRetire'))el('flowRetire').disabled=busy||!write||!selected||selected.status==='RETIRED';
  el('flowPrint').disabled=busy||!selected||dirty;
  root.querySelectorAll('[data-flow-id]').forEach(x=>x.disabled=busy);
@@ -36,9 +36,9 @@ async function history(itemId){
  const all=await request('/api/process-flows');const revs=all.filter(x=>x.item_id===itemId);
  el('flowHistory').innerHTML=revs.map(x=>'<tr><td>'+esc(x.revision_code)+'</td><td>'+esc(x.created_at)+'<br>'+esc(x.activated_at||'미적용')+'</td><td>'+esc(x.change_reason||'최초 등록')+'</td><td>'+esc(x.created_by)+'</td><td>'+esc(label[x.status])+'</td><td class="no-print"><button class="flow-btn light" data-flow-id="'+x.id+'">조회</button></td></tr>').join('');
 }
-function fill(x){selected=x;steps=x.steps;dirty=false;el('flowEditor').hidden=false;el('flowTitle').textContent=x.part_no+' · '+x.part_name+' · '+x.revision_code+' · '+label[x.status];el('flowItem').value=x.item_id;el('flowCode').value=x.revision_code;el('flowNote').value=x.note;el('flowMeta').textContent='당시 품목: '+x.part_no_snapshot+' · '+x.part_name_snapshot+' | 등록: '+x.created_by+' · '+x.created_at+(x.retire_reason?' | 폐기 사유: '+x.retire_reason:'');renderSteps();}
+function fill(x){el('flowItem').querySelectorAll('[data-historical-item]').forEach(option=>option.remove());if(!Array.from(el('flowItem').options).some(option=>option.value===String(x.item_id))){el('flowItem').insertAdjacentHTML('beforeend','<option data-historical-item disabled value="'+Number(x.item_id)+'">'+esc(x.part_no+' · '+x.part_name+' · 기존 이력 조회 전용')+'</option>');}selected=x;steps=x.steps;dirty=false;el('flowEditor').hidden=false;el('flowTitle').textContent=x.part_no+' · '+x.part_name+' · '+x.revision_code+' · '+label[x.status];el('flowItem').value=x.item_id;el('flowCode').value=x.revision_code;el('flowNote').value=x.note;el('flowMeta').textContent='당시 품목: '+x.part_no_snapshot+' · '+x.part_name_snapshot+' | 등록: '+x.created_by+' · '+x.created_at+(x.retire_reason?' | 폐기 사유: '+x.retire_reason:'')+(x.item_selectable?'':' | 완제품 선택 대상이 아닙니다. 기존 이력은 조회 전용이며 폐기만 가능합니다.');renderSteps();}
 async function select(id){const x=await request('/api/process-flows/'+id);fill(x);await history(x.item_id);}
-if(el('flowNew'))el('flowNew').onclick=()=>{if(!abandon())return;task(async()=>{selected=null;steps=[];dirty=false;el('flowEditor').hidden=false;el('flowTitle').textContent='신규 공정흐름도';['flowItem','flowCode','flowNote'].forEach(id=>el(id).value='');el('flowMeta').textContent='';el('flowHistory').innerHTML='';renderSteps();message('공정번호와 공정명을 한 칸에 입력하고 순서를 지정해 주세요.');});};
+if(el('flowNew'))el('flowNew').onclick=()=>{if(!abandon())return;task(async()=>{el('flowItem').querySelectorAll('[data-historical-item]').forEach(option=>option.remove());selected=null;steps=[];dirty=false;el('flowEditor').hidden=false;el('flowTitle').textContent='신규 공정흐름도';['flowItem','flowCode','flowNote'].forEach(id=>el(id).value='');el('flowMeta').textContent='';el('flowHistory').innerHTML='';renderSteps();message('공정번호와 공정명을 한 칸에 입력하고 순서를 지정해 주세요.');});};
 el('flowSearch').onclick=()=>task(list);el('flowReset').onclick=()=>{el('flowKeyword').value='';task(list);};
 el('flowKeyword').onkeydown=e=>{if(e.key==='Enter')task(list);};
 root.addEventListener('click',e=>{
@@ -63,5 +63,5 @@ if(el('flowRevise'))el('flowRevise').onclick=()=>{const code=prompt('새 공정�
 if(el('flowRetire'))el('flowRetire').onclick=()=>{if(dirty){message('초안을 저장하거나 다시 조회한 뒤 폐기해 주세요.',true);return;}const reason=prompt('폐기 사유. 기존 공정과 연결 문서 이력은 보존됩니다.');if(!reason?.trim())return;task(async()=>{const x=await request('/api/process-flows/'+selected.id+'/retire','POST',{version:selected.version,reason:reason.trim()});fill(x);await history(x.item_id);await list();message('폐기 처리했습니다. 구버전을 자동 적용하지 않습니다.');});};
 el('flowPrint').onclick=()=>{if(selected&&!dirty)window.print();};
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
-task(async()=>{const items=await request('/api/process-flows/options');el('flowItem').innerHTML='<option value="">품목 선택</option>'+items.map(x=>'<option value="'+x.id+'"'+(x.is_active!=='Y'?' disabled':'')+'>'+esc(x.part_no+' · '+x.part_name)+'</option>').join('');ready=true;await list();message('품목별 공정흐름도를 선택하거나 신규 등록해 주세요.');});
+task(async()=>{const items=await request('/api/process-flows/options');el('flowItem').innerHTML='<option value="">완제품 품목 선택</option>'+items.map(x=>'<option value="'+x.id+'"'+(x.is_active!=='Y'?' disabled':'')+'>'+esc(x.part_no+' · '+x.part_name)+'</option>').join('');ready=true;await list();message('품목별 공정흐름도를 선택하거나 신규 등록해 주세요.');});
 })();
