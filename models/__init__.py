@@ -34,6 +34,7 @@ from models.inventory_adjustment import InventoryAdjustmentModel
 from models.inventory_movement import InventoryMovementModel
 from models.item_identity import ItemPartNoHistory, install_item_identity_events
 from models.document import ItemRevision, ItemDocument, DocumentFile
+from models.auth_session import AuthSession
 from models.process_flow import ProcessFlowRevision, ProcessFlowStepKey, ProcessFlowStep
 from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
 
@@ -73,6 +74,7 @@ from models.document_migration import ensure_document_codes
 ensure_document_codes(engine)
 
 __all__ = [
+    "AuthSession",
     "ItemRevision", "ItemDocument", "DocumentFile",
     "ProcessFlowRevision", "ProcessFlowStepKey", "ProcessFlowStep",
     "FmeaDocument", "FmeaRevision", "FmeaRow",

@@ -86,6 +86,7 @@
 <div class="login-card">
     <div class="login-title">출하 바코드 관리 시스템</div>
     <div class="login-subtitle">인증된 사용자만 접근 가능합니다.</div>
+    <p id="sessionExpiredNotice" class="login-subtitle" hidden>로그인 세션이 만료되었습니다. 다시 로그인해 주세요.</p>
     <form id="loginForm" onsubmit="handleLogin(event)">
         <div class="form-group">
             <label for="username">아이디</label>
@@ -101,6 +102,8 @@
 </div>
 
 <script>
+    document.getElementById('sessionExpiredNotice').hidden = new URLSearchParams(window.location.search).get('reason') !== 'idle';
+
     async function handleLogin(e) {
         e.preventDefault();
         const errorDiv = document.getElementById("errorMsg");
@@ -118,7 +121,6 @@
             const data = await res.json();
 
             if (res.ok && data.status === "success") {
-                localStorage.setItem(`mes:last-activity:${data.username || username}`, String(Date.now()));
                 window.location.href = "/shipping";
             } else {
                 errorDiv.innerText = data.detail || "로그인 정보가 올바르지 않습니다.";

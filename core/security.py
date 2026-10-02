@@ -74,35 +74,19 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return hmac.compare_digest(hash_password(plain_password), hashed_password)
 
 
-def create_session_token(username: str) -> str:
-    """HMAC 서명 기반 세션 토큰 생성"""
-    signature = hmac.new(
-        SECRET_KEY.encode("utf-8"),
-        str(username).encode("utf-8"),
-        hashlib.sha256
-    ).hexdigest()
-    return f"{username}|{signature}"
+def create_session_token(username: str, db: Optional[Session] = None) -> str:
+    """랜덤 로그인 세션을 서버 DB에 등록합니다. 과거 만료 없는 토큰은 재사용하지 않습니다."""
+    from services.auth_session_service import issue_token
+    return issue_token(username, db)
 
 
 generate_session_token = create_session_token
 
 
-def verify_session_token(token: str) -> Optional[str]:
-    """세션 토큰 유효성 검증 및 사용자 식별자 반환"""
-    if not token or "|" not in token:
-        return None
-    try:
-        username, signature = token.split("|", 1)
-        expected_signature = hmac.new(
-            SECRET_KEY.encode("utf-8"),
-            username.encode("utf-8"),
-            hashlib.sha256
-        ).hexdigest()
-        if hmac.compare_digest(signature, expected_signature):
-            return username
-    except Exception:
-        return None
-    return None
+def verify_session_token(token: str, db: Optional[Session] = None) -> Optional[str]:
+    """서버의 만료/폐기 상태를 검사하고 사용자 식별자를 반환합니다. 활동시간은 갱신하지 않습니다."""
+    from services.auth_session_service import verify_username
+    return verify_username(token, db)
 
 
 def get_current_user_optional(request: Request, db: Session = Depends(get_db)):
@@ -121,7 +105,7 @@ def get_current_user_optional(request: Request, db: Session = Depends(get_db)):
     if not token:
         return None
 
-    username = verify_session_token(token)
+    username = getattr(request.state, "authenticated_username", None) or verify_session_token(token, db)
     if not username:
         return None
 

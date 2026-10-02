@@ -1,7 +1,7 @@
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from core.config import BASE_DIR
@@ -60,7 +60,9 @@ async def audit_request_context(request: Request, call_next):
     """업무 데이터 변경 시 사용자/메뉴/요청 정보를 감사로그에 연결합니다."""
     request_path = request.url.path
     token = request.cookies.get("session_token")
-    username = verify_session_token(token) if token else None
+    username = getattr(request.state, "authenticated_username", None)
+    if not username and token:
+        username = verify_session_token(token)
     user_id = None
 
     if username:
@@ -106,11 +108,13 @@ async def enforce_menu_write_permission(request: Request, call_next):
         return await call_next(request)
 
     req_path = request.url.path.rstrip("/") or "/"
-    if req_path.startswith("/static/") or req_path in {"/login", "/logout", "/api/login", "/api/logout"}:
+    if req_path.startswith("/static/") or req_path in {"/login", "/logout", "/api/login", "/api/logout", "/api/session/activity"}:
         return await call_next(request)
 
     token = request.cookies.get("session_token")
-    username = verify_session_token(token) if token else None
+    username = getattr(request.state, "authenticated_username", None)
+    if not username and token:
+        username = verify_session_token(token)
     if not username:
         return await call_next(request)
 
@@ -169,6 +173,31 @@ async def enforce_menu_write_permission(request: Request, call_next):
         db.close()
 
     return await call_next(request)
+
+
+@app.middleware("http")
+async def enforce_login_session(request: Request, call_next):
+    """창을 닫아도 서버 만료시각이 지나면 모든 업무 화면/API의 인증을 차단합니다."""
+    path = request.url.path.rstrip("/") or "/"
+    if DEV_BYPASS_AUTH or path.startswith("/static/") or path in {
+        "/login", "/logout", "/api/login", "/api/logout"
+    }:
+        return await call_next(request)
+    token = request.cookies.get("session_token")
+    username = verify_session_token(token) if token else None
+    if username:
+        request.state.authenticated_username = username
+        response = await call_next(request)
+        response.headers.setdefault("Cache-Control", "private, no-store")
+        return response
+    if path.startswith("/api/"):
+        response = JSONResponse(status_code=401,
+            content={"detail": "로그인 세션이 만료되었습니다. 다시 로그인해 주세요."},
+            headers={"Cache-Control": "no-store"})
+    else:
+        response = RedirectResponse(url="/login?reason=idle", status_code=303)
+    response.delete_cookie("session_token")
+    return response
 
 
 # 정적 파일 경로 마운트

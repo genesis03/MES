@@ -18,3 +18,11 @@ DOCUMENT_ALLOWED_EXTENSIONS = tuple(
 )
 if DOCUMENT_MAX_FILE_BYTES < 1 or DOCUMENT_MAX_FILES < 1:
     raise ValueError("문서 파일 크기/개수 제한은 1 이상이어야 합니다.")
+
+# 기존 미사용 정책을 서버/화면에서 공유합니다. 운영 환경변수로 변경할 수 있습니다.
+SESSION_ADMIN_IDLE_MINUTES = int(os.getenv("SESSION_ADMIN_IDLE_MINUTES", "20"))
+SESSION_USER_IDLE_MINUTES = int(os.getenv("SESSION_USER_IDLE_MINUTES", "30"))
+SESSION_COOKIE_MAX_AGE_SECONDS = 86400 * 7  # 기존 로그인 쿠키 보관 상한
+SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() in {"1", "true", "yes"}
+if SESSION_ADMIN_IDLE_MINUTES < 1 or SESSION_USER_IDLE_MINUTES < 1:
+    raise ValueError("로그인 미사용 제한은 1분 이상이어야 합니다.")
