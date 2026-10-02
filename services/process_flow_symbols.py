@@ -6,7 +6,7 @@ from models.models import CommonCodeModel
 
 SYMBOL_GROUP = "PROCESS_FLOW_SYMBOL"
 # 아래 값은 업무 마스터가 아니라 SVG 렌더러가 지원하는 도형 식별자입니다.
-SUPPORTED_SHAPES = frozenset({"CIRCLE", "ARROW", "SQUARE", "DIAMOND", "INVERTED_TRIANGLE", "DELAY"})
+SUPPORTED_SHAPES = frozenset({"CIRCLE", "ARROW", "SQUARE", "DIAMOND", "INVERTED_TRIANGLE", "DELAY", "DIAMOND_SQUARE", "SQUARE_DIAMOND", "CIRCLE_SQUARE", "CIRCLE_ARROW"})
 
 
 def _symbol(row):

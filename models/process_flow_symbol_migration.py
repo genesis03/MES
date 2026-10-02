@@ -1,4 +1,4 @@
-"""승인된 기본 공정 기호 6종을 기존 공통코드에 누락된 경우만 등록합니다."""
+"""기본 및 복합 공정 기호을 기존 공통코드에 누락된 경우만 등록합니다."""
 import json
 from datetime import datetime
 from sqlalchemy import text
@@ -11,6 +11,10 @@ INITIAL_SYMBOLS = (
     ("QUALITY_INSPECTION", "품질검사", "DIAMOND"),
     ("STORAGE", "저장", "INVERTED_TRIANGLE"),
     ("DELAY", "지체", "DELAY"),
+    ("QUALITY_QUANTITY_INSPECTION", "품질검사 + 수량검사 (품질 주)", "DIAMOND_SQUARE"),
+    ("QUANTITY_QUALITY_INSPECTION", "수량검사 + 품질검사 (수량 주)", "SQUARE_DIAMOND"),
+    ("OPERATION_QUANTITY_INSPECTION", "가공 + 수량검사", "CIRCLE_SQUARE"),
+    ("OPERATION_TRANSPORT", "가공 + 운반", "CIRCLE_ARROW"),
 )
 
 

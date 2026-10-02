@@ -11,7 +11,12 @@ const shapes={
  SQUARE:'<rect x="5" y="5" width="22" height="22"/>',
  DIAMOND:'<path d="M16 3L29 16L16 29L3 16Z"/>',
  INVERTED_TRIANGLE:'<path d="M3 5H29L16 28Z"/>',
- DELAY:'<path d="M5 5H16A11 11 0 0 1 16 27H5Z"/>'
+ DELAY:'<path d="M5 5H16A11 11 0 0 1 16 27H5Z"/>',
+ // 복합기호는 주 기능을 바깥쪽, 보조 기능을 안쪽에 표시합니다.
+ DIAMOND_SQUARE:'<path d="M16 3L29 16L16 29L3 16Z"/><rect x="9.5" y="9.5" width="13" height="13"/>',
+ SQUARE_DIAMOND:'<rect x="5" y="5" width="22" height="22"/><path d="M16 5L27 16L16 27L5 16Z"/>',
+ CIRCLE_SQUARE:'<circle cx="16" cy="16" r="12"/><rect x="8" y="8" width="16" height="16"/>',
+ CIRCLE_ARROW:'<circle cx="16" cy="16" r="13"/><path d="M6 12H16V7L25 16L16 25V20H6Z"/>'
 };
 let selected=null,steps=[],records=[],symbols=[],items=[],busy=false,dirty=false,ready=false;
 function message(t,error=false){el('flowMessage').textContent=t;el('flowMessage').className=error?'flow-error':'';}
@@ -22,7 +27,7 @@ function errorText(detail){
   const names={step_no:'공정번호',step_name:'공정명',symbol_code:'기호',note:'비고',revision_code:'개정번호',item_id:'완제품 품목'};
   if(i>=0&&Number.isInteger(loc[i+1])){
    const number=loc[i+1]+1;
-   if(field==='step_no'||field==='step_name')return number+'번째 공정의 '+names[field]+'를 입력해 주세요. 사용하지 않는 행은 ‘제외’를 눌러주세요.';
+   if(field==='step_no'||field==='step_name')return number+'번째 공정의 '+names[field]+'를 입력해 주세요. 사용하지 않는 행은 ‘삭제’를 눌러주세요.';
    return number+'번째 공정의 '+(names[field]||'입력값')+'를 확인해 주세요.';
   }
   return (names[field]||'입력값')+'를 확인해 주세요.';
@@ -76,7 +81,7 @@ function symbolOptions(step){
  return options+symbols.map(x=>'<option value="'+esc(x.code)+'"'+(x.code===step.symbol_code?' selected':'')+'>'+esc(x.code===step.symbol_code&&step.symbol_name?step.symbol_name:x.name)+'</option>').join('');
 }
 function renderSteps(){
- el('flowSteps').innerHTML=steps.map((s,i)=>'<tr><td class="flow-symbol-editor"><select data-index="'+i+'" data-field="symbol_code" aria-label="'+(i+1)+'번째 공정 기호">'+symbolOptions(s)+'</select>'+symbolSvg(s.symbol_shape,s.symbol_name)+'</td><td><input data-index="'+i+'" data-field="step_no" aria-label="'+(i+1)+'번째 공정번호" placeholder="공정번호" maxlength="50" value="'+esc(s.step_no)+'"><input data-index="'+i+'" data-field="step_name" aria-label="'+(i+1)+'번째 공정명" placeholder="공정명" maxlength="200" value="'+esc(s.step_name)+'"></td><td><textarea data-index="'+i+'" data-field="note" aria-label="'+(i+1)+'번째 공정 비고" maxlength="4000">'+esc(s.note)+'</textarea></td><td><button class="flow-btn light" data-step-op="up" data-index="'+i+'">위로</button> <button class="flow-btn light" data-step-op="down" data-index="'+i+'">아래로</button> <button class="flow-btn light" data-step-op="remove" data-index="'+i+'">제외</button></td></tr>').join('');
+ el('flowSteps').innerHTML=steps.map((s,i)=>'<tr><td class="flow-symbol-editor"><select data-index="'+i+'" data-field="symbol_code" aria-label="'+(i+1)+'번째 공정 기호">'+symbolOptions(s)+'</select>'+symbolSvg(s.symbol_shape,s.symbol_name)+'</td><td class="flow-process-editor"><input data-index="'+i+'" data-field="step_no" aria-label="'+(i+1)+'번째 공정번호" placeholder="공정번호" maxlength="50" value="'+esc(s.step_no)+'"><input data-index="'+i+'" data-field="step_name" aria-label="'+(i+1)+'번째 공정명" placeholder="공정명" maxlength="200" value="'+esc(s.step_name)+'"></td><td class="flow-note-editor"><textarea rows="1" data-index="'+i+'" data-field="note" aria-label="'+(i+1)+'번째 공정 비고" maxlength="4000">'+esc(s.note)+'</textarea></td><td class="flow-row-actions"><button type="button" class="flow-btn light flow-order-btn" data-step-op="up" data-index="'+i+'" aria-label="위로 이동" title="위로 이동">↑</button> <button type="button" class="flow-btn light flow-order-btn" data-step-op="down" data-index="'+i+'" aria-label="아래로 이동" title="아래로 이동">↓</button> <button type="button" class="flow-btn light" data-step-op="remove" data-index="'+i+'">삭제</button></td></tr>').join('');
  diagram();controls();
 }
 function renderList(){
@@ -107,7 +112,7 @@ root.addEventListener('click',e=>{
  const b=e.target.closest('[data-flow-id]');if(b&&!busy&&abandon())task(()=>select(Number(b.dataset.flowId)));
  const op=e.target.closest('[data-step-op]');if(!op||!editable()||busy)return;
  const i=Number(op.dataset.index);
- if(op.dataset.stepOp==='remove'){if(steps[i].id&&!confirm('이 초안에서 공정을 제외할까요? 기존 이력은 보존됩니다.'))return;steps.splice(i,1);}
+ if(op.dataset.stepOp==='remove'){if(steps[i].id&&!confirm('이 초안에서 공정 행을 삭제할까요? 기존 이력은 보존됩니다.'))return;steps.splice(i,1);}
  else{const j=i+(op.dataset.stepOp==='up'?-1:1);if(j<0||j>=steps.length)return;[steps[i],steps[j]]=[steps[j],steps[i]];}
  dirty=true;renderSteps();
 });
@@ -127,7 +132,7 @@ function validateSteps(requireSymbols=false){
  for(let i=0;i<steps.length;i++){
   const s=steps[i];
   for(const field of ['step_no','step_name']){
-   if(!String(s[field]||'').trim()){message((i+1)+'번째 공정의 '+(field==='step_no'?'공정번호':'공정명')+'를 입력해 주세요. 사용하지 않는 행은 ‘제외’를 눌러주세요.',true);focusStep(i,field);return false;}
+   if(!String(s[field]||'').trim()){message((i+1)+'번째 공정의 '+(field==='step_no'?'공정번호':'공정명')+'를 입력해 주세요. 사용하지 않는 행은 ‘삭제’를 눌러주세요.',true);focusStep(i,field);return false;}
   }
   const key=s.step_no.trim().toLocaleLowerCase();
   if(seen.has(key)){message((i+1)+'번째 공정번호가 중복되었습니다.',true);focusStep(i,'step_no');return false;}seen.add(key);

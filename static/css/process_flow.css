@@ -33,3 +33,19 @@
  .flow-diagram-number,.flow-diagram-name{font-size:12px;color:#000}
  .flow-symbol{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
+
+/* 공정 입력은 한 행으로 유지하고 좁은 화면에서는 가로 스크롤합니다. */
+.flow-scroll .flow-edit{min-width:1050px;table-layout:fixed}
+.flow-edit th:first-child,.flow-edit td:first-child{width:270px}
+.flow-edit th:nth-child(2),.flow-edit td:nth-child(2){width:360px}
+.flow-edit th:last-child,.flow-edit td:last-child{width:160px}
+.flow-edit .flow-symbol-editor{display:table-cell}
+.flow-symbol-editor select{display:inline-block;width:calc(100% - 46px);height:36px;min-height:36px;margin:0;vertical-align:middle}
+.flow-symbol-editor .flow-symbol,.flow-symbol-editor .flow-symbol-empty{display:inline-block;margin:0 0 0 8px;vertical-align:middle}
+.flow-process-editor input{display:inline-block;vertical-align:middle;height:36px;margin:0}
+.flow-process-editor input[data-field="step_no"]{width:72px;margin-right:8px}
+.flow-process-editor input[data-field="step_name"]{width:calc(100% - 80px)}
+.flow-edit .flow-note-editor textarea{height:36px;min-height:36px;margin:0;resize:none;white-space:pre;overflow:auto;line-height:18px}
+.flow-row-actions{white-space:nowrap}
+.flow-row-actions .flow-btn{padding:6px 10px;vertical-align:middle}
+.flow-row-actions .flow-order-btn{width:36px;font-size:20px;line-height:24px;padding:6px}
