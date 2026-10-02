@@ -49,3 +49,37 @@
 .flow-row-actions{white-space:nowrap}
 .flow-row-actions .flow-btn{padding:6px 10px;vertical-align:middle}
 .flow-row-actions .flow-order-btn{width:36px;font-size:20px;line-height:24px;padding:6px}
+
+/* 입력표와 흐름도는 같은 작업 영역에 나란히 배치합니다. */
+.flow-workspace{display:grid;grid-template-columns:minmax(0,7fr) minmax(280px,3fr);gap:16px;align-items:start;margin-top:12px}
+.flow-input-pane{min-width:0}
+.flow-input-pane>.flow-scroll{margin-top:0}
+.flow-workspace>.flow-sheet{box-sizing:border-box;width:100%;max-width:none;margin:0;padding:16px 12px;min-width:0}
+.flow-workspace>.flow-sheet>h2{font-size:19px;margin:0 0 12px}
+.flow-workspace>.flow-sheet>h3{text-align:center;font-size:14px;line-height:1.5;margin:0 0 6px}
+.flow-workspace .flow-document-meta{text-align:center;margin:0 0 12px;font-size:11px;overflow-wrap:anywhere}
+.flow-workspace .flow-diagram{width:fit-content;max-width:100%;margin:0 auto}
+.flow-workspace .flow-diagram-row{grid-template-columns:38px 48px minmax(0,1fr);min-height:42px}
+.flow-workspace .flow-diagram-number,.flow-workspace .flow-diagram-name{padding:8px 5px;font-size:12px;text-align:left}
+.flow-workspace .flow-diagram-name{max-width:300px}
+.flow-input-pane .flow-edit{min-width:880px}
+.flow-input-pane .flow-edit th,.flow-input-pane .flow-edit td{padding:7px}
+.flow-input-pane .flow-edit th:first-child,.flow-input-pane .flow-edit td:first-child{width:240px}
+.flow-input-pane .flow-edit th:nth-child(2),.flow-input-pane .flow-edit td:nth-child(2){width:290px}
+.flow-input-pane .flow-edit th:nth-child(3),.flow-input-pane .flow-edit td:nth-child(3){width:auto}
+.flow-input-pane .flow-edit th:last-child,.flow-input-pane .flow-edit td:last-child{width:138px}
+.flow-input-pane .flow-process-editor input[data-field="step_no"]{width:60px;margin-right:6px}
+.flow-input-pane .flow-process-editor input[data-field="step_name"]{width:calc(100% - 66px)}
+.flow-input-pane .flow-row-actions .flow-btn{padding:6px 8px}
+.flow-input-pane .flow-row-actions .flow-order-btn{width:32px}
+@media screen and (max-width:1200px){
+ .flow-workspace{grid-template-columns:minmax(0,1fr)}
+ .flow-workspace>.flow-sheet{max-width:480px;justify-self:center}
+}
+@media print{
+ .flow-workspace{display:block;margin:0}
+ .flow-workspace>.flow-sheet{width:100%;max-width:none;margin:0;padding:0;border:0}
+ .flow-workspace>.flow-sheet>h2{font-size:22px}
+ .flow-workspace>.flow-sheet>h3{font-size:16px}
+ .flow-workspace .flow-document-meta{font-size:12px}
+}

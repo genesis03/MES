@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}공정흐름도{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=compact-preview-1">{% endblock %}
 {% block content %}
 <div id="flowApp" data-can-write="{{ 'true' if can_write_flow else 'false' }}">
   <div class="flow-head no-print"><h1>공정흐름도</h1>{% if can_write_flow %}<button id="flowNew" class="flow-btn primary no-print">신규 등록</button>{% endif %}</div>
@@ -19,13 +19,18 @@
     <div class="flow-tools no-print">
     {% if can_write_flow %}<button id="flowAdd" class="flow-btn light">공정 추가</button><button id="flowSave" class="flow-btn primary">초안 저장</button><button id="flowActivate" class="flow-btn primary">현재 사용 적용</button><button id="flowRevise" class="flow-btn primary">개정 등록</button><button id="flowRetire" class="flow-btn danger">Revision 폐기</button>{% endif %}
     <button id="flowPrint" class="flow-btn light">인쇄</button></div>
-    <div class="flow-scroll no-print"><table class="flow-edit"><thead><tr><th>기호 명칭 / 기호</th><th>공정번호 / 공정명</th><th>비고</th><th>순서 / 삭제</th></tr></thead><tbody id="flowSteps"></tbody></table></div>
-    <h3 class="no-print">개정 이력</h3><div class="flow-scroll no-print"><table><thead><tr><th>개정번호</th><th>등록일 / 적용일</th><th>주요 개정 내용</th><th>등록자</th><th>상태</th><th class="no-print">조회</th></tr></thead><tbody id="flowHistory"></tbody></table></div>
-    <p class="flow-note no-print">기호 명칭을 선택하면 아래 흐름도에 자동 표시됩니다. 기존 기호 미지정 공정은 초안 또는 새 개정에서 선택해 주세요.</p>
+    <div class="flow-workspace">
+      <div class="flow-input-pane no-print">
+        <div class="flow-scroll no-print"><table class="flow-edit"><thead><tr><th>기호 명칭 / 기호</th><th>공정번호 / 공정명</th><th>비고</th><th>순서 / 삭제</th></tr></thead><tbody id="flowSteps"></tbody></table></div>
+        <p class="flow-note">기호 명칭을 선택하면 미리보기에 자동 표시됩니다. 기존 기호 미지정 공정은 초안 또는 새 개정에서 선택해 주세요.</p>
+      </div>
     <section class="flow-sheet" aria-label="공정흐름도 미리보기 및 인쇄">
       <h2>공정흐름도</h2><h3 id="flowDiagramTitle"></h3><p id="flowDiagramRevision" class="flow-document-meta"></p>
       <div id="flowDiagram" class="flow-diagram"></div>
     </section>
+    </div>
+    <h3 class="no-print">개정 이력</h3><div class="flow-scroll no-print"><table><thead><tr><th>개정번호</th><th>등록일 / 적용일</th><th>주요 개정 내용</th><th>등록자</th><th>상태</th><th class="no-print">조회</th></tr></thead><tbody id="flowHistory"></tbody></table></div>
+
   </section>
 </div>
 {% endblock %}
