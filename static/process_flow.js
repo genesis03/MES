@@ -98,9 +98,30 @@ async function history(itemId){
  const all=await request('/api/process-flows'),revs=all.filter(x=>x.item_id===itemId);
  el('flowHistory').innerHTML=revs.map(x=>'<tr><td>'+esc(x.revision_code)+'</td><td>'+esc(x.created_at)+'<br>'+esc(x.activated_at||'미적용')+'</td><td>'+esc(x.change_reason||'최초 등록')+'</td><td>'+esc(x.created_by)+'</td><td>'+esc(label[x.status])+'</td><td><button class="flow-btn light" data-flow-id="'+x.id+'">조회</button></td></tr>').join('');
 }
+function historyValue(change,value){
+ if(/공정 추가|공정 삭제/.test(change.field)&&value){
+  try{const s=JSON.parse(value);return [s.step_no,s.step_name,s.symbol_name?'기호: '+s.symbol_name:'','순서: '+s.sort_order,s.note?'비고: '+s.note:''].filter(Boolean).join(' · ');}catch(_){/* 이전 문자열 기록은 그대로 표시합니다. */}
+ }
+ return String(value??'');
+}
+function historyChanges(log){
+ const grouped=new Map(),priorities={'기호 도형':1,'기호 코드':2,'기호 명칭':3};
+ for(const change of log.changes||[]){
+  const symbol=Object.hasOwn(priorities,change.field),field=symbol?'기호':change.field;
+  const key=JSON.stringify([change.step_no,field]);
+  if(!symbol){grouped.set(key,{...change,field});continue;}
+  const priority=priorities[change.field],previous=grouped.get(key);
+  if(!previous||priority>previous.priority)grouped.set(key,{...change,field,priority});
+ }
+ return Array.from(grouped.values());
+}
 async function correctionHistory(){
  const logs=selected?await request('/api/process-flows/'+selected.id+'/corrections'):[];
- el('flowCorrectionHistory').innerHTML=logs.length?logs.flatMap(log=>log.changes.map(change=>'<tr><td>'+esc(log.corrected_at)+'</td><td>'+esc(log.corrected_by)+'</td><td>'+esc(log.reason)+'</td><td>'+esc(change.step_no||'문서')+' · '+esc(change.field)+'</td><td>'+esc(change.before)+'</td><td>'+esc(change.after)+'</td></tr>')).join(''):'<tr><td colspan="6">수정 이력이 없습니다.</td></tr>';
+ el('flowCorrectionHistory').innerHTML=logs.length?logs.map(log=>{
+  const changes=historyChanges(log);
+  const column=fn=>changes.map(change=>'<div>'+esc(fn(change))+'</div>').join('');
+  return '<tr><td>'+esc(String(log.corrected_at).split('.')[0])+'</td><td>'+esc(log.corrected_by)+'</td><td>'+esc(log.reason)+'</td><td>'+column(change=>(change.step_no||'문서')+' · '+change.field)+'</td><td>'+column(change=>historyValue(change,change.before))+'</td><td>'+column(change=>historyValue(change,change.after))+'</td></tr>';
+ }).join(''):'<tr><td colspan="6">수정 이력이 없습니다.</td></tr>';
 }
 function fill(x){
  el('flowItem').querySelectorAll('[data-historical-item]').forEach(option=>option.remove());

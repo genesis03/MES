@@ -51,8 +51,8 @@ function cell(field,row,index,type='text'){
 }
 function balanceRows(){
  el('fmeaRows').querySelectorAll('tr[data-analysis-row]').forEach(tr=>{
-  let height=112;
-  tr.querySelectorAll('textarea').forEach(area=>{area.style.height='0px';height=Math.max(height,area.scrollHeight+(area.closest('.pf-stack')?42:8));area.style.height='';});
+  let height=88;
+  tr.querySelectorAll('textarea').forEach(area=>{area.style.height='0px';height=Math.max(height,area.scrollHeight+(area.closest('.pf-stack')?30:6));area.style.height='';});
   tr.style.setProperty('--analysis-height',Math.min(height,360)+'px');
  });
 }

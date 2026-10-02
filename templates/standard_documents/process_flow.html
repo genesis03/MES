@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}공정흐름도{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=full-edit-3">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=compact-rows-history-2">{% endblock %}
 {% block content %}
 <div id="flowApp" data-can-write="{{ 'true' if can_write_flow else 'false' }}">
   <div class="flow-head no-print"><h1>공정흐름도</h1>{% if can_write_flow %}<button id="flowNew" class="flow-btn primary no-print">신규 등록</button>{% endif %}</div>
@@ -39,4 +39,4 @@
   </section>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/process_flow.js?v=full-edit-3" defer></script>{% endblock %}
+{% block extra_script %}<script src="/static/process_flow.js?v=compact-rows-history-2" defer></script>{% endblock %}
