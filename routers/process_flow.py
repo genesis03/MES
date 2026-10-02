@@ -10,10 +10,10 @@ from sqlalchemy.orm import Session
 from core.config import BASE_DIR
 from core.database import get_db
 from services.revision_number_service import normalize_revision_code, revision_key
-from core.security import get_current_user, get_current_user_optional
+from core.security import check_admin_permission, get_current_user, get_current_user_optional
 from models.audit_log import AuditLogModel
 from models.fmea import FmeaRow
-from models.models import ItemMasterModel
+from models.models import ItemMasterModel, UserModel
 from models.process_flow import ProcessFlowRevision, ProcessFlowStep, ProcessFlowStepKey
 from services.document_service import actor_name, lock_item
 from services.standard_document_item_service import require_finished_item, selectable_finished_items
@@ -39,6 +39,7 @@ class StepPayload(BaseModel):
 class CreatePayload(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     item_id: int = Field(gt=0)
+    registrant_user_id: int | None = Field(default=None, gt=0)
     revision_code: str = Field(min_length=1, max_length=50)
     _normalize_revision = field_validator("revision_code", mode="before")(normalize_revision_code)
     note: str = Field(default="", max_length=8000)
@@ -58,6 +59,7 @@ class VersionPayload(BaseModel):
 
 
 class RevisePayload(VersionPayload):
+    registrant_user_id: int | None = Field(default=None, gt=0)
     revision_code: str = Field(min_length=1, max_length=50)
     _normalize_revision = field_validator("revision_code", mode="before")(normalize_revision_code)
     change_reason: str = Field(min_length=1, max_length=4000)
@@ -83,6 +85,23 @@ class EditPayload(SavePayload):
 
 class RetirePayload(VersionPayload):
     reason: str = Field(min_length=1, max_length=4000)
+
+
+def _registrant(db, user, selected_id):
+    if not check_admin_permission(user):
+        if selected_id is not None and selected_id != user.id:
+            raise HTTPException(403, "일반 계정은 등록자를 변경할 수 없습니다.")
+        registrant = user
+    else:
+        registrant = db.get(UserModel, selected_id or user.id)
+        if not registrant:
+            raise HTTPException(422, "등록자를 기존 계정에서 선택해 주세요.")
+    name = str(registrant.name or "").strip()
+    if not name:
+        raise HTTPException(422, "등록자 계정에 성명을 먼저 등록해 주세요.")
+    if len(name) > 100:
+        raise HTTPException(422, "등록자 성명은 100자 이내로 등록해 주세요.")
+    return registrant.id, name
 
 
 def _save_steps(db, revision, payload_steps, user):
@@ -137,6 +156,17 @@ def options(db: Session = Depends(get_db), user=Depends(get_current_user)):
             for x in selectable_finished_items(db)]
 
 
+@router.get("/api/process-flows/registrants")
+def registrants(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    require_flow_access(user, "WRITE")
+    can_select = check_admin_permission(user)
+    users = db.scalars(select(UserModel).order_by(UserModel.name, UserModel.id)).all() if can_select else [user]
+    return {"can_select": can_select, "current_user_id": user.id,
+            "current_user_name": str(user.name or "").strip(),
+            "users": [{"id": x.id, "name": str(x.name or "").strip(), "department": x.department or ""}
+                      for x in users if str(x.name or "").strip()]}
+
+
 @router.get("/api/process-flows/symbols")
 def symbols(db: Session = Depends(get_db), user=Depends(get_current_user)):
     require_flow_access(user)
@@ -167,9 +197,11 @@ def create(payload: CreatePayload, db: Session = Depends(get_db), user=Depends(g
     require_finished_item(db, item)
     if db.scalar(select(ProcessFlowRevision.id).where(ProcessFlowRevision.item_id == item.id)):
         raise HTTPException(409, "공정흐름도 이력이 있습니다. 기존 문서에서 개정 등록해 주세요.")
+    registrant_id, registrant_name = _registrant(db, user, payload.registrant_user_id)
     row = ProcessFlowRevision(item_id=item.id, revision_code=payload.revision_code, sequence=1,
         part_no_snapshot=item.part_no, part_name_snapshot=item.part_name, note=payload.note,
-        created_by_id=user.id, created_by=actor_name(user))
+        created_by_id=user.id, created_by=actor_name(user),
+        registrant_user_id=registrant_id, registrant_name=registrant_name)
     db.add(row)
     db.flush()
     _save_steps(db, row, payload.steps, user)
@@ -319,10 +351,12 @@ def revise(revision_id: int, payload: RevisePayload, db: Session = Depends(get_d
         raise HTTPException(409, "작성 중인 초안이 있습니다. 해당 초안을 선택해 주세요.")
     if any(revision_key(x.revision_code) == revision_key(payload.revision_code) for x in revisions):
         raise HTTPException(409, "이미 사용한 개정번호입니다.")
+    registrant_id, registrant_name = _registrant(db, user, payload.registrant_user_id)
     row = ProcessFlowRevision(item_id=item.id, revision_code=payload.revision_code,
         sequence=max(x.sequence for x in revisions) + 1, previous_revision_id=previous.id,
         part_no_snapshot=item.part_no, part_name_snapshot=item.part_name, note=previous.note,
-        change_reason=payload.change_reason, created_by_id=user.id, created_by=actor_name(user))
+        change_reason=payload.change_reason, created_by_id=user.id, created_by=actor_name(user),
+        registrant_user_id=registrant_id, registrant_name=registrant_name)
     db.add(row)
     db.flush()
     for old in flow_steps(db, previous.id):

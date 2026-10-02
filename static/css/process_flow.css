@@ -99,3 +99,27 @@
 #flowCorrectionHistory td{white-space:pre-wrap;overflow-wrap:anywhere;max-width:300px}
 @media screen and (max-width:1200px){.flow-workspace{grid-template-columns:minmax(0,1fr)}}
 @media print{.flow-workspace{display:block}}
+
+/* 등록자 지정 및 선택한 문서의 인쇄 배치 */ 
+.flow-fields{grid-template-columns:minmax(180px,1fr) 160px minmax(150px,.7fr) minmax(180px,1fr)}
+#flowApp [hidden]{display:none!important}
+.flow-print-only{display:none}
+.flow-print-summary table{width:100%;border-collapse:collapse;font-size:11px}
+.flow-print-summary th,.flow-print-summary td{padding:8px;border:1px solid #cbd5e1;text-align:left;overflow-wrap:anywhere}
+.flow-print-summary th{background:#f1f5f9}
+.flow-history-table td:nth-child(2),.flow-history-table td:nth-child(3){white-space:nowrap}
+#flowRevisionDialog select,#flowRevisionDialog textarea,#flowRevisionDialog input[readonly]{width:100%;margin-top:6px;padding:8px;border:1px solid #cbd5e1;border-radius:4px;font-size:13px}
+#flowRevisionDialog textarea{resize:vertical}
+@media screen and (max-width:1000px){.flow-fields{grid-template-columns:1fr}}
+@media print{
+ .flow-print-only{display:block!important}
+ .flow-print-summary{margin:0 0 16px}
+ .flow-history-title{margin:18px 0 8px!important}
+ .flow-history-table{overflow:visible}
+ .flow-history-table table{min-width:0;width:100%;font-size:10px}
+ .flow-history-table th,.flow-history-table td{padding:6px}
+ .flow-history-table thead,.flow-print-summary thead{display:table-header-group}
+ .flow-history-table tr,.flow-print-summary tr{break-inside:avoid;page-break-inside:avoid}
+ .flow-print-summary,.flow-history-title{break-after:avoid;page-break-after:avoid}
+ #flowRevisionDialog{display:none!important}
+}

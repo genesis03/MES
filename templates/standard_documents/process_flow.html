@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}공정흐름도{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=numeric-revision-1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=print-registrant-1">{% endblock %}
 {% block content %}
 <div id="flowApp" data-can-write="{{ 'true' if can_write_flow else 'false' }}">
   <div class="flow-head no-print"><h1>공정흐름도</h1>{% if can_write_flow %}<button id="flowNew" class="flow-btn primary no-print">신규 등록</button>{% endif %}</div>
@@ -13,7 +13,7 @@
   <section id="flowEditor" class="flow-card" hidden>
     <h2 id="flowTitle" class="no-print">신규 공정흐름도</h2>
     <div class="flow-fields no-print">
-      <label>완제품 품목 *<select id="flowItem"></select></label><label>개정번호 *<span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="flowCode" inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력" aria-label="공정흐름도 개정번호 숫자"></span></label><label>비고<textarea id="flowNote" maxlength="8000"></textarea></label>
+      <label>완제품 품목 *<select id="flowItem"></select></label><label>개정번호 *<span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="flowCode" inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력" aria-label="공정흐름도 개정번호 숫자"></span></label><label>등록자<select id="flowRegistrant" aria-label="등록자 선택"></select><input id="flowRegistrantName" readonly aria-label="등록자 성명" hidden></label><label>비고<textarea id="flowNote" maxlength="8000"></textarea></label>
     </div>
     <p id="flowMeta" class="flow-note no-print"></p>
     <div class="flow-tools no-print">
@@ -23,6 +23,9 @@
       <label for="flowCorrectionReason">수정 사유 *</label><textarea id="flowCorrectionReason" maxlength="4000" rows="2"></textarea>
       <p class="flow-note">기호·공정번호·공정명·비고·순서와 공정 추가/삭제를 수정할 수 있습니다. 개정번호는 유지하며 수정 사유·수정자·변경 전후를 기록합니다. 새 개정번호가 필요한 경우에는 개정 등록을 사용해 주세요.</p>
     </div>
+    <section class="flow-print-summary flow-print-only" aria-label="선택한 공정흐름도 문서 정보">
+      <table><thead><tr><th>품번</th><th>품명</th><th>개정번호</th><th>상태</th><th>주요 개정 내용</th><th>등록자 / 등록일</th></tr></thead><tbody id="flowPrintSummary"></tbody></table>
+    </section>
     <div class="flow-workspace">
       <div class="flow-input-pane no-print">
         <div class="flow-scroll no-print"><table class="flow-edit"><thead><tr><th>기호 명칭 / 기호</th><th>공정번호 / 공정명</th><th>비고</th><th>순서 / 삭제</th></tr></thead><tbody id="flowSteps"></tbody></table></div>
@@ -34,9 +37,21 @@
     </section>
     </div>
     <h3 class="no-print">수정 이력 · 선택한 개정</h3><div class="flow-scroll no-print"><table><thead><tr><th>수정일시</th><th>수정자</th><th>수정 사유</th><th>대상 / 항목</th><th>수정 전</th><th>수정 후</th></tr></thead><tbody id="flowCorrectionHistory"></tbody></table></div>
-    <h3 class="no-print">개정 이력</h3><div class="flow-scroll no-print"><table><thead><tr><th>개정번호</th><th>등록일 / 적용일</th><th>주요 개정 내용</th><th>등록자</th><th>상태</th><th class="no-print">조회</th></tr></thead><tbody id="flowHistory"></tbody></table></div>
+    <h3 class="flow-history-title">개정 이력</h3><div class="flow-scroll flow-history-table"><table><thead><tr><th>개정번호</th><th>등록일</th><th>적용일</th><th>주요 개정 내용</th><th>등록자</th><th>상태</th><th class="no-print">조회</th></tr></thead><tbody id="flowHistory"></tbody></table></div>
 
   </section>
+  {% if can_write_flow %}
+  <dialog id="flowRevisionDialog" class="mes-revision-dialog">
+    <form id="flowRevisionForm">
+      <h3>공정흐름도 개정 등록</h3>
+      <label>새 개정번호 *<span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="flowNewRevisionCode" required inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력"></span></label>
+      <label>등록자 *<select id="flowRevisionRegistrant"></select><input id="flowRevisionRegistrantName" readonly hidden></label>
+      <label>주요 개정 내용 *<textarea id="flowRevisionReason" required maxlength="4000" rows="3"></textarea></label>
+      <p id="flowRevisionError" class="flow-error" role="alert"></p>
+      <div class="mes-revision-actions"><button id="flowRevisionCancel" type="button">취소</button><button id="flowRevisionSubmit" type="submit">초안 생성</button></div>
+    </form>
+  </dialog>
+  {% endif %}
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/process_flow.js?v=compact-rows-history-2" defer></script>{% endblock %}
+{% block extra_script %}<script src="/static/process_flow.js?v=print-registrant-1" defer></script>{% endblock %}

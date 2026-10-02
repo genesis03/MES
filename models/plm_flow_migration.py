@@ -2,6 +2,10 @@
 from sqlalchemy import inspect, text
 
 COLUMNS = {
+    "process_flow_revisions": {
+        "registrant_user_id": "INTEGER REFERENCES users(id)",
+        "registrant_name": "VARCHAR(100)",
+    },
     "process_flow_steps": {
         "symbol_code": "VARCHAR(50)",
         "symbol_name_snapshot": "VARCHAR(200)",

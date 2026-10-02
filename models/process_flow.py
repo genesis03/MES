@@ -27,6 +27,8 @@ class ProcessFlowRevision(Base):
     note = Column(Text)
     created_by_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_by = Column(String(100), nullable=False)
+    registrant_user_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"))
+    registrant_name = Column(String(100))
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime)
     activated_by_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"))
