@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from core.database import get_db
+from services.revision_number_service import normalize_revision_code, revision_key
 from services.inspection_standard_access import get_inspection_user, inspection_context
 from models.models import ItemMasterModel
 from models.quality_standard import (
@@ -46,7 +47,7 @@ class StandardItemPayload(BaseModel):
 
 class StandardPayload(BaseModel):
     part_no: str = Field(max_length=80)
-    revision: str = Field(default="Rev.00", max_length=20)
+    revision: str = Field(default="REV.0", max_length=20)
     effective_date: Optional[str] = Field(default=None, max_length=10)
     is_active: str = Field(default="Y", max_length=1)
     note: Optional[str] = None
@@ -325,6 +326,16 @@ def _apply_standard_items(row: QualityInboundStandard, payload_items: list[Stand
         )
 
 
+def _numeric_revision(value: str) -> str:
+    try:
+        revision = normalize_revision_code(value)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if len(revision) > 20:
+        raise HTTPException(422, "개정번호는 숫자 16자리 이내로 입력해 주세요.")
+    return revision
+
+
 def _deactivate_other_revisions(db: Session, item_id: int, exclude_id: Optional[int] = None):
     query = db.query(QualityInboundStandard).filter(
         QualityInboundStandard.item_id == item_id,
@@ -343,16 +354,16 @@ def create_inbound_standard(
     current_user=Depends(get_inspection_user),
 ):
     part_no = payload.part_no.strip()
-    revision = payload.revision.strip()
+    revision = _numeric_revision(payload.revision)
     product = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no, ItemMasterModel.is_active == "Y").first()
     if not product:
         raise HTTPException(422, "사용 가능한 품번을 선택해 주십시오.")
     if not revision:
         raise HTTPException(422, "REV는 필수입니다.")
-    if db.query(QualityInboundStandard.id).filter(
+    codes = db.query(QualityInboundStandard.revision).filter(
         QualityInboundStandard.item_id == product.id,
-        QualityInboundStandard.revision == revision,
-    ).first():
+    ).all()
+    if any(revision_key(code) == revision_key(revision) for (code,) in codes):
         raise HTTPException(409, "해당 품번의 동일 REV 기준서가 이미 존재합니다.")
     _validate_standard_items(db, payload.items)
     active = _yn(payload.is_active, "사용여부")
@@ -385,16 +396,17 @@ def update_inbound_standard(
     if not row:
         raise HTTPException(404, "입고검사 기준서를 찾을 수 없습니다.")
     part_no = payload.part_no.strip()
-    revision = payload.revision.strip()
+    # Preserve the exact historical spelling when the revision number did not change.
+    revision = (row.revision if revision_key(payload.revision) == revision_key(row.revision)
+                else _numeric_revision(payload.revision))
     product = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no, ItemMasterModel.is_active == "Y").first()
     if not product:
         raise HTTPException(422, "사용 가능한 품번을 선택해 주십시오.")
-    duplicate = db.query(QualityInboundStandard.id).filter(
+    codes = db.query(QualityInboundStandard.revision).filter(
         QualityInboundStandard.item_id == product.id,
-        QualityInboundStandard.revision == revision,
         QualityInboundStandard.id != standard_id,
-    ).first()
-    if duplicate:
+    ).all()
+    if any(revision_key(code) == revision_key(revision) for (code,) in codes):
         raise HTTPException(409, "해당 품번의 동일 REV 기준서가 이미 존재합니다.")
     _validate_standard_items(db, payload.items)
     active = _yn(payload.is_active, "사용여부")

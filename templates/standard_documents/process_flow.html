@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}공정흐름도{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=compact-rows-history-2">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=numeric-revision-1">{% endblock %}
 {% block content %}
 <div id="flowApp" data-can-write="{{ 'true' if can_write_flow else 'false' }}">
   <div class="flow-head no-print"><h1>공정흐름도</h1>{% if can_write_flow %}<button id="flowNew" class="flow-btn primary no-print">신규 등록</button>{% endif %}</div>
@@ -13,7 +13,7 @@
   <section id="flowEditor" class="flow-card" hidden>
     <h2 id="flowTitle" class="no-print">신규 공정흐름도</h2>
     <div class="flow-fields no-print">
-      <label>완제품 품목 *<select id="flowItem"></select></label><label>개정번호 *<input id="flowCode" maxlength="50"></label><label>비고<textarea id="flowNote" maxlength="8000"></textarea></label>
+      <label>완제품 품목 *<select id="flowItem"></select></label><label>개정번호 *<span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="flowCode" inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력" aria-label="공정흐름도 개정번호 숫자"></span></label><label>비고<textarea id="flowNote" maxlength="8000"></textarea></label>
     </div>
     <p id="flowMeta" class="flow-note no-print"></p>
     <div class="flow-tools no-print">

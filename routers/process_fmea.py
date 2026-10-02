@@ -3,12 +3,13 @@ from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from core.config import BASE_DIR
 from core.database import get_db
+from services.revision_number_service import normalize_revision_code, revision_key
 from core.security import get_current_user, get_current_user_optional
 from models.document import ItemRevision
 from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
@@ -73,6 +74,7 @@ class CreatePayload(HeaderPayload):
     item_id: int = Field(gt=0)
     document_no: str = Field(min_length=1, max_length=100)
     revision_code: str = Field(min_length=1, max_length=50)
+    _normalize_revision = field_validator("revision_code", mode="before")(normalize_revision_code)
     rows: list[RowPayload] = Field(default_factory=list, max_length=500)
 
 
@@ -88,6 +90,7 @@ class VersionPayload(BaseModel):
 
 class RevisePayload(VersionPayload):
     revision_code: str = Field(min_length=1, max_length=50)
+    _normalize_revision = field_validator("revision_code", mode="before")(normalize_revision_code)
     change_reason: str = Field(min_length=1, max_length=4000)
 
 
@@ -275,7 +278,7 @@ def revise(revision_id: int, payload: RevisePayload, db: Session = Depends(get_d
     revisions = db.scalars(select(FmeaRevision).where(FmeaRevision.document_id == document.id)).all()
     if any(x.status == "DRAFT" for x in revisions):
         raise HTTPException(409, "작성 중인 초안이 있습니다. 해당 초안을 선택해 주세요.")
-    if any(x.revision_code.lower() == payload.revision_code.lower() for x in revisions):
+    if any(revision_key(x.revision_code) == revision_key(payload.revision_code) for x in revisions):
         raise HTTPException(409, "이미 사용한 개정번호입니다.")
     row = FmeaRevision(
         document_id=document.id, revision_code=payload.revision_code,

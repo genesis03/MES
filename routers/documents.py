@@ -3,13 +3,14 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
 from core import config
 from core.database import get_db
+from services.revision_number_service import normalize_revision_code, revision_key
 from core.security import get_current_user, get_current_user_optional
 from models.document import DocumentFile, ItemDocument, ItemRevision
 from models.document_migration import DRAWING_TYPE
@@ -28,6 +29,7 @@ templates = Jinja2Templates(directory=str(config.BASE_DIR / "templates"))
 class RevisionPayload(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
     revision_code: str = Field(min_length=1, max_length=50)
+    _normalize_revision = field_validator("revision_code", mode="before")(normalize_revision_code)
     previous_revision_id: int | None = Field(default=None, gt=0)
     change_reason: str = Field(default="", max_length=4000)
     note: str = Field(default="", max_length=8000)
@@ -155,8 +157,8 @@ def create_revision(item_id: int, payload: RevisionPayload, db: Session = Depend
         raise HTTPException(422, "개정 등록은 이전 Revision을 선택해 주세요.")
     if previous and not payload.change_reason:
         raise HTTPException(422, "개정 사유를 입력해 주세요.")
-    if db.scalar(select(ItemRevision.id).where(ItemRevision.item_id == item_id,
-                                               func.lower(ItemRevision.revision_code) == payload.revision_code.lower())):
+    codes = db.scalars(select(ItemRevision.revision_code).where(ItemRevision.item_id == item_id))
+    if any(revision_key(code) == revision_key(payload.revision_code) for code in codes):
         raise HTTPException(409, "이 품목에 동일 Revision이 이미 등록되어 있습니다.")
     sequence = (db.scalar(select(func.max(ItemRevision.sequence)).where(ItemRevision.item_id == item_id)) or 0) + 1
     row = ItemRevision(item_id=item.id, revision_code=payload.revision_code, sequence=sequence,

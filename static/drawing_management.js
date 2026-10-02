@@ -167,7 +167,7 @@
         event.preventDefault();
         run(async () => {
             const row = await jsonPost(`/api/documents/items/${state.item.item_id}/revisions`, {
-                revision_code: $('drawingRevisionCode').value.trim(), previous_revision_id: state.previousId,
+                revision_code: MesRevisionNumber.read($('drawingRevisionCode')), previous_revision_id: state.previousId,
                 change_reason: $('drawingChangeReason').value.trim(), note: $('drawingRevisionNote').value.trim()});
             $('drawingRevisionDialog').close();
             await loadItems();

@@ -78,7 +78,7 @@ function diagram(){
  const item=items.find(x=>x.id===Number(el('flowItem').value));
  const number=selected?.part_no_snapshot||item?.part_no||'',name=selected?.part_name_snapshot||item?.part_name||'';
  el('flowDiagramTitle').textContent=[number,name].filter(Boolean).join(' · ')||'공정흐름도';
- el('flowDiagramRevision').textContent='공정흐름도 개정번호: '+(selected?.revision_code||el('flowCode').value.trim()||'미입력')+' · '+(selected?label[selected.status]:'작성 중');
+ el('flowDiagramRevision').textContent='공정흐름도 개정번호: '+(selected?.revision_code||(el('flowCode').value.trim()?'REV.'+el('flowCode').value.trim():'미입력'))+' · '+(selected?label[selected.status]:'작성 중');
  el('flowDiagram').innerHTML=steps.length?steps.map(s=>'<div class="flow-diagram-row"><div class="flow-symbol-cell">'+symbolSvg(s.symbol_shape,s.symbol_name)+'</div><div class="flow-diagram-number">'+esc(s.step_no||'미입력')+'</div><div class="flow-diagram-name">'+esc(s.step_name||'공정명 미입력')+(!s.symbol_code?'<small class="flow-note">기호 미지정</small>':'')+'</div></div>').join(''):'<p class="flow-note">공정을 등록해 주세요.</p>';
 }
 function symbolOptions(step){
@@ -128,14 +128,14 @@ function fill(x){
  if(!Array.from(el('flowItem').options).some(option=>option.value===String(x.item_id)))el('flowItem').insertAdjacentHTML('beforeend','<option data-historical-item disabled value="'+Number(x.item_id)+'">'+esc(x.part_no+' · '+x.part_name+' · 기존 이력 조회 전용')+'</option>');
  selected=x;steps=x.steps;dirty=false;correcting=false;el('flowCorrectionReason').value='';el('flowEditor').hidden=false;
  el('flowTitle').textContent=x.part_no+' · '+x.part_name+' · '+x.revision_code+' · '+label[x.status];
- el('flowItem').value=x.item_id;el('flowCode').value=x.revision_code;el('flowNote').value=x.note;
+ el('flowItem').value=x.item_id;MesRevisionNumber.setInput(el('flowCode'),x.revision_code);el('flowNote').value=x.note;
  el('flowMeta').textContent='당시 품목: '+x.part_no_snapshot+' · '+x.part_name_snapshot+' | 등록: '+x.created_by+' · '+x.created_at+(x.retire_reason?' | 폐기 사유: '+x.retire_reason:'')+(x.item_selectable?'':' | 완제품 선택 대상이 아닙니다. 기존 이력은 조회 전용이며 폐기만 가능합니다.');
  renderSteps();
 }
 async function select(id){const x=await request('/api/process-flows/'+id);fill(x);await history(x.item_id);await correctionHistory();}
 if(el('flowNew'))el('flowNew').onclick=()=>{
  if(!abandon())return;
- task(async()=>{el('flowItem').querySelectorAll('[data-historical-item]').forEach(option=>option.remove());selected=null;steps=[];dirty=false;correcting=false;el('flowEditor').hidden=false;el('flowTitle').textContent='신규 공정흐름도';['flowItem','flowCode','flowNote'].forEach(id=>el(id).value='');el('flowMeta').textContent='';el('flowHistory').innerHTML='';el('flowCorrectionHistory').innerHTML='';renderSteps();message('공정번호·공정명을 입력하고 기호를 선택해 주세요. 입력 순서대로 흐름도를 표시합니다.');});
+ task(async()=>{el('flowItem').querySelectorAll('[data-historical-item]').forEach(option=>option.remove());selected=null;steps=[];dirty=false;correcting=false;el('flowEditor').hidden=false;el('flowTitle').textContent='신규 공정흐름도';['flowItem','flowNote'].forEach(id=>el(id).value='');MesRevisionNumber.setInput(el('flowCode'),'');el('flowMeta').textContent='';el('flowHistory').innerHTML='';el('flowCorrectionHistory').innerHTML='';renderSteps();message('공정번호·공정명을 입력하고 기호를 선택해 주세요. 입력 순서대로 흐름도를 표시합니다.');});
 };
 el('flowSearch').onclick=()=>task(list);el('flowReset').onclick=()=>{el('flowKeyword').value='';task(list);};
 el('flowKeyword').onkeydown=e=>{if(e.key==='Enter')task(list);};
@@ -185,7 +185,7 @@ if(el('flowSave'))el('flowSave').onclick=()=>{
  if(!validateSteps())return;
  task(async()=>{
   const body={note:el('flowNote').value,steps:steps.map(s=>({id:s.id||null,step_no:s.step_no,step_name:s.step_name,note:s.note,symbol_code:s.symbol_code||''}))};
-  if(selected)body.version=selected.version;else{body.item_id=Number(el('flowItem').value);body.revision_code=el('flowCode').value;}
+  if(selected)body.version=selected.version;else{body.item_id=Number(el('flowItem').value);body.revision_code=MesRevisionNumber.read(el('flowCode'));}
   const result=await request(selected?'/api/process-flows/'+selected.id:'/api/process-flows',selected?'PUT':'POST',body);
   fill(result);await history(result.item_id);await correctionHistory();await list();message('초안을 저장했습니다. 기호 선택과 내용을 확인한 뒤 현재 사용 적용해 주세요.');
  });
@@ -216,9 +216,11 @@ if(el('flowActivate'))el('flowActivate').onclick=()=>{
  if(!confirm('현재 사용 공정흐름도로 적용할까요? 기존 FMEA는 자동 변경하지 않고 기존 기준을 보존합니다.'))return;
  task(async()=>{const x=await request('/api/process-flows/'+selected.id+'/activate','POST',{version:selected.version});fill(x);await history(x.item_id);await correctionHistory();await list();message('현재 사용으로 적용했습니다. 기존 FMEA는 새 흐름도와 일치 여부를 검토해 개정해 주세요.');});
 };
-if(el('flowRevise'))el('flowRevise').onclick=()=>{
- const code=prompt('새 공정흐름도 개정번호');if(!code?.trim())return;const reason=prompt('주요 개정 내용');if(!reason?.trim())return;
- task(async()=>{const x=await request('/api/process-flows/'+selected.id+'/revise','POST',{version:selected.version,revision_code:code.trim(),change_reason:reason.trim()});fill(x);await history(x.item_id);await correctionHistory();await list();message('기존 공정의 고유 연결과 기호를 보존한 새 초안을 만들었습니다.');});
+if(el('flowRevise'))el('flowRevise').onclick=async()=>{
+ if(busy||!selected)return;
+ const code=await MesRevisionNumber.ask('공정흐름도 개정 등록');if(!code)return;
+ const reason=prompt('주요 개정 내용');if(!reason?.trim())return;
+ task(async()=>{const x=await request('/api/process-flows/'+selected.id+'/revise','POST',{version:selected.version,revision_code:MesRevisionNumber.code(code),change_reason:reason.trim()});fill(x);await history(x.item_id);await correctionHistory();await list();message('기존 공정의 고유 연결과 기호를 보존한 새 초안을 만들었습니다.');});
 };
 if(el('flowRetire'))el('flowRetire').onclick=()=>{
  if(dirty){message('초안을 저장하거나 다시 조회한 뒤 폐기해 주세요.',true);return;}

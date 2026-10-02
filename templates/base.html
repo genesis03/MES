@@ -66,14 +66,19 @@
             color: #cbd5e1;
             font-weight: bold;
         }
-        .session-countdown { color:#94a3b8; font-size:12px; margin:0 0 10px; font-variant-numeric:tabular-nums; }
+        .session-logout-row { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+        .session-countdown { color:#94a3b8; font-size:11px; margin:0; white-space:nowrap; font-variant-numeric:tabular-nums; }
         .session-countdown.is-warning { color:#fbbf24; }
-        .session-warning { display:block; font-size:11px; line-height:1.5; color:#fbbf24; margin:-4px 0 10px; }
+        .session-warning { display:block; font-size:11px; line-height:1.5; color:#fbbf24; margin:6px 0 0; }
         .session-warning[hidden] { display:none; }
         .btn-top-logout {
-            display: block;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            white-space: nowrap;
             text-align: center;
-            padding: 6px 0;
+            padding: 4px 7px;
             background-color: #dc2626;
             color: #ffffff;
             text-decoration: none;
@@ -82,6 +87,19 @@
             font-size: 12px;
         }
         .btn-top-logout:hover { background-color: #b91c1c; }
+        .revision-number-field { display:flex !important; align-items:center; gap:8px; min-width:0; width:100%; }
+        .revision-number-field > .revision-number-prefix { flex:none; font-size:13px; font-weight:600; color:#334155 !important; }
+        .revision-number-field > input { flex:1; min-width:0; width:0 !important; }
+        .revision-number-field.legacy > .revision-number-prefix { display:none; }
+        .mes-revision-dialog { margin:auto; width:min(380px,calc(100vw - 32px)); padding:20px; border:1px solid #cbd5e1; border-radius:8px; color:#1e293b; }
+        .mes-revision-dialog::backdrop { background:rgba(15,23,42,.4); }
+        .mes-revision-dialog h3 { margin-bottom:16px; font-size:17px; }
+        .mes-revision-dialog label { display:block; margin-bottom:16px; font-size:13px; }
+        .mes-revision-dialog .revision-number-field { margin-top:6px; }
+        .mes-revision-dialog input { padding:8px; border:1px solid #cbd5e1; border-radius:4px; font-size:13px; }
+        .mes-revision-actions { display:flex; justify-content:flex-end; gap:8px; }
+        .mes-revision-actions button { padding:7px 12px; border:0; border-radius:4px; background:#e2e8f0; cursor:pointer; }
+        .mes-revision-actions button[type="submit"] { background:#2563eb; color:white; }
 
         .sidebar-menu { list-style: none; padding: 12px 0; flex: 1; }
         .menu-item { display: flex; flex-direction: column; margin-bottom: 4px; }
@@ -227,6 +245,7 @@
             .main-content { padding: 0; overflow: visible; }
         }
     </style>
+    <script src="/static/revision_number.js?v=numeric-revision-1"></script>
     {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -240,9 +259,11 @@
                 <span class="user-name-text">{{ user.username }}</span>
                 <span class="user-role-tag">{{ "관리자" if user.role == "ADMIN" else "일반계정" }}</span>
             </div>
-            <div id="mesSessionCountdown" class="session-countdown" data-username="{{ user.username }}" role="timer" aria-label="자동 로그아웃까지 남은 시간">로그아웃 시간 확인 중…</div>
+            <div class="session-logout-row">
+                <div id="mesSessionCountdown" class="session-countdown" data-username="{{ user.username }}" role="timer" aria-label="자동 로그아웃까지 남은 시간">로그아웃 시간 확인 중…</div>
+                <a href="/logout" class="btn-top-logout">로그아웃</a>
+            </div>
             <small id="mesSessionWarning" class="session-warning" hidden></small>
-            <a href="/logout" class="btn-top-logout">로그아웃</a>
         </div>
         {% endif %}
         <ul class="sidebar-menu">

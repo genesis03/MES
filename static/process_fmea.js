@@ -110,7 +110,7 @@ function fill(detail){
   el('fmeaItemResults').hidden=true;el('fmeaItemResults').innerHTML='';
   selected=detail;rows=detail.rows;currentFlow=detail.flow||null;dirty=false;el('fmeaEditor').hidden=false;
   el('fmeaEditorTitle').textContent=detail.part_no+' · '+detail.part_name+' · 공정 FMEA';
-  el('fmeaItem').value=detail.item_id;el('fmeaNumber').value=detail.document_no;el('fmeaCode').value=detail.revision_code;
+  el('fmeaItem').value=detail.item_id;el('fmeaNumber').value=detail.document_no;MesRevisionNumber.setInput(el('fmeaCode'),detail.revision_code);
   const fields={fmeaCompany:'company',fmeaModelYear:'model_year',fmeaTeam:'team',fmeaAuthor:'prepared_by',fmeaDate:'date_prepared',fmeaNote:'note'};
   Object.entries(fields).forEach(([id,field])=>el(id).value=detail[field]||'');
   el('fmeaOwner').value=detail.process_owner||'';el('fmeaDue').value=detail.completion_due_date||'';el('fmeaMassDate').value=detail.mass_production_date||'';el('fmeaVehicle').value=detail.vehicle_model_snapshot||'';
@@ -135,7 +135,7 @@ async function startNew(){
   el('fmeaItemKeyword').value='';el('fmeaItemDisplay').textContent='선택된 품목 없음';
   el('fmeaItemResults').hidden=true;el('fmeaItemResults').innerHTML='';
   selected=null;rows=[];currentFlow=null;flowChoices=[];dirty=false;el('fmeaEditor').hidden=false;el('fmeaEditorTitle').textContent='신규 공정 FMEA';
-  ['fmeaNumber','fmeaCode','fmeaCompany','fmeaModelYear','fmeaNote'].forEach(id=>el(id).value='');
+  ['fmeaNumber','fmeaCompany','fmeaModelYear','fmeaNote'].forEach(id=>el(id).value='');MesRevisionNumber.setInput(el('fmeaCode'),'');
   el('fmeaItem').value='';el('fmeaTeam').value=root.dataset.team;el('fmeaAuthor').value=root.dataset.author;el('fmeaDate').value=root.dataset.today;
   el('fmeaStatus').textContent='신규 · 초안';el('fmeaRevisionSelect').innerHTML='';el('fmeaHistoryNote').textContent='';el('fmeaChangeReason').textContent='';
   ['fmeaOwner','fmeaDue','fmeaMassDate','fmeaVehicle'].forEach(id=>el(id).value='');
@@ -238,7 +238,7 @@ if(el('fmeaAddRow'))el('fmeaAddRow').addEventListener('click',()=>{if(rows.lengt
 if(el('fmeaSave'))el('fmeaSave').addEventListener('click',()=>task(async()=>{
   const body=payload();let result;
   if(selected){body.version=selected.version;result=await request('/api/process-fmea/revisions/'+selected.id,'PUT',body);}
-  else{body.item_id=Number(el('fmeaItem').value);if(!body.item_id||el('fmeaItemKeyword').value.trim()!==options.items.find(x=>x.id===body.item_id)?.part_no){message('품번 조회 후 완제품을 선택해 주세요.',true);return;}body.document_no=el('fmeaNumber').value;body.revision_code=el('fmeaCode').value;result=await request('/api/process-fmea/documents','POST',body);}
+  else{body.item_id=Number(el('fmeaItem').value);if(!body.item_id||el('fmeaItemKeyword').value.trim()!==options.items.find(x=>x.id===body.item_id)?.part_no){message('품번 조회 후 완제품을 선택해 주세요.',true);return;}body.document_no=el('fmeaNumber').value;body.revision_code=MesRevisionNumber.read(el('fmeaCode'));result=await request('/api/process-fmea/documents','POST',body);}
   // 저장 성공 직후 서버 값을 반영하여 후속 목록 조회 실패가 중복 저장을 만들지 않게 합니다.
   fill(result);await selectRevision(result.id);await list();message('초안을 저장했습니다. 확인 후 현재 사용 적용해 주세요.');
 }));
@@ -247,10 +247,11 @@ if(el('fmeaActivate'))el('fmeaActivate').addEventListener('click',()=>{
   if(!confirm('이 개정을 현재 사용으로 적용할까요? 적용 후 수정은 개정 등록으로만 가능합니다.'))return;
   task(async()=>{const result=await request('/api/process-fmea/revisions/'+selected.id+'/activate','POST',{version:selected.version});fill(result);await selectRevision(result.id);await list();message('현재 사용으로 적용했습니다. 이전 현재 사용본은 구버전으로 보존됩니다.');});
 });
-if(el('fmeaRevise'))el('fmeaRevise').addEventListener('click',()=>{
-  const code=prompt('새 FMEA 개정번호를 입력해 주세요.');if(!code?.trim())return;
+if(el('fmeaRevise'))el('fmeaRevise').addEventListener('click',async()=>{
+  if(busy||!selected)return;
+  const code=await MesRevisionNumber.ask('공정 FMEA 개정 등록');if(!code)return;
   const reason=prompt('개정 사유를 입력해 주세요.');if(!reason?.trim())return;
-  task(async()=>{const result=await request('/api/process-fmea/revisions/'+selected.id+'/revise','POST',{version:selected.version,revision_code:code.trim(),change_reason:reason.trim()});fill(result);await selectRevision(result.id);await list();message('기존 분석표를 복사한 새 초안을 만들었습니다. 내용을 수정하고 저장해 주세요.');});
+  task(async()=>{const result=await request('/api/process-fmea/revisions/'+selected.id+'/revise','POST',{version:selected.version,revision_code:MesRevisionNumber.code(code),change_reason:reason.trim()});fill(result);await selectRevision(result.id);await list();message('기존 분석표를 복사한 새 초안을 만들었습니다. 내용을 수정하고 저장해 주세요.');});
 });
 if(el('fmeaRetire'))el('fmeaRetire').addEventListener('click',()=>{
   if(dirty){message('수정 중인 입력을 저장하거나 다시 조회한 뒤 폐기해 주세요.',true);return;}
