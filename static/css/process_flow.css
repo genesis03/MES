@@ -123,3 +123,18 @@
  .flow-print-summary,.flow-history-title{break-after:avoid;page-break-after:avoid}
  #flowRevisionDialog{display:none!important}
 }
+
+/* FMEA와 동일한 품번 조회 후 완제품 선택 방식 */
+.flow-item-picker{position:relative;min-width:0}
+.flow-item-picker>label{margin-bottom:5px}
+.flow-item-query{display:flex;gap:6px;align-items:center}
+.flow-item-query input{width:100%;min-width:0;flex:1}
+.flow-item-query .flow-btn{flex:none;padding:8px 10px}
+.flow-fields input[type=hidden]{display:none}
+.flow-item-display{margin:6px 0 0;font-size:12px;line-height:1.5;color:#334155;overflow-wrap:anywhere}
+.flow-item-results{position:absolute;top:100%;left:0;z-index:20;background:#fff;border:1px solid #cbd5e1;border-radius:5px;padding:10px;box-shadow:0 4px 12px #0002;width:460px;max-width:calc(100vw - 60px);box-sizing:border-box;max-height:320px;overflow:auto}
+.flow-item-result-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;margin-bottom:8px}
+.flow-item-results table{width:100%;border-collapse:collapse;font-size:12px}
+.flow-item-results th,.flow-item-results td{border:1px solid #dbe2eb;padding:6px;text-align:left;overflow-wrap:anywhere}
+.flow-item-results th{background:#f1f5f9}
+.flow-item-results .flow-btn{min-height:30px;font-size:11px;padding:5px 8px}

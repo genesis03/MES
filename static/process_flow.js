@@ -68,6 +68,8 @@ function controls(){
  if(el('flowCorrectCancel')){el('flowCorrectCancel').hidden=!correcting;el('flowCorrectCancel').disabled=busy;}
  el('flowCorrectionPanel').hidden=!correcting;el('flowCorrectionReason').disabled=busy||!correcting;
  el('flowItem').disabled=!!selected||!edit;el('flowCode').disabled=!!selected||!edit;
+ el('flowItemKeyword').disabled=!!selected||!edit;el('flowItemSearch').disabled=!!selected||!edit;
+ root.querySelectorAll('[data-pick-flow-item]').forEach(x=>x.disabled=!!selected||!edit);
  el('flowRegistrant').disabled=!!selected||!edit||!registrants.can_select;
  if(el('flowSave'))el('flowSave').disabled=!edit||correcting;
  if(el('flowAdd'))el('flowAdd').disabled=!edit;
@@ -146,8 +148,9 @@ async function correctionHistory(){
  }).join(''):'<tr><td colspan="6">수정 이력이 없습니다.</td></tr>';
 }
 function fill(x){
- el('flowItem').querySelectorAll('[data-historical-item]').forEach(option=>option.remove());
- if(!Array.from(el('flowItem').options).some(option=>option.value===String(x.item_id)))el('flowItem').insertAdjacentHTML('beforeend','<option data-historical-item disabled value="'+Number(x.item_id)+'">'+esc(x.part_no+' · '+x.part_name+' · 기존 이력 조회 전용')+'</option>');
+ el('flowItemKeyword').value=x.part_no;
+ el('flowItemDisplay').textContent=x.part_no+' · '+x.part_name+(x.item_selectable?'':' · 기존 이력 조회 전용');
+ el('flowItemResults').hidden=true;el('flowItemResults').innerHTML='';
  selected=x;setRegistrant('flowRegistrant','flowRegistrantName',x);printSummary();steps=x.steps;dirty=false;correcting=false;el('flowCorrectionReason').value='';el('flowEditor').hidden=false;
  el('flowTitle').textContent=x.part_no+' · '+x.part_name+' · '+x.revision_code+' · '+label[x.status];
  el('flowItem').value=x.item_id;MesRevisionNumber.setInput(el('flowCode'),x.revision_code);el('flowNote').value=x.note;
@@ -157,7 +160,7 @@ function fill(x){
 async function select(id){const x=await request('/api/process-flows/'+id);fill(x);await history(x.item_id);await correctionHistory();}
 if(el('flowNew'))el('flowNew').onclick=()=>{
  if(!abandon())return;
- task(async()=>{el('flowItem').querySelectorAll('[data-historical-item]').forEach(option=>option.remove());selected=null;setRegistrant('flowRegistrant','flowRegistrantName');printSummary();steps=[];dirty=false;correcting=false;el('flowEditor').hidden=false;el('flowTitle').textContent='신규 공정흐름도';['flowItem','flowNote'].forEach(id=>el(id).value='');MesRevisionNumber.setInput(el('flowCode'),'');el('flowMeta').textContent='';el('flowHistory').innerHTML='';el('flowCorrectionHistory').innerHTML='';renderSteps();message('공정번호·공정명을 입력하고 기호를 선택해 주세요. 입력 순서대로 흐름도를 표시합니다.');});
+ task(async()=>{el('flowItemKeyword').value='';el('flowItemDisplay').textContent='선택된 품목 없음';el('flowItemResults').hidden=true;el('flowItemResults').innerHTML='';selected=null;setRegistrant('flowRegistrant','flowRegistrantName');printSummary();steps=[];dirty=false;correcting=false;el('flowEditor').hidden=false;el('flowTitle').textContent='신규 공정흐름도';['flowItem','flowNote'].forEach(id=>el(id).value='');MesRevisionNumber.setInput(el('flowCode'),'');el('flowMeta').textContent='';el('flowHistory').innerHTML='';el('flowCorrectionHistory').innerHTML='';renderSteps();message('공정번호·공정명을 입력하고 기호를 선택해 주세요. 입력 순서대로 흐름도를 표시합니다.');});
 };
 el('flowSearch').onclick=()=>task(list);el('flowReset').onclick=()=>{el('flowKeyword').value='';task(list);};
 el('flowKeyword').onkeydown=e=>{if(e.key==='Enter')task(list);};
@@ -179,7 +182,32 @@ el('flowSteps').onchange=e=>{
  step.symbol_code=symbol?.code||'';step.symbol_name=symbol?.name||'';step.symbol_shape=symbol?.shape||'';
  dirty=true;renderSteps();
 };
-root.querySelector('.flow-fields').oninput=()=>{if(textEditable()){dirty=true;diagram();controls();}};
+root.querySelector('.flow-fields').oninput=event=>{if(event.target.id!=='flowItemKeyword'&&textEditable()){dirty=true;diagram();controls();}};
+async function searchItems(){
+ const keyword=el('flowItemKeyword').value.trim();
+ if(!keyword){el('flowItemResults').hidden=true;message('조회할 품번을 입력해 주세요.',true);return;}
+ items=await request('/api/process-flows/options');
+ const key=keyword.toLocaleLowerCase(),matches=items.filter(item=>item.is_active==='Y'&&item.part_no.toLocaleLowerCase().includes(key));
+ el('flowItemResults').hidden=false;
+ el('flowItemResults').innerHTML='<div class="flow-item-result-head"><span>완제품 조회 결과</span><button type="button" id="flowItemResultsClose" class="flow-btn light">닫기</button></div>'+(matches.length?'<table><thead><tr><th>품번</th><th>품명</th><th>선택</th></tr></thead><tbody>'+matches.map(item=>'<tr><td>'+esc(item.part_no)+'</td><td>'+esc(item.part_name)+'</td><td><button type="button" class="flow-btn primary" data-pick-flow-item="'+item.id+'">선택</button></td></tr>').join('')+'</tbody></table>':'<p>일치하는 사용 중인 완제품이 없습니다.</p>');
+}
+el('flowItemSearch').onclick=()=>{if(!selected&&editable()&&!busy)task(searchItems);};
+el('flowItemKeyword').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();if(!selected&&editable()&&!busy)task(searchItems);}};
+el('flowItemKeyword').oninput=()=>{
+ el('flowItemResults').hidden=true;
+ const item=items.find(x=>x.id===Number(el('flowItem').value));
+ if(!selected&&item&&el('flowItemKeyword').value.trim()!==item.part_no){
+  el('flowItem').value='';el('flowItemDisplay').textContent='선택된 품목 없음';dirty=true;diagram();controls();
+ }
+};
+el('flowItemResults').onclick=event=>{
+ if(event.target.closest('#flowItemResultsClose')){el('flowItemResults').hidden=true;return;}
+ const button=event.target.closest('[data-pick-flow-item]');if(!button||selected||!editable()||busy)return;
+ const item=items.find(x=>x.id===Number(button.dataset.pickFlowItem)&&x.is_active==='Y');if(!item)return;
+ el('flowItem').value=item.id;el('flowItemKeyword').value=item.part_no;
+ el('flowItemDisplay').textContent=item.part_no+' · '+item.part_name;
+ el('flowItemResults').hidden=true;dirty=true;diagram();controls();message('완제품을 선택했습니다.');
+};
 function validateSteps(requireSymbols=false){
  clearErrors();const seen=new Set();
  for(let i=0;i<steps.length;i++){
@@ -202,7 +230,10 @@ if(el('flowAdd'))el('flowAdd').onclick=()=>{
 };
 if(el('flowSave'))el('flowSave').onclick=()=>{
  if(!editable()||busy||correcting)return;
- if(!selected&&!Number(el('flowItem').value)){message('완제품 품목을 선택해 주세요.',true);el('flowItem').focus();return;}
+ if(!selected){
+  const item=items.find(x=>x.id===Number(el('flowItem').value)&&x.is_active==='Y');
+  if(!item||el('flowItemKeyword').value.trim()!==item.part_no){message('품번 조회 후 완제품을 선택해 주세요.',true);el('flowItemKeyword').focus();return;}
+ }
  if(!selected&&!el('flowCode').value.trim()){message('공정흐름도 개정번호를 입력해 주세요.',true);el('flowCode').focus();return;}
  if(!validateSteps())return;
  task(async()=>{
@@ -287,7 +318,7 @@ window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.return
 task(async()=>{
  [items,symbols,registrants]=await Promise.all([request('/api/process-flows/options'),request('/api/process-flows/symbols'),write?request('/api/process-flows/registrants'):Promise.resolve(registrants)]);
  setRegistrant('flowRegistrant','flowRegistrantName');
- el('flowItem').innerHTML='<option value="">완제품 품목 선택</option>'+items.map(x=>'<option value="'+x.id+'">'+esc(x.part_no+' · '+x.part_name)+'</option>').join('');
+ el('flowItem').value='';
  ready=true;await list();message('품목별 공정흐름도를 선택하거나 신규 등록해 주세요.');
 });
 })();

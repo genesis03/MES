@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}공정흐름도{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=print-registrant-1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=item-query-1">{% endblock %}
 {% block content %}
 <div id="flowApp" data-can-write="{{ 'true' if can_write_flow else 'false' }}">
   <div class="flow-head no-print"><h1>공정흐름도</h1>{% if can_write_flow %}<button id="flowNew" class="flow-btn primary no-print">신규 등록</button>{% endif %}</div>
@@ -13,7 +13,12 @@
   <section id="flowEditor" class="flow-card" hidden>
     <h2 id="flowTitle" class="no-print">신규 공정흐름도</h2>
     <div class="flow-fields no-print">
-      <label>완제품 품목 *<select id="flowItem"></select></label><label>개정번호 *<span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="flowCode" inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력" aria-label="공정흐름도 개정번호 숫자"></span></label><label>등록자<select id="flowRegistrant" aria-label="등록자 선택"></select><input id="flowRegistrantName" readonly aria-label="등록자 성명" hidden></label><label>비고<textarea id="flowNote" maxlength="8000"></textarea></label>
+      <div class="flow-item-picker">
+        <label for="flowItemKeyword">완제품 품목 *</label>
+        <div class="flow-item-query"><input id="flowItemKeyword" placeholder="품번 입력" autocomplete="off" aria-controls="flowItemResults"><button type="button" id="flowItemSearch" class="flow-btn primary">조회</button></div>
+        <input id="flowItem" type="hidden"><p id="flowItemDisplay" class="flow-item-display" aria-live="polite">선택된 품목 없음</p>
+        <div id="flowItemResults" class="flow-item-results" hidden></div>
+      </div><label>개정번호 *<span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="flowCode" inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력" aria-label="공정흐름도 개정번호 숫자"></span></label><label>등록자<select id="flowRegistrant" aria-label="등록자 선택"></select><input id="flowRegistrantName" readonly aria-label="등록자 성명" hidden></label><label>비고<textarea id="flowNote" maxlength="8000"></textarea></label>
     </div>
     <p id="flowMeta" class="flow-note no-print"></p>
     <div class="flow-tools no-print">
@@ -54,4 +59,4 @@
   {% endif %}
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/process_flow.js?v=print-registrant-1" defer></script>{% endblock %}
+{% block extra_script %}<script src="/static/process_flow.js?v=item-query-1" defer></script>{% endblock %}
