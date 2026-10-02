@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}공정 FMEA{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/process_fmea.css">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/process_fmea.css?v=item-query-stage-1">{% endblock %}
 {% block content %}
 <div id="fmeaApp" data-can-write="{{ 'true' if can_write_fmea else 'false' }}" data-author="{{ default_prepared_by }}" data-team="{{ default_team }}" data-today="{{ today }}">
   <div class="pf-head"><h1>잠재적 고장형태 및 영향분석 (공정 FMEA)</h1>{% if can_write_fmea %}<button class="pf-btn primary" id="fmeaNew">신규 등록</button>{% endif %}</div>
@@ -12,7 +12,12 @@
   <section id="fmeaEditor" class="pf-card" hidden>
     <div class="pf-head"><h2 id="fmeaEditorTitle">신규 공정 FMEA</h2><div class="pf-search"><label for="fmeaRevisionSelect">개정 이력</label><select id="fmeaRevisionSelect"></select><span id="fmeaStatus" class="pf-status"></span></div></div>
     <div class="pf-fields">
-      <label>완제품 품목 *<select id="fmeaItem"></select></label><label>FMEA 번호 *<input id="fmeaNumber" maxlength="100"></label><label>개정번호 *<input id="fmeaCode" maxlength="50" placeholder="개정번호 입력"></label><label>공정책임<input id="fmeaOwner" maxlength="100"></label>
+      <div class="pf-item-picker">
+        <label for="fmeaItemKeyword">완제품 품목 *</label>
+        <div class="pf-item-query"><input id="fmeaItemKeyword" placeholder="품번 입력" autocomplete="off" aria-controls="fmeaItemResults"><button type="button" id="fmeaItemSearch" class="pf-btn primary">조회</button></div>
+        <input id="fmeaItem" type="hidden"><p id="fmeaItemDisplay" class="pf-item-display" aria-live="polite">선택된 품목 없음</p>
+        <div id="fmeaItemResults" class="pf-item-results" hidden></div>
+      </div><label>FMEA 번호 *<input id="fmeaNumber" maxlength="100"></label><label>개정번호 *<input id="fmeaCode" maxlength="50" placeholder="개정번호 입력"></label><label>공정책임<input id="fmeaOwner" maxlength="100"></label>
       <label>회사명<input id="fmeaCompany" maxlength="200"></label><label>적용차종 · 품목마스터<input id="fmeaVehicle" readonly></label><label>완료예정일<input id="fmeaDue" type="date"></label><label>양산적용일<input id="fmeaMassDate" type="date"></label>
       <label>작성자 *<input id="fmeaAuthor" maxlength="100"></label><label>작성일 *<input id="fmeaDate" type="date"></label><label>기준 공정흐름도 개정<select id="fmeaFlow"><option value="">공정흐름도 선택</option></select></label><label>기준 도면 Revision<select id="fmeaBasis"><option value="">연결하지 않음</option></select></label>
       <label class="pf-full">상호기능팀원<textarea id="fmeaTeam" maxlength="200" placeholder="참여 부서와 담당자"></textarea></label><label class="pf-full">모델연도 · 기존 정보 유지<input id="fmeaModelYear" maxlength="100"></label>
@@ -36,4 +41,4 @@
   </section>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/process_fmea.js" defer></script>{% endblock %}
+{% block extra_script %}<script src="/static/process_fmea.js?v=item-query-stage-1" defer></script>{% endblock %}

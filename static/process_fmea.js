@@ -21,6 +21,8 @@ function editable(){return canWrite&&loaded&&(!selected||selected.status==='DRAF
 function updateControls(){
   const write=editable()&&!busy;
   root.querySelectorAll('.pf-fields input,.pf-fields select,.pf-fields textarea,#fmeaRows input,#fmeaRows textarea,#fmeaRows select').forEach(x=>x.disabled=!write);
+  el('fmeaItemKeyword').disabled=!!selected||!write;el('fmeaItemSearch').disabled=!!selected||!write;
+  root.querySelectorAll('[data-pick-item]').forEach(x=>x.disabled=!!selected||!write);
   el('fmeaItem').disabled=!!selected||!write;el('fmeaNumber').disabled=!!selected||!write;el('fmeaCode').disabled=!!selected||!write;
   ['fmeaAddRow','fmeaSave'].forEach(id=>{if(el(id))el(id).disabled=!write;});
   if(el('fmeaActivate'))el('fmeaActivate').disabled=!selected||!write;
@@ -56,7 +58,7 @@ function balanceRows(){
 }
 function renderRows(){
  const stages=currentFlow?.steps||[],html=[];
- const stageCell=(step,count)=>'<td rowspan="'+count+'" class="pf-stage-cell"><strong>'+esc(step.step_no)+'</strong><span>'+esc(step.step_name)+'</span>'+ (canWrite?'<button class="pf-btn light no-print" data-add-flow-row="'+step.id+'">분석행 추가</button>':'')+'</td>';
+ const stageCell=(step,count)=>'<td rowspan="'+count+'" class="pf-stage-cell"><div class="pf-stage-layout"><div class="pf-stage-text"><strong>'+esc(step.step_no)+'</strong><span>'+esc(step.step_name)+'</span></div>'+ (canWrite?'<button type="button" class="pf-btn light no-print pf-stage-add" data-add-flow-row="'+step.id+'">분석행 추가</button>':'')+'</div></td>';
  const render=(row,i,firstCell)=>{
   const na=row.action_not_applicable;
   const actionCheck='<label class="pf-na-check"><input type="checkbox" data-field="action_not_applicable" data-row="'+i+'"'+(na?' checked':'')+'>조치 해당없음</label>';
@@ -103,8 +105,9 @@ async function list(){
   updateControls();
 }
 function fill(detail){
-  el('fmeaItem').querySelectorAll('[data-historical-item]').forEach(option=>option.remove());
-  if(!Array.from(el('fmeaItem').options).some(option=>option.value===String(detail.item_id))){el('fmeaItem').insertAdjacentHTML('beforeend','<option data-historical-item disabled value="'+Number(detail.item_id)+'">'+esc(detail.part_no+' · '+detail.part_name+' · 기존 이력 조회 전용')+'</option>');}
+  el('fmeaItemKeyword').value=detail.part_no;
+  el('fmeaItemDisplay').textContent=detail.part_no+' · '+detail.part_name+(detail.item_selectable?'':' · 기존 이력 조회 전용');
+  el('fmeaItemResults').hidden=true;el('fmeaItemResults').innerHTML='';
   selected=detail;rows=detail.rows;currentFlow=detail.flow||null;dirty=false;el('fmeaEditor').hidden=false;
   el('fmeaEditorTitle').textContent=detail.part_no+' · '+detail.part_name+' · 공정 FMEA';
   el('fmeaItem').value=detail.item_id;el('fmeaNumber').value=detail.document_no;el('fmeaCode').value=detail.revision_code;
@@ -129,7 +132,8 @@ async function selectRevision(revisionId){
   await historyAndChanges(detail,revisions);
 }
 async function startNew(){
-  el('fmeaItem').querySelectorAll('[data-historical-item]').forEach(option=>option.remove());
+  el('fmeaItemKeyword').value='';el('fmeaItemDisplay').textContent='선택된 품목 없음';
+  el('fmeaItemResults').hidden=true;el('fmeaItemResults').innerHTML='';
   selected=null;rows=[];currentFlow=null;flowChoices=[];dirty=false;el('fmeaEditor').hidden=false;el('fmeaEditorTitle').textContent='신규 공정 FMEA';
   ['fmeaNumber','fmeaCode','fmeaCompany','fmeaModelYear','fmeaNote'].forEach(id=>el(id).value='');
   el('fmeaItem').value='';el('fmeaTeam').value=root.dataset.team;el('fmeaAuthor').value=root.dataset.author;el('fmeaDate').value=root.dataset.today;
@@ -156,12 +160,33 @@ el('fmeaReset').addEventListener('click',()=>{el('fmeaKeyword').value='';el('fme
 el('fmeaKeyword').addEventListener('keydown',event=>{if(event.key==='Enter')task(list);});
 el('fmeaList').addEventListener('click',event=>{const button=event.target.closest('[data-select-document]');if(button&&!busy&&abandon())task(async()=>{await selectRevision(Number(button.dataset.revisionId));message('공정 FMEA를 조회했습니다.');});});
 el('fmeaRevisionSelect').addEventListener('change',()=>{const id=Number(el('fmeaRevisionSelect').value);if(!abandon()){el('fmeaRevisionSelect').value=selected.id;return;}task(()=>selectRevision(id));});
-root.querySelector('.pf-fields').addEventListener('input',()=>{if(editable())markDirty();});
-el('fmeaItem').addEventListener('change',()=>task(async()=>{
- const itemId=Number(el('fmeaItem').value);await basisOptions(itemId);await flowOptions(itemId);
- currentFlow=null;el('fmeaVehicle').value=options.items.find(x=>x.id===itemId)?.vehicle_model||'';
- flowWarning();renderRows();markDirty();
-}));
+root.querySelector('.pf-fields').addEventListener('input',event=>{if(event.target.id!=='fmeaItemKeyword'&&editable())markDirty();});
+async function searchItems(){
+ const keyword=el('fmeaItemKeyword').value.trim();
+ if(!keyword){el('fmeaItemResults').hidden=true;message('조회할 품번을 입력해 주세요.',true);return;}
+ options=await request('/api/process-fmea/options');
+ const key=keyword.toLocaleLowerCase(),matches=options.items.filter(item=>item.is_active==='Y'&&item.part_no.toLocaleLowerCase().includes(key));
+ el('fmeaItemResults').hidden=false;
+ el('fmeaItemResults').innerHTML='<div class="pf-item-result-head"><span>완제품 조회 결과</span><button type="button" id="fmeaItemResultsClose" class="pf-btn light">닫기</button></div>'+ (matches.length?'<table><thead><tr><th>품번</th><th>품명</th><th>선택</th></tr></thead><tbody>'+matches.map(item=>'<tr><td>'+esc(item.part_no)+'</td><td>'+esc(item.part_name)+'</td><td><button type="button" class="pf-btn primary" data-pick-item="'+item.id+'">선택</button></td></tr>').join('')+'</tbody></table>':'<p>일치하는 사용 중인 완제품이 없습니다.</p>');
+}
+el('fmeaItemSearch').addEventListener('click',()=>{if(!selected&&editable()&&!busy)task(searchItems);});
+el('fmeaItemKeyword').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();if(!selected&&editable()&&!busy)task(searchItems);}});
+el('fmeaItemKeyword').addEventListener('input',()=>{el('fmeaItemResults').hidden=true;});
+el('fmeaItemResults').addEventListener('click',event=>{
+ if(event.target.closest('#fmeaItemResultsClose')){el('fmeaItemResults').hidden=true;return;}
+ const button=event.target.closest('[data-pick-item]');if(!button||selected||!editable()||busy)return;
+ const item=options.items.find(x=>x.id===Number(button.dataset.pickItem)&&x.is_active==='Y');if(!item)return;
+ const changed=Number(el('fmeaItem').value)!==item.id;
+ if(changed&&rows.length&&!confirm('품목을 변경하면 아직 저장하지 않은 분석행과 공정 선택을 초기화합니다. 변경할까요?'))return;
+ task(async()=>{
+  await basisOptions(item.id);await flowOptions(item.id);
+  el('fmeaItem').value=item.id;el('fmeaItemKeyword').value=item.part_no;
+  el('fmeaItemDisplay').textContent=item.part_no+' · '+item.part_name;
+  el('fmeaItemResults').hidden=true;el('fmeaVehicle').value=item.vehicle_model||'';
+  currentFlow=null;if(changed)rows=[];
+  flowWarning();renderRows();markDirty();message('완제품을 선택했습니다. 기준 공정흐름도를 선택해 주세요.');
+ });
+});
 el('fmeaFlow').addEventListener('change',()=>{
  if(!editable()||busy)return;
  const next=flowChoices.find(x=>x.id===Number(el('fmeaFlow').value))||null;
@@ -213,7 +238,7 @@ if(el('fmeaAddRow'))el('fmeaAddRow').addEventListener('click',()=>{if(rows.lengt
 if(el('fmeaSave'))el('fmeaSave').addEventListener('click',()=>task(async()=>{
   const body=payload();let result;
   if(selected){body.version=selected.version;result=await request('/api/process-fmea/revisions/'+selected.id,'PUT',body);}
-  else{body.item_id=Number(el('fmeaItem').value);body.document_no=el('fmeaNumber').value;body.revision_code=el('fmeaCode').value;result=await request('/api/process-fmea/documents','POST',body);}
+  else{body.item_id=Number(el('fmeaItem').value);if(!body.item_id||el('fmeaItemKeyword').value.trim()!==options.items.find(x=>x.id===body.item_id)?.part_no){message('품번 조회 후 완제품을 선택해 주세요.',true);return;}body.document_no=el('fmeaNumber').value;body.revision_code=el('fmeaCode').value;result=await request('/api/process-fmea/documents','POST',body);}
   // 저장 성공 직후 서버 값을 반영하여 후속 목록 조회 실패가 중복 저장을 만들지 않게 합니다.
   fill(result);await selectRevision(result.id);await list();message('초안을 저장했습니다. 확인 후 현재 사용 적용해 주세요.');
 }));
@@ -235,7 +260,7 @@ if(el('fmeaRetire'))el('fmeaRetire').addEventListener('click',()=>{
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
 task(async()=>{
   options=await request('/api/process-fmea/options');
-  el('fmeaItem').innerHTML='<option value="">완제품 품목 선택</option>'+options.items.map(x=>'<option value="'+x.id+'"'+(x.is_active!=='Y'?' disabled':'')+'>'+esc(x.part_no+' · '+x.part_name+(x.is_active!=='Y'?' · 사용중지':''))+'</option>').join('');
+  el('fmeaItem').value='';
   loaded=true;await list();message('공정흐름도를 먼저 적용한 뒤 FMEA를 작성하세요. 기존 FMEA는 그대로 조회할 수 있습니다.');
 });
 })();
