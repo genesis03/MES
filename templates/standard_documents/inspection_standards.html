@@ -92,7 +92,25 @@
 const DOC_TYPE='{{ document_type }}';const CAN_WRITE={{ 'true' if can_write else 'false' }};
 let current=null,historyRows=[];
 const $=id=>document.getElementById(id);const esc=v=>{const s=document.createElement('span');s.textContent=v??'';return s.innerHTML};
-function api(url,opt){return fetch(url,opt).then(async r=>{const d=await r.json();if(!r.ok)throw new Error(d.detail||'처리 실패');return d})}
+async function api(url,opt){
+  const r=await fetch(url,opt);
+  const body=await r.text();
+  let d=null,validJson=false;
+  if(body.trim()){
+    try{d=JSON.parse(body);validJson=true}catch(e){}
+  }
+  const context=`HTTP ${r.status} · ${new URL(url,window.location.origin).pathname}`;
+  if(!r.ok){
+    const detail=d&&d.detail;
+    const reason=typeof detail==='string'?detail:
+      Array.isArray(detail)?detail.map(x=>x.msg||'입력값을 확인해 주세요.').join(' / '):
+      r.status>=500?'서버 오류가 발생했습니다. 서버 로그를 확인해 주세요.':'요청을 처리하지 못했습니다.';
+    throw new Error(`${reason} (${context})`);
+  }
+  if(r.status===204)return null;
+  if(!validJson)throw new Error(`서버 응답이 JSON 형식이 아닙니다. (${context})`);
+  return d;
+}
 function message(t,ok=false){$('msg').textContent=t||'';$('msg').className='msg '+(t?(ok?'ok':'err'):'')}
 function closeModal(id){$(id).classList.remove('show')}
 function statusText(v){return {DRAFT:'작성중',CURRENT:'현재사용',SUPERSEDED:'이전REV',RETIRED:'폐기'}[v]||v||''}

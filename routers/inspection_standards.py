@@ -310,7 +310,8 @@ def inspection_page(kind: str, request: Request, current_user=Depends(get_curren
 def standard_users(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     if not any(_menu_level(current_user, x) != "NONE" for x in VALID_TYPES):
         raise HTTPException(403, "검사기준서 관리 조회 권한이 없습니다.")
-    rows = db.query(UserModel).filter(UserModel.is_active == True).order_by(UserModel.name, UserModel.username).all()
+    # 사용자 모델에는 활성 여부 컬럼이 없으므로 기존 계정 관리와 동일하게 조회합니다.
+    rows = db.query(UserModel).order_by(UserModel.name, UserModel.username).all()
     return [{"id": x.id, "name": str(x.name or x.username), "username": x.username} for x in rows]
 
 
