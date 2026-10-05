@@ -13,6 +13,7 @@ from core.database import get_db
 from core.security import check_admin_permission, get_current_user, parse_user_permissions
 from models.inspection_standard import InspectionStandard, InspectionStandardItem, InspectionStandardPrecheck
 from models.models import ItemMasterModel, UserModel
+from models.quality_standard import QualityInspectionItemMaster
 from models.process_flow import ProcessFlowRevision, ProcessFlowStep, ProcessFlowStepKey
 from services.revision_number_service import normalize_revision_code, revision_key
 from services.standard_document_item_service import is_selectable_finished_item
@@ -382,6 +383,32 @@ def list_standards(
     rows = query.order_by(InspectionStandard.item_id, InspectionStandard.sequence.desc(), InspectionStandard.id.desc()).all()
     return [_standard_dict(x) for x in rows]
 
+
+
+@router.get("/api/standard-documents/inspection-standards/inspection-item-options")
+def inspection_item_options(
+    document_type: str,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _require_access(current_user, document_type)
+    # 마스터에 그룹 필드가 없으므로 기존 데이터 유형을 임시 선택 분류로 사용합니다.
+    group_labels = {"NUMBER": "치수", "TEXT": "문구", "PASSFAIL": "합부판정"}
+    rows = (
+        db.query(QualityInspectionItemMaster)
+        .filter(QualityInspectionItemMaster.is_active == "Y")
+        .order_by(QualityInspectionItemMaster.sort_order, QualityInspectionItemMaster.item_code)
+        .all()
+    )
+    items = [{
+        "id": x.id,
+        "item_name": x.item_name,
+        "data_type": x.data_type,
+        "group_name": group_labels.get(x.data_type, x.data_type),
+        "inspection_method": x.inspection_method or "",
+        "default_unit": x.default_unit or "",
+    } for x in rows]
+    return {"groups": list(dict.fromkeys(x["group_name"] for x in items)), "items": items}
 
 @router.get("/api/standard-documents/inspection-standards/{standard_id}")
 def get_standard(

@@ -10,7 +10,7 @@
 .lookup-row{display:grid;grid-template-columns:1fr auto;gap:6px}.btn{height:34px;border:0;border-radius:4px;padding:0 12px;font-weight:700;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#334155}.green{background:#15803d;color:#fff}.orange{background:#d97706;color:#fff}.danger{background:#b91c1c;color:#fff}.btn:disabled{opacity:.45;cursor:not-allowed}
 .toolbar{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}.status-badge{display:inline-block;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:800}.DRAFT{background:#fef3c7;color:#92400e}.CURRENT{background:#dcfce7;color:#166534}.SUPERSEDED{background:#e2e8f0;color:#475569}.RETIRED{background:#fee2e2;color:#991b1b}
 .table-wrap{overflow:auto}.is-table{width:100%;border-collapse:collapse;font-size:12px;min-width:1050px}.is-table th,.is-table td{border:1px solid #dbe3ec;padding:6px;text-align:center;vertical-align:middle}.is-table th{background:#f8fafc;color:#475569}.is-table input,.is-table select{width:100%;box-sizing:border-box;height:34px;border:1px solid #cbd5e1;border-radius:3px;padding:0 5px;font-size:12px}.is-table textarea{width:100%;box-sizing:border-box;height:34px;min-height:34px;border:1px solid #cbd5e1;border-radius:3px;padding:6px 5px;font-size:12px;line-height:20px;resize:none;overflow:auto;display:block}
-.inspection-table{table-layout:fixed;min-width:1040px}.inspection-table.show-details{min-width:1580px}.inspection-table th{white-space:nowrap}.inspection-table .detail-col{display:none}.inspection-table.show-details .detail-col{display:table-cell}.inspection-table .col-order{width:48px}.inspection-table .col-group{width:48px}.inspection-table .col-name{width:120px}.inspection-table .col-detail{width:66px}.inspection-table .col-special{width:66px}.inspection-table .col-tool{width:100px}.inspection-table .col-number{width:78px}.inspection-table .col-unit{width:44px}.inspection-table .col-frequency{width:88px}.inspection-table .col-sample{width:76px}.inspection-table .col-record{width:100px}.inspection-table .col-delete{width:52px}.detail-toggle{display:flex;align-items:center;gap:5px;font-size:12px;margin-right:auto}.detail-toggle input{margin:0}.dimension-help{font-size:12px;color:#475569;margin:0 0 8px}.is-field .revision-number-field{height:34px;box-sizing:border-box}.is-field .revision-number-field input{height:100%}.row-actions{display:flex;gap:5px;justify-content:flex-end;margin-bottom:8px}.small{height:29px;padding:0 9px;font-size:11px}.msg{font-size:12px;min-height:18px;margin-top:8px}.ok{color:#15803d}.err{color:#b91c1c}
+.inspection-table{table-layout:fixed;min-width:1160px}.inspection-table.show-details{min-width:1580px}.inspection-table th{white-space:nowrap}.inspection-table .detail-col{display:none}.inspection-table.show-details .detail-col{display:table-cell}.inspection-table .col-order{width:48px}.inspection-table .col-group{width:90px}.inspection-table .col-name{width:120px}.inspection-table .col-detail{width:66px}.inspection-table .col-special{width:66px}.inspection-table .col-tool{width:100px}.inspection-table .col-number{width:78px}.inspection-table .col-unit{width:44px}.inspection-table .col-frequency{width:88px}.inspection-table .col-sample{width:76px}.inspection-table .col-record{width:100px}.inspection-table .col-delete{width:52px}.spec-hint{display:block;text-align:left;font-size:11px;color:#b91c1c;white-space:normal}.spec-hint:empty{display:none}.detail-toggle{display:flex;align-items:center;gap:5px;font-size:12px;margin-right:auto}.detail-toggle input{margin:0}.dimension-help{font-size:12px;color:#475569;margin:0 0 8px}.is-field .revision-number-field{height:34px;box-sizing:border-box}.is-field .revision-number-field input{height:100%}.row-actions{display:flex;gap:5px;justify-content:flex-end;margin-bottom:8px}.small{height:29px;padding:0 9px;font-size:11px}.msg{font-size:12px;min-height:18px;margin-top:8px}.ok{color:#15803d}.err{color:#b91c1c}
 .history{width:100%;border-collapse:collapse;font-size:12px}.history th,.history td{border-bottom:1px solid #e2e8f0;padding:7px;text-align:center}.history th{background:#f8fafc}.history tbody tr{cursor:pointer}.history tbody tr:hover{background:#eff6ff}
 .modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1200}.modal.show{display:flex}.modal-box{width:min(760px,94vw);max-height:88vh;overflow:auto;background:#fff;border-radius:7px}.modal-head{padding:12px 14px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center}.modal-body{padding:14px}.modal-foot{padding:10px 14px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:7px}.close{border:0;background:none;font-size:20px;cursor:pointer}
 .search-grid{display:grid;grid-template-columns:1fr auto;gap:7px;margin-bottom:10px}.search-results{width:100%;border-collapse:collapse;font-size:12px}.search-results th,.search-results td{padding:7px;border-bottom:1px solid #e2e8f0}.search-results tbody tr{cursor:pointer}.search-results tbody tr:hover{background:#eff6ff}
@@ -72,7 +72,7 @@
   <div class="is-card-body">
     <div class="row-actions"><label class="detail-toggle"><input id="showItemDetails" type="checkbox" onchange="toggleItemDetails()" aria-controls="inspectionTable">치수·상세 항목 표시</label>{% if can_write %}<button class="btn secondary small" type="button" onclick="addInspectionItem()">행 추가</button>{% endif %}</div>
     <p id="dimensionHelp" class="dimension-help" hidden>기준치수와 부호를 포함한 공차를 입력하세요. 예: 8.95 ±0.05 → 기준치수 8.95 / 하한공차 -0.05 / 상한공차 +0.05. 허용 치수는 자동 계산됩니다.</p>
-    <div class="table-wrap"><table id="inspectionTable" class="is-table inspection-table"><thead><tr><th class="col-order">순번</th><th class="detail-col col-group">그룹</th><th class="col-name">검사항목</th><th class="detail-col col-detail">상세번호</th><th class="col-special">특별특성</th><th class="col-tool">검사구</th><th>검사규격 / 방법</th><th class="detail-col col-number">기준치수</th><th class="detail-col col-number">하한공차</th><th class="detail-col col-number">상한공차</th><th class="detail-col col-unit">단위</th><th class="col-frequency">검사주기</th><th class="col-sample">검사수량</th><th class="col-record">기록관리</th>{% if can_write %}<th class="col-delete">삭제</th>{% endif %}</tr></thead><tbody id="itemBody"></tbody></table></div>
+    <div class="table-wrap"><table id="inspectionTable" class="is-table inspection-table"><thead><tr><th class="col-order">순번</th><th class="col-group">그룹</th><th class="col-name">검사항목</th><th class="detail-col col-detail">상세번호</th><th class="col-special">특별특성</th><th class="col-tool">검사구</th><th>검사규격 / 방법</th><th class="detail-col col-number">기준치수</th><th class="detail-col col-number">상한공차</th><th class="detail-col col-number">하한공차</th><th class="detail-col col-unit">단위</th><th class="col-frequency">검사주기</th><th class="col-sample">검사수량</th><th class="col-record">기록관리</th>{% if can_write %}<th class="col-delete">삭제</th>{% endif %}</tr></thead><tbody id="itemBody"></tbody></table></div>
   </div>
 </div>
 
@@ -91,7 +91,7 @@
 {% block extra_script %}
 <script>
 const DOC_TYPE='{{ document_type }}';const CAN_WRITE={{ 'true' if can_write else 'false' }};
-let current=null,historyRows=[];
+let current=null,historyRows=[],inspectionItemOptions={groups:[],items:[]};
 const $=id=>document.getElementById(id);const esc=v=>{const s=document.createElement('span');s.textContent=v??'';return s.innerHTML};
 async function api(url,opt){
   const r=await fetch(url,opt);
@@ -121,16 +121,88 @@ function defaultPrechecks(){return[
  {sort_order:2,check_item:'측정기 상태',criteria:'정상 작동 될 것',responsible:'검사원',frequency:'검사 전/매일',abnormal_action:'교체, 기 검사품 확인',note:''}
 ]}
 function precheckRow(x={},idx=0){return `<tr><td><input class="p-sort" type="number" min="1" value="${x.sort_order||idx+1}"></td><td><input class="p-item" value="${esc(x.check_item||'')}"></td><td><textarea class="p-criteria">${esc(x.criteria||'')}</textarea></td><td><input class="p-responsible" value="${esc(x.responsible||'')}"></td><td><input class="p-frequency" value="${esc(x.frequency||'')}"></td><td><textarea class="p-action">${esc(x.abnormal_action||'')}</textarea></td><td><textarea class="p-note">${esc(x.note||'')}</textarea></td>${CAN_WRITE?'<td><button class="btn danger small remove-pre" type="button">삭제</button></td>':''}</tr>`}
+function groupOptions(selected=''){
+  const values=[...inspectionItemOptions.groups];
+  if(selected&&!values.includes(selected))values.push(selected);
+  return '<option value="">선택</option>'+values.map(v=>`<option value="${esc(v)}"${v===selected?' selected':''}>${esc(v)}</option>`).join('');
+}
+function inspectionNameOptions(group='',selected=''){
+  const rows=inspectionItemOptions.items.filter(x=>!group||!inspectionItemOptions.groups.includes(group)||x.group_name===group);
+  let html='<option value="">선택</option>';
+  if(selected&&!rows.some(x=>x.item_name===selected))html+=`<option value="${esc(selected)}" selected>${esc(selected)}</option>`;
+  return html+rows.map(x=>`<option value="${esc(x.item_name)}" data-master-id="${x.id}"${x.item_name===selected?' selected':''}>${esc(x.item_name)}</option>`).join('');
+}
+function selectedInspectionMaster(tr){
+  const option=tr.querySelector('.i-name').selectedOptions[0];
+  return inspectionItemOptions.items.find(x=>String(x.id)===option?.dataset.masterId);
+}
+function isDimensionRow(tr){
+  return tr.querySelector('.i-group').value==='치수'||selectedInspectionMaster(tr)?.data_type==='NUMBER'||tr.querySelector('.i-name').value==='치수';
+}
+function parseDimensionSpec(raw){
+  const value=String(raw||'').normalize('NFKC').trim().replace(/[−–]/g,'-').replace(/\s+/g,'').replace(/^(?:Ø|ø|Φ|φ|⌀)/,'').replace(/mm$/i,'');
+  const number='[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)';
+  const unsigned='(?:\\d+(?:\\.\\d*)?|\\.\\d+)';
+  let match=value.match(new RegExp('^('+number+')(?:±|\\+/-)('+unsigned+')$'));
+  if(match){const nominal=Number(match[1]),t=Number(match[2]);if([nominal,t,nominal-t,nominal+t].every(Number.isFinite))return{nominal,upper:t,lower:-t};return null}
+  match=value.match(new RegExp('^('+number+')([+-]'+unsigned+')/([+-]'+unsigned+')$'));
+  if(match){const nominal=Number(match[1]),a=Number(match[2]),b=Number(match[3]);if([nominal,a,b,nominal+a,nominal+b].every(Number.isFinite))return{nominal,upper:Math.max(a,b),lower:Math.min(a,b)}}
+  return null;
+}
+function syncDimensionSpec(tr,showDetails=true){
+  const hint=tr.querySelector('.spec-hint');
+  if(!isDimensionRow(tr)){delete tr.dataset.dimensionError;hint.textContent='';return}
+  const text=tr.querySelector('.i-spec').value;
+  const parsed=parseDimensionSpec(text);
+  if(!parsed){
+    const invalid=!!tr.dataset.autoSpec||/[±]|\+\s*\/\s*-/.test(text);
+    tr.dataset.dimensionError=invalid?'1':'';
+    hint.textContent=text.trim()?'자동 해석 불가: 규격을 확인하거나 치수·공차를 직접 입력하세요.':'';
+    return;
+  }
+  tr.querySelector('.i-nominal').value=parsed.nominal;
+  tr.querySelector('.i-upper').value=parsed.upper;
+  tr.querySelector('.i-lower').value=parsed.lower;
+  tr.querySelector('.i-upper').dataset.legacyLimit='';
+  tr.querySelector('.i-lower').dataset.legacyLimit='';
+  tr.dataset.autoSpec=text;
+  delete tr.dataset.dimensionError;
+  hint.textContent='';
+  if(showDetails){$('showItemDetails').checked=true;toggleItemDetails()}
+}
+$('itemBody').addEventListener('input',e=>{
+  const tr=e.target.closest('tr');if(!tr)return;
+  if(e.target.matches('.i-spec'))syncDimensionSpec(tr);
+  if(e.target.matches('.i-nominal,.i-upper,.i-lower')){
+    delete tr.dataset.autoSpec;delete tr.dataset.dimensionError;
+    tr.querySelector('.spec-hint').textContent='';
+  }
+});
+$('itemBody').addEventListener('change',e=>{
+  const tr=e.target.closest('tr');if(!tr)return;
+  if(e.target.matches('.i-group')){
+    tr.querySelector('.i-name').innerHTML=inspectionNameOptions(e.target.value,'');
+    syncDimensionSpec(tr);
+  }
+  if(e.target.matches('.i-name')){
+    const master=selectedInspectionMaster(tr);
+    if(master){
+      if(!tr.querySelector('.i-group').value){tr.querySelector('.i-group').innerHTML=groupOptions(master.group_name)}
+      const unit=tr.querySelector('.i-unit');if(!unit.value)unit.value=master.default_unit||'';
+    }
+    syncDimensionSpec(tr);
+  }
+});
 function roundedDimension(value){return Number(value.toPrecision(12))}
 function toleranceValue(nominal,limit){return nominal==null||limit==null?null:roundedDimension(limit-nominal)}
 function dimensionLimit(tr,cls){const field=tr.querySelector(cls),value=field.value;if(value==='')return field.dataset.legacyLimit?Number(field.dataset.legacyLimit):null;const nominal=num(tr,'.i-nominal');if(nominal==null)throw new Error('공차를 입력한 검사항목의 기준치수를 입력해 주세요.');const tolerance=Number(value);if(!Number.isFinite(nominal)||!Number.isFinite(tolerance))throw new Error('기준치수와 공차는 숫자로 입력해 주세요.');const result=roundedDimension(nominal+tolerance);if(!Number.isFinite(result))throw new Error('기준치수와 공차의 입력 범위를 확인해 주세요.');return result}
-function itemRow(x={},idx=0){const val=v=>v==null?'':v;return `<tr><td><input class="i-note" type="hidden" value="${esc(x.note||'')}"><input class="i-sort" type="number" min="1" value="${x.sort_order||idx+1}"></td><td class="detail-col"><input class="i-group" value="${esc(x.inspection_group_no||'')}"></td><td><input class="i-name" value="${esc(x.inspection_item_name||'')}"></td><td class="detail-col"><input class="i-detail" value="${esc(x.detail_no||'')}"></td><td><input class="i-special" value="${esc(x.special_characteristic||'')}"></td><td><input class="i-tool" value="${esc(x.inspection_tool||'')}"></td><td><textarea class="i-spec">${esc(x.spec_text||'')}</textarea></td><td class="detail-col"><input class="i-nominal" type="number" step="any" value="${val(x.nominal_value)}"></td><td class="detail-col"><input class="i-lower" type="number" step="any" value="${val(toleranceValue(x.nominal_value,x.lower_limit))}" data-legacy-limit="${x.nominal_value==null?val(x.lower_limit):''}" title="${x.nominal_value==null&&x.lower_limit!=null?'기존 하한치수: '+esc(x.lower_limit)+' (기준치수·공차 입력 전까지 보존)':'기준치수 대비 하한공차 (예: -0.05)'}"></td><td class="detail-col"><input class="i-upper" type="number" step="any" value="${val(toleranceValue(x.nominal_value,x.upper_limit))}" data-legacy-limit="${x.nominal_value==null?val(x.upper_limit):''}" title="${x.nominal_value==null&&x.upper_limit!=null?'기존 상한치수: '+esc(x.upper_limit)+' (기준치수·공차 입력 전까지 보존)':'기준치수 대비 상한공차 (예: +0.05)'}"></td><td class="detail-col"><input class="i-unit" value="${esc(x.unit||'')}"></td><td><input class="i-frequency" value="${esc(x.inspection_frequency||'')}"></td><td><input class="i-sample" value="${esc(x.sample_qty_text||'')}"></td><td><input class="i-record" value="${esc(x.record_management||'')}"></td>${CAN_WRITE?'<td><button class="btn danger small remove-item" type="button">삭제</button></td>':''}</tr>`}
+function itemRow(x={},idx=0){const val=v=>v==null?'':v;return `<tr><td><input class="i-note" type="hidden" value="${esc(x.note||'')}"><input class="i-sort" type="number" min="1" value="${x.sort_order||idx+1}"></td><td><select class="i-group">${groupOptions(x.inspection_group_no||'')}</select></td><td><select class="i-name">${inspectionNameOptions(x.inspection_group_no||'',x.inspection_item_name||'')}</select></td><td class="detail-col"><input class="i-detail" value="${esc(x.detail_no||'')}"></td><td><input class="i-special" value="${esc(x.special_characteristic||'')}"></td><td><input class="i-tool" value="${esc(x.inspection_tool||'')}"></td><td><textarea class="i-spec" placeholder="치수 예: Ø8±0.05">${esc(x.spec_text||'')}</textarea><span class="spec-hint" role="status"></span></td><td class="detail-col"><input class="i-nominal" type="number" step="any" value="${val(x.nominal_value)}"></td><td class="detail-col"><input class="i-upper" type="number" step="any" value="${val(toleranceValue(x.nominal_value,x.upper_limit))}" data-legacy-limit="${x.nominal_value==null?val(x.upper_limit):''}" title="${x.nominal_value==null&&x.upper_limit!=null?'기존 상한치수: '+esc(x.upper_limit)+' (기준치수·공차 입력 전까지 보존)':'기준치수 대비 상한공차 (예: +0.05)'}"></td><td class="detail-col"><input class="i-lower" type="number" step="any" value="${val(toleranceValue(x.nominal_value,x.lower_limit))}" data-legacy-limit="${x.nominal_value==null?val(x.lower_limit):''}" title="${x.nominal_value==null&&x.lower_limit!=null?'기존 하한치수: '+esc(x.lower_limit)+' (기준치수·공차 입력 전까지 보존)':'기준치수 대비 하한공차 (예: -0.05)'}"></td><td class="detail-col"><input class="i-unit" value="${esc(x.unit||'')}"></td><td><input class="i-frequency" value="${esc(x.inspection_frequency||'')}"></td><td><input class="i-sample" value="${esc(x.sample_qty_text||'')}"></td><td><input class="i-record" value="${esc(x.record_management||'')}"></td>${CAN_WRITE?'<td><button class="btn danger small remove-item" type="button">삭제</button></td>':''}</tr>`}
 function toggleItemDetails(){$('inspectionTable').classList.toggle('show-details',$('showItemDetails').checked);$('dimensionHelp').hidden=!$('showItemDetails').checked}
-function showDetailsForItems(items){$('showItemDetails').checked=items.some(x=>x.inspection_group_no||x.detail_no||x.unit||x.nominal_value!=null||x.lower_limit!=null||x.upper_limit!=null);toggleItemDetails()}
+function showDetailsForItems(items){$('showItemDetails').checked=items.some(x=>x.detail_no||x.unit||x.nominal_value!=null||x.lower_limit!=null||x.upper_limit!=null);toggleItemDetails()}
 function addPrecheck(x={}){$('precheckBody').insertAdjacentHTML('beforeend',precheckRow(x,$('precheckBody').children.length))}
-function addInspectionItem(x={}){$('itemBody').insertAdjacentHTML('beforeend',itemRow(x,$('itemBody').children.length))}
+function addInspectionItem(x={}){$('itemBody').insertAdjacentHTML('beforeend',itemRow(x,$('itemBody').children.length));setEditable(CAN_WRITE&&(!current||current.status==='DRAFT'))}
 $('precheckBody').addEventListener('click',e=>{if(e.target.closest('.remove-pre'))e.target.closest('tr').remove()});$('itemBody').addEventListener('click',e=>{if(e.target.closest('.remove-item'))e.target.closest('tr').remove()});
-function setEditable(editable){document.querySelectorAll('#managementNo,#revision,#effectiveDate,#preparedBy,#reviewedBy,#approvedBy,#changeSummary,#changeReason,#note,#precheckBody input,#precheckBody textarea,#itemBody input,#itemBody textarea').forEach(x=>x.disabled=!editable);if($('processStep'))$('processStep').disabled=!editable||!!current;const note=$('readonlyNote');note.classList.toggle('show',!editable);note.textContent=!editable?(current?.status==='CURRENT'?'현재사용 기준서는 직접 수정할 수 없습니다. 개정 버튼으로 새 REV를 작성해 주세요.':'이전/폐기 기준서는 이력 조회 전용입니다.') : ''}
+function setEditable(editable){document.querySelectorAll('#managementNo,#revision,#effectiveDate,#preparedBy,#reviewedBy,#approvedBy,#changeSummary,#changeReason,#note,#precheckBody input,#precheckBody textarea,#itemBody input,#itemBody select,#itemBody textarea').forEach(x=>x.disabled=!editable);if($('processStep'))$('processStep').disabled=!editable||!!current;const note=$('readonlyNote');note.classList.toggle('show',!editable);note.textContent=!editable?(current?.status==='CURRENT'?'현재사용 기준서는 직접 수정할 수 없습니다. 개정 버튼으로 새 REV를 작성해 주세요.':'이전/폐기 기준서는 이력 조회 전용입니다.') : ''}
 function updateButtons(){if(!CAN_WRITE){setEditable(false);return}const draft=current&&current.status==='DRAFT';$('saveBtn').disabled=!!current&&!draft;$('reviseBtn').disabled=!current||current.status==='DRAFT'||current.status==='RETIRED';$('activateBtn').disabled=!draft;$('deleteBtn').disabled=!draft;setEditable(!current||draft)}
 async function openItemModal(){$('itemKeyword').value='';$('itemSearchBody').innerHTML='';$('itemModal').classList.add('show');await searchItems()}
 async function searchItems(){try{const rows=await api('/api/standard-documents/inspection-standards/items?document_type='+DOC_TYPE+'&keyword='+encodeURIComponent($('itemKeyword').value||''));$('itemSearchBody').innerHTML=rows.length?rows.map(x=>`<tr data-item-id="${x.item_id}"><td>${esc(x.part_no)}</td><td>${esc(x.part_name)}</td></tr>`).join(''):'<tr><td colspan="2">조회 결과가 없습니다.</td></tr>';$('itemSearchBody').querySelectorAll('tr[data-item-id]').forEach((tr,idx)=>{tr.onclick=()=>{const x=rows[idx];selectItem(x.item_id,x.part_no,x.part_name)}})}catch(e){message(e.message)}}
@@ -142,7 +214,7 @@ function collectItems(){return[...$('itemBody').querySelectorAll('tr')].map(tr=>
 function payload(){return{document_type:DOC_TYPE,item_id:Number($('itemId').value),process_flow_step_key_id:DOC_TYPE==='PROCESS'?Number($('processStep').value)||null:null,revision:MesRevisionNumber.read($('revision'),true),management_no:$('managementNo').value.trim()||null,effective_date:$('effectiveDate').value||null,change_summary:$('changeSummary').value.trim()||null,change_reason:$('changeReason').value.trim()||null,note:$('note').value.trim()||null,prepared_by:$('preparedBy').value||null,reviewed_by:$('reviewedBy').value||null,approved_by:$('approvedBy').value||null,prechecks:collectPrechecks(),items:collectItems()}}
 function clearDocumentFields(){current=null;$('standardId').value='';$('managementNo').value='';MesRevisionNumber.setInput($('revision'),'0',true);$('effectiveDate').value='';$('statusName').value='작성중';$('changeSummary').value='';$('changeReason').value='';$('note').value='';['preparedBy','reviewedBy','approvedBy'].forEach(id=>$(id).value='');$('precheckBody').innerHTML='';defaultPrechecks().forEach(addPrecheck);$('itemBody').innerHTML='';showDetailsForItems([]);addInspectionItem();updateButtons();message('')}
 function newStandard(clearItem=true){if(clearItem){$('itemId').value='';$('partNo').value='';$('partName').value='';if($('processStep'))$('processStep').innerHTML='<option value="">품번 선택 후 조회</option>';$('historyBody').innerHTML='<tr><td colspan="7">품번을 선택해 주세요.</td></tr>'}clearDocumentFields()}
-async function saveStandard(){try{const p=payload();if(!p.item_id)throw new Error('품번을 선택해 주세요.');if(DOC_TYPE==='PROCESS'&&!p.process_flow_step_key_id)throw new Error('공정흐름도 단계를 선택해 주세요.');if(!p.items.length)throw new Error('검사항목을 1개 이상 입력해 주세요.');const id=$('standardId').value;const d=await api(id?'/api/standard-documents/inspection-standards/'+id:'/api/standard-documents/inspection-standards',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});await openStandard(d.id);await loadHistory();message('저장했습니다.',true)}catch(e){message(e.message)}}
+async function saveStandard(){try{for(const tr of $('itemBody').querySelectorAll('tr')){if(tr.querySelector('.i-name').value&&tr.dataset.dimensionError==='1')throw new Error('치수 규격을 확인해 주세요. 예: Ø8±0.05. 직접 입력하려면 기준치수와 공차를 수정해 주세요.')}const p=payload();if(!p.item_id)throw new Error('품번을 선택해 주세요.');if(DOC_TYPE==='PROCESS'&&!p.process_flow_step_key_id)throw new Error('공정흐름도 단계를 선택해 주세요.');if(!p.items.length)throw new Error('검사항목을 1개 이상 입력해 주세요.');const id=$('standardId').value;const d=await api(id?'/api/standard-documents/inspection-standards/'+id:'/api/standard-documents/inspection-standards',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});await openStandard(d.id);await loadHistory();message('저장했습니다.',true)}catch(e){message(e.message)}}
 async function loadHistory(){const itemId=Number($('itemId').value);if(!itemId)return;const q=new URLSearchParams({document_type:DOC_TYPE,item_id:String(itemId)});if(DOC_TYPE==='PROCESS'){const k=Number($('processStep').value);if(!k){$('historyBody').innerHTML='<tr><td colspan="7">공정흐름도 단계를 선택해 주세요.</td></tr>';return}q.set('process_flow_step_key_id',String(k))}try{historyRows=await api('/api/standard-documents/inspection-standards?'+q.toString());$('historyBody').innerHTML=historyRows.length?historyRows.map(x=>`<tr onclick="openStandard(${x.id})"><td>${esc(x.revision)}</td><td><span class="status-badge ${x.status}">${statusText(x.status)}</span></td><td>${esc(x.effective_date)}</td><td>${esc(x.change_summary)}</td><td>${esc(x.change_reason)}</td><td>${esc(x.created_by)}</td><td>${esc(x.created_at)}</td></tr>`).join(''):'<tr><td colspan="7">등록된 기준서가 없습니다.</td></tr>'}catch(e){message(e.message)}}
 async function openStandard(id){try{const d=await api('/api/standard-documents/inspection-standards/'+id);current=d;$('standardId').value=d.id;$('itemId').value=d.item_id;$('partNo').value=d.part_no;$('partName').value=d.part_name;if(DOC_TYPE==='PROCESS'){if(!$('processStep').options.length||!$('processStep').querySelector(`option[value="${d.process_flow_step_key_id}"]`))await loadProcessSteps(d.item_id);$('processStep').value=d.process_flow_step_key_id||''}$('managementNo').value=d.management_no||'';MesRevisionNumber.setInput($('revision'),d.revision,true);$('effectiveDate').value=d.effective_date||'';$('statusName').value=statusText(d.status);$('changeSummary').value=d.change_summary||'';$('changeReason').value=d.change_reason||'';$('note').value=d.note||'';$('preparedBy').value=d.prepared_by||'';$('reviewedBy').value=d.reviewed_by||'';$('approvedBy').value=d.approved_by||'';$('precheckBody').innerHTML='';(d.prechecks||[]).forEach(addPrecheck);$('itemBody').innerHTML='';showDetailsForItems(d.items||[]);(d.items||[]).forEach(addInspectionItem);updateButtons();message('')}catch(e){message(e.message)}}
 {% if can_write %}
@@ -151,6 +223,6 @@ async function reviseStandard(){try{const rev=MesRevisionNumber.read($('newRevis
 async function activateStandard(){if(!current||current.status!=='DRAFT'||!confirm('이 REV를 현재사용 기준서로 적용하시겠습니까?'))return;try{const d=await api('/api/standard-documents/inspection-standards/'+current.id+'/activate',{method:'POST'});await openStandard(d.id);await loadHistory();message('현재사용 기준서로 적용했습니다.',true)}catch(e){message(e.message)}}
 async function deleteDraft(){if(!current||current.status!=='DRAFT'||!confirm('작성중 기준서를 삭제하시겠습니까?'))return;try{await api('/api/standard-documents/inspection-standards/'+current.id,{method:'DELETE'});await loadHistory();clearDocumentFields();message('작성중 기준서를 삭제했습니다.',true)}catch(e){message(e.message)}}
 {% endif %}
-(async()=>{try{const users=await api('/api/standard-documents/inspection-standards/users');userOptions(users);newStandard()}catch(e){message(e.message)}})();
+(async()=>{try{const [users,options]=await Promise.all([api('/api/standard-documents/inspection-standards/users'),api('/api/standard-documents/inspection-standards/inspection-item-options?document_type='+DOC_TYPE)]);inspectionItemOptions=options;userOptions(users);newStandard();if(!options.items.length)message('사용 중인 검사항목 마스터가 없습니다. 검사항목 마스터를 등록해 주세요.')}catch(e){message(e.message)}})();
 </script>
 {% endblock %}
