@@ -37,6 +37,7 @@ from models.document import ItemRevision, ItemDocument, DocumentFile
 from models.auth_session import AuthSession
 from models.process_flow import ProcessFlowRevision, ProcessFlowStepKey, ProcessFlowStep
 from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
+from models.inspection_standard import InspectionStandard, InspectionStandardPrecheck, InspectionStandardItem
 
 
 # 신규/수정 업무행은 품번과 함께 영구 item_id를 자동 연결합니다.
@@ -80,6 +81,7 @@ __all__ = [
     "ItemRevision", "ItemDocument", "DocumentFile",
     "ProcessFlowRevision", "ProcessFlowStepKey", "ProcessFlowStep",
     "FmeaDocument", "FmeaRevision", "FmeaRow",
+    "InspectionStandard", "InspectionStandardPrecheck", "InspectionStandardItem",
     "PurchaseOrderMaster", "PurchaseOrderItem", "PurchaseInboundMaster", "PurchaseInboundItem",
     "LotRelationModel", "LotConsumptionModel",
     "ProductionLotModel",
