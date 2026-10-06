@@ -28,9 +28,10 @@
     <p class="pf-sub">검토·승인 결재는 아직 구현하지 않았으며 현재 사용 적용과 구분합니다.</p>
     <details id="fmeaChanges"><summary>선택 개정의 변경 전·후</summary><p id="fmeaDiffWarning" class="pf-warning"></p><div class="pf-scroll"><table class="pf-history"><thead><tr><th>구분</th><th>공정 / 영역</th><th>변경 항목</th><th>변경 전</th><th>변경 후</th></tr></thead><tbody id="fmeaDiffRows"></tbody></table></div></details>
     <div class="pf-toolbar no-print">
-      {% if can_write_fmea %}<button id="fmeaAddRow" class="pf-btn light" hidden>행 추가</button><button id="fmeaSave" class="pf-btn primary">초안 저장</button><button id="fmeaActivate" class="pf-btn primary">현재 사용 적용</button><button id="fmeaRevise" class="pf-btn primary">개정 등록</button><button id="fmeaRetire" class="pf-btn danger">Revision 폐기</button>{% endif %}
+      {% if can_write_fmea %}<button id="fmeaAddRow" class="pf-btn light" hidden>행 추가</button><button id="fmeaImport" class="pf-btn light">엑셀 분석행 불러오기</button><input id="fmeaImportFile" type="file" accept=".xlsx" hidden><button id="fmeaSave" class="pf-btn primary">초안 저장</button><button id="fmeaActivate" class="pf-btn primary">현재 사용 적용</button><button id="fmeaRevise" class="pf-btn primary">개정 등록</button><button id="fmeaRetire" class="pf-btn danger">Revision 폐기</button>{% endif %}
       <a id="fmeaPrint" class="pf-btn light" target="_blank" rel="noopener noreferrer" aria-disabled="true">인쇄</a>
     </div>
+    <p class="pf-sub">엑셀은 갑지의 분석표만 읽습니다. 상단 기본정보·개정 이력과 을지·병지는 제외합니다. 오류가 있으면 전체 불러오기를 취소하며, 검증 성공 시 현재 초안의 분석행을 교체합니다. 확인 후 초안 저장해 주세요.</p>
     <p class="pf-sub">공정번호·공정명·순서는 선택한 공정흐름도와 같습니다. 같은 공정의 고장 형태는 분석행을 추가해 작성합니다. 미평가와 조치 해당없음은 구분합니다.</p>
     <div class="pf-scroll"><table class="pf-analysis">
       <colgroup><col class="pf-process-col"><col class="pf-text-col" span="3"><col class="pf-score-col" span="2"><col class="pf-text-col"><col class="pf-score-col"><col class="pf-text-col" span="2"><col class="pf-score-col" span="2"><col class="pf-text-col" span="3"><col class="pf-score-col" span="4"><col class="pf-text-col"><col class="pf-score-col"></colgroup>
@@ -41,4 +42,4 @@
   </section>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/process_fmea.js?v=compact-rows-history-2" defer></script>{% endblock %}
+{% block extra_script %}<script src="/static/process_fmea.js?v=excel-analysis-import-3" defer></script>{% endblock %}

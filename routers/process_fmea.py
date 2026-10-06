@@ -1,15 +1,16 @@
 import json
 from datetime import date, datetime
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from core.config import BASE_DIR
 from core.database import get_db
 from services.revision_number_service import normalize_revision_code, revision_key
+from services.fmea_excel_import import FmeaImportError, MAX_FILE_BYTES, parse_company_fmea
 from core.security import get_current_user, get_current_user_optional
 from models.document import ItemRevision
 from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
@@ -38,6 +39,7 @@ class HeaderPayload(BaseModel):
     basis_item_revision_id: int | None = Field(default=None, gt=0)
     note: str = Field(default="", max_length=8000)
     flow_revision_id: int | None = Field(default=None, gt=0)
+    import_flow_version: int | None = Field(default=None, gt=0)
     process_owner: str = Field(default="", max_length=100)
     completion_due_date: date | None = None
     mass_production_date: date | None = None
@@ -107,7 +109,11 @@ def _header(db, revision, item, payload):
     revision.basis_item_revision_id = basis.id if basis else None
     revision.basis_revision_snapshot = basis.revision_code if basis else None
     if payload.flow_revision_id:
-        usable_flow(db, item.id, payload.flow_revision_id)
+        flow = usable_flow(db, item.id, payload.flow_revision_id)
+        if payload.import_flow_version is not None and (flow.version != payload.import_flow_version or flow.status != "CURRENT"):
+            raise HTTPException(409, "엑셀 검증 이후 공정흐름도가 변경되었습니다. 최신 공정흐름도를 조회하고 파일을 다시 불러와 주세요.")
+    elif payload.import_flow_version is not None:
+        raise HTTPException(422, "엑셀 분석행의 기준 공정흐름도를 선택해 주세요.")
     revision.flow_revision_id = payload.flow_revision_id
     revision.vehicle_model_snapshot = item.vehicle_model
     revision.part_no_snapshot, revision.part_name_snapshot = item.part_no, item.part_name
@@ -183,6 +189,45 @@ def drawing_revisions(item_id: int, db: Session = Depends(get_db), user=Depends(
     return [{"id": x.id, "revision_code": x.revision_code, "status": x.status}
             for x in db.scalars(select(ItemRevision).where(ItemRevision.item_id == item_id,
                 ItemRevision.status != "RETIRED").order_by(ItemRevision.sequence.desc()))]
+
+
+@router.post("/api/process-fmea/import-excel")
+def import_excel(
+    file: UploadFile = File(...), item_id: int = Form(..., gt=0),
+    flow_revision_id: int = Form(..., gt=0), flow_version: int = Form(..., gt=0),
+    revision_id: int | None = Form(default=None, gt=0),
+    revision_version: int | None = Form(default=None, gt=0),
+    db: Session = Depends(get_db), user=Depends(get_current_user),
+):
+    """Validate all 갑지 rows; return draft input only, with no database/file writes."""
+    require_fmea_access(user, "WRITE")
+    item = db.get(ItemMasterModel, item_id)
+    if not item:
+        raise HTTPException(404, "품목을 찾을 수 없습니다.")
+    require_finished_item(db, item)
+    if revision_id:
+        revision = get_revision(db, revision_id)
+        document = db.get(FmeaDocument, revision.document_id)
+        if document.item_id != item_id or revision.status != "DRAFT":
+            raise HTTPException(409, "같은 품목의 FMEA 초안에서만 파일을 불러올 수 있습니다.")
+        if revision.version != revision_version:
+            raise HTTPException(409, "FMEA 초안이 변경되었습니다. 다시 조회해 주세요.")
+    flow = usable_flow(db, item_id, flow_revision_id)
+    if flow.status != "CURRENT" or flow.version != flow_version:
+        raise HTTPException(409, "최신 현재 사용 공정흐름도를 조회한 뒤 파일을 불러와 주세요.")
+    if not (file.filename or "").lower().endswith(".xlsx"):
+        raise HTTPException(422, "매크로 없는 .xlsx 파일만 불러올 수 있습니다.")
+    try:
+        content = file.file.read(MAX_FILE_BYTES + 1)
+        parsed = parse_company_fmea(content, flow_steps(db, flow.id))
+        result = [RowPayload.model_validate(row).model_dump(mode="json") for row in parsed]
+    except FmeaImportError as exc:
+        raise HTTPException(422, detail={"message": str(exc), "errors": exc.errors}) from None
+    except ValidationError:
+        raise HTTPException(422, "분석행의 입력값이 FMEA 입력 규칙과 일치하지 않습니다. 파일을 확인해 주세요.") from None
+    finally:
+        file.file.close()
+    return {"sheet": "갑지", "row_count": len(result), "flow_version": flow.version, "rows": result}
 
 
 @router.get("/api/process-fmea/documents")
