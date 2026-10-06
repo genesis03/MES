@@ -139,11 +139,18 @@
 .flow-item-results th{background:#f1f5f9}
 .flow-item-results .flow-btn{min-height:30px;font-size:11px;padding:5px 8px}
 
-/* 조작 버튼을 각 행 맨 앞에 두고 이동한 공정을 강조합니다. */
-.flow-input-pane .flow-edit th:nth-child(1),.flow-input-pane .flow-edit td:nth-child(1){width:153px}
+
+/* 선택한 공정을 표 상단의 공통 아이콘으로 이동하거나 삭제합니다. */
+.flow-input-pane .flow-edit{min-width:calc(var(--flow-table-min,816px) - 105px)}
+.flow-input-pane .flow-edit th:nth-child(1),.flow-input-pane .flow-edit td:nth-child(1){width:48px;text-align:center}
 .flow-input-pane .flow-edit th:nth-child(2),.flow-input-pane .flow-edit td:nth-child(2){width:var(--flow-symbol-width,287px)}
 .flow-input-pane .flow-edit th:nth-child(3),.flow-input-pane .flow-edit td:nth-child(3){width:305px}
 .flow-input-pane .flow-edit th:nth-child(4),.flow-input-pane .flow-edit td:nth-child(4){width:var(--flow-note-width,106px)}
-.flow-input-pane .flow-edit .flow-row-actions{vertical-align:top}
+.flow-input-pane .flow-edit input[type=checkbox]{display:inline-block;width:18px;height:18px;min-height:0;margin:0;padding:0;vertical-align:middle;cursor:pointer}
+.flow-input-pane .flow-edit input[type=checkbox]:disabled{cursor:not-allowed}
 .flow-input-pane .flow-edit .flow-step-active>td{background:#eff6ff}
 .flow-input-pane .flow-edit .flow-step-active>td:first-child{box-shadow:inset 3px 0 #2563eb}
+.flow-selection-tools{margin-bottom:8px}
+.flow-selection-tools .flow-note{margin:0 0 0 4px}
+.flow-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;padding:6px}
+.flow-icon-btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
