@@ -13,22 +13,8 @@ router = APIRouter(tags=["Pages"])
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 def get_first_accessible_url(user: UserModel) -> Optional[str]:
-    """사용자가 접근 가능한 최초의 메뉴 URL을 탐색하여 반환"""
-    if str(user.role).strip().upper() == "ADMIN":
-        return "/shipping/history"
-
-    menu_checks = [
-        ("history", "/shipping/history"),
-        ("print", "/shipping/print"),
-        ("manual", "/shipping/manual"),
-        ("verify", "/shipping/verify")
-    ]
-
-    for child_menu, url in menu_checks:
-        if check_permission(user, "shipping", child_menu, "READ"):
-            return url
-
-    return None
+    """메뉴 접근 거부 후에도 공통 진입 화면에서 사이드바 순서와 권한을 적용합니다."""
+    return "/" if user else None
 
 def handle_unauthorized_access(user: UserModel):
     """권한 부족 시 사용 가능한 메뉴로 복귀시키거나, 권한이 전무할 경우 로그아웃 처리"""
@@ -53,11 +39,12 @@ async def dispatch_entry_point(request: Request, db: Session = Depends(get_db)):
     if not user:
         return RedirectResponse(url="/login", status_code=303)
 
-    target_url = get_first_accessible_url(user)
-    if target_url:
-        return RedirectResponse(url=target_url, status_code=303)
-
-    return handle_unauthorized_access(user)
+    # base.html의 권한 필터가 적용된 후 실제 사이드바의 첫 메뉴로 이동합니다.
+    return templates.TemplateResponse(
+        request=request,
+        name="entry.html",
+        context={"user": user},
+    )
 
 # ==============================================================================
 # 2. 개별 업무 화면 라우터

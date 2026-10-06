@@ -18,7 +18,7 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 async def login_page(request: Request, db: Session = Depends(get_db)):
     user = get_current_user_optional(request, db)
     if user:
-        return RedirectResponse(url="/shipping", status_code=303)
+        return RedirectResponse(url="/", status_code=303)
     return templates.TemplateResponse(request=request, name="login.html", context={})
 
 @router.post("/api/login")

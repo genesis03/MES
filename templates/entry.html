@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}생산관리시스템{% endblock %}
+{% block content %}
+<div role="status">
+    <p id="entryStatus">첫 메뉴로 이동 중입니다.</p>
+    <a id="entryLogout" href="/logout" hidden>로그아웃</a>
+</div>
+{% endblock %}
+{% block extra_script %}
+<script>
+function firstAccessibleMenuUrl() {
+    const links = document.querySelectorAll('.sidebar-menu .submenu a[href]');
+    for (const link of links) {
+        const menu = link.closest('.menu-item');
+        // 접힌 아코디언의 하위 메뉴도 이동 대상에 포함합니다.
+        if (!menu || link.style.display === 'none' || menu.style.display === 'none') continue;
+        const href = link.getAttribute('href') || '';
+        if (href.startsWith('/') && !href.startsWith('//') && href !== '/' && href !== '/shipping') {
+            return href;
+        }
+    }
+    return null;
+}
+document.addEventListener('DOMContentLoaded', function () {
+    // base.html의 applyMenuAccess() 실행 뒤 필터링된 메뉴 순서를 사용합니다.
+    const target = firstAccessibleMenuUrl();
+    if (target) {
+        window.location.replace(target);
+        return;
+    }
+    document.getElementById('entryStatus').textContent = '부여된 시스템 메뉴 권한이 없습니다. 관리자에게 문의해 주세요.';
+    document.getElementById('entryLogout').hidden = false;
+});
+</script>
+{% endblock %}
