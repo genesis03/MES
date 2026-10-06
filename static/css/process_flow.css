@@ -138,3 +138,12 @@
 .flow-item-results th,.flow-item-results td{border:1px solid #dbe2eb;padding:6px;text-align:left;overflow-wrap:anywhere}
 .flow-item-results th{background:#f1f5f9}
 .flow-item-results .flow-btn{min-height:30px;font-size:11px;padding:5px 8px}
+
+/* 조작 버튼을 각 행 맨 앞에 두고 이동한 공정을 강조합니다. */
+.flow-input-pane .flow-edit th:nth-child(1),.flow-input-pane .flow-edit td:nth-child(1){width:153px}
+.flow-input-pane .flow-edit th:nth-child(2),.flow-input-pane .flow-edit td:nth-child(2){width:var(--flow-symbol-width,287px)}
+.flow-input-pane .flow-edit th:nth-child(3),.flow-input-pane .flow-edit td:nth-child(3){width:305px}
+.flow-input-pane .flow-edit th:nth-child(4),.flow-input-pane .flow-edit td:nth-child(4){width:var(--flow-note-width,106px)}
+.flow-input-pane .flow-edit .flow-row-actions{vertical-align:top}
+.flow-input-pane .flow-edit .flow-step-active>td{background:#eff6ff}
+.flow-input-pane .flow-edit .flow-step-active>td:first-child{box-shadow:inset 3px 0 #2563eb}

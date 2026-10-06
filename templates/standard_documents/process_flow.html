@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}공정흐름도{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=item-query-1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=row-actions-first-1">{% endblock %}
 {% block content %}
 <div id="flowApp" data-can-write="{{ 'true' if can_write_flow else 'false' }}">
   <div class="flow-head no-print"><h1>공정흐름도</h1>{% if can_write_flow %}<button id="flowNew" class="flow-btn primary no-print">신규 등록</button>{% endif %}</div>
@@ -33,7 +33,7 @@
     </section>
     <div class="flow-workspace">
       <div class="flow-input-pane no-print">
-        <div class="flow-scroll no-print"><table class="flow-edit"><thead><tr><th>기호 명칭 / 기호</th><th>공정번호 / 공정명</th><th>비고</th><th>순서 / 삭제</th></tr></thead><tbody id="flowSteps"></tbody></table></div>
+        <div class="flow-scroll no-print"><table class="flow-edit"><thead><tr><th>위 / 아래 / 삭제</th><th>기호 명칭 / 기호</th><th>공정번호 / 공정명</th><th>비고</th></tr></thead><tbody id="flowSteps"></tbody></table></div>
         <p class="flow-note">기호 명칭을 선택하면 미리보기에 자동 표시됩니다. 기존 기호 미지정 공정은 초안 또는 새 개정에서 선택해 주세요.</p>
       </div>
     <section class="flow-sheet" aria-label="공정흐름도 미리보기 및 인쇄">
@@ -59,4 +59,4 @@
   {% endif %}
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/process_flow.js?v=item-query-1" defer></script>{% endblock %}
+{% block extra_script %}<script src="/static/process_flow.js?v=row-actions-first-1" defer></script>{% endblock %}
