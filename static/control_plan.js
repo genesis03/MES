@@ -48,13 +48,18 @@ function render(){
      tr.append(td);
     }
    }
-   rowInput(tr,row,'equipment','설비명');rowInput(tr,row,'item_no','관리항목 NO');rowInput(tr,row,'product','제품 관리항목');rowInput(tr,row,'process','공정 관리항목');rowInput(tr,row,'classification','특별특성');
+   if(!index){
+    const td=document.createElement('td');td.rowSpan=grouped.length;td.className='cp-step cp-step-equipment';td.dataset.stepId=step.id;
+    const el=document.createElement('textarea');el.value=Array.from(new Set(grouped.map(r=>(r.equipment||'').trim()).filter(Boolean))).join('\n');el.maxLength=4000;el.dataset.field='equipment';el.setAttribute('aria-label',step.step_no+' 공정 설비명');
+    el.addEventListener('input',()=>{grouped.forEach(r=>r.equipment=el.value);dirty=true;refreshControls();});td.append(el);tr.append(td);
+   }
+   rowInput(tr,row,'item_no','관리항목 NO');rowInput(tr,row,'product','제품 관리항목');rowInput(tr,row,'process','공정 관리항목');rowInput(tr,row,'classification','특별특성');
    rowInput(tr,row,'fool_proof','F/P','checkbox');rowInput(tr,row,'automatic','자동검사','checkbox');
    ['specification','method','sample_size','sample_frequency'].forEach((f,i)=>rowInput(tr,row,f,['규격','확인방법','샘플 크기','샘플 주기'][i]));rowInput(tr,row,'control_method','관리방안','text',2);
    ['material','production','quality','engineering'].forEach((f,i)=>rowInput(tr,row,f,['자재','생산','QC','기술'][i],'checkbox'));
    rowInput(tr,row,'reaction','이상 발생시 조치사항');rowInput(tr,row,'note','비고');
    const actions=document.createElement('td');actions.className='cp-actions';
-   for(const [label,action] of [['추가',()=>{const added=emptyRow(step);['sub','main','outside'].forEach(field=>added[field]=grouped.find(r=>r[field])?.[field]||'');rows.splice(rows.indexOf(row)+1,0,added);}],['삭제',()=>{rows.splice(rows.indexOf(row),1);}]] ){
+   for(const [label,action] of [['추가',()=>{const added=emptyRow(step);added.equipment=row.equipment||'';['sub','main','outside'].forEach(field=>added[field]=grouped.find(r=>r[field])?.[field]||'');rows.splice(rows.indexOf(row)+1,0,added);}],['삭제',()=>{rows.splice(rows.indexOf(row),1);}]] ){
     const btn=document.createElement('button');btn.type='button';btn.textContent=label;btn.onclick=()=>{action();dirty=true;render();};actions.append(btn);
    }
    tr.append(actions);tbody.append(tr);
