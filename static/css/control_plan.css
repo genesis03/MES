@@ -86,9 +86,12 @@
 .cp-scroll{overflow:visible}.cp-paper{min-width:0}.cp-header-scroll{overflow:auto}.cp-form{min-width:1212px}.cp-analysis .flow-symbol{width:28px;height:28px;display:inline-block}.cp-analysis .flow-symbol-empty{color:#64748b}
 @media print{.cp-header-scroll{overflow:visible}.cp-form{min-width:0}.cp-analysis .flow-symbol{width:18px;height:18px}}
 
-/* Keep the other columns at their previous widths; shrink only the first four. */
-.cp-analysis .cp-compact-col{width:2.564102564%}.cp-analysis .cp-standard-col,.cp-analysis .cp-action-col{width:4.273504274%}.cp-analysis td.cp-step-equipment,.cp-analysis .cp-step-equipment textarea{text-align:left}
-@media print{.cp-analysis{width:93.333333333%}.cp-analysis .cp-compact-col{width:2.678571429%}.cp-analysis .cp-standard-col{width:4.464285714%}.cp-analysis .cp-action-col{width:0}}
+/* Reference-image ratios stay identical across screen and print. The screen
+   adds a separate 100-unit editing column, excluded from printed output. */
+.cp-analysis{--cp-column-total:2080}
+.cp-analysis col{width:calc(100% * var(--cp-column-weight) / var(--cp-column-total))}
+.cp-analysis td.cp-step-equipment,.cp-analysis .cp-step-equipment textarea{text-align:left}
+@media print{.cp-analysis{--cp-column-total:1980;width:93.333333333%}.cp-analysis .cp-action-col{width:0}}
 
 /* The company form uses the same connected header grid on screen and paper. */
 .cp-paper{--cp-form-line:#111;--cp-form-label:#ffd09d}
