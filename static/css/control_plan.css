@@ -119,6 +119,21 @@
 .cp-customer-line label>span{background:var(--cp-form-label);align-self:stretch;display:flex;align-items:center;padding:5px;border-right:1px solid var(--cp-form-line);white-space:nowrap}
 .cp-customer-line input,.cp-customer-line textarea{border:0!important;border-radius:0!important;background:#fff;resize:none}
 .cp-header-value{display:none}
+/* Use the same fixed grid tracks in all three header sections. Native table
+   rows otherwise grow to fit date controls and drift from the merged cells. */
+.cp-revisions{display:grid;grid-template-columns:32px 108px minmax(0,1fr) repeat(3,40px);grid-template-rows:repeat(7,var(--cp-row-height));height:calc(7 * var(--cp-row-height));border:0}
+.cp-revisions colgroup{display:none}
+.cp-revisions thead,.cp-revisions tbody,.cp-revisions tr,.cp-approval table thead,.cp-approval table tbody,.cp-approval table tr{display:contents}
+.cp-revisions th,.cp-revisions td,.cp-approval table th,.cp-approval table td{min-width:0;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;border-width:0 1px 1px 0;box-sizing:border-box}
+.cp-revisions thead th,.cp-approval table thead th{border-top-width:1px}
+.cp-revisions th:first-child,.cp-approval table th:first-child{border-left-width:1px;width:auto}
+.cp-approval table{display:grid;grid-template-columns:30px repeat(3,minmax(0,1fr));grid-template-rows:var(--cp-row-height) calc(4 * var(--cp-row-height)) var(--cp-row-height);height:calc(6 * var(--cp-row-height));border:0}
+.cp-approval table tbody tr:first-child th{align-items:flex-start;padding-top:8px}
+.cp-revisions input,.cp-revisions textarea,.cp-approval input,.cp-approval textarea{display:block;line-height:16px;min-height:0!important;max-height:100%;margin:0}
+.cp-revisions input,.cp-revisions textarea,.cp-approval input{height:calc(var(--cp-row-height) - 5px)!important}
+.cp-approval textarea[name$=_signature]{height:100%}
+.cp-established{min-width:0;min-height:0;overflow:hidden;box-sizing:border-box}
+.cp-revisions .cp-header-value,.cp-approval .cp-header-value{max-width:100%;max-height:100%;overflow:hidden}
 /* Compact the header rows and give the revision reason 60% of its former space. */
 .cp-header-grid{--cp-row-height:26.4px;grid-template-columns:35% calc(27.6% + 104px) minmax(0,1fr)}
 .cp-revisions input,.cp-revisions textarea,.cp-approval input,.cp-established input{min-height:0!important;height:100%;box-sizing:border-box}
@@ -134,6 +149,7 @@
  .cp-basic{grid-template-columns:66px minmax(0,1fr);padding:0;gap:0}
  .cp-item-fields label{grid-template-columns:75px minmax(0,1fr);gap:0}
  .cp-revisions .cp-revision-date-col{width:82px}.cp-revisions .cp-person-col{width:28px}
+ .cp-revisions{grid-template-columns:22px 82px minmax(0,1fr) repeat(3,28px)}
  .cp-customer-line{grid-template-columns:125px repeat(3,minmax(0,1fr));gap:0}
  .cp-customer-line label>span{font-size:9px;padding:2px}.cp-customer-line label{min-height:16.8px}
  .cp-revisions th,.cp-revisions td,.cp-approval th,.cp-approval td{padding:1px}
