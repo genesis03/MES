@@ -91,7 +91,7 @@
 .cp-analysis{--cp-column-total:2080}
 .cp-analysis col{width:calc(100% * var(--cp-column-weight) / var(--cp-column-total))}
 .cp-analysis td.cp-step-equipment,.cp-analysis .cp-step-equipment textarea{text-align:left}
-@media print{.cp-analysis{--cp-column-total:1980;width:93.333333333%}.cp-analysis .cp-action-col{width:0}}
+@media print{.cp-analysis{--cp-column-total:1980;width:100%}.cp-analysis .cp-action-col{width:0}}
 
 /* The company form uses the same connected header grid on screen and paper. */
 .cp-paper{--cp-form-line:#111;--cp-form-label:#ffd09d}
@@ -153,7 +153,7 @@
  .cp-paper{-webkit-print-color-adjust:exact;print-color-adjust:exact}
  .cp-document-line,.cp-basic,.cp-revisions,.cp-established,.cp-approval table,.cp-customer-line{font-size:10px}
  .cp-header-grid{--cp-row-height:21.6px;grid-template-columns:37.5% calc(29.571428571% + 75.2px) minmax(0,1fr)}
- .cp-form{width:93.333333333%}
+ .cp-form{width:100%}
  .cp-basic{grid-template-columns:66px minmax(0,1fr);padding:0;gap:0}
  .cp-item-fields label{grid-template-columns:75px minmax(0,1fr);gap:0}
  .cp-revisions .cp-revision-date-col{width:82px}.cp-revisions .cp-person-col{width:28px}
