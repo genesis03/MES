@@ -48,7 +48,9 @@
             color: #ffffff;
             letter-spacing: -0.5px;
             border-bottom: 1px solid #334155;
+            text-decoration: none;
         }
+        .sidebar-brand:focus-visible { outline: 2px solid #ffffff; outline-offset: -4px; }
 
         .sidebar-brand-credit {
             font-size: 8px;
@@ -123,7 +125,6 @@
             color: #e2e8f0;
             cursor: pointer;
         }
-        .menu-title.active { background-color: var(--primary-color); color: #ffffff; }
         .menu-title:hover { background-color: var(--sidebar-hover); color: #ffffff; }
         .arrow-icon { font-size: 10px; transition: transform 0.3s ease; }
         .menu-item.open .arrow-icon { transform: rotate(180deg); }
@@ -262,7 +263,7 @@
 <body>
 
     <nav class="sidebar no-print">
-        <div class="sidebar-brand"><span>MES</span><span class="sidebar-brand-credit">MADE BY QUALITY</span></div>
+        <a href="/" id="nav-home" class="sidebar-brand" aria-label="업무현황으로 이동"><span>MES</span><span class="sidebar-brand-credit">MADE BY QUALITY</span></a>
 
         {% if user %}
         <div class="sidebar-user-panel">
@@ -279,10 +280,6 @@
         {% endif %}
         <ul class="sidebar-menu">
             {% if user %}
-
-            <li class="menu-item">
-                <a href="/" id="nav-dashboard" class="menu-title" style="text-decoration:none">업무현황</a>
-            </li>
 
             <!-- 1. 기초 정보 -->
             {% if user %}
@@ -583,8 +580,8 @@
             applyReadOnlyMode();
             const currentPath = window.location.pathname;
             const routeMap = {
-                "/": "nav-dashboard",
-                "/shipping": "nav-dashboard",
+                "/": "nav-home",
+                "/shipping": "nav-home",
                 "/shipping/history": "nav-history",
                 "/shipping/inquiry": "nav-shipping-inquiry",
                 "/shipping/print": "nav-print",
