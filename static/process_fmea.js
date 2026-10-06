@@ -12,6 +12,11 @@ const scores = ['severity','occurrence','detection','new_severity','new_occurren
 const dateFields = ['target_date','completion_date'];
 const esc = value => String(value ?? '').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 function message(text, error=false) {el('fmeaMessage').textContent=text;el('fmeaMessage').className='pf-message '+(error?'error':'success');}
+function importMessage(text, error=false){
+ message(text,error);
+ const status=el('fmeaImportMessage');status.hidden=false;status.textContent=text;
+ status.className='pf-message '+(error?'error':'success');
+}
 async function request(url, method='GET', body) {
   const response=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
   const data=await response.json();
@@ -26,7 +31,7 @@ function updateControls(){
   root.querySelectorAll('[data-pick-item]').forEach(x=>x.disabled=!!selected||!write);
   el('fmeaItem').disabled=!!selected||!write;el('fmeaNumber').disabled=!!selected||!write;el('fmeaCode').disabled=!!selected||!write;
   ['fmeaAddRow','fmeaSave'].forEach(id=>{if(el(id))el(id).disabled=!write;});
-  if(el('fmeaImport'))el('fmeaImport').disabled=!write||!currentFlow||currentFlow.status!=='CURRENT';
+  if(el('fmeaImport'))el('fmeaImport').disabled=!canWrite||!loaded||busy;
   if(el('fmeaImportFile'))el('fmeaImportFile').disabled=!write;
   if(el('fmeaActivate'))el('fmeaActivate').disabled=!selected||!write;
   if(el('fmeaRevise'))el('fmeaRevise').disabled=busy||!canWrite||!selected||selected.item_selectable!==true||!['CURRENT','SUPERSEDED'].includes(selected.status);
@@ -108,6 +113,7 @@ async function list(){
   updateControls();
 }
 function fill(detail){
+  el('fmeaImportMessage').hidden=true;
   el('fmeaItemKeyword').value=detail.part_no;
   el('fmeaItemDisplay').textContent=detail.part_no+' · '+detail.part_name+(detail.item_selectable?'':' · 기존 이력 조회 전용');
   el('fmeaItemResults').hidden=true;el('fmeaItemResults').innerHTML='';
@@ -135,6 +141,7 @@ async function selectRevision(revisionId){
   await historyAndChanges(detail,revisions);
 }
 async function startNew(){
+  el('fmeaImportMessage').hidden=true;
   el('fmeaItemKeyword').value='';el('fmeaItemDisplay').textContent='선택된 품목 없음';
   el('fmeaItemResults').hidden=true;el('fmeaItemResults').innerHTML='';
   importedFlowVersion=null;selected=null;rows=[];currentFlow=null;flowChoices=[];dirty=false;el('fmeaEditor').hidden=false;el('fmeaEditorTitle').textContent='신규 공정 FMEA';
@@ -153,9 +160,9 @@ function payload(){
     process_owner:el('fmeaOwner').value,completion_due_date:el('fmeaDue').value||null,mass_production_date:el('fmeaMassDate').value||null,
     rows:rows.map(r=>{const data={id:r.id||null,process_code:r.process_code||null,flow_step_id:r.flow_step_id||null,action_not_applicable:!!r.action_not_applicable};textFields.concat(scores,dateFields).forEach(f=>data[f]=r[f]);return data;})};
 }
-async function task(fn){
+async function task(fn,onError=null){
   if(busy)return;busy=true;updateControls();
-  try{await fn();}catch(error){message(error.message,true);}finally{busy=false;updateControls();}
+  try{await fn();}catch(error){if(onError)onError(error);else message(error.message,true);}finally{busy=false;updateControls();}
 }
 if(el('fmeaNew'))el('fmeaNew').addEventListener('click',()=>{if(abandon())task(startNew);});
 el('fmeaSearch').addEventListener('click',()=>task(list));
@@ -240,16 +247,23 @@ el('fmeaRows').addEventListener('click',event=>{
 });
 if(el('fmeaAddRow'))el('fmeaAddRow').addEventListener('click',()=>{if(rows.length>=500){message('분석행은 최대 500개입니다.',true);return;}rows.push(newRow(currentFlow?.steps[0]||null));dirty=true;renderRows();});
 if(el('fmeaImport'))el('fmeaImport').addEventListener('click',()=>{
- if(editable()&&!busy&&currentFlow?.status==='CURRENT')el('fmeaImportFile').click();
+ if(!canWrite||!loaded||busy)return;
+ if(selected&&selected.status!=='DRAFT'){importMessage('엑셀 분석행은 초안에서만 불러올 수 있습니다. 개정 등록으로 초안을 만든 뒤 불러와 주세요.',true);return;}
+ if(!editable()){importMessage('사용 중인 완제품의 FMEA 초안에서 불러와 주세요. 현재 문서는 조회 전용입니다.',true);return;}
+ if(!Number(el('fmeaItem').value)){importMessage('품번 조회 후 완제품을 먼저 선택해 주세요.',true);return;}
+ if(!currentFlow||currentFlow.status!=='CURRENT'){importMessage('기준 공정흐름도에서 현재 사용 개정을 먼저 선택해 주세요. 목록에 없으면 공정흐름도를 등록하고 현재 사용으로 적용해야 합니다.',true);return;}
+ importMessage('파일을 선택해 주세요. 갑지의 분석행만 검증하여 불러옵니다.');
+ el('fmeaImportFile').click();
 });
 if(el('fmeaImportFile'))el('fmeaImportFile').addEventListener('change',()=>{
  const file=el('fmeaImportFile').files[0];el('fmeaImportFile').value='';
  if(!file||!editable()||busy)return;
- if(!file.name.toLowerCase().endsWith('.xlsx')||file.size>10*1024*1024){message('10MB 이하의 .xlsx 파일을 선택해 주세요.',true);return;}
+ if(!file.name.toLowerCase().endsWith('.xlsx')||file.size>10*1024*1024){importMessage('10MB 이하의 .xlsx 파일을 선택해 주세요.',true);return;}
  const itemId=Number(el('fmeaItem').value);
- if(!itemId||!currentFlow||currentFlow.status!=='CURRENT'){message('완제품과 현재 사용 공정흐름도를 먼저 선택해 주세요.',true);return;}
+ if(!itemId||!currentFlow||currentFlow.status!=='CURRENT'){importMessage('완제품과 현재 사용 공정흐름도를 먼저 선택해 주세요.',true);return;}
  if(rows.length&&!confirm('검증에 성공하면 현재 초안의 분석행을 엑셀 내용으로 교체합니다. 불러올까요?'))return;
  task(async()=>{
+  importMessage('엑셀 분석행을 검증하고 있습니다.');
   const form=new FormData();form.append('file',file);form.append('item_id',itemId);
   form.append('flow_revision_id',currentFlow.id);form.append('flow_version',currentFlow.version);
   if(selected){form.append('revision_id',selected.id);form.append('revision_version',selected.version);}
@@ -266,8 +280,8 @@ if(el('fmeaImportFile'))el('fmeaImportFile').addEventListener('change',()=>{
    return {...newRow(step),...row};
   });
   rows=imported;importedFlowVersion=data.flow_version;dirty=true;renderRows();
-  message('갑지 분석행 '+data.row_count+'개를 불러왔습니다. 기본정보는 유지했습니다. 내용을 확인한 뒤 초안 저장해 주세요.');
- });
+  importMessage('갑지 분석행 '+data.row_count+'개를 불러왔습니다. 기본정보는 유지했습니다. 내용을 확인한 뒤 초안 저장해 주세요.');
+ },error=>importMessage(error.message,true));
 });
 if(el('fmeaSave'))el('fmeaSave').addEventListener('click',()=>task(async()=>{
   const body=payload();let result;
