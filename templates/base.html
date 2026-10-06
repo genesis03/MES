@@ -123,6 +123,7 @@
             color: #e2e8f0;
             cursor: pointer;
         }
+        .menu-title.active { background-color: var(--primary-color); color: #ffffff; }
         .menu-title:hover { background-color: var(--sidebar-hover); color: #ffffff; }
         .arrow-icon { font-size: 10px; transition: transform 0.3s ease; }
         .menu-item.open .arrow-icon { transform: rotate(180deg); }
@@ -278,6 +279,10 @@
         {% endif %}
         <ul class="sidebar-menu">
             {% if user %}
+
+            <li class="menu-item">
+                <a href="/" id="nav-dashboard" class="menu-title" style="text-decoration:none">업무현황</a>
+            </li>
 
             <!-- 1. 기초 정보 -->
             {% if user %}
@@ -578,8 +583,8 @@
             applyReadOnlyMode();
             const currentPath = window.location.pathname;
             const routeMap = {
-                "/": "nav-history",
-                "/shipping": "nav-history",
+                "/": "nav-dashboard",
+                "/shipping": "nav-dashboard",
                 "/shipping/history": "nav-history",
                 "/shipping/inquiry": "nav-shipping-inquiry",
                 "/shipping/print": "nav-print",

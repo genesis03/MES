@@ -1,35 +1,145 @@
 {% extends "base.html" %}
-{% block title %}생산관리시스템{% endblock %}
+{% block title %}업무현황 - 생산관리시스템{% endblock %}
+{% block extra_head %}
+<style>
+.dash-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:12px}.dash-head h1{font-size:25px;margin:0 0 6px}.dash-head p,.dash-note{font-size:12px;color:#64748b;line-height:1.6}.dash-controls{display:flex;align-items:center;gap:8px;font-size:12px}.dash-controls input,.dash-controls button{height:34px;padding:0 10px;border:1px solid #cbd5e1;border-radius:5px;background:#fff}.dash-controls button{background:#2563eb;color:#fff;border-color:#2563eb;cursor:pointer}.dash-controls button:disabled{opacity:.5}
+.dash-cards{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:14px;margin:18px 0}.dash-card{background:#fff;border:1px solid #dbe3ec;border-radius:8px;padding:18px;border-top:3px solid #2563eb}.dash-card.warn{border-top-color:#d97706}.dash-card.danger{border-top-color:#b91c1c}.dash-card h2{font-size:13px;color:#475569;margin:0}.dash-value{font-size:30px;font-weight:800;color:#0f172a;margin:10px 0 6px}.dash-detail{font-size:12px;color:#64748b;min-height:18px;line-height:1.5}.dash-card a{display:inline-block;margin-top:12px;font-size:12px;color:#2563eb;text-decoration:none}.dash-panels{display:grid;grid-template-columns:repeat(2,minmax(280px,1fr));gap:14px}.dash-panel{background:#fff;border:1px solid #dbe3ec;border-radius:8px;overflow:hidden}.dash-panel h2{font-size:14px;padding:13px 16px;margin:0;background:#f8fafc;border-bottom:1px solid #dbe3ec}.dash-scroll{overflow-x:auto}.dash-table{width:100%;border-collapse:collapse;font-size:12px;min-width:460px}.dash-table th,.dash-table td{padding:10px 12px;border-bottom:1px solid #e2e8f0;text-align:left}.dash-table th{font-weight:700;color:#64748b}.dash-table td.number{text-align:right;white-space:nowrap}.dash-table tr.overdue{background:#fff7ed}.dash-empty{padding:24px;color:#64748b;font-size:13px}.dash-footer{margin-top:14px}.dash-cards [hidden],.dash-panels [hidden],[hidden]{display:none!important}
+@media(max-width:1100px){.dash-cards{grid-template-columns:repeat(2,minmax(160px,1fr))}.dash-panels{grid-template-columns:1fr}}@media(max-width:650px){.dash-cards{grid-template-columns:1fr}.dash-controls{flex-wrap:wrap}}
+</style>
+{% endblock %}
 {% block content %}
-<div role="status">
-    <p id="entryStatus">첫 메뉴로 이동 중입니다.</p>
-    <a id="entryLogout" href="/logout" hidden>로그아웃</a>
+<div class="dash-head">
+    <div><h1>업무현황</h1><p>생산과 입출고, 품질 현황을 확인하세요.</p></div>
+    <div class="dash-controls"><label for="dashboardDate">기준일</label><input type="date" id="dashboardDate"><button type="button" id="dashboardRefresh">새로고침</button></div>
 </div>
+<p class="dash-note">생산계획·실적·불량은 기준일 자료입니다. 미입고·출고대기는 현재 잔량이며, 입고 납기 지연은 기준일보다 납기가 지난 항목입니다.</p>
+<div class="dash-cards" id="dashboardCards">
+{% for key, label, path, color in [
+('plan','생산계획','/production/plans',''),
+('performance','생산실적','/production/performance/status',''),
+('inbound','미입고 · 입고대기','/purchase/unreceived',''),
+('outbound','출고대기','/sales/shipping',''),
+('overdue','입고 납기 지연','/purchase/unreceived','warn'),
+('quality','불량 발생 기록','/quality/defect-status','danger')
+] %}
+    <section class="dash-card {{ color }}" id="card-{{ key }}" hidden>
+        <h2>{{ label }}</h2><div class="dash-value" id="value-{{ key }}">—</div>
+        <p class="dash-detail" id="detail-{{ key }}"></p><a href="{{ path }}">상세 보기 →</a>
+    </section>
+{% endfor %}
+</div>
+<p class="dash-empty" id="dashboardNoAccess" hidden>조회 가능한 업무현황 항목이 없습니다. 왼쪽 메뉴를 이용하거나 관리자에게 권한을 확인해 주세요.</p>
+<div class="dash-panels">
+    <section class="dash-panel" id="panel-plan" hidden><h2>기준일 생산계획 · 최대 10건</h2><div class="dash-scroll"><table class="dash-table"><thead><tr><th>품번</th><th>품명</th><th>계획수량</th></tr></thead><tbody id="rows-plan"></tbody></table></div></section>
+    <section class="dash-panel" id="panel-inbound" hidden><h2>미입고 · 납기순 최대 10건</h2><div class="dash-scroll"><table class="dash-table"><thead><tr><th>납기일</th><th>업체</th><th>품번</th><th>잔량</th></tr></thead><tbody id="rows-inbound"></tbody></table></div></section>
+    <section class="dash-panel" id="panel-outbound" hidden><h2>출고대기 · 납기순 최대 10건</h2><div class="dash-scroll"><table class="dash-table"><thead><tr><th>납기일</th><th>고객사</th><th>품번</th><th>잔량</th></tr></thead><tbody id="rows-outbound"></tbody></table></div></section>
+    <section class="dash-panel" id="panel-quality" hidden><h2>기준일 불량 발생 · 최대 10건</h2><div class="dash-scroll"><table class="dash-table"><thead><tr><th>구분</th><th>품번</th><th>불량유형</th><th>불량수량</th></tr></thead><tbody id="rows-quality"></tbody></table></div></section>
+</div>
+<p class="dash-note dash-footer" id="dashboardUpdated" role="status"></p>
 {% endblock %}
 {% block extra_script %}
 <script>
-function firstAccessibleMenuUrl() {
-    const links = document.querySelectorAll('.sidebar-menu .submenu a[href]');
-    for (const link of links) {
-        const menu = link.closest('.menu-item');
-        // 접힌 아코디언의 하위 메뉴도 이동 대상에 포함합니다.
-        if (!menu || link.style.display === 'none' || menu.style.display === 'none') continue;
-        const href = link.getAttribute('href') || '';
-        if (href.startsWith('/') && !href.startsWith('//') && href !== '/' && href !== '/shipping') {
-            return href;
-        }
-    }
-    return null;
+const dashboardPaths={plan:'/production/plans',performance:'/production/performance/status',inbound:'/purchase/unreceived',outbound:'/sales/shipping',overdue:'/purchase/unreceived',quality:'/quality/defect-status'};
+const dashEl=id=>document.getElementById(id);
+function dashboardCanRead(path){
+    return Array.from(document.querySelectorAll('.sidebar-menu .submenu a[href]')).some(link=>{
+        const menu=link.closest('.menu-item');
+        return link.getAttribute('href')===path&&menu&&menu.style.display!=='none'&&link.style.display!=='none';
+    });
 }
-document.addEventListener('DOMContentLoaded', function () {
-    // base.html의 applyMenuAccess() 실행 뒤 필터링된 메뉴 순서를 사용합니다.
-    const target = firstAccessibleMenuUrl();
-    if (target) {
-        window.location.replace(target);
-        return;
+function dashboardSeoulDate(now=new Date()){
+    const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
+    const get=type=>parts.find(p=>p.type===type).value;
+    return get('year')+'-'+get('month')+'-'+get('day');
+}
+function dashboardOverdue(rows,date){return rows.filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x.due_date||'')&&x.due_date<date)}
+function dashboardSortDue(rows,field){return [...rows].sort((a,b)=>String(a[field]||'9999-12-31').localeCompare(String(b[field]||'9999-12-31')))}
+function dashboardQuantity(value,unit=''){
+    const number=value==null?NaN:Number(value);
+    return Number.isFinite(number)?number.toLocaleString('ko-KR',{maximumFractionDigits:6})+(unit?' '+unit:''):'—';
+}
+function dashboardArray(data,field){
+    const rows=field?data&&data[field]:data;
+    if(!Array.isArray(rows))throw new Error('조회 응답 형식을 확인해 주세요.');
+    return rows;
+}
+function dashboardMetric(key,value,detail){
+    dashEl('value-'+key).textContent=value;
+    dashEl('detail-'+key).textContent=detail;
+}
+function dashboardRows(key,rows,columns,date,dueField){
+    const body=dashEl('rows-'+key);body.replaceChildren();
+    if(!rows.length){
+        const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=columns.length;td.textContent='해당 자료가 없습니다.';tr.append(td);body.append(tr);return;
     }
-    document.getElementById('entryStatus').textContent = '부여된 시스템 메뉴 권한이 없습니다. 관리자에게 문의해 주세요.';
-    document.getElementById('entryLogout').hidden = false;
+    rows.slice(0,10).forEach(row=>{
+        const tr=document.createElement('tr');
+        if(dueField&&row[dueField]&&row[dueField]<date)tr.className='overdue';
+        columns.forEach(col=>{const td=document.createElement('td');td.textContent=col.value(row)??'';if(col.number)td.className='number';tr.append(td)});
+        body.append(tr);
+    });
+}
+async function dashboardGet(url){
+    const response=await fetch(url,{headers:{Accept:'application/json'}});
+    if(response.status===401){window.location.replace('/login?reason=idle');throw new Error('로그인이 만료되었습니다.')}
+    if(!response.ok)throw new Error(response.status===403?'조회 권한을 확인해 주세요.':'조회 실패 · HTTP '+response.status);
+    return response.json();
+}
+function dashboardFailure(keys,error){
+    keys.forEach(key=>{
+        dashboardMetric(key,'확인 필요',error.message||'조회하지 못했습니다.');
+        const body=dashEl('rows-'+key);if(body){body.replaceChildren();const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=4;td.textContent='자료를 불러오지 못했습니다.';tr.append(td);body.append(tr)}
+    });
+}
+async function refreshDashboard(){
+    const date=dashEl('dashboardDate').value;if(!/^\d{4}-\d{2}-\d{2}$/.test(date))return;
+    const button=dashEl('dashboardRefresh');button.disabled=true;
+    const allowed={};Object.entries(dashboardPaths).forEach(([key,path])=>{
+        allowed[key]=dashboardCanRead(path);dashEl('card-'+key).hidden=!allowed[key];
+        const panel=dashEl('panel-'+key);if(panel)panel.hidden=!allowed[key];
+        if(allowed[key])dashboardMetric(key,'…','조회 중');
+    });
+    dashEl('dashboardNoAccess').hidden=Object.values(allowed).some(Boolean);
+    const period=new URLSearchParams({start_date:date,end_date:date}).toString();
+    const tasks=[];
+    const run=(keys,fn)=>tasks.push(fn().catch(error=>dashboardFailure(keys,error)));
+    if(allowed.plan)run(['plan'],async()=>{
+        const rows=dashboardArray(await dashboardGet('/api/production/plans?'+period));
+        dashboardMetric('plan',rows.length+'건','기준일에 등록된 생산계획');
+        dashboardRows('plan',rows,[{value:x=>x.part_no},{value:x=>x.part_name},{value:x=>dashboardQuantity(x.plan_qty),number:true}]);
+    });
+    if(allowed.performance)run(['performance'],async()=>{
+        const rows=dashboardArray(await dashboardGet('/api/production/performance-status?'+period));
+        const machining=rows.filter(x=>x.performance_type==='MACHINING').length,assembly=rows.filter(x=>x.performance_type==='ASSEMBLY').length;
+        dashboardMetric('performance',(rows.length>=2000?'≥ ':'')+rows.length+'건','가공 '+machining+'건 · 조립 '+assembly+'건'+(rows.length>=2000?' · 조회 상한 도달':''));
+    });
+    if(allowed.inbound)run(['inbound','overdue'],async()=>{
+        const rows=dashboardArray(await dashboardGet('/api/purchase/unreceived'),'items');
+        const general=rows.filter(x=>x.type==='GENERAL').length,subcontract=rows.filter(x=>x.type==='SUBCONTRACT').length;
+        dashboardMetric('inbound',rows.length+'건','일반구매 '+general+'건 · 외주가공 '+subcontract+'건 · 발주 품목 기준');
+        dashboardMetric('overdue',dashboardOverdue(rows,date).length+'건','잔량이 있고 납기가 지난 발주 품목');
+        dashboardRows('inbound',dashboardSortDue(rows,'due_date'),[{value:x=>x.due_date||'미지정'},{value:x=>x.partner_name},{value:x=>x.part_no},{value:x=>dashboardQuantity(x.remaining_qty,x.unit),number:true}],date,'due_date');
+    });
+    if(allowed.outbound)run(['outbound'],async()=>{
+        const rows=dashboardArray(await dashboardGet('/api/sales/shipping/open-items'));
+        dashboardMetric('outbound',rows.length+'건','미출고 잔량이 있는 수주 품목 · 포장 완료 여부와 무관');
+        dashboardRows('outbound',dashboardSortDue(rows,'delivery_date'),[{value:x=>x.delivery_date||'미지정'},{value:x=>x.customer_name},{value:x=>x.part_no},{value:x=>dashboardQuantity(x.remaining_qty,x.unit),number:true}],date,'delivery_date');
+    });
+    if(allowed.quality)run(['quality'],async()=>{
+        const data=await dashboardGet('/api/quality/defect-status?'+period+'&limit=5000');
+        const rows=dashboardArray(data,'items');
+        dashboardMetric('quality',(rows.length>=5000?'≥ ':'')+rows.length+'건','입고·생산실적·생산 LOT의 불량 발생 기록'+(rows.length>=5000?' · 조회 상한 도달':''));
+        dashboardRows('quality',rows,[{value:x=>x.source_name},{value:x=>x.part_no},{value:x=>(x.defect_items||[]).map(d=>d.name).join(', ')},{value:x=>dashboardQuantity(x.defect_qty),number:true}]);
+    });
+    await Promise.allSettled(tasks);
+    dashEl('dashboardUpdated').textContent='최종 조회: '+new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date());
+    button.disabled=false;
+}
+document.addEventListener('DOMContentLoaded',()=>{
+    dashEl('dashboardDate').value=dashboardSeoulDate();
+    dashEl('dashboardRefresh').addEventListener('click',refreshDashboard);
+    dashEl('dashboardDate').addEventListener('change',refreshDashboard);
+    refreshDashboard();
 });
 </script>
 {% endblock %}
