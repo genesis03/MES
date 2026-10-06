@@ -93,8 +93,8 @@ $('cpFile').onchange=()=>run(async()=>{const file=$('cpFile').files[0];if(!file)
  if(rows.some(r=>textFields.some(f=>r[f]))&&!confirm('하단 관리항목을 엑셀 내용으로 교체하시겠습니까? 상단 입력은 유지됩니다.'))return;
  message('엑셀 양식과 공정 순서를 확인하고 있습니다.');const body=new FormData();body.append('file',file);body.append('item_id',$('cpItem').value);body.append('flow_revision_id',flow.id);body.append('flow_version',flow.version);if(current){body.append('revision_id',current.id);body.append('revision_version',current.version);}
  const data=await api('/import-excel',{method:'POST',body});rows=data.rows;dirty=true;render();message(data.message+' ('+rows.length+'개 관리항목)');});
-window.addEventListener('beforeprint',()=>{document.querySelectorAll('#cpRows textarea').forEach(el=>{const span=document.createElement('span');span.className='cp-print-value';span.textContent=el.value;el.after(span);});});
-window.addEventListener('afterprint',()=>document.querySelectorAll('.cp-print-value').forEach(el=>el.remove()));
+window.addEventListener('beforeprint',()=>{document.querySelectorAll('.cp-form input:not([type=checkbox]),.cp-form textarea').forEach(el=>{const span=document.createElement('span');span.className='cp-header-value';span.textContent=el.type==='date'?el.value.replace(/-/g,'.'):el.value;el.after(span);});document.querySelectorAll('#cpRows textarea').forEach(el=>{const span=document.createElement('span');span.className='cp-print-value';span.textContent=el.value;el.after(span);});});
+window.addEventListener('afterprint',()=>document.querySelectorAll('.cp-print-value,.cp-header-value').forEach(el=>el.remove()));
 $('cpPrint').onclick=()=>window.print();
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
 run(async()=>{items=await api('/options');addOptions($('cpItem'),items,'품목 선택',x=>x.part_no+' · '+x.part_name);render();});

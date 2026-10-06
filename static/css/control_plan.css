@@ -89,3 +89,48 @@
 /* Keep the other columns at their previous widths; shrink only the first four. */
 .cp-analysis .cp-compact-col{width:2.564102564%}.cp-analysis .cp-standard-col,.cp-analysis .cp-action-col{width:4.273504274%}.cp-analysis td.cp-step-equipment,.cp-analysis .cp-step-equipment textarea{text-align:left}
 @media print{.cp-analysis{width:93.333333333%}.cp-analysis .cp-compact-col{width:2.678571429%}.cp-analysis .cp-standard-col{width:4.464285714%}.cp-analysis .cp-action-col{width:0}}
+
+/* The company form uses the same connected header grid on screen and paper. */
+.cp-paper{--cp-form-line:#111;--cp-form-label:#ffd09d}
+.cp-paper h1{letter-spacing:0;margin-bottom:18px}
+.cp-document-line{font-size:12px;margin-bottom:12px}
+.cp-header-grid{grid-template-columns:35% 46% 19%;gap:0}
+.cp-basic{grid-template-columns:100px minmax(0,1fr);gap:0;font-size:12px}
+.cp-stages{align-items:stretch}
+.cp-stages strong,.cp-stages label{border:1px solid var(--cp-form-line);border-right:0;border-bottom:0;background:var(--cp-form-label);padding:5px;display:flex;align-items:center;justify-content:center}
+.cp-stages label{justify-content:flex-start;gap:5px;font-weight:400}
+.cp-stages label:nth-of-type(1){grid-row:2/span 2}.cp-stages label:nth-of-type(2){grid-row:4/span 2}.cp-stages label:nth-of-type(3){grid-row:6/span 2}
+.cp-item-fields label{grid-template-columns:100px minmax(0,1fr);gap:0;white-space:normal;border:1px solid var(--cp-form-line);border-right:0;border-bottom:0}
+.cp-item-fields label:nth-child(2){grid-row:2/span 2}.cp-item-fields label:nth-child(3){grid-row:4/span 2}.cp-item-fields label:nth-child(4){padding:0;align-items:stretch}
+.cp-item-fields label>span{align-self:stretch;display:flex;align-items:center;justify-content:center;text-align:center;background:var(--cp-form-label);border-right:1px solid var(--cp-form-line);padding:4px;line-height:normal!important}
+.cp-item-fields input,.cp-item-fields textarea{border:0!important;border-radius:0!important;min-height:0;height:100%;margin:0;resize:none;text-align:center;white-space:pre-wrap}
+.cp-revisions th,.cp-revisions td,.cp-approval th,.cp-approval td{border-color:var(--cp-form-line);padding:4px}
+.cp-revisions thead th,.cp-revisions tbody th,.cp-approval th{background:var(--cp-form-label)}
+.cp-revisions thead th{white-space:normal}.cp-revisions .cp-revision-date-col{width:108px}.cp-revisions .cp-person-col{width:40px}
+.cp-revisions input,.cp-revisions textarea,.cp-approval input,.cp-approval textarea{border:0!important;border-radius:0!important;background:transparent!important;padding:3px!important}
+.cp-revisions input{text-align:center}
+.cp-approval{padding:0}
+.cp-established{border:1px solid var(--cp-form-line);border-left:0;border-bottom:0;background:var(--cp-form-label);padding:4px;gap:4px;font-size:12px}
+.cp-established input{flex:1;min-width:0;border:0!important;border-radius:0!important;background:transparent!important;padding:3px!important;font-size:11px}
+.cp-approval table th:first-child{width:30px}
+.cp-customer-line{margin-top:-1px;padding:0;gap:0;grid-template-columns:180px repeat(3,minmax(0,1fr));border:1px solid var(--cp-form-line);font-size:12px}
+.cp-customer-line label{gap:0;min-height:36px}
+.cp-customer-line label+label{border-left:1px solid var(--cp-form-line)}
+.cp-customer-line label>span{background:var(--cp-form-label);align-self:stretch;display:flex;align-items:center;padding:5px;border-right:1px solid var(--cp-form-line);white-space:nowrap}
+.cp-customer-line input,.cp-customer-line textarea{border:0!important;border-radius:0!important;background:#fff;resize:none}
+.cp-header-value{display:none}
+@media print{
+ .cp-paper{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ .cp-document-line,.cp-basic,.cp-revisions,.cp-established,.cp-approval table,.cp-customer-line{font-size:10px}
+ .cp-header-grid{grid-template-columns:35% 46% 19%}
+ .cp-basic{grid-template-columns:66px minmax(0,1fr);padding:0;gap:0}
+ .cp-item-fields label{grid-template-columns:75px minmax(0,1fr);gap:0}
+ .cp-revisions .cp-revision-date-col{width:82px}.cp-revisions .cp-person-col{width:28px}
+ .cp-customer-line{grid-template-columns:125px repeat(3,minmax(0,1fr));gap:0}
+ .cp-customer-line label>span{font-size:9px;padding:3px}.cp-customer-line label{min-height:28px}
+ .cp-form input:not([type=checkbox]),.cp-form textarea{display:none!important}
+ .cp-form .cp-header-value{display:block;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;color:#111;font-weight:400;padding:3px}
+ .cp-item-fields .cp-header-value{display:flex;align-items:center;justify-content:center;text-align:center}
+ .cp-customer-line .cp-header-value{flex:1;width:0}
+ .cp-established .cp-header-value{font-size:10px;padding:2px}
+}

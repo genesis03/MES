@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}관리계획서{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/wide_table_scroll.css?v=1"><link rel="stylesheet" href="/static/css/control_plan.css?v=compact-equipment-1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/wide_table_scroll.css?v=1"><link rel="stylesheet" href="/static/css/control_plan.css?v=company-header-1">{% endblock %}
 {% block content %}
 <div id="cpApp" data-write="{{ 'true' if can_write_control_plan else 'false' }}">
 <div class="cp-toolbar">
@@ -16,7 +16,7 @@
 <p class="cp-notice" id="cpMessage" role="status">품목과 공정흐름도를 선택하세요. 엑셀은 첫 시트의 하단 관리항목만 불러옵니다.</p>
 <div class="cp-scroll">
   <section class="cp-paper" aria-labelledby="controlPlanTitle">
-    <h1 id="controlPlanTitle">관리 계획서</h1>
+    <h1 id="controlPlanTitle">관리 계획서 (Control Plan)</h1>
     <div class="cp-header-scroll">
     <fieldset class="cp-form" {% if not can_write_control_plan %}disabled{% endif %}>
       <legend class="cp-sr-only">관리계획서 상단 정보</legend>
@@ -28,14 +28,14 @@
         <div class="cp-basic">
           <div class="cp-stages" role="group" aria-labelledby="cpStageHeading">
             <strong id="cpStageHeading">단계</strong>
-            <label><input type="checkbox" name="stage_prototype">시작</label>
+            <label><input type="checkbox" name="stage_prototype">시작단계</label>
             <label><input type="checkbox" name="stage_prelaunch">선행양산</label>
-            <label><input type="checkbox" name="stage_production">양산</label>
+            <label><input type="checkbox" name="stage_production">양산단계</label>
           </div>
           <div class="cp-item-fields">
-            <label for="cpVehicle">차종<input readonly id="cpVehicle" name="vehicle_model" maxlength="100"></label>
-            <label for="cpPartName">품명<input readonly id="cpPartName" name="part_name" maxlength="200"></label>
-            <label for="cpPartNo">품번<input readonly id="cpPartNo" name="part_no" maxlength="100"></label>
+            <label for="cpVehicle"><span>차종</span><input readonly id="cpVehicle" name="vehicle_model" maxlength="100"></label>
+            <label for="cpPartName"><span>부품명/품명</span><input readonly id="cpPartName" name="part_name" maxlength="200"></label>
+            <label for="cpPartNo"><span>부번/품번</span><input readonly id="cpPartNo" name="part_no" maxlength="100"></label>
             <label for="cpTeam"><span>상호기능팀원</span><textarea id="cpTeam" name="team" rows="3" maxlength="200"></textarea></label>
           </div>
         </div>
@@ -67,10 +67,10 @@
         </div>
       </div>
       <div class="cp-customer-line">
-        <label for="cpSupplierCode">업체코드<input id="cpSupplierCode" name="supplier_code" maxlength="100"></label>
-        <label for="cpCustomerEngineering">고객기술 승인/일자(요구시)<textarea id="cpCustomerEngineering" name="customer_engineering_approval" rows="1" maxlength="1000"></textarea></label>
-        <label for="cpCustomerQuality">고객 품질 승인/일자(요구시)<textarea id="cpCustomerQuality" name="customer_quality_approval" rows="1" maxlength="1000"></textarea></label>
-        <label for="cpOtherApproval">기타 승인/일자(요구시)<textarea id="cpOtherApproval" name="other_approval" rows="1" maxlength="1000"></textarea></label>
+        <label for="cpSupplierCode"><span>업체코드</span><input id="cpSupplierCode" name="supplier_code" maxlength="100"></label>
+        <label for="cpCustomerEngineering"><span>고객기술 승인/일자(요구시)</span><textarea id="cpCustomerEngineering" name="customer_engineering_approval" rows="1" maxlength="1000"></textarea></label>
+        <label for="cpCustomerQuality"><span>고객 품질 승인/일자(요구시)</span><textarea id="cpCustomerQuality" name="customer_quality_approval" rows="1" maxlength="1000"></textarea></label>
+        <label for="cpOtherApproval"><span>기타 승인/일자(요구시)</span><textarea id="cpOtherApproval" name="other_approval" rows="1" maxlength="1000"></textarea></label>
       </div>
     </fieldset>
     </div>
@@ -86,5 +86,5 @@
 </div>
 <script src="/static/wide_table_scroll.js?v=1" defer></script>
 <script src="/static/flow_symbols.js?v=1" defer></script>
-<script src="/static/control_plan.js?v=compact-equipment-1" defer></script>
+<script src="/static/control_plan.js?v=company-header-1" defer></script>
 {% endblock %}
