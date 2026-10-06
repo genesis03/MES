@@ -97,11 +97,10 @@ def parse_control_plan(data, steps):
         for r in range(14,sheet.max_row+1):
             if not any(sheet.cell(r,c).value is not None for c in range(1,28)):
                 continue
-            number=read(r,1); name=read(r,5)
-            if not number or not name:
-                fail(f'A{r}', '공정번호와 공정명이 필요합니다.'); continue
-            base_name=name.splitlines()[0].strip()
-            key=(number,base_name)
+            number=read(r,1)
+            if not number:
+                fail(f'A{r}', '공정번호가 필요합니다.'); continue
+            key=number
             if not groups or groups[-1]!=key:
                 groups.append(key)
             # A management number can span several independently named characteristics.
@@ -131,14 +130,19 @@ def parse_control_plan(data, steps):
                     fail(f'{get_column_letter(col)}{r}','같은 관리항목에 공정기호가 다릅니다.')
                 if value: current[field]=value
         # Consecutive material-specific blocks are one process in the flow.
-        expected=[(str(s.step_no).strip(),str(s.step_name).strip()) for s in steps]
+        expected=[str(s.step_no).strip() for s in steps]
         if len(set(expected))!=len(expected):
-            fail('공정흐름도','동일한 공정번호와 공정명이 중복되어 엑셀 행을 구분할 수 없습니다.')
+            fail('공정흐름도','동일한 공정번호가 중복되어 엑셀 행을 구분할 수 없습니다.')
         if groups!=expected:
-            fail('A14:E마지막행','공정번호·공정명 또는 순서가 공정흐름도와 일치하지 않습니다. 누락된 공정도 확인해 주세요.')
-        mapping={key:s.id for key,s in zip(expected,steps)}
+            fail('A14:A마지막행','공정번호 또는 순서가 공정흐름도와 일치하지 않습니다. '
+                 + '엑셀: '+', '.join(groups[:50])+' / 공정흐름도: '+', '.join(expected[:50])
+                 + '. 대상 품목과 누락된 공정도 확인해 주세요.')
+        mapping={key:s for key,s in zip(expected,steps)}
         for row in rows:
-            row['flow_step_id']=mapping.get(row.pop('_group'))
+            step=mapping.get(row.pop('_group'))
+            row['flow_step_id']=step.id if step else None
+            if not row['process_detail'] and step:
+                row['process_detail']=str(step.step_name or '').strip()
             if not (row['product'] or row['process']):
                 fail(row['source_cell'],'제품 또는 공정 관리항목이 필요합니다.')
             row.pop('source_cell')

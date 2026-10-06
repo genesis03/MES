@@ -46,10 +46,32 @@ def test_import_reference_formulas_and_item_metadata():
     assert rows[0]['quality'] is True
     assert 'company' not in rows[0]
 
-@pytest.mark.parametrize('cell,value',[('A15',30),('E15','다른 공정'),('A11','다른 항목'),('M15','=SUM(1,2)'),('M15','=M15'),('U15','예'),('H15','x'*4001)])
+@pytest.mark.parametrize('cell,value',[('A15',30),('A11','다른 항목'),('M15','=SUM(1,2)'),('M15','=M15'),('U15','예'),('H15','x'*4001)])
 def test_import_rejects_mismatch_without_partial_result(cell,value):
     book=workbook();book.active[cell]=value
     with pytest.raises(ControlPlanImportError):parse_control_plan(data(book),steps())
+
+def test_import_without_process_names_uses_flow_names():
+    book=workbook();book.active['E14']=None;book.active['E15']=None
+    rows=parse_control_plan(data(book),steps())
+    assert [r['flow_step_id'] for r in rows]==[1,2]
+    assert [r['process_detail'] for r in rows]==['입고검사','가공']
+
+
+def test_import_process_name_differences_do_not_block_number_mapping():
+    book=workbook();book.active['E15']='가공 상세 설명'
+    rows=parse_control_plan(data(book),steps())
+    assert rows[1]['flow_step_id']==2
+    assert rows[1]['process_detail']=='가공 상세 설명'
+
+
+def test_duplicate_flow_numbers_are_ambiguous():
+    duplicate=[SimpleNamespace(id=1,step_no='10',step_name='입고검사'),
+               SimpleNamespace(id=2,step_no='10',step_name='다른 검사')]
+    with pytest.raises(ControlPlanImportError) as error:
+        parse_control_plan(data(workbook()),duplicate)
+    assert any('중복' in e['message'] for e in error.value.errors)
+
 
 def test_import_rejects_missing_and_reordered_processes():
     with pytest.raises(ControlPlanImportError):parse_control_plan(data(workbook()),list(reversed(steps())))
@@ -138,3 +160,18 @@ def test_canonical_revision_and_snapshot_survive_source_change(api):
     read=client.get('/api/control-plans/revisions/'+str(saved['id'])).json()
     assert read['flow']['steps'][0]['step_name']=='입고검사'
     assert client.post('/api/control-plans/revisions/'+str(saved['id'])+'/activate',json={'version':1}).status_code==409
+
+
+def test_api_import_without_names_maps_by_process_number(api):
+    client,_,_=api
+    book=workbook();book.active['E14']=None;book.active['E15']=None
+    response=upload(client,book)
+    assert response.status_code==200,response.text
+    assert [r['process_detail'] for r in response.json()['rows']]==['입고검사','가공']
+
+
+def test_number_mismatch_error_lists_both_process_sequences():
+    book=workbook();book.active['A15']=30
+    with pytest.raises(ControlPlanImportError) as error:
+        parse_control_plan(data(book),steps())
+    assert any('엑셀: 10, 30 / 공정흐름도: 10, 20' in e['message'] for e in error.value.errors)
