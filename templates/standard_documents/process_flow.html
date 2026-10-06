@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}공정흐름도{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=selected-row-actions-1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=unified-actions-2">{% endblock %}
 {% block content %}
 <div id="flowApp" data-can-write="{{ 'true' if can_write_flow else 'false' }}">
   <div class="flow-head no-print"><h1>공정흐름도</h1>{% if can_write_flow %}<button id="flowNew" class="flow-btn primary no-print">신규 등록</button>{% endif %}</div>
@@ -21,8 +21,13 @@
       </div><label>개정번호 *<span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="flowCode" inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력" aria-label="공정흐름도 개정번호 숫자"></span></label><label>등록자<select id="flowRegistrant" aria-label="등록자 선택"></select><input id="flowRegistrantName" readonly aria-label="등록자 성명" hidden></label><label>비고<textarea id="flowNote" maxlength="8000"></textarea></label>
     </div>
     <p id="flowMeta" class="flow-note no-print"></p>
-    <div class="flow-tools no-print">
-    {% if can_write_flow %}<button id="flowAdd" class="flow-btn light">공정 추가</button><button id="flowSave" class="flow-btn primary">초안 저장</button><button id="flowActivate" class="flow-btn primary">현재 사용 적용</button><button id="flowCorrect" class="flow-btn primary">수정</button><button id="flowCorrectCancel" class="flow-btn light" hidden>수정 취소</button><button id="flowRevise" class="flow-btn primary">개정 등록</button><button id="flowRetire" class="flow-btn danger">Revision 폐기</button>{% endif %}
+    <div class="flow-tools flow-selection-tools no-print">
+    {% if can_write_flow %}
+          <button type="button" class="flow-btn light flow-icon-btn" data-step-op="up" aria-label="선택한 공정 위로 이동" title="선택한 공정 위로 이동"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+          <button type="button" class="flow-btn light flow-icon-btn" data-step-op="down" aria-label="선택한 공정 아래로 이동" title="선택한 공정 아래로 이동"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg></button>
+          <button type="button" class="flow-btn danger flow-icon-btn" data-step-op="remove" aria-label="선택한 공정 삭제" title="선택한 공정 삭제"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
+          <span id="flowSelectionCount" class="flow-note" role="status">0개 선택</span>
+    <button id="flowAdd" class="flow-btn light">공정 추가</button><button id="flowSave" class="flow-btn primary">초안 저장</button><button id="flowActivate" class="flow-btn primary">현재 사용 적용</button><button id="flowCorrect" class="flow-btn primary">수정</button><button id="flowCorrectCancel" class="flow-btn light" hidden>수정 취소</button><button id="flowRevise" class="flow-btn primary">개정 등록</button><button id="flowRetire" class="flow-btn danger">Revision 폐기</button>{% endif %}
     <button id="flowPrint" class="flow-btn light">인쇄</button></div>
     <div id="flowCorrectionPanel" class="flow-correction-panel no-print" hidden>
       <label for="flowCorrectionReason">수정 사유 *</label><textarea id="flowCorrectionReason" maxlength="4000" rows="2"></textarea>
@@ -33,14 +38,6 @@
     </section>
     <div class="flow-workspace">
       <div class="flow-input-pane no-print">
-        {% if can_write_flow %}
-        <div class="flow-tools flow-selection-tools">
-          <button type="button" class="flow-btn light flow-icon-btn" data-step-op="up" aria-label="선택한 공정 위로 이동" title="선택한 공정 위로 이동"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
-          <button type="button" class="flow-btn light flow-icon-btn" data-step-op="down" aria-label="선택한 공정 아래로 이동" title="선택한 공정 아래로 이동"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg></button>
-          <button type="button" class="flow-btn danger flow-icon-btn" data-step-op="remove" aria-label="선택한 공정 삭제" title="선택한 공정 삭제"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>
-          <span id="flowSelectionCount" class="flow-note" role="status">0개 선택</span>
-        </div>
-        {% endif %}
         <div class="flow-scroll no-print"><table class="flow-edit"><thead><tr><th><input type="checkbox" id="flowSelectAll" aria-label="공정 전체 선택"></th><th>기호 명칭 / 기호</th><th>공정번호 / 공정명</th><th>비고</th></tr></thead><tbody id="flowSteps"></tbody></table></div>
         <p class="flow-note">기호 명칭을 선택하면 미리보기에 자동 표시됩니다. 기존 기호 미지정 공정은 초안 또는 새 개정에서 선택해 주세요.</p>
       </div>

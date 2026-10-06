@@ -151,6 +151,7 @@
 .flow-input-pane .flow-edit .flow-step-active>td{background:#eff6ff}
 .flow-input-pane .flow-edit .flow-step-active>td:first-child{box-shadow:inset 3px 0 #2563eb}
 .flow-selection-tools{margin-bottom:8px}
-.flow-selection-tools .flow-note{margin:0 0 0 4px}
+.flow-selection-tools .flow-note{margin:0 0 0 4px;white-space:nowrap}
+.flow-selection-tools>.flow-btn{flex:none;white-space:nowrap}
 .flow-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;padding:6px}
 .flow-icon-btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
