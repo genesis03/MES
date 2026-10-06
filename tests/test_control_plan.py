@@ -24,7 +24,7 @@ from routers.control_plan import router
 def workbook():
     book=Workbook();sheet=book.active;sheet.title='관리계획서'
     for cell,label in HEADERS.items(): sheet[cell]=label
-    for r,number,name in [(14,10,'입고검사\n원자재'),(15,20,'가공')]:
+    for r,number,name in [(14,10,'입고\n검사'),(15,20,'가공')]:
         for c,value in {1:number,3:'◇',5:name,7:1,8:'치수',13:'10±1',14:'V/C',15:'n=3',16:'LOT',17:'검사일지',21:'●',23:'격리'}.items():sheet.cell(r,c,value)
         sheet.merge_cells(start_row=r,start_column=17,end_row=r,end_column=18)
         sheet.merge_cells(start_row=r,start_column=23,end_row=r,end_column=25)
@@ -41,7 +41,7 @@ def test_import_reference_formulas_and_item_metadata():
     book=workbook();sheet=book.active;sheet['M15']='=M14';sheet['G15']='=G14+1';sheet['H15']='=IF(H14="","",H14)'
     rows=parse_control_plan(data(book),steps())
     assert len(rows)==2
-    assert rows[0]['process_detail']=='입고검사\n원자재'
+    assert rows[0]['process_detail']=='입고검사'
     assert rows[1]['specification']=='10±1' and rows[1]['item_no']=='2' and rows[1]['product']=='치수'
     assert rows[0]['quality'] is True
     assert 'company' not in rows[0]
@@ -51,18 +51,17 @@ def test_import_rejects_mismatch_without_partial_result(cell,value):
     book=workbook();book.active[cell]=value
     with pytest.raises(ControlPlanImportError):parse_control_plan(data(book),steps())
 
-def test_import_without_process_names_uses_flow_names():
-    book=workbook();book.active['E14']=None;book.active['E15']=None
-    rows=parse_control_plan(data(book),steps())
-    assert [r['flow_step_id'] for r in rows]==[1,2]
-    assert [r['process_detail'] for r in rows]==['입고검사','가공']
+def test_import_requires_process_names_and_rejects_differences():
+    for name in (None,'다른 공정','입고검사\n다른 공정'):
+        book=workbook();book.active['E14']=name
+        with pytest.raises(ControlPlanImportError) as error:parse_control_plan(data(book),steps())
+        assert any('공정명' in e['message'] for e in error.value.errors)
 
 
-def test_import_process_name_differences_do_not_block_number_mapping():
-    book=workbook();book.active['E15']='가공 상세 설명'
+def test_multiline_names_and_material_identifiers_match_flow():
+    book=workbook();book.active['E14']='입고\n검사\nC1100'
     rows=parse_control_plan(data(book),steps())
-    assert rows[1]['flow_step_id']==2
-    assert rows[1]['process_detail']=='가공 상세 설명'
+    assert rows[0]['flow_step_id']==1 and rows[0]['process_detail']=='입고검사'
 
 
 def test_duplicate_flow_numbers_are_ambiguous():
@@ -80,7 +79,7 @@ def test_import_rejects_missing_and_reordered_processes():
 def test_merged_number_can_have_distinct_characteristics():
     book=workbook();sheet=book.active
     sheet.insert_rows(15)
-    for c,v in {1:10,3:'◇',5:'입고검사\n원자재',7:1,8:'치수2',13:'20±1',14:'V/C',17:'검사일지',23:'격리'}.items():sheet.cell(15,c,v)
+    for c,v in {1:10,3:'◇',5:'입고\n검사',7:1,8:'치수2',13:'20±1',14:'V/C',17:'검사일지',23:'격리'}.items():sheet.cell(15,c,v)
     sheet.merge_cells('A14:A15');sheet.merge_cells('E14:E15');sheet.merge_cells('G14:G15')
     rows=parse_control_plan(data(book),steps())
     assert rows[0]['item_no']==rows[1]['item_no']=='1'
@@ -153,21 +152,28 @@ def test_guards_permissions_flow_version_identity_and_order(api):
 
 def test_canonical_revision_and_snapshot_survive_source_change(api):
     client,factory,_=api;body=payload();body['revision_code']='00'
+    with factory() as db:
+        step=db.get(ProcessFlowStep,1);step.symbol_code='SOURCE';step.symbol_name_snapshot='검사';step.symbol_shape_snapshot='SQUARE';db.commit()
     saved=client.post('/api/control-plans/revisions',json=body).json();assert saved['revision_code']=='REV.0'
     assert client.post('/api/control-plans/revisions',json=payload()).status_code==409
     with factory() as db:
-        db.get(ProcessFlowStep,1).step_name='변경 공정';db.get(ProcessFlowRevision,1).version=2;db.commit()
+        step=db.get(ProcessFlowStep,1);step.step_name='변경 공정';step.step_no='99';step.symbol_shape_snapshot='ARROW'
+        db.get(ProcessFlowRevision,1).version=2;db.commit()
     read=client.get('/api/control-plans/revisions/'+str(saved['id'])).json()
     assert read['flow']['steps'][0]['step_name']=='입고검사'
+    assert read['flow']['steps'][0]['step_no']=='10'
+    assert read['flow']['steps'][0]['symbol_shape']=='SQUARE'
     assert client.post('/api/control-plans/revisions/'+str(saved['id'])+'/activate',json={'version':1}).status_code==409
 
 
-def test_api_import_without_names_maps_by_process_number(api):
+def test_api_import_name_mismatch_preserves_existing_document(api):
     client,_,_=api
-    book=workbook();book.active['E14']=None;book.active['E15']=None
-    response=upload(client,book)
-    assert response.status_code==200,response.text
-    assert [r['process_detail'] for r in response.json()['rows']]==['입고검사','가공']
+    saved=client.post('/api/control-plans/revisions',json=payload()).json()
+    book=workbook();book.active['E14']='다른 공정명'
+    response=upload(client,book,revision_id=saved['id'],revision_version=saved['version'])
+    assert response.status_code==422,response.text
+    assert any('공정명 불일치' in error['message'] for error in response.json()['detail']['errors'])
+    assert client.get('/api/control-plans/revisions/'+str(saved['id'])).json()==saved
 
 
 def test_number_mismatch_error_lists_both_process_sequences():
@@ -175,3 +181,19 @@ def test_number_mismatch_error_lists_both_process_sequences():
     with pytest.raises(ControlPlanImportError) as error:
         parse_control_plan(data(book),steps())
     assert any('엑셀: 10, 30 / 공정흐름도: 10, 20' in e['message'] for e in error.value.errors)
+
+
+def test_saved_process_names_follow_flow_even_when_payload_differs(api):
+    client,_,_=api
+    body=payload()
+    body['rows'][0]['process_detail']='사용자가 바꾼 공정명'
+    created=client.post('/api/control-plans/revisions',json=body)
+    assert created.status_code==200,created.text
+    assert [r['process_detail'] for r in created.json()['rows']]==['입고검사','가공']
+
+
+def test_multiline_numeric_process_name_is_not_mistaken_for_material():
+    book=workbook();book.active['E14']='입고\n검사\n1'
+    reference=steps();reference[0].step_name='입고검사1'
+    rows=parse_control_plan(data(book),reference)
+    assert rows[0]['process_detail']=='입고검사1'

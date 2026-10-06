@@ -28,3 +28,4 @@
 .pf-stack textarea,.pf-stack>input{min-height:24px}
 .pf-stack input[type=date]{height:28px;padding:4px}
 .pf-stack .pf-na-check{height:24px}
+@media print{@page{size:A4 landscape;margin:10mm}}

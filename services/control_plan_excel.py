@@ -93,7 +93,7 @@ def parse_control_plan(data, steps):
                 return value.strip()
             except ValueError as exc:
                 fail(cell,str(exc)); return ''
-        rows=[]; groups=[]; current=None; identities=None; seen={}
+        rows=[]; groups=[]; current=None; identities=None; seen={}; process_names={}
         for r in range(14,sheet.max_row+1):
             if not any(sheet.cell(r,c).value is not None for c in range(1,28)):
                 continue
@@ -101,6 +101,8 @@ def parse_control_plan(data, steps):
             if not number:
                 fail(f'A{r}', '공정번호가 필요합니다.'); continue
             key=number
+            name_anchor=anchors.get((r,5),(r,5))
+            process_names.setdefault(key,{})[name_anchor]=read(r,5)
             if not groups or groups[-1]!=key:
                 groups.append(key)
             # A management number can span several independently named characteristics.
@@ -138,10 +140,25 @@ def parse_control_plan(data, steps):
                  + '엑셀: '+', '.join(groups[:50])+' / 공정흐름도: '+', '.join(expected[:50])
                  + '. 대상 품목과 누락된 공정도 확인해 주세요.')
         mapping={key:s for key,s in zip(expected,steps)}
+        for number,names in process_names.items():
+            step=mapping.get(number)
+            if not step: continue
+            target=normalize(step.step_name)
+            for (r,c),name in names.items():
+                if not name:
+                    fail(f'E{r}',f'{number} 공정명이 필요합니다. 기준: {step.step_name}'); continue
+                parts=[p.strip() for p in name.splitlines() if p.strip()]
+                if normalize(''.join(parts))==target: continue
+                # Material identifiers can follow the process name on separate lines.
+                # Join the actual name lines, never allow arbitrary prefix matching.
+                while len(parts)>1 and re.fullmatch(r'(?=.*[0-9])[A-Za-z0-9._/-]+',parts[-1]):
+                    parts.pop()
+                if normalize(''.join(parts))!=target:
+                    fail(f'E{r}',f'{number} 공정명 불일치: 엑셀 {name} / 공정흐름도 {step.step_name}')
         for row in rows:
             step=mapping.get(row.pop('_group'))
             row['flow_step_id']=step.id if step else None
-            if not row['process_detail'] and step:
+            if step:
                 row['process_detail']=str(step.step_name or '').strip()
             if not (row['product'] or row['process']):
                 fail(row['source_cell'],'제품 또는 공정 관리항목이 필요합니다.')

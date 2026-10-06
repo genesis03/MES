@@ -135,7 +135,8 @@ def assign(db,row,payload,user):
     header=dict(payload.header);item=db.get(ItemMasterModel,payload.item_id)
     header.update(part_no=item.part_no,part_name=item.part_name,vehicle_model=item.vehicle_model or '')
     row.header_json=json.dumps(header,ensure_ascii=False)
-    row.rows_json=json.dumps([x.model_dump() for x in payload.rows],ensure_ascii=False)
+    step_names={s.id:s.step_name for s in steps}
+    row.rows_json=json.dumps([x.model_dump() | {'process_detail':step_names[x.flow_step_id]} for x in payload.rows],ensure_ascii=False)
     row.flow_revision_id=flow.id;row.flow_version=flow.version
     row.flow_snapshot_json=json.dumps(flow_dict(db,flow),ensure_ascii=False)
     row.updated_by_id=user.id;row.updated_at=datetime.now()

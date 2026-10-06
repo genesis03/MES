@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}관리계획서{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/control_plan.css?v=aligned-header-rows-2">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/wide_table_scroll.css?v=1"><link rel="stylesheet" href="/static/css/control_plan.css?v=flow-reference-scroll-1">{% endblock %}
 {% block content %}
 <div id="cpApp" data-write="{{ 'true' if can_write_control_plan else 'false' }}">
 <div class="cp-toolbar">
@@ -17,6 +17,7 @@
 <div class="cp-scroll">
   <section class="cp-paper" aria-labelledby="controlPlanTitle">
     <h1 id="controlPlanTitle">관리 계획서</h1>
+    <div class="cp-header-scroll">
     <fieldset class="cp-form" {% if not can_write_control_plan %}disabled{% endif %}>
       <legend class="cp-sr-only">관리계획서 상단 정보</legend>
       <div class="cp-document-line">
@@ -67,11 +68,12 @@
       </div>
       <div class="cp-customer-line">
         <label for="cpSupplierCode">업체코드<input id="cpSupplierCode" name="supplier_code" maxlength="100"></label>
-        <label for="cpCustomerEngineering">고객기술 승인/일자(요구시)<textarea id="cpCustomerEngineering" name="customer_engineering_approval" rows="2" maxlength="1000"></textarea></label>
-        <label for="cpCustomerQuality">고객 품질 승인/일자(요구시)<textarea id="cpCustomerQuality" name="customer_quality_approval" rows="2" maxlength="1000"></textarea></label>
-        <label for="cpOtherApproval">기타 승인/일자(요구시)<textarea id="cpOtherApproval" name="other_approval" rows="2" maxlength="1000"></textarea></label>
+        <label for="cpCustomerEngineering">고객기술 승인/일자(요구시)<textarea id="cpCustomerEngineering" name="customer_engineering_approval" rows="1" maxlength="1000"></textarea></label>
+        <label for="cpCustomerQuality">고객 품질 승인/일자(요구시)<textarea id="cpCustomerQuality" name="customer_quality_approval" rows="1" maxlength="1000"></textarea></label>
+        <label for="cpOtherApproval">기타 승인/일자(요구시)<textarea id="cpOtherApproval" name="other_approval" rows="1" maxlength="1000"></textarea></label>
       </div>
     </fieldset>
+    </div>
     <div class="cp-lower-scroll"><table class="cp-analysis" id="cpAnalysis" aria-label="공정별 관리항목">
     <thead>
     <tr><th rowspan="3">공정번호</th><th colspan="3">공정흐름도</th><th rowspan="3">공정명</th><th rowspan="3">설비명</th><th colspan="3">관리항목</th><th rowspan="3">특별특성</th><th colspan="2">대상여부</th><th colspan="6">관리기준</th><th colspan="4">관리분담</th><th rowspan="3">이상 발생시 조치사항</th><th rowspan="3">비고</th><th rowspan="3" class="cp-actions">행 편집</th></tr>
@@ -81,5 +83,7 @@
   </section>
 </div>
 </div>
-<script src="/static/control_plan.js?v=control-plan-1" defer></script>
+<script src="/static/wide_table_scroll.js?v=1" defer></script>
+<script src="/static/flow_symbols.js?v=1" defer></script>
+<script src="/static/control_plan.js?v=flow-reference-scroll-1" defer></script>
 {% endblock %}

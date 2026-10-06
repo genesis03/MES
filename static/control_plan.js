@@ -37,15 +37,24 @@ function render(){
   if(!grouped.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=25;td.textContent=step.step_no+' '+step.step_name+' — 관리항목 없음 ';const add=document.createElement('button');add.textContent='관리항목 추가';add.onclick=()=>{rows.push(emptyRow(step));sortRows();dirty=true;render();};td.append(add);tr.append(td);tbody.append(tr);continue;}
   grouped.forEach((row,index)=>{
    const tr=document.createElement('tr');
-   if(!index){const td=document.createElement('td');td.rowSpan=grouped.length;td.className='cp-step';td.textContent=step.step_no;tr.append(td);}
-   ['sub','main','outside'].forEach(f=>rowInput(tr,row,f,f));
-   rowInput(tr,row,'process_detail','공정명 상세');rowInput(tr,row,'equipment','설비명');rowInput(tr,row,'item_no','관리항목 NO');rowInput(tr,row,'product','제품 관리항목');rowInput(tr,row,'process','공정 관리항목');rowInput(tr,row,'classification','특별특성');
+   if(!index){
+    for(const [field,value] of [['number',step.step_no],...['sub','main','outside'].map(field=>[field,grouped.find(r=>r[field])?.[field]||'']),['name',step.step_name]]){
+     const td=document.createElement('td');td.rowSpan=grouped.length;td.className='cp-step cp-step-'+field;td.dataset.stepId=step.id;
+     if(['sub','main','outside'].includes(field)){
+      // CP retains lane placement; the actual symbol belongs to the linked flow.
+      const lane=['outside','sub','main'].find(f=>grouped.some(r=>r[f]))||'main';
+      if(field===lane)td.innerHTML=window.MESFlowSymbols.render(step.symbol_shape,step.symbol_name);
+     }else td.textContent=value||'';
+     tr.append(td);
+    }
+   }
+   rowInput(tr,row,'equipment','설비명');rowInput(tr,row,'item_no','관리항목 NO');rowInput(tr,row,'product','제품 관리항목');rowInput(tr,row,'process','공정 관리항목');rowInput(tr,row,'classification','특별특성');
    rowInput(tr,row,'fool_proof','F/P','checkbox');rowInput(tr,row,'automatic','자동검사','checkbox');
    ['specification','method','sample_size','sample_frequency'].forEach((f,i)=>rowInput(tr,row,f,['규격','확인방법','샘플 크기','샘플 주기'][i]));rowInput(tr,row,'control_method','관리방안','text',2);
    ['material','production','quality','engineering'].forEach((f,i)=>rowInput(tr,row,f,['자재','생산','QC','기술'][i],'checkbox'));
    rowInput(tr,row,'reaction','이상 발생시 조치사항');rowInput(tr,row,'note','비고');
    const actions=document.createElement('td');actions.className='cp-actions';
-   for(const [label,action] of [['추가',()=>{rows.splice(rows.indexOf(row)+1,0,emptyRow(step));}],['삭제',()=>{rows.splice(rows.indexOf(row),1);}]] ){
+   for(const [label,action] of [['추가',()=>{const added=emptyRow(step);['sub','main','outside'].forEach(field=>added[field]=grouped.find(r=>r[field])?.[field]||'');rows.splice(rows.indexOf(row)+1,0,added);}],['삭제',()=>{rows.splice(rows.indexOf(row),1);}]] ){
     const btn=document.createElement('button');btn.type='button';btn.textContent=label;btn.onclick=()=>{action();dirty=true;render();};actions.append(btn);
    }
    tr.append(actions);tbody.append(tr);

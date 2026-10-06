@@ -5,19 +5,7 @@ const el=id=>document.getElementById(id),write=root.dataset.canWrite==='true';
 const label={DRAFT:'초안',CURRENT:'현재 사용',SUPERSEDED:'구버전',RETIRED:'폐기'};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // 도형 표현만 코드에 정의합니다. 선택 목록/명칭은 공통코드 API에서 가져옵니다.
-const shapes={
- CIRCLE:'<circle cx="16" cy="16" r="11"/>',
- ARROW:'<path d="M3 11H17V5L29 16L17 27V21H3Z"/>',
- SQUARE:'<rect x="5" y="5" width="22" height="22"/>',
- DIAMOND:'<path d="M16 3L29 16L16 29L3 16Z"/>',
- INVERTED_TRIANGLE:'<path d="M3 5H29L16 28Z"/>',
- DELAY:'<path d="M5 5H16A11 11 0 0 1 16 27H5Z"/>',
- // 복합기호는 주 기능을 바깥쪽, 보조 기능을 안쪽에 표시합니다.
- DIAMOND_SQUARE:'<path d="M16 3L29 16L16 29L3 16Z"/><rect x="9.5" y="9.5" width="13" height="13"/>',
- SQUARE_DIAMOND:'<rect x="5" y="5" width="22" height="22"/><path d="M16 5L27 16L16 27L5 16Z"/>',
- CIRCLE_SQUARE:'<circle cx="16" cy="16" r="12"/><rect x="8" y="8" width="16" height="16"/>',
- CIRCLE_ARROW:'<circle cx="16" cy="16" r="13"/><path d="M6 12H16V7L25 16L16 25V20H6Z"/>'
-};
+const shapes=window.MESFlowSymbols.shapes;
 let registrants={can_select:false,current_user_id:null,current_user_name:'',users:[]},revisionSource=null;
 let selected=null,steps=[],records=[],symbols=[],items=[],busy=false,dirty=false,ready=false,correcting=false;
 let activeStep=null;
@@ -109,9 +97,7 @@ async function task(fn){
   if(d){const i=d.loc.indexOf('steps');if(Number.isInteger(d.loc[i+1]))focusStep(d.loc[i+1],d.loc.at(-1));}
  }
 }
-function symbolSvg(shape,name){
- return shapes[shape]?'<svg class="flow-symbol" viewBox="0 0 32 32" role="img" aria-label="'+esc(name||'공정 기호')+'"><g fill="white" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">'+shapes[shape]+'</g></svg>':'<span class="flow-symbol-empty" title="기호 미지정">—</span>';
-}
+function symbolSvg(shape,name){return window.MESFlowSymbols.render(shape,name);}
 function diagram(){
  const item=items.find(x=>x.id===Number(el('flowItem').value));
  const number=selected?.part_no_snapshot||item?.part_no||'',name=selected?.part_name_snapshot||item?.part_name||'';

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}공정 FMEA{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/process_fmea.css?v=numeric-revision-1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/wide_table_scroll.css?v=1"><link rel="stylesheet" href="/static/css/process_fmea.css?v=a4-scroll-1">{% endblock %}
 {% block content %}
 <div id="fmeaApp" data-can-write="{{ 'true' if can_write_fmea else 'false' }}" data-author="{{ default_prepared_by }}" data-team="{{ default_team }}" data-today="{{ today }}">
   <div class="pf-head"><h1>잠재적 고장형태 및 영향분석 (공정 FMEA)</h1>{% if can_write_fmea %}<button class="pf-btn primary" id="fmeaNew">신규 등록</button>{% endif %}</div>
@@ -43,4 +43,4 @@
   </section>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/process_fmea.js?v=excel-import-feedback-4" defer></script>{% endblock %}
+{% block extra_script %}<script src="/static/wide_table_scroll.js?v=1" defer></script><script src="/static/process_fmea.js?v=excel-import-feedback-4" defer></script>{% endblock %}

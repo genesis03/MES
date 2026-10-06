@@ -226,9 +226,9 @@
     }catch(e){$('ob-cancel').disabled=false;msg(e.message);}
   }
 
-  function printWindow(title, bodyHtml, css=''){
+  function printWindow(title, bodyHtml, css='',isLabel=false){
     const w=window.open('','_blank','width=1000,height=800'); if(!w){alert('팝업 차단을 해제해 주세요.');return;}
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:Arial,sans-serif;padding:20px;color:#111}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}.left{text-align:left}${css}</style></head><body>${bodyHtml}</body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),200);
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${isLabel?'':'@page{size:A4 portrait;margin:10mm}@media print{body{padding:0!important}thead{display:table-header-group}tr{break-inside:avoid}}'}body{font-family:Arial,sans-serif;padding:20px;color:#111}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #333;padding:6px;text-align:center}th{background:#eee}.left{text-align:left}${css}</style></head><body>${bodyHtml}</body></html>`);w.document.close();w.focus();setTimeout(()=>w.print(),200);
   }
 
   function printSlip(){
@@ -240,7 +240,7 @@
   function printLabels(){
     if(!currentOutbound) return;
     let cards=''; currentOutbound.items.forEach(item=>{(item.lots||[]).forEach(lot=>{cards+=`<div class="label"><div><b>외주가공 출고</b></div><div>출고일 ${esc(currentOutbound.outbound_date)}</div><div>품번 ${esc(item.previous_part_no)}</div><div class="lot">${esc(lot.lot_no)}</div><div>수량 ${fmt(lot.outbound_qty)} ${esc(item.unit)}</div><div>${esc(currentOutbound.partner_name)}</div></div>`;});});
-    printWindow('외주가공 출고 라벨',cards,'.label{width:80mm;min-height:45mm;border:1px solid #111;padding:5mm;margin:0 0 4mm;box-sizing:border-box;page-break-inside:avoid}.lot{font-size:18px;font-weight:bold;margin:4mm 0}');
+    printWindow('외주가공 출고 라벨',cards,'.label{width:80mm;min-height:45mm;border:1px solid #111;padding:5mm;margin:0 0 4mm;box-sizing:border-box;page-break-inside:avoid}.lot{font-size:18px;font-weight:bold;margin:4mm 0}',true);
   }
 
   function init(){

@@ -1,0 +1,7 @@
+/* Non-label output defaults to A4; individual forms may choose landscape. */
+@page{size:A4 portrait;margin:10mm}
+@media print{
+ body{height:auto!important;overflow:visible!important;background:#fff!important}
+ .sidebar,.sidebar-overlay,.mobile-menu-btn,.no-print{display:none!important}
+ .main-content{margin:0!important;padding:0!important;width:100%!important;overflow:visible!important}
+}
