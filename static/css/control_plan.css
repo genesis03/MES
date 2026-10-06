@@ -108,7 +108,7 @@
 .cp-item-fields label>span{align-self:stretch;display:flex;align-items:center;justify-content:center;text-align:center;background:var(--cp-form-label);border-right:1px solid var(--cp-form-line);padding:4px;line-height:normal!important}
 .cp-item-fields input,.cp-item-fields textarea{border:0!important;border-radius:0!important;min-height:0;height:100%;margin:0;resize:none;text-align:center;white-space:pre-wrap}
 .cp-revisions th,.cp-revisions td,.cp-approval th,.cp-approval td{border-color:var(--cp-form-line);padding:4px}
-.cp-revisions thead th,.cp-revisions tbody th,.cp-approval th{background:var(--cp-form-label)}
+.cp-revisions thead th,.cp-revisions tbody th,.cp-approval th,.cp-approval thead th{background:var(--cp-form-label)}
 .cp-revisions thead th{white-space:normal}.cp-revisions .cp-revision-date-col{width:108px}.cp-revisions .cp-person-col{width:40px}
 .cp-revisions input,.cp-revisions textarea,.cp-approval input,.cp-approval textarea{border:0!important;border-radius:0!important;background:transparent!important;padding:3px!important}
 .cp-revisions input{text-align:center}
