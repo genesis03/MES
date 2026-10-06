@@ -1,0 +1,79 @@
+.main-content{min-width:0}
+.cp-notice{margin:0 0 14px;color:#64748b;font-size:13px;line-height:1.6}
+.cp-scroll{max-width:100%;overflow:auto}
+.cp-paper{min-width:1260px;background:#fff;border:1px solid #cbd5e1;padding:24px;box-sizing:border-box;color:#111}
+.cp-paper h1{text-align:center;font-size:26px;letter-spacing:8px;margin:0 0 24px}
+.cp-form,.cp-stages{border:0;padding:0;margin:0;min-width:0}
+.cp-sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.cp-form input:not([type=checkbox]),.cp-form textarea{box-sizing:border-box;min-width:0;width:100%;border:1px solid #cbd5e1;border-radius:3px;background:#fff;padding:6px;font:inherit;font-size:12px;color:#111;min-height:32px}
+.cp-form textarea{resize:vertical;display:block}
+.cp-form input:focus-visible,.cp-form textarea:focus-visible{outline:2px solid #2563eb;outline-offset:1px}
+.cp-form:disabled input,.cp-form:disabled textarea{background:#f8fafc;color:#475569}
+.cp-document-line{display:flex;justify-content:space-between;gap:32px;margin-bottom:18px;font-size:13px;font-weight:700}
+.cp-document-line label{display:flex;align-items:center;gap:8px;width:40%;max-width:480px;white-space:nowrap}
+/* 사용자가 제시한 줄바꿈을 공통 7행 기준으로 맞춥니다. */
+.cp-header-grid{--cp-row-height:44px;display:grid;grid-template-columns:minmax(340px,1fr) minmax(460px,1.25fr) minmax(340px,1fr);gap:18px;align-items:start}
+.cp-basic{display:grid;grid-template-columns:92px minmax(0,1fr);grid-template-rows:repeat(7,var(--cp-row-height));gap:0 12px;font-size:12px}
+.cp-stages{grid-column:1;grid-row:1/-1;display:grid;grid-template-rows:repeat(7,var(--cp-row-height));align-items:center}
+.cp-stages strong{grid-row:1;font-weight:700}
+.cp-stages label{display:flex;align-items:center;gap:7px;white-space:nowrap}
+.cp-stages label:nth-of-type(1){grid-row:2}
+.cp-stages label:nth-of-type(2){grid-row:4}
+.cp-stages label:nth-of-type(3){grid-row:6}
+.cp-stages input{width:16px;height:16px;margin:0;accent-color:#2563eb}
+.cp-item-fields{grid-column:2;grid-row:1/-1;display:grid;grid-template-rows:repeat(7,var(--cp-row-height))}
+.cp-item-fields label{display:grid;grid-template-columns:84px minmax(0,1fr);gap:8px;align-items:center;white-space:nowrap}
+.cp-item-fields label:nth-child(1){grid-row:1}
+.cp-item-fields label:nth-child(2){grid-row:2}
+.cp-item-fields label:nth-child(3){grid-row:4}
+.cp-item-fields label:nth-child(4){grid-row:6/span 2;align-items:start;padding:6px 0}
+.cp-item-fields label:nth-child(4) span{line-height:32px}
+.cp-item-fields textarea{height:100%;min-height:0;resize:none}
+.cp-revisions,.cp-approval table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12px}
+.cp-revisions th,.cp-revisions td,.cp-approval th,.cp-approval td{border:1px solid #94a3b8;text-align:center;padding:5px;vertical-align:middle}
+.cp-revisions thead th,.cp-approval thead th{background:#f1f5f9;font-weight:700;white-space:nowrap;box-sizing:border-box}
+.cp-revisions tr{height:var(--cp-row-height)}
+.cp-revisions{height:calc(7 * var(--cp-row-height))}
+.cp-revisions tbody th,.cp-approval tbody th{font-weight:400}
+.cp-revisions .cp-number-col{width:32px}
+.cp-revisions .cp-revision-date-col{width:122px}
+.cp-revisions .cp-person-col{width:52px}
+.cp-revisions textarea{min-height:32px;height:32px;resize:none}
+.cp-approval{display:grid;grid-template-rows:var(--cp-row-height) calc(6 * var(--cp-row-height))}
+.cp-established{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;white-space:nowrap}
+.cp-established input{max-width:180px}
+.cp-approval table th:first-child{width:40px;white-space:nowrap}
+.cp-approval table td{padding:4px}
+.cp-approval input[type=date]{font-size:10px;padding:4px 1px;min-height:34px}
+.cp-approval table{height:calc(6 * var(--cp-row-height))}
+.cp-approval thead tr,.cp-approval tbody tr:last-child{height:var(--cp-row-height)}
+.cp-approval tbody tr:first-child{height:calc(4 * var(--cp-row-height))}
+.cp-approval tbody tr:first-child th{vertical-align:top;padding-top:13px}
+.cp-approval textarea[name$=_signature]{height:calc(4 * var(--cp-row-height) - 12px);resize:none;text-align:center}
+.cp-customer-line{display:grid;grid-template-columns:180px repeat(3,minmax(0,1fr));gap:18px;border-top:1px solid #cbd5e1;margin-top:20px;padding-top:14px;font-size:12px}
+.cp-customer-line label{display:flex;flex-direction:column;gap:8px}
+@media print{
+ @page{size:A4 landscape;margin:10mm}
+ body{display:block!important;height:auto!important;overflow:visible!important;background:#fff!important}
+ .sidebar,.sidebar-overlay,.mobile-menu-btn,.cp-notice{display:none!important}
+ .main-content{margin:0!important;padding:0!important;width:100%!important;overflow:visible!important}
+ .cp-scroll{overflow:visible}
+ .cp-paper{min-width:0;border:0;padding:0}
+ .cp-paper h1{font-size:20px;margin-bottom:14px}
+ .cp-header-grid{--cp-row-height:36px;grid-template-columns:29% 41% 30%;gap:0}
+ .cp-basic{grid-template-columns:66px minmax(0,1fr);gap:6px;padding-right:8px;font-size:10px}
+ .cp-item-fields label{grid-template-columns:70px minmax(0,1fr);gap:3px}
+ .cp-approval{padding-left:8px}
+ .cp-revisions,.cp-approval table,.cp-customer-line,.cp-established{font-size:10px}
+ .cp-revisions .cp-number-col{width:22px}.cp-revisions .cp-revision-date-col{width:88px}.cp-revisions .cp-person-col{width:34px}
+ .cp-revisions th,.cp-revisions td{padding:2px}
+ .cp-revisions textarea{height:28px;min-height:26px}
+ .cp-form input:not([type=checkbox]),.cp-form textarea{border:0;border-radius:0;font-size:10px;padding:3px;background:transparent;min-height:26px}
+ .cp-customer-line{grid-template-columns:120px repeat(3,minmax(0,1fr));gap:10px}
+ .cp-paper{break-inside:avoid}
+}
+.cp-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-bottom:12px}.cp-toolbar label{display:flex;flex-direction:column;gap:4px;font-size:12px}.cp-toolbar select,.cp-toolbar input,.cp-toolbar button{padding:7px;border:1px solid #cbd5e1;border-radius:4px;background:white}.cp-toolbar button{background:#2563eb;color:white;cursor:pointer}.cp-toolbar button:disabled{opacity:.45;cursor:default}.cp-notice[data-error=true]{color:#b91c1c;white-space:pre-wrap}.cp-lower-scroll{overflow:auto;margin-top:20px;max-width:100%}.cp-analysis{border-collapse:collapse;min-width:2700px;table-layout:fixed;width:100%;font-size:12px}.cp-analysis th,.cp-analysis td{border:1px solid #94a3b8;padding:4px;vertical-align:top}.cp-analysis thead th{background:#f1f5f9;text-align:center;vertical-align:middle}.cp-analysis input:not([type=checkbox]),.cp-analysis textarea{width:100%;min-width:38px;box-sizing:border-box;font:inherit;border:1px solid #cbd5e1;padding:4px}.cp-analysis textarea{min-height:75px;resize:vertical;white-space:pre-wrap}.cp-analysis input[type=checkbox]{accent-color:#2563eb}.cp-analysis td.cp-step{width:120px;white-space:pre-wrap;background:#f8fafc}.cp-analysis button{display:block;margin:5px 0;padding:4px;font:inherit}.cp-analysis td:has(input[type=checkbox]){text-align:center}.cp-form:disabled input,.cp-analysis :disabled{background:#f8fafc}.cp-toolbar select{max-width:330px}
+@media print{.cp-toolbar,.cp-actions,.cp-analysis button{display:none!important}.cp-paper{break-inside:auto}.cp-lower-scroll{overflow:visible}.cp-analysis{min-width:0;font-size:7px}.cp-analysis th,.cp-analysis td{padding:2px;overflow-wrap:anywhere}.cp-analysis textarea,.cp-analysis input:not([type=checkbox]){border:0;font-size:7px;min-width:0;padding:0;resize:none}.cp-analysis textarea{height:auto;min-height:0}.cp-analysis thead{display:table-header-group}.cp-analysis tr{break-inside:avoid}.cp-header-grid{break-inside:avoid}}
+
+.cp-print-value{display:none}
+@media print{.cp-analysis textarea{display:none}.cp-print-value{display:block;white-space:pre-wrap;overflow-wrap:anywhere}}

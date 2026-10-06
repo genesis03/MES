@@ -36,6 +36,7 @@ from models.item_identity import ItemPartNoHistory, install_item_identity_events
 from models.document import ItemRevision, ItemDocument, DocumentFile
 from models.auth_session import AuthSession
 from models.process_flow import ProcessFlowRevision, ProcessFlowStepKey, ProcessFlowStep
+from models.control_plan import ControlPlanRevision
 from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
 from models.inspection_standard import InspectionStandard, InspectionStandardPrecheck, InspectionStandardItem
 

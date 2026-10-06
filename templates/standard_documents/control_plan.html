@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}관리계획서{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/control_plan.css?v=aligned-header-rows-2">{% endblock %}
+{% block content %}
+<div id="cpApp" data-write="{{ 'true' if can_write_control_plan else 'false' }}">
+<div class="cp-toolbar">
+<label>완제품 <select id="cpItem"><option value="">품목 선택</option></select></label>
+<label>문서 개정 <select id="cpRevision"><option value="">새 문서</option></select></label>
+<label>기준 공정흐름도 <select id="cpFlow"><option value="">공정흐름도 선택</option></select></label>
+<label>개정번호 <input id="cpRevisionCode" value="REV.0" maxlength="50"></label>
+<button id="cpNew" type="button">새 문서</button>
+{% if can_write_control_plan %}<button id="cpSave" type="button">초안 저장</button><button id="cpImport" type="button">관리항목 불러오기</button><button id="cpActivate" type="button">현재 사용 적용</button><button id="cpRevise" type="button">개정 등록</button>{% endif %}
+<button id="cpPrint" type="button">인쇄</button>
+<input id="cpFile" type="file" accept=".xlsx" hidden>
+</div>
+<p class="cp-notice" id="cpMessage" role="status">품목과 공정흐름도를 선택하세요. 엑셀은 첫 시트의 하단 관리항목만 불러옵니다.</p>
+<div class="cp-scroll">
+  <section class="cp-paper" aria-labelledby="controlPlanTitle">
+    <h1 id="controlPlanTitle">관리 계획서</h1>
+    <fieldset class="cp-form" {% if not can_write_control_plan %}disabled{% endif %}>
+      <legend class="cp-sr-only">관리계획서 상단 정보</legend>
+      <div class="cp-document-line">
+        <label for="cpCompany">회사명:<input id="cpCompany" name="company" maxlength="200" autocomplete="organization"></label>
+        <label for="cpDocumentNo">문서번호:<input id="cpDocumentNo" name="document_no" maxlength="100"></label>
+      </div>
+      <div class="cp-header-grid">
+        <div class="cp-basic">
+          <div class="cp-stages" role="group" aria-labelledby="cpStageHeading">
+            <strong id="cpStageHeading">단계</strong>
+            <label><input type="checkbox" name="stage_prototype">시작</label>
+            <label><input type="checkbox" name="stage_prelaunch">선행양산</label>
+            <label><input type="checkbox" name="stage_production">양산</label>
+          </div>
+          <div class="cp-item-fields">
+            <label for="cpVehicle">차종<input readonly id="cpVehicle" name="vehicle_model" maxlength="100"></label>
+            <label for="cpPartName">품명<input readonly id="cpPartName" name="part_name" maxlength="200"></label>
+            <label for="cpPartNo">품번<input readonly id="cpPartNo" name="part_no" maxlength="100"></label>
+            <label for="cpTeam"><span>상호기능팀원</span><textarea id="cpTeam" name="team" rows="3" maxlength="200"></textarea></label>
+          </div>
+        </div>
+        <table class="cp-revisions" aria-label="개정 이력 입력">
+          <colgroup><col class="cp-number-col"><col class="cp-revision-date-col"><col class="cp-reason-col"><col span="3" class="cp-person-col"></colgroup>
+          <thead><tr><th scope="col">NO</th><th scope="col">개정일자</th><th scope="col">개정사유</th><th scope="col">작성</th><th scope="col">검토</th><th scope="col">승인</th></tr></thead>
+          <tbody>
+          {% for number in range(1, 7) %}
+            <tr>
+              <th scope="row">{{ number }}</th>
+              <td><input type="date" name="revision_{{ number }}_date" aria-label="{{ number }}번 개정일자"></td>
+              <td><textarea name="revision_{{ number }}_reason" rows="1" maxlength="4000" aria-label="{{ number }}번 개정사유"></textarea></td>
+              {% for field, label in [('prepared', '작성'), ('reviewed', '검토'), ('approved', '승인')] %}
+              <td><input name="revision_{{ number }}_{{ field }}" maxlength="100" aria-label="{{ number }}번 개정 {{ label }}"></td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        <div class="cp-approval">
+          <label class="cp-established" for="cpEstablishedDate">제정일자:<input id="cpEstablishedDate" name="established_date" type="date"></label>
+          <table aria-label="결재 서명 및 날짜 입력">
+            <thead><tr><th scope="col">결재</th><th scope="col">작성</th><th scope="col">검토</th><th scope="col">승인</th></tr></thead>
+            <tbody>
+              <tr><th scope="row">서명</th>{% for field, label in [('prepared', '작성'), ('reviewed', '검토'), ('approved', '승인')] %}<td><textarea name="{{ field }}_signature" rows="4" maxlength="100" placeholder="서명" aria-label="{{ label }} 서명"></textarea></td>{% endfor %}</tr>
+              <tr><th scope="row">날짜</th>{% for field, label in [('prepared', '작성'), ('reviewed', '검토'), ('approved', '승인')] %}<td><input type="date" name="{{ field }}_date" aria-label="{{ label }} 날짜"></td>{% endfor %}</tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="cp-customer-line">
+        <label for="cpSupplierCode">업체코드<input id="cpSupplierCode" name="supplier_code" maxlength="100"></label>
+        <label for="cpCustomerEngineering">고객기술 승인/일자(요구시)<textarea id="cpCustomerEngineering" name="customer_engineering_approval" rows="2" maxlength="1000"></textarea></label>
+        <label for="cpCustomerQuality">고객 품질 승인/일자(요구시)<textarea id="cpCustomerQuality" name="customer_quality_approval" rows="2" maxlength="1000"></textarea></label>
+        <label for="cpOtherApproval">기타 승인/일자(요구시)<textarea id="cpOtherApproval" name="other_approval" rows="2" maxlength="1000"></textarea></label>
+      </div>
+    </fieldset>
+    <div class="cp-lower-scroll"><table class="cp-analysis" id="cpAnalysis" aria-label="공정별 관리항목">
+    <thead>
+    <tr><th rowspan="3">공정번호</th><th colspan="3">공정흐름도</th><th rowspan="3">공정명</th><th rowspan="3">설비명</th><th colspan="3">관리항목</th><th rowspan="3">특별특성</th><th colspan="2">대상여부</th><th colspan="6">관리기준</th><th colspan="4">관리분담</th><th rowspan="3">이상 발생시 조치사항</th><th rowspan="3">비고</th><th rowspan="3" class="cp-actions">행 편집</th></tr>
+    <tr><th rowspan="2">SUB</th><th rowspan="2">MAIN</th><th rowspan="2">외주</th><th rowspan="2">NO</th><th rowspan="2">제품</th><th rowspan="2">공정</th><th rowspan="2">F/P</th><th rowspan="2">자동검사</th><th rowspan="2">규격</th><th rowspan="2">확인방법</th><th colspan="2">샘플</th><th rowspan="2" colspan="2">관리방안</th><th rowspan="2">자재</th><th rowspan="2">생산</th><th rowspan="2">QC</th><th rowspan="2">기술</th></tr>
+    <tr><th>크기</th><th>주기</th></tr>
+    </thead><tbody id="cpRows"></tbody></table></div>
+  </section>
+</div>
+</div>
+<script src="/static/control_plan.js?v=control-plan-1" defer></script>
+{% endblock %}

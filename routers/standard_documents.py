@@ -1,4 +1,4 @@
-"""표준문서 메뉴의 개발 예정 화면. 문서 작성/저장 API는 아직 제공하지 않습니다."""
+"""표준문서 안내와 관리계획서 입력 화면."""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -16,10 +16,6 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 # 화면 제목/안내만 정의합니다. 업무 마스터나 문서 유형 공통코드를 대신하지 않습니다.
 PLANNED_PAGES = {
-    "/standard-documents/control-plans": {
-        "title": "관리계획서",
-        "description": "완제품 품목만 선택하는 관리계획서 기능을 준비 중입니다. 기존 품목마스터의 자재유형 기준을 사용합니다.",
-    },
     "/standard-documents/work-standards": {
         "title": "작업표준서 관리",
         "description": "품목·공정별 작업표준서와 개정 이력을 관리하는 기능을 준비 중입니다.",
@@ -38,12 +34,18 @@ def planned_document_page(request: Request, db: Session = Depends(get_db)):
     user = get_current_user_optional(request, db)
     if not user:
         return RedirectResponse("/login", status_code=303)
+    level = "WRITE"
     if not check_admin_permission(user):
         access = parse_user_permissions(user).get("menu_access")
         value = access.get(request.url.path) if isinstance(access, dict) else None
         level = "READ" if value is True else str(value or "NONE").upper()
         if level not in {"READ", "WRITE"}:
             raise HTTPException(403, "해당 표준문서 메뉴에 대한 접근 권한이 없습니다.")
+    if request.url.path == "/standard-documents/control-plans":
+        return templates.TemplateResponse(
+            request=request, name="standard_documents/control_plan.html",
+            context={"user": user, "can_write_control_plan": level == "WRITE"},
+        )
     page = PLANNED_PAGES[request.url.path]
     return templates.TemplateResponse(
         request=request, name="standard_documents/planned.html",
