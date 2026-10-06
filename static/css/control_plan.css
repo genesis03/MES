@@ -141,6 +141,11 @@
 .cp-revisions th,.cp-revisions td,.cp-approval th,.cp-approval td{padding:2px}
 .cp-customer-line label{min-height:21.6px}
 .cp-customer-line input,.cp-customer-line textarea{height:21.6px;min-height:0!important;padding:2px}
+/* Each shared edge is drawn once, with the same 1px stroke. */
+.cp-stages label:last-child,.cp-item-fields label:last-child{border-bottom:1px solid var(--cp-form-line)}
+.cp-approval table th:first-child{border-left:0}
+.cp-customer-line{margin-top:0;border-top:0}
+.cp-analysis th,.cp-analysis td{border:1px solid var(--cp-form-line)}
 @media print{
  .cp-paper{-webkit-print-color-adjust:exact;print-color-adjust:exact}
  .cp-document-line,.cp-basic,.cp-revisions,.cp-established,.cp-approval table,.cp-customer-line{font-size:10px}

@@ -95,7 +95,48 @@ $('cpFile').onchange=()=>run(async()=>{const file=$('cpFile').files[0];if(!file)
  const data=await api('/import-excel',{method:'POST',body});rows=data.rows;dirty=true;render();message(data.message+' ('+rows.length+'개 관리항목)');});
 window.addEventListener('beforeprint',()=>{document.querySelectorAll('.cp-form input:not([type=checkbox]),.cp-form textarea').forEach(el=>{const span=document.createElement('span');span.className='cp-header-value';span.textContent=el.type==='date'?el.value.replace(/-/g,'.'):el.value;el.after(span);});document.querySelectorAll('#cpRows textarea').forEach(el=>{const span=document.createElement('span');span.className='cp-print-value';span.textContent=el.value;el.after(span);});});
 window.addEventListener('afterprint',()=>document.querySelectorAll('.cp-print-value,.cp-header-value').forEach(el=>el.remove()));
-$('cpPrint').onclick=()=>window.print();
+$('cpPrint').onclick=async()=>{
+ const preview=window.open('','_blank','width=1200,height=850,scrollbars=yes,resizable=yes');
+ if(!preview){message('미리보기 창을 열 수 없습니다. 이 사이트의 팝업을 허용해 주세요.',true);return;}
+ preview.opener=null;
+ const doc=preview.document;
+ doc.title='관리계획서 인쇄 미리보기';
+ doc.body.textContent='미리보기를 준비하고 있습니다.';
+ try{
+  const cssUrl=document.querySelector('link[href*="/static/css/control_plan.css"]').href;
+  const response=await fetch(cssUrl);
+  if(!response.ok)throw Error('인쇄 양식을 불러오지 못했습니다. 다시 시도해 주세요.');
+  const css=await response.text();
+  if(preview.closed)return;
+  const paper=document.querySelector('.cp-paper').cloneNode(true);
+  paper.querySelectorAll('.cp-header-value,.cp-print-value,.cp-actions,button').forEach(el=>el.remove());
+  const sourceControls=document.querySelector('.cp-paper').querySelectorAll('input,textarea');
+  paper.querySelectorAll('input,textarea').forEach((el,index)=>{
+   const source=sourceControls[index];
+   if(el.type==='checkbox'){el.checked=source.checked;el.disabled=true;return;}
+   const span=doc.createElement('span');
+   span.className=el.closest('.cp-form')?'cp-header-value':'cp-print-value';
+   span.textContent=el.type==='date'?source.value.replace(/-/g,'.'):source.value;
+   el.replaceWith(span);
+  });
+  const style=doc.createElement('style');
+  style.textContent=css.replace(/@media\s+print\s*\{/g,'@media all{')+`
+   *{box-sizing:border-box;margin:0;padding:0}
+   html{background:#e2e8f0}
+   body{display:block!important;background:#e2e8f0!important;overflow:auto!important;font-family:Arial,sans-serif}
+   .cp-preview-toolbar{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:16px;padding:12px 20px;background:#fff;border-bottom:1px solid #cbd5e1}
+   .cp-preview-toolbar button{padding:8px 20px;border:0;border-radius:4px;background:#2563eb;color:#fff;cursor:pointer;font-size:14px}
+   .cp-paper{width:277mm;margin:10mm auto;background:#fff;box-shadow:0 2px 12px #0002}
+   .cp-header-scroll,.cp-lower-scroll{overflow:visible}
+   @media print{html,body{background:#fff!important}.cp-preview-toolbar{display:none}.cp-paper{width:100%;margin:0;box-shadow:none}}
+  `;
+  doc.head.append(style);
+  const toolbar=doc.createElement('div');toolbar.className='cp-preview-toolbar';
+  const label=doc.createElement('span');label.textContent='관리계획서 인쇄 미리보기 · A4 가로';
+  const button=doc.createElement('button');button.type='button';button.textContent='인쇄';button.onclick=()=>preview.print();
+  toolbar.append(label,button);doc.body.replaceChildren(toolbar,doc.importNode(paper,true));
+ }catch(error){if(!preview.closed)preview.close();message(error.message,true);}
+};
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
 run(async()=>{items=await api('/options');addOptions($('cpItem'),items,'품목 선택',x=>x.part_no+' · '+x.part_name);render();});
 })();
