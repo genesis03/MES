@@ -119,15 +119,24 @@
 .cp-customer-line label>span{background:var(--cp-form-label);align-self:stretch;display:flex;align-items:center;padding:5px;border-right:1px solid var(--cp-form-line);white-space:nowrap}
 .cp-customer-line input,.cp-customer-line textarea{border:0!important;border-radius:0!important;background:#fff;resize:none}
 .cp-header-value{display:none}
+/* Compact the header rows and give the revision reason 60% of its former space. */
+.cp-header-grid{--cp-row-height:26.4px;grid-template-columns:35% calc(27.6% + 104px) minmax(0,1fr)}
+.cp-revisions input,.cp-revisions textarea,.cp-approval input,.cp-established input{min-height:0!important;height:100%;box-sizing:border-box}
+.cp-revisions textarea{height:18px;min-height:0}
+.cp-revisions th,.cp-revisions td,.cp-approval th,.cp-approval td{padding:2px}
+.cp-customer-line label{min-height:21.6px}
+.cp-customer-line input,.cp-customer-line textarea{height:21.6px;min-height:0!important;padding:2px}
 @media print{
  .cp-paper{-webkit-print-color-adjust:exact;print-color-adjust:exact}
  .cp-document-line,.cp-basic,.cp-revisions,.cp-established,.cp-approval table,.cp-customer-line{font-size:10px}
- .cp-header-grid{grid-template-columns:35% 46% 19%}
+ .cp-header-grid{--cp-row-height:21.6px;grid-template-columns:37.5% calc(29.571428571% + 75.2px) minmax(0,1fr)}
+ .cp-form{width:93.333333333%}
  .cp-basic{grid-template-columns:66px minmax(0,1fr);padding:0;gap:0}
  .cp-item-fields label{grid-template-columns:75px minmax(0,1fr);gap:0}
  .cp-revisions .cp-revision-date-col{width:82px}.cp-revisions .cp-person-col{width:28px}
  .cp-customer-line{grid-template-columns:125px repeat(3,minmax(0,1fr));gap:0}
- .cp-customer-line label>span{font-size:9px;padding:3px}.cp-customer-line label{min-height:28px}
+ .cp-customer-line label>span{font-size:9px;padding:2px}.cp-customer-line label{min-height:16.8px}
+ .cp-revisions th,.cp-revisions td,.cp-approval th,.cp-approval td{padding:1px}
  .cp-form input:not([type=checkbox]),.cp-form textarea{display:none!important}
  .cp-form .cp-header-value{display:block;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;color:#111;font-weight:400;padding:3px}
  .cp-item-fields .cp-header-value{display:flex;align-items:center;justify-content:center;text-align:center}
