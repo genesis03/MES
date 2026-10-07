@@ -21,6 +21,7 @@ function refreshControls(){
  for(const id of ['cpSave','cpImport'])if($(id))$(id).disabled=!edit||!flow;
  if($('cpActivate'))$('cpActivate').disabled=!edit||!current||dirty;
  if($('cpRevise'))$('cpRevise').disabled=!canWrite||!current||current.status==='DRAFT'||busy;
+ if($('cpInspectionLinks'))$('cpInspectionLinks').disabled=!current||dirty||busy||!canWrite||!['DRAFT','CURRENT'].includes(current.status);
  $('cpItem').disabled=busy;$('cpRevision').disabled=busy;$('cpNew').disabled=busy;
  document.querySelectorAll('#cpRows input,#cpRows textarea,#cpRows button').forEach(el=>el.disabled=!edit);
 }
@@ -93,6 +94,38 @@ $('cpFile').onchange=()=>run(async()=>{const file=$('cpFile').files[0];if(!file)
  if(rows.some(r=>textFields.some(f=>r[f]))&&!confirm('하단 관리항목을 엑셀 내용으로 교체하시겠습니까? 상단 입력은 유지됩니다.'))return;
  message('엑셀 양식과 공정 순서를 확인하고 있습니다.');const body=new FormData();body.append('file',file);body.append('item_id',$('cpItem').value);body.append('flow_revision_id',flow.id);body.append('flow_version',flow.version);if(current){body.append('revision_id',current.id);body.append('revision_version',current.version);}
  const data=await api('/import-excel',{method:'POST',body});rows=data.rows;dirty=true;render();message(data.message+' ('+rows.length+'개 관리항목)');});
+if($('cpInspectionLinks'))$('cpInspectionLinks').onclick=()=>run(async()=>{
+ const planId=current.id;
+ const data=await api('/revisions/'+planId+'/inspection-links');
+ const dialog=document.createElement('dialog');
+ dialog.style.cssText='width:min(900px,95vw);max-height:85vh;margin:auto;padding:20px;border:1px solid #94a3b8;border-radius:6px;overflow:auto';
+ const heading=document.createElement('h2');heading.textContent='검사기준서 연결 설정';heading.style.fontSize='18px';dialog.append(heading);
+ const help=document.createElement('p');help.textContent='각 관리계획서 공정이 연결될 검사구분을 지정하세요. 미지정 공정은 불러오기에서 제외됩니다. 공정검사는 품번에 등록된 공정코드와 연결합니다.';help.style.cssText='font-size:13px;margin:12px 0';dialog.append(help);
+ const fields=[];
+ for(const step of current.flow.steps){
+  const line=document.createElement('div');line.style.cssText='display:grid;grid-template-columns:1fr 180px 180px;gap:8px;margin:8px 0;align-items:center';
+  const label=document.createElement('span');label.textContent=step.step_no+' · '+step.step_name;
+  const category=document.createElement('select');
+  for(const [value,text] of [['','미지정'],['RAW_INBOUND','자재 입고'],['SUBCONTRACT_INBOUND','외주가공 입고'],['PROCESS','공정검사'],['FINAL','최종검사']])category.add(new Option(text,value));
+  const process=document.createElement('select');process.add(new Option('내부 공정 선택',''));
+  data.processes.forEach(p=>process.add(new Option(p.name+' ('+p.code+')',p.code)));
+  const old=data.links.find(x=>x.flow_step_id===step.id);category.value=old?.category||'';process.value=old?.process_code||'';
+  const toggle=()=>{process.disabled=category.value!=='PROCESS';if(process.disabled)process.value='';};category.onchange=toggle;toggle();
+  line.append(label,category,process);dialog.append(line);fields.push({step,category,process});
+ }
+ const error=document.createElement('p');error.style.color='#b91c1c';dialog.append(error);
+ const save=document.createElement('button');save.textContent='연결 저장';save.style.cssText='padding:8px 16px;margin:12px 8px 0 0';
+ const close=document.createElement('button');close.textContent='닫기';close.style.padding='8px 16px';close.onclick=()=>dialog.close();
+ save.onclick=async()=>{
+  if(current?.id!==planId||dirty){error.textContent='문서가 변경되었습니다. 닫고 다시 열어 주세요.';return;}
+  const links=fields.filter(x=>x.category.value).map(x=>({flow_step_id:x.step.id,category:x.category.value,process_code:x.process.value||null}));
+  if(links.some(x=>x.category==='PROCESS'&&!x.process_code)){error.textContent='공정검사에는 내부 공정을 선택해 주세요.';return;}
+  save.disabled=true;
+  try{const result=await api('/revisions/'+planId+'/inspection-links',json('PUT',{version:current.version,links}));display(result);message('검사기준서 연결을 저장했습니다.');dialog.close();}
+  catch(e){error.textContent=e.message;}finally{save.disabled=false;}
+ };
+ dialog.append(save,close);dialog.onclose=()=>dialog.remove();document.body.append(dialog);dialog.showModal();
+});
 window.addEventListener('beforeprint',()=>{document.querySelectorAll('.cp-form input:not([type=checkbox]),.cp-form textarea').forEach(el=>{const span=document.createElement('span');span.className='cp-header-value';span.textContent=el.type==='date'?el.value.replace(/-/g,'.'):el.value;el.after(span);});document.querySelectorAll('#cpRows textarea').forEach(el=>{const span=document.createElement('span');span.className='cp-print-value';span.textContent=el.value;el.after(span);});});
 window.addEventListener('afterprint',()=>document.querySelectorAll('.cp-print-value,.cp-header-value').forEach(el=>el.remove()));
 $('cpPrint').onclick=async()=>{

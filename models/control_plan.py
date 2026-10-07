@@ -29,3 +29,14 @@ class ControlPlanRevision(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now)
     activated_at = Column(DateTime)
+
+
+class ControlPlanInspectionLink(Base):
+    """Explicit inspection routing for a process in a control-plan snapshot."""
+    __tablename__ = 'control_plan_inspection_links'
+    __table_args__ = (UniqueConstraint('plan_id', 'flow_step_id'),)
+    id = Column(Integer, primary_key=True)
+    plan_id = Column(Integer, ForeignKey('control_plan_revisions.id', ondelete='CASCADE'), nullable=False)
+    flow_step_id = Column(Integer, nullable=False)
+    category = Column(String(30), nullable=False)
+    process_code = Column(String(50), nullable=True)

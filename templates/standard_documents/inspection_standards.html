@@ -34,13 +34,14 @@
     <div id="readonlyNote" class="readonly-note"></div>
     <input type="hidden" id="standardId"><input type="hidden" id="itemId">
     <div class="is-grid">
+      {% if document_type == 'INBOUND' %}
+      <div class="is-field"><label>입고검사 구분 *</label><select id="inspectionCategory" onchange="changeInspectionScope()"><option value="RAW_INBOUND">자재 입고 — 원재료</option><option value="SUBCONTRACT_INBOUND">외주가공 입고 — -AG 품번</option></select></div>
+      {% elif document_type == 'PROCESS' %}
+      <div class="is-field"><label>검사 공정 *</label><select id="inspectionProcess" onchange="changeInspectionScope()"><option value="">내부 공정 선택</option></select></div>
+      {% endif %}
       <div class="is-field"><label>품번 *</label><div class="lookup-row"><input id="partNo" readonly placeholder="조회 버튼으로 선택"><button class="btn secondary" type="button" onclick="openItemModal()">조회</button></div></div>
       <div class="is-field"><label>품명</label><input id="partName" readonly></div>
-      {% if document_type == 'PROCESS' %}
-      <div class="is-field"><label>공정흐름도 단계 *</label><select id="processStep"><option value="">품번 선택 후 조회</option></select></div>
-      {% else %}
       <div class="is-field"><label>문서구분</label><input value="{{ document_name }}" readonly></div>
-      {% endif %}
       <div class="is-field"><label>관리번호</label><input id="managementNo" maxlength="80"></div>
       <div class="is-field"><label>REV *</label><span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="revision" value="0" inputmode="numeric" pattern="[0-9]+" maxlength="16"></span></div>
       <div class="is-field"><label>적용일</label><input id="effectiveDate" type="date"></div>
@@ -52,6 +53,10 @@
     </div>
     <div class="toolbar">
       {% if can_write %}<button class="btn primary" id="saveBtn" type="button" onclick="saveStandard()">저장</button><button class="btn secondary" id="newBtn" type="button" onclick="newStandard()">신규</button><button class="btn orange" id="reviseBtn" type="button" onclick="openRevisionModal()" disabled>개정</button><button class="btn green" id="activateBtn" type="button" onclick="activateStandard()" disabled>현재사용 적용</button><button class="btn danger" id="deleteBtn" type="button" onclick="deleteDraft()" disabled>작성중 삭제</button>{% endif %}
+    </div>
+    <div class="toolbar">
+      {% if can_write %}<button class="btn secondary" id="importPlanBtn" type="button" onclick="openPlanImport()">관리계획서 불러오기</button>{% endif %}
+      <span id="planSource" style="font-size:12px;align-self:center"></span>
     </div>
     <div id="msg" class="msg"></div>
   </div>
@@ -82,6 +87,16 @@
 <div class="modal" id="itemModal"><div class="modal-box"><div class="modal-head"><strong>품번 조회</strong><button class="close" onclick="closeModal('itemModal')">×</button></div><div class="modal-body"><div class="search-grid"><input id="itemKeyword" placeholder="품번 또는 품명"><button class="btn primary" onclick="searchItems()">조회</button></div><table class="search-results"><thead><tr><th>품번</th><th>품명</th></tr></thead><tbody id="itemSearchBody"></tbody></table></div><div class="modal-foot"><button class="btn secondary" onclick="closeModal('itemModal')">닫기</button></div></div></div>
 
 {% if can_write %}
+<div class="modal" id="planImportModal"><div class="modal-box" style="width:min(620px,94vw)">
+  <div class="modal-head"><strong>관리계획서에서 검사항목 불러오기</strong><button type="button" class="close" onclick="closeModal('planImportModal')">×</button></div>
+  <div class="modal-body">
+    <p style="font-size:12px;margin-bottom:12px">현재사용 관리계획서에서 이 검사구분에 연결된 공정을 선택하세요. 검사기준 항목을 가져오며 저장 전까지는 초안에만 반영됩니다.</p>
+    <div class="is-field"><label>관리계획서</label><select id="importPlan" onchange="updatePlanSteps()"></select></div>
+    <div class="is-field" style="margin-top:12px"><label>검사 공정</label><select id="importPlanStep"></select></div>
+    <div id="planImportMessage" class="msg err" role="alert"></div>
+  </div>
+  <div class="modal-foot"><button class="btn secondary" type="button" onclick="closeModal('planImportModal')">취소</button><button id="importPlanConfirm" class="btn primary" type="button" onclick="importPlanItems()">불러오기</button></div>
+</div></div>
 <div class="modal" id="revisionModal"><div class="modal-box" style="width:min(520px,94vw)"><div class="modal-head"><strong>새 REV 작성</strong><button class="close" onclick="closeModal('revisionModal')">×</button></div><div class="modal-body"><div class="is-field"><label>새 REV *</label><span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="newRevision" inputmode="numeric" pattern="[0-9]+" maxlength="16"></span></div><div class="is-field"><label>개정내용</label><input id="newChangeSummary"></div><div class="is-field"><label>개정사유</label><textarea id="newChangeReason"></textarea></div></div><div class="modal-foot"><button class="btn secondary" onclick="closeModal('revisionModal')">취소</button><button class="btn primary" onclick="reviseStandard()">개정 생성</button></div></div></div>
 {% endif %}
 {% endblock %}
@@ -90,7 +105,8 @@
 <script>
 const DOC_TYPE='{{ document_type }}';const CAN_WRITE={{ 'true' if can_write else 'false' }};
 let current=null,historyRows=[],inspectionItemOptions={groups:[],items:[]};
-const $=id=>document.getElementById(id);const esc=v=>{const s=document.createElement('span');s.textContent=v??'';return s.innerHTML};
+let planSource=null,planOptions=[],planImportItemId=null,planImportBusy=false,planImportScope="";
+const $=id=>document.getElementById(id);const esc=v=>{const s=document.createElement('span');s.textContent=v??'';return s.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;')};
 async function api(url,opt){
   const r=await fetch(url,opt);
   const body=await r.text();
@@ -114,6 +130,59 @@ function message(t,ok=false){$('msg').textContent=t||'';$('msg').className='msg 
 function closeModal(id){$(id).classList.remove('show')}
 function statusText(v){return {DRAFT:'작성중',CURRENT:'현재사용',SUPERSEDED:'이전REV',RETIRED:'폐기'}[v]||v||''}
 function userOptions(users){const html='<option value="">선택</option>'+users.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('');$('preparedBy').innerHTML=html}
+function inspectionContext(){return {document_type:DOC_TYPE,inspection_category:DOC_TYPE==='INBOUND'?$('inspectionCategory').value:DOC_TYPE,inspection_process_code:DOC_TYPE==='PROCESS'?$('inspectionProcess').value:''}}
+function contextQuery(){return new URLSearchParams(inspectionContext())}
+function changeInspectionScope(){if(planImportBusy)return;if(current?.status==='DRAFT'&&!current.inspection_category){setPlanSource(null);message('이전 작성본의 검사구분을 지정했습니다. 품번 조건을 확인한 뒤 저장해 주세요.',true);return}newStandard();message('검사구분에 맞는 품번을 조회해 주세요.',true)}
+function setPlanSource(source){
+  planSource=source;
+  if($('planSource'))$('planSource').textContent=source?`출처: ${source.document_no} ${source.revision_code} · 공정 ${source.step_no}`:'';
+}
+function restorePlanSource(d){setPlanSource(d.control_plan_revision_id?{plan_id:d.control_plan_revision_id,step_id:d.control_plan_flow_step_id,document_no:d.control_plan_document_no||'관리계획서',revision_code:d.control_plan_revision_code||'',step_no:d.control_plan_process_no}:null)}
+function planImportMessage(text){message(text);if($('planImportMessage'))$('planImportMessage').textContent=text}
+async function openPlanImport(){
+  if(planImportBusy)return;
+  if(!CAN_WRITE||(current&&current.status!=='DRAFT')){message('현재사용 기준서는 개정한 뒤 불러와 주세요.');return}
+  const itemId=Number($('itemId').value);
+  if(!itemId){message('먼저 품번을 선택해 주세요.');return}
+  planImportBusy=true;updateButtons();
+  try{
+    const query=contextQuery();query.set('item_id',String(itemId));const options=await api('/api/standard-documents/inspection-standards/control-plan-options?'+query);
+    if(itemId!==Number($('itemId').value))return;
+    if(!options.length)throw new Error('연결 가능한 현재사용 관리계획서가 없습니다. 완제품 BOM 연결과 관리계획서의 검사기준서 연결 설정을 확인해 주세요.');
+    planOptions=options;planImportItemId=itemId;planImportScope=contextQuery().toString();
+    $('importPlan').innerHTML='<option value="">관리계획서 선택</option>'+options.map(x=>`<option value="${x.id}">${esc(x.part_no)} · ${esc(x.document_no)} · ${esc(x.revision_code)}</option>`).join('');
+    if(options.length===1)$('importPlan').value=options[0].id;
+    updatePlanSteps();$('planImportMessage').textContent='';$('planImportModal').classList.add('show');
+  }catch(e){message(e.message)}finally{planImportBusy=false;updateButtons()}
+}
+function updatePlanSteps(){
+  const plan=planOptions.find(x=>x.id===Number($('importPlan').value));
+  $('importPlanStep').innerHTML='<option value="">검사 공정 선택</option>'+(plan?.steps||[]).map(x=>`<option value="${x.id}">${esc(x.step_no)} · ${esc(x.step_name)}</option>`).join('');
+}
+async function importPlanItems(){
+  if(planImportBusy)return;
+  if(!CAN_WRITE||(current&&current.status!=='DRAFT')){message('작성중 기준서에만 불러올 수 있습니다.');return}
+  const itemId=planImportItemId,standardId=$('standardId').value;
+  const planId=Number($('importPlan').value),stepId=Number($('importPlanStep').value);
+  if(itemId!==Number($('itemId').value)||planImportScope!==contextQuery().toString()){closeModal('planImportModal');message('품번이 변경되었습니다. 다시 불러와 주세요.');return}
+  if(!planId||!stepId){planImportMessage('관리계획서와 검사 공정을 선택해 주세요.');return}
+  const hasItems=[...$('itemBody').querySelectorAll('input,select,textarea')].some(x=>!x.matches('.i-sort')&&x.value.trim());
+  if(hasItems&&!confirm('현재 검사기준 항목을 선택한 공정의 관리항목으로 교체하시겠습니까?'))return;
+  planImportBusy=true;$('importPlanConfirm').disabled=true;updateButtons();
+  try{
+    const query=contextQuery();query.set('item_id',String(itemId));query.set('plan_id',String(planId));query.set('step_id',String(stepId));
+    const d=await api('/api/standard-documents/inspection-standards/control-plan-import?'+query);
+    if(itemId!==Number($('itemId').value)||planImportScope!==contextQuery().toString()||standardId!==$('standardId').value||(current&&current.status!=='DRAFT'))throw new Error('작성 문서가 변경되었습니다. 다시 불러와 주세요.');
+    const mapped=d.items.map(x=>{
+      const master=inspectionItemOptions.items.find(m=>m.item_name===x.inspection_item_name);
+      return {...x,inspection_group_no:master?.group_name||(x.inspection_item_name.startsWith('치수')?'치수':null),unit:master?.default_unit||null};
+    });
+    $('itemBody').innerHTML='';mapped.forEach(addInspectionItem);showDetailsForItems(mapped);
+    $('itemBody').querySelectorAll('tr').forEach(tr=>syncDimensionSpec(tr));
+    setPlanSource(d);updateButtons();closeModal('planImportModal');
+    message(`${d.items.length}개 항목을 불러왔습니다. 내용을 확인한 뒤 저장해 주세요.`,true);
+  }catch(e){planImportMessage(e.message)}finally{planImportBusy=false;$('importPlanConfirm').disabled=false;updateButtons()}
+}
 function defaultPrechecks(){return[
  {sort_order:1,check_item:'측정기 교정 여부',criteria:'교정기한 이내일 것',responsible:'검사원',frequency:'검사 전/매일',abnormal_action:'교체, 기 검사품 확인',note:''},
  {sort_order:2,check_item:'측정기 상태',criteria:'정상 작동 될 것',responsible:'검사원',frequency:'검사 전/매일',abnormal_action:'교체, 기 검사품 확인',note:''}
@@ -200,27 +269,26 @@ function showDetailsForItems(items){$('showItemDetails').checked=items.some(x=>x
 function addPrecheck(x={}){$('precheckBody').insertAdjacentHTML('beforeend',precheckRow(x,$('precheckBody').children.length))}
 function addInspectionItem(x={}){$('itemBody').insertAdjacentHTML('beforeend',itemRow(x,$('itemBody').children.length));setEditable(CAN_WRITE&&(!current||current.status==='DRAFT'))}
 $('precheckBody').addEventListener('click',e=>{if(e.target.closest('.remove-pre'))e.target.closest('tr').remove()});$('itemBody').addEventListener('click',e=>{if(e.target.closest('.remove-item'))e.target.closest('tr').remove()});
-function setEditable(editable){document.querySelectorAll('#managementNo,#revision,#effectiveDate,#preparedBy,#changeSummary,#changeReason,#note,#precheckBody input,#precheckBody textarea,#itemBody input,#itemBody select,#itemBody textarea').forEach(x=>x.disabled=!editable);if($('processStep'))$('processStep').disabled=!editable||!!current;const note=$('readonlyNote');note.classList.toggle('show',!editable);note.textContent=!editable?(current?.status==='CURRENT'?'현재사용 기준서는 직접 수정할 수 없습니다. 개정 버튼으로 새 REV를 작성해 주세요.':'이전/폐기 기준서는 이력 조회 전용입니다.') : ''}
-function updateButtons(){if(!CAN_WRITE){setEditable(false);return}const draft=current&&current.status==='DRAFT';$('saveBtn').disabled=!!current&&!draft;$('reviseBtn').disabled=!current||current.status==='DRAFT'||current.status==='RETIRED';$('activateBtn').disabled=!draft;$('deleteBtn').disabled=!draft;setEditable(!current||draft)}
-async function openItemModal(){$('itemKeyword').value='';$('itemSearchBody').innerHTML='';$('itemModal').classList.add('show');await searchItems()}
-async function searchItems(){try{const rows=await api('/api/standard-documents/inspection-standards/items?document_type='+DOC_TYPE+'&keyword='+encodeURIComponent($('itemKeyword').value||''));$('itemSearchBody').innerHTML=rows.length?rows.map(x=>`<tr data-item-id="${x.item_id}"><td>${esc(x.part_no)}</td><td>${esc(x.part_name)}</td></tr>`).join(''):'<tr><td colspan="2">조회 결과가 없습니다.</td></tr>';$('itemSearchBody').querySelectorAll('tr[data-item-id]').forEach((tr,idx)=>{tr.onclick=()=>{const x=rows[idx];selectItem(x.item_id,x.part_no,x.part_name)}})}catch(e){message(e.message)}}
-async function selectItem(id,partNo,partName){$('itemId').value=id;$('partNo').value=partNo;$('partName').value=partName;closeModal('itemModal');current=null;if(DOC_TYPE==='PROCESS')await loadProcessSteps(id);await loadHistory();newStandard(false)}
-async function loadProcessSteps(itemId){const rows=await api('/api/standard-documents/inspection-standards/process-steps?item_id='+itemId);$('processStep').innerHTML='<option value="">공정흐름도 단계 선택</option>'+rows.map(x=>`<option value="${x.step_key_id}">${esc(x.step_no)} · ${esc(x.step_name)}</option>`).join('');$('processStep').onchange=()=>{current=null;loadHistory();newStandard(false)}}
+function setEditable(editable){document.querySelectorAll('#managementNo,#revision,#effectiveDate,#preparedBy,#changeSummary,#changeReason,#note,#precheckBody input,#precheckBody textarea,#itemBody input,#itemBody select,#itemBody textarea').forEach(x=>x.disabled=!editable);for(const id of ['inspectionCategory','inspectionProcess'])if($(id))$(id).disabled=planImportBusy||(CAN_WRITE&&!!current&&(current.status!=='DRAFT'||!!current.inspection_category));const note=$('readonlyNote');note.classList.toggle('show',!editable);note.textContent=!editable?(current?.status==='CURRENT'?'현재사용 기준서는 직접 수정할 수 없습니다. 개정 버튼으로 새 REV를 작성해 주세요.':'이전/폐기 기준서는 이력 조회 전용입니다.') : ''}
+function updateButtons(){if(!CAN_WRITE){setEditable(false);return}const draft=current&&current.status==='DRAFT';$('saveBtn').disabled=planImportBusy||!!current&&!draft;$('newBtn').disabled=planImportBusy;$('reviseBtn').disabled=planImportBusy||!current||current.status==='DRAFT'||current.status==='RETIRED';$('activateBtn').disabled=planImportBusy||!draft;$('deleteBtn').disabled=planImportBusy||!draft;if($('importPlanBtn'))$('importPlanBtn').disabled=planImportBusy||!!current&&!draft;setEditable(!planImportBusy&&(!current||draft))}
+async function openItemModal(){if(DOC_TYPE==='PROCESS'&&!$('inspectionProcess').value){message('먼저 검사 공정을 선택해 주세요.');return}if(planImportBusy)return;$('itemKeyword').value='';$('itemSearchBody').innerHTML='';$('itemModal').classList.add('show');await searchItems()}
+async function searchItems(){try{const rows=await api('/api/standard-documents/inspection-standards/items?'+contextQuery().toString()+'&keyword='+encodeURIComponent($('itemKeyword').value||''));$('itemSearchBody').innerHTML=rows.length?rows.map(x=>`<tr data-item-id="${x.item_id}"><td>${esc(x.part_no)}</td><td>${esc(x.part_name)}</td></tr>`).join(''):'<tr><td colspan="2">조회 결과가 없습니다.</td></tr>';$('itemSearchBody').querySelectorAll('tr[data-item-id]').forEach((tr,idx)=>{tr.onclick=()=>{const x=rows[idx];selectItem(x.item_id,x.part_no,x.part_name)}})}catch(e){message(e.message)}}
+async function selectItem(id,partNo,partName){$('itemId').value=id;$('partNo').value=partNo;$('partName').value=partName;closeModal('itemModal');current=null;newStandard(false);await loadHistory()}
 function collectPrechecks(){return[...$('precheckBody').querySelectorAll('tr')].map(tr=>({sort_order:Number(tr.querySelector('.p-sort').value||1),check_item:tr.querySelector('.p-item').value.trim(),criteria:tr.querySelector('.p-criteria').value.trim()||null,responsible:tr.querySelector('.p-responsible').value.trim()||null,frequency:tr.querySelector('.p-frequency').value.trim()||null,abnormal_action:tr.querySelector('.p-action').value.trim()||null,note:tr.querySelector('.p-note').value.trim()||null})).filter(x=>x.check_item)}
 function num(tr,cls){const v=tr.querySelector(cls).value;return v===''?null:Number(v)}
 function collectItems(){return[...$('itemBody').querySelectorAll('tr')].map(tr=>({sort_order:Number(tr.querySelector('.i-sort').value||1),inspection_group_no:tr.querySelector('.i-group').value.trim()||null,inspection_item_name:tr.querySelector('.i-name').value.trim(),detail_no:tr.querySelector('.i-detail').value.trim()||null,special_characteristic:tr.querySelector('.i-special').value.trim()||null,inspection_tool:tr.querySelector('.i-tool').value.trim()||null,spec_text:tr.querySelector('.i-spec').value.trim()||null,nominal_value:num(tr,'.i-nominal'),lower_limit:dimensionLimit(tr,'.i-lower'),upper_limit:dimensionLimit(tr,'.i-upper'),unit:tr.querySelector('.i-unit').value.trim()||null,inspection_frequency:tr.querySelector('.i-frequency').value.trim()||null,sample_qty_text:tr.querySelector('.i-sample').value.trim()||null,record_management:tr.querySelector('.i-record').value.trim()||null,note:tr.querySelector('.i-note').value.trim()||null})).filter(x=>x.inspection_item_name)}
-function payload(){return{document_type:DOC_TYPE,item_id:Number($('itemId').value),process_flow_step_key_id:DOC_TYPE==='PROCESS'?Number($('processStep').value)||null:null,revision:MesRevisionNumber.read($('revision'),true),management_no:$('managementNo').value.trim()||null,effective_date:$('effectiveDate').value||null,change_summary:$('changeSummary').value.trim()||null,change_reason:$('changeReason').value.trim()||null,note:$('note').value.trim()||null,prepared_by:$('preparedBy').value||null,reviewed_by:current?.reviewed_by||null,approved_by:current?.approved_by||null,prechecks:collectPrechecks(),items:collectItems()}}
-function clearDocumentFields(){current=null;$('standardId').value='';$('managementNo').value='';MesRevisionNumber.setInput($('revision'),'0',true);$('effectiveDate').value='';$('statusName').value='작성중';$('changeSummary').value='';$('changeReason').value='';$('note').value='';$('preparedBy').value='';$('precheckBody').innerHTML='';defaultPrechecks().forEach(addPrecheck);$('itemBody').innerHTML='';showDetailsForItems([]);addInspectionItem();updateButtons();message('')}
-function newStandard(clearItem=true){if(clearItem){$('itemId').value='';$('partNo').value='';$('partName').value='';if($('processStep'))$('processStep').innerHTML='<option value="">품번 선택 후 조회</option>';$('historyBody').innerHTML='<tr><td colspan="7">품번을 선택해 주세요.</td></tr>'}clearDocumentFields()}
-async function saveStandard(){try{for(const tr of $('itemBody').querySelectorAll('tr')){if(tr.querySelector('.i-name').value&&tr.dataset.dimensionError==='1')throw new Error('치수 규격을 확인해 주세요. 예: Ø8±0.05. 직접 입력하려면 기준치수와 공차를 수정해 주세요.')}const p=payload();if(!p.item_id)throw new Error('품번을 선택해 주세요.');if(DOC_TYPE==='PROCESS'&&!p.process_flow_step_key_id)throw new Error('공정흐름도 단계를 선택해 주세요.');if(!p.items.length)throw new Error('검사항목을 1개 이상 입력해 주세요.');const id=$('standardId').value;const d=await api(id?'/api/standard-documents/inspection-standards/'+id:'/api/standard-documents/inspection-standards',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});await openStandard(d.id);await loadHistory();message('저장했습니다.',true)}catch(e){message(e.message)}}
-async function loadHistory(){const itemId=Number($('itemId').value);if(!itemId)return;const q=new URLSearchParams({document_type:DOC_TYPE,item_id:String(itemId)});if(DOC_TYPE==='PROCESS'){const k=Number($('processStep').value);if(!k){$('historyBody').innerHTML='<tr><td colspan="7">공정흐름도 단계를 선택해 주세요.</td></tr>';return}q.set('process_flow_step_key_id',String(k))}try{historyRows=await api('/api/standard-documents/inspection-standards?'+q.toString());$('historyBody').innerHTML=historyRows.length?historyRows.map(x=>`<tr onclick="openStandard(${x.id})"><td>${esc(x.revision)}</td><td><span class="status-badge ${x.status}">${statusText(x.status)}</span></td><td>${esc(x.effective_date)}</td><td>${esc(x.change_summary)}</td><td>${esc(x.change_reason)}</td><td>${esc(x.created_by)}</td><td>${esc(x.created_at)}</td></tr>`).join(''):'<tr><td colspan="7">등록된 기준서가 없습니다.</td></tr>'}catch(e){message(e.message)}}
-async function openStandard(id){try{const d=await api('/api/standard-documents/inspection-standards/'+id);current=d;$('standardId').value=d.id;$('itemId').value=d.item_id;$('partNo').value=d.part_no;$('partName').value=d.part_name;if(DOC_TYPE==='PROCESS'){if(!$('processStep').options.length||!$('processStep').querySelector(`option[value="${d.process_flow_step_key_id}"]`))await loadProcessSteps(d.item_id);$('processStep').value=d.process_flow_step_key_id||''}$('managementNo').value=d.management_no||'';MesRevisionNumber.setInput($('revision'),d.revision,true);$('effectiveDate').value=d.effective_date||'';$('statusName').value=statusText(d.status);$('changeSummary').value=d.change_summary||'';$('changeReason').value=d.change_reason||'';$('note').value=d.note||'';$('preparedBy').value=d.prepared_by||'';$('precheckBody').innerHTML='';(d.prechecks||[]).forEach(addPrecheck);$('itemBody').innerHTML='';showDetailsForItems(d.items||[]);(d.items||[]).forEach(addInspectionItem);updateButtons();message('')}catch(e){message(e.message)}}
+function payload(){return{...inspectionContext(),control_plan_revision_id:planSource?.plan_id||null,control_plan_flow_step_id:planSource?.step_id||null,document_type:DOC_TYPE,item_id:Number($('itemId').value),process_flow_step_key_id:current?.process_flow_step_key_id||null,revision:MesRevisionNumber.read($('revision'),true),management_no:$('managementNo').value.trim()||null,effective_date:$('effectiveDate').value||null,change_summary:$('changeSummary').value.trim()||null,change_reason:$('changeReason').value.trim()||null,note:$('note').value.trim()||null,prepared_by:$('preparedBy').value||null,reviewed_by:current?.reviewed_by||null,approved_by:current?.approved_by||null,prechecks:collectPrechecks(),items:collectItems()}}
+function clearDocumentFields(){current=null;setPlanSource(null);if($('planImportModal'))closeModal('planImportModal');$('standardId').value='';$('managementNo').value='';MesRevisionNumber.setInput($('revision'),'0',true);$('effectiveDate').value='';$('statusName').value='작성중';$('changeSummary').value='';$('changeReason').value='';$('note').value='';$('preparedBy').value='';$('precheckBody').innerHTML='';defaultPrechecks().forEach(addPrecheck);$('itemBody').innerHTML='';showDetailsForItems([]);addInspectionItem();updateButtons();message('')}
+function newStandard(clearItem=true){if(clearItem){$('itemId').value='';$('partNo').value='';$('partName').value='';$('historyBody').innerHTML='<tr><td colspan="7">품번을 선택해 주세요.</td></tr>'}clearDocumentFields()}
+async function saveStandard(){try{for(const tr of $('itemBody').querySelectorAll('tr')){if(tr.querySelector('.i-name').value&&tr.dataset.dimensionError==='1')throw new Error('치수 규격을 확인해 주세요. 예: Ø8±0.05. 직접 입력하려면 기준치수와 공차를 수정해 주세요.')}const p=payload();if(!p.item_id)throw new Error('품번을 선택해 주세요.');if(DOC_TYPE==='PROCESS'&&!p.inspection_process_code)throw new Error('검사 공정을 선택해 주세요.');if(!p.items.length)throw new Error('검사항목을 1개 이상 입력해 주세요.');const id=$('standardId').value;const d=await api(id?'/api/standard-documents/inspection-standards/'+id:'/api/standard-documents/inspection-standards',{method:id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)});await openStandard(d.id);await loadHistory();message('저장했습니다.',true)}catch(e){message(e.message)}}
+async function loadHistory(){const itemId=Number($('itemId').value);if(!itemId)return;const q=contextQuery();q.set('item_id',String(itemId));try{historyRows=await api('/api/standard-documents/inspection-standards?'+q.toString());$('historyBody').innerHTML=historyRows.length?historyRows.map(x=>`<tr onclick="openStandard(${x.id})"><td>${esc(x.revision)}${!x.inspection_category&&DOC_TYPE!=='FINAL'?' (미분류)':''}</td><td><span class="status-badge ${x.status}">${statusText(x.status)}</span></td><td>${esc(x.effective_date)}</td><td>${esc(x.change_summary)}</td><td>${esc(x.change_reason)}</td><td>${esc(x.created_by)}</td><td>${esc(x.created_at)}</td></tr>`).join(''):'<tr><td colspan="7">등록된 기준서가 없습니다.</td></tr>'}catch(e){message(e.message)}}
+async function openStandard(id){try{const d=await api('/api/standard-documents/inspection-standards/'+id);current=d;restorePlanSource(d);if($('planImportModal'))closeModal('planImportModal');$('standardId').value=d.id;$('itemId').value=d.item_id;$('partNo').value=d.part_no;$('partName').value=d.part_name;if($('inspectionCategory'))$('inspectionCategory').value=d.inspection_category||(d.part_no.toLowerCase().endsWith('-ag')?'SUBCONTRACT_INBOUND':'RAW_INBOUND');if($('inspectionProcess'))$('inspectionProcess').value=d.inspection_process_code||d.registered_process_code||'';$('managementNo').value=d.management_no||'';MesRevisionNumber.setInput($('revision'),d.revision,true);$('effectiveDate').value=d.effective_date||'';$('statusName').value=statusText(d.status);$('changeSummary').value=d.change_summary||'';$('changeReason').value=d.change_reason||'';$('note').value=d.note||'';$('preparedBy').value=d.prepared_by||'';$('precheckBody').innerHTML='';(d.prechecks||[]).forEach(addPrecheck);$('itemBody').innerHTML='';showDetailsForItems(d.items||[]);(d.items||[]).forEach(addInspectionItem);updateButtons();message('')}catch(e){message(e.message)}}
 {% if can_write %}
 function openRevisionModal(){if(!current)return;$('newRevision').value='';$('newChangeSummary').value='';$('newChangeReason').value='';$('revisionModal').classList.add('show')}
 async function reviseStandard(){try{const rev=MesRevisionNumber.read($('newRevision'),true);const d=await api('/api/standard-documents/inspection-standards/'+current.id+'/revise',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:rev,change_summary:$('newChangeSummary').value.trim()||null,change_reason:$('newChangeReason').value.trim()||null})});closeModal('revisionModal');await openStandard(d.id);await loadHistory();message('새 REV 작성본을 생성했습니다.',true)}catch(e){message(e.message)}}
 async function activateStandard(){if(!current||current.status!=='DRAFT'||!confirm('이 REV를 현재사용 기준서로 적용하시겠습니까?'))return;try{const d=await api('/api/standard-documents/inspection-standards/'+current.id+'/activate',{method:'POST'});await openStandard(d.id);await loadHistory();message('현재사용 기준서로 적용했습니다.',true)}catch(e){message(e.message)}}
 async function deleteDraft(){if(!current||current.status!=='DRAFT'||!confirm('작성중 기준서를 삭제하시겠습니까?'))return;try{await api('/api/standard-documents/inspection-standards/'+current.id,{method:'DELETE'});await loadHistory();clearDocumentFields();message('작성중 기준서를 삭제했습니다.',true)}catch(e){message(e.message)}}
 {% endif %}
-(async()=>{try{const [users,options]=await Promise.all([api('/api/standard-documents/inspection-standards/users'),api('/api/standard-documents/inspection-standards/inspection-item-options?document_type='+DOC_TYPE)]);inspectionItemOptions=options;userOptions(users);newStandard();if(!options.items.length)message('사용 중인 검사항목 마스터가 없습니다. 검사항목 마스터를 등록해 주세요.')}catch(e){message(e.message)}})();
+(async()=>{try{const [users,options]=await Promise.all([api('/api/standard-documents/inspection-standards/users'),api('/api/standard-documents/inspection-standards/inspection-item-options?document_type='+DOC_TYPE)]);inspectionItemOptions=options;userOptions(users);if(DOC_TYPE==='PROCESS'){const processes=await api('/api/standard-documents/inspection-standards/internal-processes');$('inspectionProcess').innerHTML='<option value="">내부 공정 선택</option>'+processes.map(x=>`<option value="${esc(x.code)}">${esc(x.name)} (${esc(x.code)})</option>`).join('')}newStandard();if(!options.items.length)message('사용 중인 검사항목 마스터가 없습니다. 검사항목 마스터를 등록해 주세요.')}catch(e){message(e.message)}})();
 </script>
 {% endblock %}

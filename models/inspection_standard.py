@@ -16,6 +16,8 @@ class InspectionStandard(Base):
     process_flow_step_key_id = Column(
         Integer, ForeignKey("process_flow_step_keys.id", ondelete="RESTRICT"), nullable=True, index=True
     )
+    inspection_category = Column(String(30), nullable=True)
+    inspection_process_code = Column(String(50), nullable=True)
 
     revision = Column(String(20), nullable=False)
     sequence = Column(Integer, nullable=False, default=1)
@@ -39,7 +41,7 @@ class InspectionStandard(Base):
     reviewed_by = Column(String(100), nullable=True)
     approved_by = Column(String(100), nullable=True)
 
-    # 향후 관리계획서 연동용. 현재는 연결하지 않고 출처 식별값만 보관할 수 있게 둡니다.
+    # 최종검사 기준서의 관리계획서 출처. item_key에는 스냅샷의 flow_step_id를 보관합니다.
     control_plan_revision_id = Column(Integer, nullable=True)
     control_plan_process_no = Column(String(50), nullable=True)
     control_plan_item_key = Column(String(100), nullable=True)

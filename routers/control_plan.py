@@ -8,8 +8,9 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user, check_admin_permission, parse_user_permissions
-from models.control_plan import ControlPlanRevision
-from models.models import ItemMasterModel
+from models.control_plan import ControlPlanRevision, ControlPlanInspectionLink
+from models.models import ItemMasterModel, ProcessModel
+from services.inspection_standard_links import INTERNAL_CODES, CATEGORIES
 from models.process_flow import ProcessFlowRevision
 from services.document_service import lock_item
 from services.standard_document_item_service import selectable_finished_items, require_finished_item, is_selectable_finished_item
@@ -100,6 +101,55 @@ def output(row):
     return {k:getattr(row,k) for k in ('id','item_id','document_no','revision_code','status','version',
             'flow_revision_id','flow_version','previous_revision_id')} | {
         'header':json.loads(row.header_json),'rows':json.loads(row.rows_json),'flow':json.loads(row.flow_snapshot_json)}
+
+
+class InspectionLinkPayload(BaseModel):
+    flow_step_id: int = Field(gt=0)
+    category: str = Field(max_length=30)
+    process_code: str | None = Field(default=None, max_length=50)
+
+
+class InspectionLinksPayload(BaseModel):
+    version: int = Field(gt=0)
+    links: list[InspectionLinkPayload] = Field(default_factory=list, max_length=500)
+
+
+@router.get('/revisions/{id}/inspection-links')
+def inspection_links(id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    access(user)
+    existing(db, id)
+    links = db.query(ControlPlanInspectionLink).filter(ControlPlanInspectionLink.plan_id == id).all()
+    processes = db.query(ProcessModel).filter(ProcessModel.is_active == 'Y', ProcessModel.process_code.in_(INTERNAL_CODES)).order_by(ProcessModel.sort_order).all()
+    return {'links': [{'flow_step_id': x.flow_step_id, 'category': x.category, 'process_code': x.process_code} for x in links],
+            'processes': [{'code': x.process_code, 'name': x.process_name} for x in processes]}
+
+
+@router.put('/revisions/{id}/inspection-links')
+def save_inspection_links(id: int, payload: InspectionLinksPayload, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    access(user, True)
+    row = existing(db, id, payload.version)
+    if row.status not in {'DRAFT', 'CURRENT'}:
+        raise HTTPException(409, '이전 관리계획서의 검사 연결은 변경할 수 없습니다.')
+    lock_item(db, row.item_id)
+    require_finished_item(db, db.get(ItemMasterModel, row.item_id))
+    steps = {s['id'] for s in json.loads(row.flow_snapshot_json).get('steps', [])}
+    ids = [x.flow_step_id for x in payload.links]
+    if len(ids) != len(set(ids)) or not set(ids).issubset(steps):
+        raise HTTPException(422, '공정이 중복되었거나 관리계획서에 없는 공정입니다.')
+    codes = {p.process_code for p in db.query(ProcessModel).filter(ProcessModel.is_active == 'Y', ProcessModel.process_code.in_(INTERNAL_CODES)).all()}
+    for link in payload.links:
+        if link.category not in CATEGORIES or (link.category == 'PROCESS' and link.process_code not in codes):
+            raise HTTPException(422, '검사구분과 등록된 내부 공정을 확인해 주세요.')
+        if link.category != 'PROCESS' and link.process_code:
+            raise HTTPException(422, '내부 공정코드는 공정검사에만 지정할 수 있습니다.')
+    db.query(ControlPlanInspectionLink).filter(ControlPlanInspectionLink.plan_id == id).delete()
+    for link in payload.links:
+        db.add(ControlPlanInspectionLink(plan_id=id, **link.model_dump()))
+    row.version += 1
+    row.updated_at = datetime.now()
+    row.updated_by_id = user.id
+    commit(db)
+    return output(row)
 
 def commit(db):
     try: db.commit()
@@ -209,7 +259,11 @@ def revise(id:int,payload:Revise,db:Session=Depends(get_db),user=Depends(get_cur
         status='DRAFT',version=1,flow_revision_id=old.flow_revision_id,flow_version=old.flow_version,
         flow_snapshot_json=old.flow_snapshot_json,header_json=old.header_json,rows_json=old.rows_json,
         previous_revision_id=old.id,created_by_id=user.id,updated_by_id=user.id)
-    db.add(row);commit(db);return output(row)
+    db.add(row);db.flush()
+    for link in db.query(ControlPlanInspectionLink).filter(ControlPlanInspectionLink.plan_id == old.id).all():
+        db.add(ControlPlanInspectionLink(plan_id=row.id, flow_step_id=link.flow_step_id,
+                                         category=link.category, process_code=link.process_code))
+    commit(db);return output(row)
 
 @router.post('/import-excel')
 def import_excel(file:UploadFile=File(...),item_id:int=Form(...,gt=0),flow_revision_id:int=Form(...,gt=0),

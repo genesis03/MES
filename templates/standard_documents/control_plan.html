@@ -11,6 +11,7 @@
 <button id="cpNew" type="button">새 문서</button>
 {% if can_write_control_plan %}<button id="cpSave" type="button">초안 저장</button><button id="cpImport" type="button">관리항목 불러오기</button><button id="cpActivate" type="button">현재 사용 적용</button><button id="cpRevise" type="button">개정 등록</button>{% endif %}
 <button id="cpPrint" type="button">인쇄</button>
+{% if can_write_control_plan %}<button id="cpInspectionLinks" type="button" disabled>검사기준서 연결 설정</button>{% endif %}
 <input id="cpFile" type="file" accept=".xlsx" hidden>
 </div>
 <p class="cp-notice" id="cpMessage" role="status">품목과 공정흐름도를 선택하세요. 엑셀은 첫 시트의 하단 관리항목만 불러옵니다.</p>
@@ -92,5 +93,5 @@
 </div>
 <script src="/static/wide_table_scroll.js?v=1" defer></script>
 <script src="/static/flow_symbols.js?v=1" defer></script>
-<script src="/static/control_plan.js?v=print-preview-1" defer></script>
+<script src="/static/control_plan.js?v=inspection-links-2" defer></script>
 {% endblock %}

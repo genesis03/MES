@@ -36,7 +36,7 @@ from models.item_identity import ItemPartNoHistory, install_item_identity_events
 from models.document import ItemRevision, ItemDocument, DocumentFile
 from models.auth_session import AuthSession
 from models.process_flow import ProcessFlowRevision, ProcessFlowStepKey, ProcessFlowStep
-from models.control_plan import ControlPlanRevision
+from models.control_plan import ControlPlanRevision, ControlPlanInspectionLink
 from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
 from models.inspection_standard import InspectionStandard, InspectionStandardPrecheck, InspectionStandardItem
 
@@ -48,6 +48,8 @@ install_item_identity_events()
 Base.metadata.create_all(bind=engine)
 from models.plm_flow_migration import ensure_plm_flow_columns
 ensure_plm_flow_columns(engine)
+from models.inspection_link_migration import ensure_inspection_link_columns
+ensure_inspection_link_columns(engine)
 from models.purchase_migration import ensure_purchase_entry_columns
 from models.subcontract_inbound_migration import ensure_subcontract_inbound_columns
 from models.quality_migration import ensure_quality_master_data

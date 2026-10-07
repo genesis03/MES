@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from core.config import BASE_DIR
 from core.database import get_db
@@ -15,6 +15,10 @@ from models.inspection_standard import InspectionStandard, InspectionStandardIte
 from models.models import ItemMasterModel, UserModel
 from models.quality_standard import QualityInspectionItemMaster
 from models.process_flow import ProcessFlowRevision, ProcessFlowStep, ProcessFlowStepKey
+from models.control_plan import ControlPlanRevision
+from services.final_inspection_control_plan import plan_steps, selected_step, inspection_rows
+from services.inspection_standard_links import scope, require_item, eligible, plan_item_ids, allowed_steps, require_source, INTERNAL_CODES
+from models.models import ProcessModel
 from services.revision_number_service import normalize_revision_code, revision_key
 from services.standard_document_item_service import is_selectable_finished_item
 
@@ -74,6 +78,10 @@ class StandardPayload(BaseModel):
     prepared_by: Optional[str] = Field(default=None, max_length=100)
     reviewed_by: Optional[str] = Field(default=None, max_length=100)
     approved_by: Optional[str] = Field(default=None, max_length=100)
+    control_plan_revision_id: Optional[int] = Field(default=None, gt=0)
+    control_plan_flow_step_id: Optional[int] = Field(default=None, gt=0)
+    inspection_category: Optional[str] = Field(default=None, max_length=30)
+    inspection_process_code: Optional[str] = Field(default=None, max_length=50)
     prechecks: list[PrecheckPayload] = Field(default_factory=list)
     items: list[InspectionItemPayload] = Field(default_factory=list)
 
@@ -138,13 +146,18 @@ def _numeric_revision(value: str):
     return revision
 
 
-def _identity_filter(query, document_type, item_id, step_key_id):
+def _identity_filter(query, document_type, item_id, step_key_id, category=None, process_code=None):
     query = query.filter(
         InspectionStandard.document_type == document_type,
         InspectionStandard.item_id == item_id,
     )
     if document_type == "PROCESS":
+        if process_code:
+            return query.filter(InspectionStandard.inspection_process_code == process_code)
         return query.filter(InspectionStandard.process_flow_step_key_id == step_key_id)
+    if document_type == "INBOUND" and category:
+        from sqlalchemy import or_
+        query = query.filter(or_(InspectionStandard.inspection_category == category, InspectionStandard.inspection_category.is_(None)))
     return query.filter(InspectionStandard.process_flow_step_key_id.is_(None))
 
 
@@ -197,6 +210,43 @@ def _validate_items(items):
             raise HTTPException(422, "규격 하한은 상한보다 클 수 없습니다.")
 
 
+def _require_plan_read(user):
+    if check_admin_permission(user):
+        return
+    access = parse_user_permissions(user).get("menu_access", {})
+    value = access.get("/standard-documents/control-plans") if isinstance(access, dict) else None
+    if value is not True and str(value or "NONE").upper() not in {"READ", "WRITE"}:
+        raise HTTPException(403, "관리계획서 조회 권한이 필요합니다.")
+
+
+def _assign_plan_source(db, row, payload, user):
+    plan_id, step_id = payload.control_plan_revision_id, payload.control_plan_flow_step_id
+    if plan_id is None and step_id is None:
+        row.control_plan_revision_id = None
+        row.control_plan_process_no = None
+        row.control_plan_item_key = None
+        return
+    if not plan_id or not step_id:
+        raise HTTPException(422, "관리계획서 문서와 공정을 함께 지정해야 합니다.")
+    unchanged = row.control_plan_revision_id == plan_id and row.control_plan_item_key == str(step_id)
+    if not unchanged:
+        _require_plan_read(user)
+    plan = db.get(ControlPlanRevision, plan_id)
+    category, code = scope(db, row.document_type, row.inspection_category, row.inspection_process_code)
+    if not plan:
+        raise HTTPException(404, "출처 관리계획서를 찾을 수 없습니다.")
+    if not unchanged and plan.status != "CURRENT":
+        raise HTTPException(409, "관리계획서가 현재사용 상태가 아닙니다. 현재사용 문서에서 다시 불러와 주세요.")
+    step = require_source(db, plan, row.item_id, category, code, step_id)
+    row.control_plan_revision_id = plan.id
+    row.control_plan_process_no = str(step["step_no"])
+    row.control_plan_item_key = str(step_id)
+    row.process_step_no_snapshot = str(step["step_no"])
+    row.process_step_name_snapshot = step["step_name"]
+    if row.document_type == "PROCESS":
+        row.process_flow_step_key_id = step.get("step_key_id")
+
+
 def _replace_children(row: InspectionStandard, payload: StandardPayload):
     row.prechecks.clear()
     for p in sorted(payload.prechecks, key=lambda x: x.sort_order):
@@ -233,12 +283,18 @@ def _replace_children(row: InspectionStandard, payload: StandardPayload):
 
 
 def _standard_dict(row: InspectionStandard, include_children=False):
+    session = object_session(row)
+    plan = session.get(ControlPlanRevision, row.control_plan_revision_id) if session and row.control_plan_revision_id else None
+    item = session.get(ItemMasterModel, row.item_id) if session else None
     data = {
         "id": row.id,
         "document_type": row.document_type,
         "document_name": DOC_NAMES.get(row.document_type, row.document_type),
         "item_id": row.item_id,
         "process_flow_step_key_id": row.process_flow_step_key_id,
+        "inspection_category": row.inspection_category,
+        "inspection_process_code": row.inspection_process_code,
+        "registered_process_code": item.production_loc if item else None,
         "revision": row.revision,
         "sequence": row.sequence,
         "status": row.status,
@@ -255,6 +311,11 @@ def _standard_dict(row: InspectionStandard, include_children=False):
         "reviewed_by": row.reviewed_by or "",
         "approved_by": row.approved_by or "",
         "previous_revision_id": row.previous_revision_id,
+        "control_plan_revision_id": row.control_plan_revision_id,
+        "control_plan_flow_step_id": int(row.control_plan_item_key) if str(row.control_plan_item_key or "").isdigit() else None,
+        "control_plan_process_no": row.control_plan_process_no or "",
+        "control_plan_document_no": plan.document_no if plan else "",
+        "control_plan_revision_code": plan.revision_code if plan else "",
         "created_by": row.created_by or "",
         "created_at": row.created_at.isoformat(sep=" ", timespec="seconds") if row.created_at else "",
         "activated_at": row.activated_at.isoformat(sep=" ", timespec="seconds") if row.activated_at else "",
@@ -320,14 +381,24 @@ def standard_users(current_user=Depends(get_current_user), db: Session = Depends
 def selectable_items(
     document_type: str,
     keyword: Optional[str] = Query(None, max_length=100),
+    inspection_category: Optional[str] = None,
+    inspection_process_code: Optional[str] = None,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     document_type = _require_access(current_user, document_type)
+    category, code = scope(db, document_type, inspection_category, inspection_process_code)
     query = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == "Y")
     if document_type == "FINAL":
         from services.standard_document_item_service import finished_item_condition
         query = query.filter(finished_item_condition())
+    elif category == "RAW_INBOUND":
+        query = query.filter(ItemMasterModel.material_type == "RAW")
+    elif category == "SUBCONTRACT_INBOUND":
+        from sqlalchemy import func
+        query = query.filter(func.lower(ItemMasterModel.part_no).like("%-ag"))
+    else:
+        query = query.filter(ItemMasterModel.production_loc == code)
     if keyword and keyword.strip():
         value = f"%{keyword.strip()}%"
         query = query.filter(
@@ -335,6 +406,13 @@ def selectable_items(
         )
     rows = query.order_by(ItemMasterModel.part_no).limit(300).all()
     return [{"item_id": x.id, "part_no": x.part_no, "part_name": x.part_name or ""} for x in rows]
+
+
+@router.get("/api/standard-documents/inspection-standards/internal-processes")
+def internal_processes(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    _require_access(current_user, "PROCESS")
+    return [{"code": x.process_code, "name": x.process_name} for x in db.query(ProcessModel).filter(
+        ProcessModel.process_code.in_(INTERNAL_CODES), ProcessModel.is_active == "Y").order_by(ProcessModel.sort_order).all()]
 
 
 @router.get("/api/standard-documents/inspection-standards/process-steps")
@@ -371,6 +449,8 @@ def list_standards(
     document_type: str,
     item_id: Optional[int] = Query(None, gt=0),
     process_flow_step_key_id: Optional[int] = Query(None, gt=0),
+    inspection_category: Optional[str] = None,
+    inspection_process_code: Optional[str] = None,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -380,6 +460,13 @@ def list_standards(
         query = query.filter(InspectionStandard.item_id == item_id)
     if document_type == "PROCESS" and process_flow_step_key_id:
         query = query.filter(InspectionStandard.process_flow_step_key_id == process_flow_step_key_id)
+    if document_type == "PROCESS" and inspection_process_code:
+        from sqlalchemy import or_
+        query = query.filter(or_(InspectionStandard.inspection_process_code == inspection_process_code,
+                                 InspectionStandard.inspection_process_code.is_(None)))
+    if document_type == "INBOUND" and inspection_category:
+        from sqlalchemy import or_
+        query = query.filter(or_(InspectionStandard.inspection_category == inspection_category, InspectionStandard.inspection_category.is_(None)))
     rows = query.order_by(InspectionStandard.item_id, InspectionStandard.sequence.desc(), InspectionStandard.id.desc()).all()
     return [_standard_dict(x) for x in rows]
 
@@ -410,6 +497,51 @@ def inspection_item_options(
     } for x in rows]
     return {"groups": list(dict.fromkeys(x["group_name"] for x in items)), "items": items}
 
+@router.get("/api/standard-documents/inspection-standards/control-plan-options")
+def control_plan_options(item_id: int = Query(gt=0), document_type: str = "FINAL",
+                         inspection_category: Optional[str] = None, inspection_process_code: Optional[str] = None,
+                         current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    document_type = _require_access(current_user, document_type, write=True)
+    _require_plan_read(current_user)
+    category, code = scope(db, document_type, inspection_category, inspection_process_code)
+    item = _resolve_item(db, document_type, item_id)
+    require_item(db, item, category, code)
+    plans = db.query(ControlPlanRevision).filter(
+        ControlPlanRevision.item_id.in_(plan_item_ids(db, item_id, category)),
+        ControlPlanRevision.status == "CURRENT").order_by(ControlPlanRevision.document_no, ControlPlanRevision.id).all()
+    result = []
+    for plan in plans:
+        owner = db.get(ItemMasterModel, plan.item_id)
+        if not is_selectable_finished_item(db, owner):
+            continue
+        ids = allowed_steps(db, plan, category, code)
+        steps = [{"id": x["id"], "step_no": x["step_no"], "step_name": x["step_name"]}
+                 for x in plan_steps(plan) if x["id"] in ids]
+        if steps:
+            result.append({"id": plan.id, "document_no": plan.document_no, "revision_code": plan.revision_code,
+                           "part_no": owner.part_no, "part_name": owner.part_name, "steps": steps})
+    return result
+
+
+@router.get("/api/standard-documents/inspection-standards/control-plan-import")
+def import_control_plan(item_id: int = Query(gt=0), plan_id: int = Query(gt=0), step_id: int = Query(gt=0),
+                        document_type: str = "FINAL", inspection_category: Optional[str] = None,
+                        inspection_process_code: Optional[str] = None,
+                        current_user=Depends(get_current_user), db: Session = Depends(get_db)):
+    document_type = _require_access(current_user, document_type, write=True)
+    _require_plan_read(current_user)
+    category, code = scope(db, document_type, inspection_category, inspection_process_code)
+    item = _resolve_item(db, document_type, item_id)
+    require_item(db, item, category, code)
+    plan = db.get(ControlPlanRevision, plan_id)
+    if not plan or plan.status != "CURRENT":
+        raise HTTPException(409, "현재사용 관리계획서에서만 불러올 수 있습니다.")
+    step = require_source(db, plan, item_id, category, code, step_id)
+    return {"plan_id": plan.id, "document_no": plan.document_no, "revision_code": plan.revision_code,
+            "step_id": step_id, "step_no": step["step_no"], "step_name": step["step_name"],
+            "items": inspection_rows(plan, step_id)}
+
+
 @router.get("/api/standard-documents/inspection-standards/{standard_id}")
 def get_standard(
     standard_id: int,
@@ -431,15 +563,18 @@ def create_standard(
 ):
     document_type = _require_access(current_user, payload.document_type, write=True)
     item = _resolve_item(db, document_type, payload.item_id)
-    step = _resolve_process_step(db, item.id, payload.process_flow_step_key_id) if document_type == "PROCESS" else None
+    category, code = scope(db, document_type, payload.inspection_category, payload.inspection_process_code)
+    require_item(db, item, category, code)
+    step = None
     revision = _numeric_revision(payload.revision)
     _validate_items(payload.items)
-    query = _identity_filter(db.query(InspectionStandard), document_type, item.id, step.step_key_id if step else None)
+    query = _identity_filter(db.query(InspectionStandard), document_type, item.id, None, category, code)
     if any(revision_key(x.revision) == revision_key(revision) for x in query.all()):
         raise HTTPException(409, "같은 품번/검사구분의 동일 REV 기준서가 이미 존재합니다.")
     last = query.order_by(InspectionStandard.sequence.desc()).first()
     row = InspectionStandard(
         document_type=document_type,
+        inspection_category=category, inspection_process_code=code,
         item_id=item.id,
         process_flow_step_key_id=step.step_key_id if step else None,
         revision=revision,
@@ -460,6 +595,7 @@ def create_standard(
         approved_by=_clean(payload.approved_by),
         created_by=_user_name(current_user),
     )
+    _assign_plan_source(db, row, payload, current_user)
     _replace_children(row, payload)
     db.add(row)
     db.commit()
@@ -482,11 +618,16 @@ def update_standard(
         raise HTTPException(409, "작성중 기준서만 수정할 수 있습니다. 현재사용 문서는 개정해 주세요.")
     if payload.document_type.strip().upper() != row.document_type or payload.item_id != row.item_id:
         raise HTTPException(422, "기준서 구분과 품번은 작성 후 변경할 수 없습니다.")
-    if row.document_type == "PROCESS" and payload.process_flow_step_key_id != row.process_flow_step_key_id:
-        raise HTTPException(422, "공정검사 기준서의 공정흐름도 단계는 작성 후 변경할 수 없습니다.")
+    category, code = scope(db, row.document_type, payload.inspection_category, payload.inspection_process_code)
+    require_item(db, db.get(ItemMasterModel, row.item_id), category, code)
+    if row.inspection_category and row.inspection_category != category:
+        raise HTTPException(422, "검사구분은 작성 후 변경할 수 없습니다.")
+    if row.inspection_process_code and row.inspection_process_code != code:
+        raise HTTPException(422, "등록 공정은 작성 후 변경할 수 없습니다.")
+    row.inspection_category, row.inspection_process_code = category, code
     revision = _numeric_revision(payload.revision)
     query = _identity_filter(
-        db.query(InspectionStandard), row.document_type, row.item_id, row.process_flow_step_key_id
+        db.query(InspectionStandard), row.document_type, row.item_id, row.process_flow_step_key_id, row.inspection_category, row.inspection_process_code
     ).filter(InspectionStandard.id != row.id)
     if any(revision_key(x.revision) == revision_key(revision) for x in query.all()):
         raise HTTPException(409, "동일 REV 기준서가 이미 존재합니다.")
@@ -500,6 +641,7 @@ def update_standard(
     row.prepared_by = _clean(payload.prepared_by)
     row.reviewed_by = _clean(payload.reviewed_by)
     row.approved_by = _clean(payload.approved_by)
+    _assign_plan_source(db, row, payload, current_user)
     _replace_children(row, payload)
     db.commit()
     db.refresh(row)
@@ -521,13 +663,14 @@ def revise_standard(
         raise HTTPException(409, "폐기된 기준서는 개정할 수 없습니다.")
     revision = _numeric_revision(payload.revision)
     query = _identity_filter(
-        db.query(InspectionStandard), source.document_type, source.item_id, source.process_flow_step_key_id
+        db.query(InspectionStandard), source.document_type, source.item_id, source.process_flow_step_key_id, source.inspection_category, source.inspection_process_code
     )
     if any(revision_key(x.revision) == revision_key(revision) for x in query.all()):
         raise HTTPException(409, "동일 REV 기준서가 이미 존재합니다.")
     last = query.order_by(InspectionStandard.sequence.desc()).first()
     row = InspectionStandard(
         document_type=source.document_type,
+        inspection_category=source.inspection_category, inspection_process_code=source.inspection_process_code,
         item_id=source.item_id,
         process_flow_step_key_id=source.process_flow_step_key_id,
         revision=revision,
@@ -583,13 +726,25 @@ def activate_standard(
     _require_access(current_user, row.document_type, write=True)
     if row.status != "DRAFT":
         raise HTTPException(409, "작성중 기준서만 현재사용으로 적용할 수 있습니다.")
+    category, code = scope(db, row.document_type, row.inspection_category, row.inspection_process_code)
+    require_item(db, db.get(ItemMasterModel, row.item_id), category, code)
+    if row.control_plan_revision_id:
+        require_source(db, db.get(ControlPlanRevision, row.control_plan_revision_id), row.item_id,
+                       category, code, int(row.control_plan_item_key))
     now = datetime.now()
     query = _identity_filter(
-        db.query(InspectionStandard), row.document_type, row.item_id, row.process_flow_step_key_id
+        db.query(InspectionStandard), row.document_type, row.item_id, row.process_flow_step_key_id, row.inspection_category, row.inspection_process_code
     ).filter(InspectionStandard.status == "CURRENT", InspectionStandard.id != row.id)
     for old in query.all():
         old.status = "SUPERSEDED"
         old.superseded_at = now
+    # An explicitly classified revision can supersede its unclassified legacy
+    # predecessor, without reclassifying unrelated historical documents.
+    previous = db.get(InspectionStandard, row.previous_revision_id) if row.previous_revision_id else None
+    if (previous and previous.status == "CURRENT" and previous.item_id == row.item_id
+            and previous.document_type == row.document_type and not previous.inspection_category):
+        previous.status = "SUPERSEDED"
+        previous.superseded_at = now
     row.status = "CURRENT"
     row.activated_at = now
     db.commit()
