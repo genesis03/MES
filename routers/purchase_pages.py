@@ -316,7 +316,7 @@ def purchase_inbound_inquiry_api(
     return {"total": total, "items": items}
 
 
-@router.get("/purchase/unreceived", response_class=HTMLResponse)
+# The page route is registered by purchase_unreceived.page_router.
 def purchase_unreceived_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(
         request=request,
@@ -331,7 +331,7 @@ def purchase_unreceived_page(request: Request, current_user=Depends(get_current_
     )
 
 
-@router.get("/subcontract/orders", response_class=HTMLResponse)
+# Subcontract page routes are registered by subcontract_pages.
 def subcontract_orders_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(
         request=request,
@@ -346,7 +346,6 @@ def subcontract_orders_page(request: Request, current_user=Depends(get_current_u
     )
 
 
-@router.get("/subcontract/outbound", response_class=HTMLResponse)
 def subcontract_outbound_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(
         request=request,
@@ -361,7 +360,6 @@ def subcontract_outbound_page(request: Request, current_user=Depends(get_current
     )
 
 
-@router.get("/subcontract/inbound", response_class=HTMLResponse)
 def subcontract_inbound_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(
         request=request,

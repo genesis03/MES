@@ -63,7 +63,7 @@ def planned_document_page(request: Request, db: Session = Depends(get_db)):
     )
 
 
-@router.get(INSPECTION_MENU_PATH, response_class=HTMLResponse)
+# The inspection entry route is registered by inspection_standards.
 def inspection_standards_entry(request: Request, db: Session = Depends(get_db)):
     user = get_current_user_optional(request, db)
     if not user:

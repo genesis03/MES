@@ -213,7 +213,7 @@ def _preview(db: Session, finished_item_id: int, scanned_lot_no: str, target_qty
     return allocations, max(remaining, 0.0)
 
 
-@router.get("/production/packing", response_class=HTMLResponse)
+# The packing page route is registered by production_pages.
 def packing_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(request=request, name="production_packing.html", context={"request": request, "user": current_user})
 

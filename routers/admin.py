@@ -17,7 +17,6 @@ from core.security import (
 )
 
 router = APIRouter(tags=["Admin"])
-public_api_router = APIRouter(tags=["Public API"])
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
@@ -54,7 +53,7 @@ async def admin_common_codes_page(request: Request, db: Session = Depends(get_db
     return templates.TemplateResponse(request=request, name="admin_common_codes.html", context={"user": user})
 
 
-@router.get("/admin/processes-locations", response_class=HTMLResponse)
+# /admin/processes-locations is registered by admin_process_code.
 @router.get("/admin/process-locations", response_class=HTMLResponse)
 @router.get("/admin/process-location", response_class=HTMLResponse)
 async def admin_processes_locations_page(request: Request, db: Session = Depends(get_db)):
@@ -193,7 +192,6 @@ async def delete_user(
 # 3. 콤보상자 공용 Lookup API (품목 마스터/BOM 연동)
 # ==============================================================================
 
-@public_api_router.get("/api/common-codes/lookup")
 @router.get("/api/common-codes/lookup")
 async def get_common_codes_lookup(db: Session = Depends(get_db)):
     codes = db.query(CommonCodeModel).filter(CommonCodeModel.is_active == "Y").order_by(CommonCodeModel.sort_order.asc(), CommonCodeModel.id.asc()).all()
@@ -205,7 +203,6 @@ async def get_common_codes_lookup(db: Session = Depends(get_db)):
     return {"status": "success", "data": grouped}
 
 
-@public_api_router.get("/api/locations/lookup")
 @router.get("/api/locations/lookup")
 async def get_locations_lookup(db: Session = Depends(get_db)):
     locations = db.query(StorageLocationModel).filter(StorageLocationModel.is_active == "Y").order_by(StorageLocationModel.sort_order.asc(), StorageLocationModel.id.asc()).all()

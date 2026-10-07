@@ -12,7 +12,7 @@ templates = Jinja2Templates(directory="templates")
 PRODUCTION_PAGES = {
     "/production/rework": (
         "수정품 가공 처리 (리워크)",
-        "부적합품 재가공과 -R LOT 이력을 관리하는 화면입니다.",
+        "부적합품 재가공과 -R LOT 이력을 관리하는 기능을 준비 중입니다.",
     ),
     "/production/packing": (
         "포장(출고LOT) 처리",
@@ -20,7 +20,7 @@ PRODUCTION_PAGES = {
     ),
     "/production/equipment/status": (
         "설비 가동 현황 (OEE)",
-        "호기별 가동·비가동과 설비효율을 조회하는 화면입니다.",
+        "호기별 가동·비가동과 설비효율을 조회하는 기능을 준비 중입니다.",
     ),
 }
 
@@ -29,13 +29,16 @@ def _render_production_ready(request: Request, current_user, route_path: str):
     page_title, page_description = PRODUCTION_PAGES[route_path]
     return templates.TemplateResponse(
         request=request,
-        name="production_route_ready.html",
+        name="standard_documents/planned.html",
         context={
             "request": request,
             "user": current_user,
-            "page_title": page_title,
-            "page_description": page_description,
-            "route_path": route_path,
+            "page": {
+                "title": page_title,
+                "section": "생산관리",
+                "description": page_description,
+                "detail": "입력·조회·LOT 처리 기능은 향후 연결할 예정입니다.",
+            },
         },
     )
 

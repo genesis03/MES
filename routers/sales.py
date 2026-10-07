@@ -58,7 +58,7 @@ def sales_unsold_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(request=request, name="sales_unsold.html", context={"request": request, "user": current_user})
 
 
-@router.get("/sales/shipping", response_class=HTMLResponse)
+# The shipping page is registered by sales_shipping_direct_page.
 def shipping_entry_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(request=request, name="sales_shipping.html", context={"request": request, "user": current_user})
 

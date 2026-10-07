@@ -73,7 +73,7 @@ def _display_name(code: Optional[str], mapping: dict[str, str]) -> str:
     return mapping.get(value, value)
 
 
-@router.get("/orders")
+# GET inquiry routes are registered by purchase_pages; retain legacy helpers.
 def inquiry_orders(
     start_date: Optional[str] = Query(None, max_length=10),
     end_date: Optional[str] = Query(None, max_length=10),
@@ -175,7 +175,6 @@ def delete_selected_orders(
     return {"deleted": len(masters), "message": f"발주 {len(masters)}건을 삭제했습니다."}
 
 
-@router.get("/inbounds")
 def inquiry_inbounds(
     start_date: Optional[str] = Query(None, max_length=10),
     end_date: Optional[str] = Query(None, max_length=10),
@@ -420,7 +419,7 @@ def _recalculate_order_status(order):
         order.status = "ORDERED"
 
 
-@router.post("/inbounds/delete-selected")
+# HTTP deletion uses purchase_delete_guard to protect consumed LOTs.
 def delete_selected_inbounds(
     payload: SelectedIds,
     db: Session = Depends(get_db),

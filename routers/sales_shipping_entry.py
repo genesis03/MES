@@ -77,7 +77,7 @@ def _item_pack_qty(master: ItemMasterModel | None) -> int:
     return int(master.moq or 0) or int(master.snp or 0) or 0
 
 
-@router.get("/sales/shipping", response_class=HTMLResponse)
+# The shipping page is registered by sales_shipping_direct_page.
 def shipping_entry_page(request: Request, current_user=Depends(get_current_user)):
     return templates.TemplateResponse(
         request=request,
@@ -108,7 +108,7 @@ def waiting_boxes(
     } for index, (box, master) in enumerate(rows)]
 
 
-@router.post("/api/sales/shipping-entry/scan")
+# HTTP scanning uses sales_shipping_fifo_auto for quantity-aware allocation.
 def scan_waiting_lot(
     payload: ShipmentScanInput,
     db: Session = Depends(get_db),
@@ -164,7 +164,7 @@ def scan_waiting_lot(
     }
 
 
-@router.post("/api/sales/shipping-entry/confirm")
+# HTTP confirmation uses sales_shipping_partial_confirm for partial shipments.
 def confirm_shipment(
     payload: ShipmentOrderCreateInput,
     db: Session = Depends(get_db),

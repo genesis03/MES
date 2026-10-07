@@ -304,7 +304,7 @@ def get_inbound(
     return _serialize(master)
 
 
-@router.post("")
+# HTTP creation is registered by subcontract_inbound_lot_policy (LZ/LC LOTs).
 def create_inbound(
     payload: InboundCreateInput,
     db: Session = Depends(get_db),

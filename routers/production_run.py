@@ -716,7 +716,7 @@ def clear_allocations(run_id: int, db: Session = Depends(get_db), current_user=D
     return {"message": "LOT 배정을 초기화했습니다."}
 
 
-@router.post("/{run_id}/scan-lot")
+# HTTP scanning uses production_run_lot_fix for subcontract-returned LOTs.
 def scan_lot(run_id: int, payload: ScanLotPayload, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     run = _get_run(db, run_id)
     if run.status != "IN_PROGRESS":
@@ -752,7 +752,7 @@ def scan_lot(run_id: int, payload: ScanLotPayload, db: Session = Depends(get_db)
     return {"message": message, "material": _serialize_material(matched_material), "assigned_qty": assigned_qty}
 
 
-@router.post("/{run_id}/complete")
+# Called directly by production_complete, which owns the HTTP route and output LOT.
 def complete_run(run_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     run = _get_run(db, run_id)
     if run.status != "IN_PROGRESS":

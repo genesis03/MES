@@ -145,7 +145,7 @@ def inventory_item_candidates(
     ]
 
 
-@router.get("/api/inventory/lots")
+# HTTP LOT lookup uses inventory_lot_location for current storage locations.
 def inventory_lots(
     part_no: Optional[list[str]] = Query(None),
     db: Session = Depends(get_db),
