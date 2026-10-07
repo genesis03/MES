@@ -3,6 +3,7 @@ from sqlalchemy import inspect, text
 
 COLUMNS = {
     "process_flow_revisions": {
+        "eco_no": "VARCHAR(100)",
         "registrant_user_id": "INTEGER REFERENCES users(id)",
         "registrant_name": "VARCHAR(100)",
     },

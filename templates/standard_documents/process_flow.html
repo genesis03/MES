@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}공정흐름도{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=unified-actions-2">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/process_flow.css?v=eco-history-1">{% endblock %}
 {% block content %}
 <div id="flowApp" data-can-write="{{ 'true' if can_write_flow else 'false' }}">
   <div class="flow-head no-print"><h1>공정흐름도</h1>{% if can_write_flow %}<button id="flowNew" class="flow-btn primary no-print">신규 등록</button>{% endif %}</div>
@@ -18,7 +18,7 @@
         <div class="flow-item-query"><input id="flowItemKeyword" placeholder="품번 입력" autocomplete="off" aria-controls="flowItemResults"><button type="button" id="flowItemSearch" class="flow-btn primary">조회</button></div>
         <input id="flowItem" type="hidden"><p id="flowItemDisplay" class="flow-item-display" aria-live="polite">선택된 품목 없음</p>
         <div id="flowItemResults" class="flow-item-results" hidden></div>
-      </div><label>개정번호 *<span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="flowCode" inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력" aria-label="공정흐름도 개정번호 숫자"></span></label><label>등록자<select id="flowRegistrant" aria-label="등록자 선택"></select><input id="flowRegistrantName" readonly aria-label="등록자 성명" hidden></label><label>비고<textarea id="flowNote" maxlength="8000"></textarea></label>
+      </div><label>개정번호 *<span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="flowCode" inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력" aria-label="공정흐름도 개정번호 숫자"></span></label><label>등록자<select id="flowRegistrant" aria-label="등록자 선택"></select><input id="flowRegistrantName" readonly aria-label="등록자 성명" hidden></label><label>ECO NO.<input id="flowEcoNo" maxlength="100" aria-label="ECO 번호"></label><label>비고<textarea id="flowNote" maxlength="8000"></textarea></label>
     </div>
     <p id="flowMeta" class="flow-note no-print"></p>
     <div class="flow-tools flow-selection-tools no-print">
@@ -46,7 +46,7 @@
       <div id="flowDiagram" class="flow-diagram"></div>
     </section>
     </div>
-    <h3 class="flow-history-title">개정 이력</h3><div class="flow-scroll flow-history-table"><table><thead><tr><th>개정번호</th><th>등록일</th><th>적용일</th><th>주요 개정 내용</th><th>등록자</th><th>상태</th><th class="no-print">조회</th></tr></thead><tbody id="flowHistory"></tbody></table></div>
+    <h3 class="flow-history-title">개정 이력</h3><div class="flow-scroll flow-history-table"><table><thead><tr><th>개정번호</th><th>등록일</th><th>적용일</th><th>주요 개정 내용</th><th>ECO NO.</th><th>등록자</th><th>상태</th><th class="no-print">조회</th></tr></thead><tbody id="flowHistory"></tbody></table></div>
     <h3 class="no-print">수정 이력 · 선택한 개정</h3><div class="flow-scroll no-print"><table><thead><tr><th>수정일시</th><th>수정자</th><th>수정 사유</th><th>대상 / 항목</th><th>수정 전</th><th>수정 후</th></tr></thead><tbody id="flowCorrectionHistory"></tbody></table></div>
 
   </section>
@@ -56,6 +56,7 @@
       <h3>공정흐름도 개정 등록</h3>
       <label>새 개정번호 *<span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="flowNewRevisionCode" required inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력"></span></label>
       <label>등록자 *<select id="flowRevisionRegistrant"></select><input id="flowRevisionRegistrantName" readonly hidden></label>
+      <label>ECO NO.<input id="flowRevisionEcoNo" maxlength="100" aria-label="새 개정 ECO 번호"></label>
       <label>주요 개정 내용 *<textarea id="flowRevisionReason" required maxlength="4000" rows="3"></textarea></label>
       <p id="flowRevisionError" class="flow-error" role="alert"></p>
       <div class="mes-revision-actions"><button id="flowRevisionCancel" type="button">취소</button><button id="flowRevisionSubmit" type="submit">초안 생성</button></div>
@@ -64,4 +65,4 @@
   {% endif %}
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/flow_symbols.js?v=1" defer></script><script src="/static/process_flow.js?v=consistency-1" defer></script>{% endblock %}
+{% block extra_script %}<script src="/static/flow_symbols.js?v=1" defer></script><script src="/static/process_flow.js?v=eco-history-1" defer></script>{% endblock %}

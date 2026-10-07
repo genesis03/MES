@@ -24,6 +24,7 @@ class ProcessFlowRevision(Base):
     part_no_snapshot = Column(String(100), nullable=False)
     part_name_snapshot = Column(Text, nullable=False)
     change_reason = Column(Text)
+    eco_no = Column(String(100))
     note = Column(Text)
     created_by_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_by = Column(String(100), nullable=False)
