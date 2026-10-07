@@ -11,19 +11,19 @@ async function loadDocumentList(){
  const query=new URLSearchParams({keyword:$('cpKeyword').value.trim(),status:$('cpState').value});
  const documents=await api('/documents?'+query);
  const body=$('cpDocumentList');body.replaceChildren();
- for(const document of documents){
+ for(const entry of documents){
   const tr=document.createElement('tr');
-  for(const value of [document.part_no,document.part_name,document.document_no,document.revision_code,statusText(document.status),document.current_revision,document.created_by+' / '+document.created_at]){
+  for(const value of [entry.part_no,entry.part_name,entry.document_no,entry.revision_code,statusText(entry.status),entry.current_revision,entry.created_by+' / '+entry.created_at]){
    const td=document.createElement('td');td.textContent=value||'';tr.append(td);
   }
   const td=document.createElement('td'),button=document.createElement('button');button.type='button';button.className='cp-list-button';button.textContent='선택';
   button.onclick=()=>{
    if(busy||!guard())return;
    run(async()=>{
-    const data=await api('/revisions/'+document.revision_id);
+    const data=await api('/revisions/'+entry.revision_id);
     const previousId=$('cpItem').value;$('cpItem').value=data.item_id;
     try{await loadLists();}catch(error){$('cpItem').value=previousId;throw error;}
-    selectedItemId=String(data.item_id);$('cpItemPartNo').value=document.part_no;$('cpItemName').textContent=document.part_name;
+    selectedItemId=String(data.item_id);$('cpItemPartNo').value=entry.part_no;$('cpItemName').textContent=entry.part_name;
     display(data);message('저장된 문서를 불러왔습니다. 적용된 문서는 개정 등록 후 수정할 수 있습니다.');
     $('cpEditor').scrollIntoView({block:'start'});
    });
