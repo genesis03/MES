@@ -6,6 +6,7 @@
   let saving = false;
   let editingId = null;
   let selectedSearchOrderId = null;
+  let orderSearchRequest = 0;
 
   const today = () => {
     const d = new Date();
@@ -341,6 +342,7 @@
   }
 
   async function loadOrderSearch() {
+    const requestId = ++orderSearchRequest;
     const params = new URLSearchParams({limit:'1000'});
     const fields = [
       ['po_no','po-search-number'], ['start_date','po-search-start'], ['end_date','po-search-end'],
@@ -349,7 +351,8 @@
     fields.forEach(([key,id]) => { const value = $(id).value.trim(); if (value) params.set(key,value); });
     $('po-search-body').innerHTML = '<tr><td colspan="5">조회 중...</td></tr>';
     try {
-      const data = await request('/api/purchase/inquiry/orders?' + params.toString());
+      const data = await MesPurchaseQuery.all('/api/purchase/inquiry/orders?' + params.toString());
+      if (requestId !== orderSearchRequest) return;
       const grouped = new Map();
       (data.items || []).forEach(row => {
         if (!grouped.has(row.po_id)) grouped.set(row.po_id, {...row, item_count:0});
@@ -374,6 +377,7 @@
         tr.addEventListener('dblclick', () => applySearchOrder(Number(tr.dataset.id)));
       });
     } catch (error) {
+      if (requestId !== orderSearchRequest) return;
       $('po-search-body').innerHTML = `<tr><td colspan="5">${error.message}</td></tr>`;
       $('po-search-message').textContent = error.message;
     }
@@ -397,7 +401,7 @@
       return;
     }
     try {
-      const data = await request('/api/purchase/inquiry/orders?' + new URLSearchParams({po_no:poNo,limit:'1000'}));
+      const data = await MesPurchaseQuery.all('/api/purchase/inquiry/orders?' + new URLSearchParams({po_no:poNo,limit:'1000'}));
       const exact = (data.items || []).find(row => String(row.po_no || '').toUpperCase() === poNo.toUpperCase());
       if (!exact) throw new Error('해당 발주번호를 찾을 수 없습니다.');
       await loadOrder(exact.po_id);

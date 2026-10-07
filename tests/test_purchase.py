@@ -13,11 +13,14 @@ from sqlalchemy.orm import sessionmaker
 # models/__init__.py creates tables on import: never point it at production.
 _bootstrap = tempfile.TemporaryDirectory()
 os.environ["DATABASE_URL"] = 'sqlite:///' + str(Path(_bootstrap.name) / 'bootstrap.db')
-from core.database import Base, engine as bootstrap_engine
+from core.database import Base, get_db, engine as bootstrap_engine
 from core.security import get_current_user
-from models.models import ItemMasterModel, PurchaseOrderMaster, PurchaseOrderItem, PurchaseInboundMaster, PurchaseInboundItem
+from models.models import ItemMasterModel, PurchaseOrderMaster, PurchaseOrderItem, PurchaseInboundMaster, PurchaseInboundItem, StorageLocationModel, WarehouseMasterModel
 from models.partner import Partner
 from routers.purchase import api_router, router, get_purchase_db
+from routers import purchase_pages, purchase_inquiry
+from services import purchase_service
+from services.purchase_lot_format import confirm_saved_inbound_short_lot
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -28,7 +31,9 @@ def cleanup_bootstrap():
 
 
 @pytest.fixture
-def setup(tmp_path):
+def setup(tmp_path, monkeypatch):
+    # Use the same LOT policy as app.py without importing the application or its migrations.
+    monkeypatch.setattr(purchase_service, 'confirm_saved_inbound', confirm_saved_inbound_short_lot)
     engine = create_engine('sqlite:///' + str(tmp_path / 'test.db'), connect_args={"check_same_thread": False, "timeout": 30})
     @event.listens_for(engine, 'connect')
     def foreign_keys(connection, _):
@@ -38,29 +43,40 @@ def setup(tmp_path):
     with factory() as db:
         db.add_all([Partner(id=1, partner_code='V1', partner_name='공급사'), Partner(id=2, partner_code='V2', partner_name='다른공급사')])
         db.add_all([ItemMasterModel(part_no=p, part_name=p, account_type='RM', material_type='RM', created_at='2026-09-11') for p in ['A', 'B']])
+        db.add(WarehouseMasterModel(warehouse_code='RM', warehouse_name='자재 창고', created_at='2026-09-11'))
+        db.add(StorageLocationModel(location_code='S-LT', location_name='복합선반', created_at='2026-09-11'))
         db.commit()
     app = FastAPI()
     app.include_router(router)
     app.include_router(api_router)
+    app.include_router(purchase_pages.router)
+    app.include_router(purchase_inquiry.router)
     def sessions():
         with factory() as db:
             yield db
     app.dependency_overrides[get_purchase_db] = sessions
+    app.dependency_overrides[get_db] = sessions
     app.dependency_overrides[get_current_user] = lambda: {'username': 'tester'}
     with TestClient(app) as client:
         yield client, factory
     engine.dispose()
 
 
+def with_storage(rows):
+    return [dict({'warehouse_code': 'RM', 'storage_location': 'S-LT'}, **row) for row in rows]
+
+
 def order(client, qty=10, **changes):
     body = dict(order_date='2026-09-11', partner_id=1, partner_name='공급사', items=[{'part_no': 'A', 'order_qty': qty}])
     body.update(changes)
+    body['items'] = with_storage(body['items'])
     return client.post('/api/purchase/orders', json=body)
 
 
 def inbound(client, po_item_id=None, qty=1, **changes):
     body = dict(inbound_date='2026-09-11', partner_id=1, partner_name='공급사', items=[dict(part_no='A', po_item_id=po_item_id, inbound_qty=qty, supplier_lot_no='SUP-001')])
     body.update(changes)
+    body['items'] = with_storage(body['items'])
     return client.post('/api/purchase/inbound', json=body)
 
 
@@ -84,11 +100,6 @@ def test_partial_and_complete(setup):
 
 def test_purchase_draft_generates_lot_only_on_confirmation(setup):
     client, factory = setup
-    from models.models import WarehouseMasterModel, StorageLocationModel
-    with factory() as db:
-        db.add(WarehouseMasterModel(warehouse_code='RM', warehouse_name='자재 창고', created_at='2026-09-13'))
-        db.add(StorageLocationModel(location_code='S-LT', location_name='복합선반', created_at='2026-09-13'))
-        db.commit()
     po = order(client, qty=10).json()
     po_item_id = po['items'][0]['id']
     body = {'inbound_date': '2026-09-13', 'partner_id': 1, 'partner_name': '공급사',
@@ -106,7 +117,7 @@ def test_purchase_draft_generates_lot_only_on_confirmation(setup):
     assert revised.status_code == 200 and revised.json()['items'][0]['internal_lot_no'] is None
     confirmed = client.post(f"/api/purchase/inbound/drafts/{draft['id']}/confirm")
     assert confirmed.status_code == 200, confirmed.text
-    assert confirmed.json()['items'][0]['internal_lot_no'].startswith('LOT-IN-')
+    assert confirmed.json()['items'][0]['internal_lot_no'] == 'LR260913001'
     with factory() as db:
         assert db.get(PurchaseOrderItem, po_item_id).received_qty == 4
     assert client.post(f"/api/purchase/inbound/drafts/{draft['id']}/confirm").status_code == 409
@@ -180,7 +191,7 @@ def test_standalone_history_filters_and_audit(setup):
     data = r.json()
     assert data['created_by'] == 'tester'
     assert data['items'][0]['po_item_id'] is None
-    assert data['items'][0]['internal_lot_no'].startswith('LOT-IN-')
+    assert data['items'][0]['internal_lot_no'] == 'LR260911001'
     assert data['items'][0]['warehouse_code'] == 'RM'
     assert data['items'][0]['storage_location'] == 'S-LT'
     history = c.get('/api/purchase/inbound/history', params=dict(start_date='2026-09-11', end_date='2026-09-11', partner_id=1, supplier_lot_no='SUP-001')).json()
@@ -199,9 +210,10 @@ def test_split_lots_decimal_and_overreceipt(setup):
     with factory() as db:
         assert db.get(PurchaseOrderItem, item).received_qty == 0.3
         assert db.get(PurchaseOrderMaster, result['id']).status == 'COMPLETED'
-    assert inbound(c, item, 0.1).status_code == 201
+    assert inbound(c, item, 0.1).status_code == 422
     with factory() as db:
-        assert db.get(PurchaseOrderItem, item).received_qty == 0.4
+        assert db.get(PurchaseOrderItem, item).received_qty == 0.3
+        assert db.scalar(select(func.count()).select_from(PurchaseInboundMaster)) == 1
 
 
 def test_concurrent_numbering_and_receipts(setup):
@@ -269,8 +281,9 @@ def test_multiple_orders_one_receipt(setup):
 
 def test_nonfinite_numbers_rejected(setup):
     c, _ = setup
-    body = '{"order_date":"2026-09-11","partner_name":"supplier","items":[{"part_no":"A","order_qty":"Infinity"}]}'
-    assert c.post('/api/purchase/orders', content=body, headers={'Content-Type':'application/json'}).status_code == 422
+    response = order(c, items=[dict(part_no='A', order_qty='Infinity')])
+    assert response.status_code == 422
+    assert any(error['loc'][-1] == 'order_qty' for error in response.json()['detail'])
 
 
 def test_constraint_failure_rolls_back(setup):
@@ -284,7 +297,7 @@ def test_constraint_failure_rolls_back(setup):
         target.inbound_qty = -1
     try:
         with factory() as db:
-            payload = InboundCreate(inbound_date='2026-09-11', partner_id=1, partner_name='공급사', items=[dict(part_no='A', po_item_id=item, inbound_qty=1, supplier_lot_no='L')])
+            payload = InboundCreate(inbound_date='2026-09-11', partner_id=1, partner_name='공급사', items=with_storage([dict(part_no='A', po_item_id=item, inbound_qty=1, supplier_lot_no='L')]))
             with pytest.raises(HTTPException) as error:
                 create_inbound(db, payload, 'tester')
             assert error.value.status_code == 409
@@ -293,4 +306,64 @@ def test_constraint_failure_rolls_back(setup):
             assert db.scalar(select(func.count()).select_from(PurchaseInboundMaster)) == 0
     finally:
         event.remove(PurchaseInboundItem, 'before_insert', invalid_insert)
+
+
+def test_order_inquiry_pagination_and_status(setup):
+    client, factory = setup
+    created = [order(client).json() for _ in range(3)]
+    with factory() as db:
+        db.get(PurchaseOrderMaster, created[0]['id']).status = 'CANCELLED'
+        db.commit()
+    first = client.get('/api/purchase/inquiry/orders?offset=0&limit=1').json()
+    second = client.get('/api/purchase/inquiry/orders?offset=1&limit=1').json()
+    assert first['total'] == second['total'] == 3
+    assert len(first['items']) == len(second['items']) == 1
+    assert first['items'][0]['po_item_id'] != second['items'][0]['po_item_id']
+    cancelled = client.get('/api/purchase/inquiry/orders?status=CANCELLED').json()
+    assert cancelled['total'] == 1 and cancelled['items'][0]['po_id'] == created[0]['id']
+    assert client.get('/api/purchase/inquiry/orders?status=UNKNOWN').status_code == 422
+    assert client.get('/api/purchase/inquiry/orders?offset=-1').status_code == 422
+    assert client.get('/api/purchase/inquiry/orders?start_date=2026-09-12&end_date=2026-09-11').status_code == 422
+
+
+def test_inbound_inquiry_drafts_legacy_status_and_pagination(setup):
+    client, factory = setup
+    confirmed = [inbound(client).json() for _ in range(2)]
+    po_item = order(client).json()['items'][0]['id']
+    response = client.post('/api/purchase/inbound/drafts', json={
+        'inbound_date': '2026-09-11', 'partner_id': 1, 'partner_name': '공급사',
+        'items': with_storage([dict(part_no='A', po_item_id=po_item, inbound_qty=1, supplier_lot_no='DRAFT')]),
+    })
+    assert response.status_code == 201, response.text
+    draft = response.json()
+    with factory() as db:
+        db.get(PurchaseInboundMaster, confirmed[1]['id']).status = ''
+        db.commit()
+    all_rows = client.get('/api/purchase/inquiry/inbounds').json()
+    assert all_rows['total'] == 3
+    drafts = client.get('/api/purchase/inquiry/inbounds?status=DRAFT').json()
+    assert drafts['total'] == 1 and drafts['items'][0]['inbound_id'] == draft['id']
+    current = client.get('/api/purchase/inquiry/inbounds?status=CONFIRMED').json()
+    assert current['total'] == 2 and all(row['status'] == 'CONFIRMED' for row in current['items'])
+    first = client.get('/api/purchase/inquiry/inbounds?limit=1').json()
+    second = client.get('/api/purchase/inquiry/inbounds?offset=1&limit=1').json()
+    assert first['total'] == second['total'] == 3
+    assert first['items'][0]['inbound_item_id'] != second['items'][0]['inbound_item_id']
+    assert first['items'][0]['source_type'] == 'GENERAL'
+    assert first['items'][0]['storage_location_name'] == '복합선반'
+    assert client.get('/api/purchase/inquiry/inbounds?status=UNKNOWN').status_code == 422
+    assert client.get('/api/purchase/inquiry/inbounds?start_date=2026-09-12&end_date=2026-09-11').status_code == 422
+
+
+def test_storage_location_remains_required(setup):
+    client, _ = setup
+    for endpoint, date_field, row in (
+        ('orders', 'order_date', dict(part_no='A', order_qty=1)),
+        ('inbound', 'inbound_date', dict(part_no='A', inbound_qty=1, supplier_lot_no='L')),
+    ):
+        response = client.post('/api/purchase/' + endpoint, json={
+            date_field: '2026-09-11', 'partner_id': 1, 'partner_name': '공급사', 'items': [row],
+        })
+        assert response.status_code == 422
+        assert any(error['loc'][-1] == 'storage_location' for error in response.json()['detail'])
 

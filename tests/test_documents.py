@@ -70,9 +70,17 @@ def setup(tmp_path, monkeypatch):
         finally:
             reset_audit_context(token)
     with TestClient(app) as client:
-        client.cookies.set("session_token", create_session_token("writer"))
+        login_as(client, factory, "writer")
         yield client, factory, tmp_path
     engine.dispose()
+
+
+def login_as(client, factory, username):
+    # The issued session and request dependencies must use the same isolated DB.
+    with factory() as db:
+        token = create_session_token(username, db=db)
+        db.commit()
+    client.cookies.set("session_token", token)
 
 
 def revision(client, code="Rev.00", previous=None, item_id=1):
@@ -238,10 +246,10 @@ def test_image_and_cad_originals(setup):
 
 @pytest.mark.parametrize("name,can_read", [("reader",True),("denied",False)])
 def test_server_permissions_and_forged_source_header(setup, name, can_read):
-    client, _, _ = setup
+    client, factory, _ = setup
     first = revision(client).json()["id"]
     file = upload(client, first).json()["files"][0]
-    client.cookies.set("session_token", create_session_token(name))
+    login_as(client, factory, name)
     expected = 200 if can_read else 403
     assert client.get("/api/documents/items").status_code == expected
     assert client.get(file["download_url"]).status_code == expected
@@ -301,7 +309,7 @@ def test_missing_login_and_safe_path(setup):
     client.cookies.clear()
     assert client.get(file["download_url"]).status_code == 401
     assert client.get("/basic-info/drawings", follow_redirects=False).status_code == 303
-    client.cookies.set("session_token", create_session_token("writer"))
+    login_as(client, factory, "writer")
     with factory() as db:
         db.get(DocumentFile, file["id"]).relative_path = "../../outside.pdf"
         db.commit()

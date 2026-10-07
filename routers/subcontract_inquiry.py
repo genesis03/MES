@@ -39,6 +39,8 @@ def inquiry_subcontract_orders(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(422, "시작일은 종료일 이후일 수 없습니다.")
     query = (
         db.query(SubcontractOrderMaster, SubcontractOrderItem)
         .join(SubcontractOrderItem, SubcontractOrderItem.order_id == SubcontractOrderMaster.id)

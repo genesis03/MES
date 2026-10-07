@@ -288,6 +288,7 @@ def inquiry_subcontract_inbounds(
     part_no: Optional[str] = Query(None, max_length=80),
     lot: Optional[str] = Query(None, max_length=100),
     status: Optional[str] = Query(None, max_length=20),
+    offset: int = Query(0, ge=0),
     limit: int = Query(1000, ge=1, le=2000),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
@@ -295,9 +296,12 @@ def inquiry_subcontract_inbounds(
     from models.quality import QualityInboundResult
     from models.subcontract_inbound import SubcontractInboundMaster, SubcontractInboundItem, SubcontractInboundLot
 
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(422, "시작일은 종료일 이후일 수 없습니다.")
+
     # 먼저 검색조건에 맞는 입고번호를 찾고, 화면에는 입고번호 1건당 1행만 반환합니다.
     match_query = (
-        db.query(SubcontractInboundMaster.id)
+        db.query(SubcontractInboundMaster.id, SubcontractInboundMaster.inbound_date)
         .join(SubcontractInboundItem, SubcontractInboundItem.inbound_id == SubcontractInboundMaster.id)
         .join(SubcontractInboundLot, SubcontractInboundLot.inbound_item_id == SubcontractInboundItem.id)
         .filter(SubcontractInboundMaster.status == "RECEIVED")
@@ -329,9 +333,13 @@ def inquiry_subcontract_inbounds(
         else:
             raise HTTPException(422, "지원하지 않는 외주입고 상태입니다.")
 
-    matched_ids = [row[0] for row in match_query.distinct().limit(limit).all()]
+    matched = match_query.distinct()
+    total = matched.count()
+    matched_ids = [row[0] for row in matched.order_by(
+        SubcontractInboundMaster.inbound_date.desc(), SubcontractInboundMaster.id.desc()
+    ).offset(offset).limit(limit).all()]
     if not matched_ids:
-        return {"total": 0, "items": []}
+        return {"total": total, "offset": offset, "limit": limit, "items": []}
 
     masters = (
         db.query(SubcontractInboundMaster)
@@ -405,7 +413,7 @@ def inquiry_subcontract_inbounds(
             "sample_qty": total_sample_qty,
             "processing_type_name": master.processing_type_name,
         })
-    return {"total": len(items), "items": items}
+    return {"total": total, "offset": offset, "limit": limit, "items": items}
 
 
 def _recalculate_order_status(order):

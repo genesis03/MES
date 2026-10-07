@@ -187,6 +187,8 @@ def purchase_order_inquiry_api(
     partner_name: Optional[str] = Query(None, max_length=100),
     part_no: Optional[str] = Query(None, max_length=50),
     status: Optional[str] = Query(None, max_length=20),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(500, ge=1, le=2000),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -220,13 +222,14 @@ def purchase_order_inquiry_api(
         query = query.filter(PurchaseOrderMaster.status == status)
 
     total = query.count()
-    rows = query.order_by(PurchaseOrderMaster.order_date.desc(), PurchaseOrderMaster.id.desc(), PurchaseOrderItem.id).limit(2000).all()
+    rows = query.order_by(PurchaseOrderMaster.order_date.desc(), PurchaseOrderMaster.id.desc(), PurchaseOrderItem.id).offset(offset).limit(limit).all()
     items = []
     for master, item, part in rows:
         items.append({
             "type": "GENERAL",
             "item_id": item.item_id,
             "po_id": master.id,
+            "po_item_id": item.id,
             "po_no": master.po_no,
             "order_date": master.order_date,
             "delivery_due_date": master.delivery_due_date or "",
@@ -243,7 +246,7 @@ def purchase_order_inquiry_api(
             "status_name": labels.get(master.status, master.status),
             "note": item.note or master.note or "",
         })
-    return {"total": total, "items": items}
+    return {"total": total, "offset": offset, "limit": limit, "items": items}
 
 
 @router.get("/api/purchase/inquiry/inbounds")
@@ -255,11 +258,17 @@ def purchase_inbound_inquiry_api(
     partner_name: Optional[str] = Query(None, max_length=100),
     part_no: Optional[str] = Query(None, max_length=50),
     lot: Optional[str] = Query(None, max_length=100),
+    status: Optional[str] = Query(None, max_length=20),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(500, ge=1, le=2000),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     if start_date and end_date and start_date > end_date:
         raise HTTPException(status_code=422, detail="시작일은 종료일 이후일 수 없습니다.")
+    labels = {"DRAFT": "임시저장", "CONFIRMED": "입고확정"}
+    if status and status not in labels:
+        raise HTTPException(status_code=422, detail="지원하지 않는 입고 상태입니다.")
 
     query = (
         db.query(PurchaseInboundMaster, PurchaseInboundItem, ItemMasterModel, PurchaseOrderMaster.po_no)
@@ -267,8 +276,15 @@ def purchase_inbound_inquiry_api(
         .join(ItemMasterModel, ItemMasterModel.id == PurchaseInboundItem.item_id)
         .outerjoin(PurchaseOrderItem, PurchaseOrderItem.id == PurchaseInboundItem.po_item_id)
         .outerjoin(PurchaseOrderMaster, PurchaseOrderMaster.id == PurchaseOrderItem.po_id)
-        .filter(PurchaseInboundMaster.status == "CONFIRMED")
     )
+    if status == "DRAFT":
+        query = query.filter(PurchaseInboundMaster.status == "DRAFT")
+    elif status == "CONFIRMED":
+        query = query.filter(or_(
+            PurchaseInboundMaster.status == "CONFIRMED",
+            PurchaseInboundMaster.status == "",
+            PurchaseInboundMaster.status.is_(None),
+        ))
     if start_date:
         query = query.filter(PurchaseInboundMaster.inbound_date >= start_date)
     if end_date:
@@ -289,13 +305,17 @@ def purchase_inbound_inquiry_api(
         ))
 
     total = query.count()
-    rows = query.order_by(PurchaseInboundMaster.inbound_date.desc(), PurchaseInboundMaster.id.desc(), PurchaseInboundItem.id).limit(2000).all()
+    rows = query.order_by(PurchaseInboundMaster.inbound_date.desc(), PurchaseInboundMaster.id.desc(), PurchaseInboundItem.id).offset(offset).limit(limit).all()
+    warehouse_names = {row.warehouse_code: row.warehouse_name for row in db.query(WarehouseMasterModel).all()}
+    location_names = {row.location_code: row.location_name for row in db.query(StorageLocationModel).all()}
     items = []
     for master, item, part, order_no in rows:
         items.append({
             "type": "GENERAL",
+            "source_type": "GENERAL",
             "item_id": item.item_id,
             "inbound_id": master.id,
+            "inbound_item_id": item.id,
             "inbound_no": master.inbound_no,
             "inbound_date": master.inbound_date,
             "po_no": order_no or "",
@@ -309,11 +329,15 @@ def purchase_inbound_inquiry_api(
             "supplier_lot_no": item.supplier_lot_no,
             "internal_lot_no": item.internal_lot_no or "",
             "warehouse_code": item.warehouse_code,
+            "warehouse_name": warehouse_names.get(item.warehouse_code, item.warehouse_code) or "",
             "storage_location": item.storage_location,
+            "storage_location_name": location_names.get(item.storage_location, item.storage_location) or "",
+            "status": master.status or "CONFIRMED",
+            "status_name": labels.get(master.status or "CONFIRMED", master.status),
             "inspection_status": item.inspection_status,
             "note": item.note or master.note or "",
         })
-    return {"total": total, "items": items}
+    return {"total": total, "offset": offset, "limit": limit, "items": items}
 
 
 # The page route is registered by purchase_unreceived.page_router.

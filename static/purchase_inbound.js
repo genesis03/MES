@@ -8,6 +8,7 @@
   let saving = false;
   let pickerOrders = [];
   let selectedPickerId = null;
+  let inboundSearchRequest = 0;
 
   const today = () => {
     const d = new Date();
@@ -359,6 +360,7 @@
   }
 
   async function searchInboundPicker() {
+    const requestId = ++inboundSearchRequest;
     const params = new URLSearchParams();
     const values = {
       inbound_no:$('pi-inbound-search-no').value.trim(),
@@ -372,7 +374,8 @@
     Object.entries(values).forEach(([k,v])=>{ if(v) params.set(k,v); });
     $('pi-inbound-popup-message').textContent = '조회 중…';
     try {
-      const data = await request('/api/purchase/inquiry/inbounds?' + params.toString());
+      const data = await MesPurchaseQuery.all('/api/purchase/inquiry/inbounds?' + params.toString());
+      if (requestId !== inboundSearchRequest) return;
       const map = new Map();
       (data.items || []).forEach(row => {
         if (!map.has(row.inbound_id)) map.set(row.inbound_id,{...row,item_count:0});
@@ -382,6 +385,7 @@
       renderInboundPicker();
       $('pi-inbound-popup-message').textContent = inboundPickerRows.length ? '행을 선택한 뒤 선택 버튼을 누르거나 더블클릭하세요.' : '조건에 맞는 입고가 없습니다.';
     } catch(error) {
+      if (requestId !== inboundSearchRequest) return;
       inboundPickerRows = []; renderInboundPicker(); $('pi-inbound-popup-message').textContent = error.message;
     }
   }
@@ -411,7 +415,7 @@
     const inboundNo = $('pi-inbound-no').value.trim();
     if (!inboundNo) { openInboundPicker(); return; }
     try {
-      const data = await request('/api/purchase/inquiry/inbounds?' + new URLSearchParams({inbound_no:inboundNo}));
+      const data = await MesPurchaseQuery.all('/api/purchase/inquiry/inbounds?' + new URLSearchParams({inbound_no:inboundNo}));
       const exact = (data.items || []).find(row => String(row.inbound_no || '').toUpperCase() === inboundNo.toUpperCase());
       if (!exact) throw new Error('해당 입고번호를 찾을 수 없습니다.');
       await loadInbound(exact.inbound_id);

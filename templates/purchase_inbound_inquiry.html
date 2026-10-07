@@ -87,6 +87,7 @@
 {% block extra_script %}
 <script>
 let inboundType='ALL';
+let inboundInquiryRequest=0;
 let currentInboundRows=[];
 const selectedInboundIds=new Set();
 const escInbound=(v)=>{const e=document.createElement('span');e.textContent=v??'';return e.innerHTML;};
@@ -118,7 +119,7 @@ function queryParams(){
 }
 
 async function fetchInboundRows(url){
-    const r=await fetch(url);const data=await r.json();if(!r.ok)throw new Error(data.detail||'조회 실패');return data.items||[];
+    const data=await MesPurchaseQuery.all(url);return data.items;
 }
 
 function renderInboundRows(rows){
@@ -137,11 +138,12 @@ function renderInboundRows(rows){
           ? (x.status_name||'입고확정')
           : (x.status==='DRAFT'?'임시저장':'입고확정');
         const note=isSub&&x.source_lot_no?`원 LOT: ${x.source_lot_no}${x.sample_qty?` / 샘플 ${Number(x.sample_qty).toLocaleString()}`:''}${x.note?` / ${x.note}`:''}`:(x.note||'');
-        return `<tr${rowAttr}><td><div class="select-cell">${checkbox}</div></td><td>${index+1}</td><td>${typeBadge}</td><td><a class="doc-link" href="${editUrl}">${escInbound(x.inbound_no)}</a></td><td>${escInbound(x.inbound_date)}</td><td><span class="status-badge ${statusClass(x.status)}">${escInbound(statusText)}</span></td><td>${escInbound(x.po_no)}</td><td class="left">${escInbound(x.partner_name)}</td><td>${escInbound(x.part_no)}</td><td class="left">${escInbound(x.part_name)}</td><td class="left">${escInbound(x.spec)}</td><td>${Number(x.inbound_qty||0).toLocaleString()}</td><td>${escInbound(x.unit)}</td><td class="lot">${escInbound(x.supplier_lot_no)}</td><td class="lot">${escInbound(x.internal_lot_no)}</td><td>${escInbound(x.warehouse_code)}</td><td>${escInbound(x.storage_location)}</td><td>${escInbound(inspection)}</td><td class="left">${escInbound(note)}</td></tr>`;
+        return `<tr${rowAttr}><td><div class="select-cell">${checkbox}</div></td><td>${index+1}</td><td>${typeBadge}</td><td><a class="doc-link" href="${editUrl}">${escInbound(x.inbound_no)}</a></td><td>${escInbound(x.inbound_date)}</td><td><span class="status-badge ${statusClass(x.status)}">${escInbound(statusText)}</span></td><td>${escInbound(x.po_no)}</td><td class="left">${escInbound(x.partner_name)}</td><td>${escInbound(x.part_no)}</td><td class="left">${escInbound(x.part_name)}</td><td class="left">${escInbound(x.spec)}</td><td>${Number(x.inbound_qty||0).toLocaleString()}</td><td>${escInbound(x.unit)}</td><td class="lot">${escInbound(x.supplier_lot_no)}</td><td class="lot">${escInbound(x.internal_lot_no)}</td><td>${escInbound(x.warehouse_name??x.warehouse_code)}</td><td>${escInbound(x.storage_location_name??x.storage_location)}</td><td>${escInbound(inspection)}</td><td class="left">${escInbound(note)}</td></tr>`;
     }).join('');
 }
 
 async function loadInboundInquiry(){
+    const requestId=++inboundInquiryRequest;
     const body=document.getElementById('inboundInquiryBody');const notice=document.getElementById('inboundNotice');selectedInboundIds.clear();currentInboundRows=[];updateInboundSelection();body.innerHTML='<tr><td colspan="19" class="empty">조회 중입니다...</td></tr>';notice.textContent='';
     const p=queryParams();
     try{
@@ -149,6 +151,7 @@ async function loadInboundInquiry(){
         if(inboundType==='ALL'||inboundType==='GENERAL')requests.push(fetchInboundRows('/api/purchase/inquiry/inbounds?'+p.toString()));
         if(inboundType==='ALL'||inboundType==='SUBCONTRACT')requests.push(fetchInboundRows('/api/purchase/inquiry/subcontract-inbounds?'+p.toString()));
         const results=await Promise.all(requests);
+        if(requestId!==inboundInquiryRequest)return;
         const rows=results.flat();
         rows.sort((a,b)=>String(b.inbound_date||'').localeCompare(String(a.inbound_date||''))||String(b.inbound_no||'').localeCompare(String(a.inbound_no||'')));
         currentInboundRows=rows;
@@ -157,7 +160,7 @@ async function loadInboundInquiry(){
         updateInboundSelection();
         if(inboundType==='SUBCONTRACT')notice.textContent='외주가공 입고번호를 클릭하면 외주가공 입고 처리 화면에서 해당 입고 건을 조회합니다.';
         else if(inboundType==='ALL')notice.textContent='일반구매는 입력/수정 화면, 외주가공은 외주가공 입고 처리 화면으로 이동합니다.';
-    }catch(e){body.innerHTML=`<tr><td colspan="19" class="empty" style="color:#dc2626;">${escInbound(e.message)}</td></tr>`;}
+    }catch(e){if(requestId!==inboundInquiryRequest)return;body.innerHTML=`<tr><td colspan="19" class="empty" style="color:#dc2626;">${escInbound(e.message)}</td></tr>`;}
 }
 
 document.addEventListener('DOMContentLoaded',()=>{document.getElementById('inboundStartDate').value=localDate(-30);document.getElementById('inboundEndDate').value=localDate(0);loadInboundInquiry();});
