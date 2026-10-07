@@ -77,7 +77,7 @@
   const fmt=function(v){return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6})};
   let defectTypes=[], defectReasons=[], lots=[], selected=null, popupSelected=null;
 
-  function today(){return new Date().toISOString().slice(0,10)}
+  function today(){return MesLocalDate.today()}
   function msg(t,ok){$('pd-msg').textContent=t||'';$('pd-msg').className='pd-msg '+(ok?'ok':'err')}
   async function jf(url,opt){const r=await fetch(url,opt);const d=await r.json();if(!r.ok)throw new Error(d.detail||'처리 실패');return d}
 

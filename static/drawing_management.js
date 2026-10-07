@@ -17,13 +17,7 @@
         const headers = new Headers(init.headers || {});
         headers.set('X-MES-Menu-Path', '/basic-info/drawings');
         const response = await fetch(url, {...init, headers});
-        if (!response.ok) {
-            let detail;
-            try { detail = (await response.json()).detail; } catch { detail = '서버 응답을 확인할 수 없습니다.'; }
-            if (Array.isArray(detail)) detail = detail.map(row => row.msg).join(', ');
-            throw new Error(detail || `요청 실패 (${response.status})`);
-        }
-        return response.json();
+        return MesResponse.read(response);
     }
 
     function jsonPost(url, body) {

@@ -136,7 +136,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
 {% block extra_script %}
 <script>
 const PERFORMANCE_TYPE='{{ performance_type }}';
-const n=v=>Number(v||0);const today=new Date().toISOString().slice(0,10);let currentRun=null;let defects=[];let defectTypes=[];let selectedOrderId=null;let currentMaterialId=null;let runDrawingRequest=0;
+const n=v=>Number(v||0);const today=MesLocalDate.today();let currentRun=null;let defects=[];let defectTypes=[];let selectedOrderId=null;let currentMaterialId=null;let runDrawingRequest=0;
 function oneMonthAgo(){const d=new Date();d.setDate(d.getDate()-30);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
 document.addEventListener('DOMContentLoaded',async()=>{performanceDate.value=today;historyStartDate.value=oneMonthAgo();historyEndDate.value=today;await loadProcesses();await loadDefectTypes();await loadRunHistory();['goodQty','setupQty'].forEach(id=>document.getElementById(id).addEventListener('input',updateProcessQty));scanLotInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();scanLot();}});materialLotScanInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();assignMaterialLot();}});historyStatus.addEventListener('change',loadRunHistory);historyLimit.addEventListener('change',loadRunHistory);});
 async function jf(url,opt){const r=await fetch(url,opt);const d=await r.json();if(!r.ok)throw new Error(d.detail||'처리 실패');return d;}

@@ -26,6 +26,7 @@ router = APIRouter(tags=["Inspection Standards"])
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 ROOT_PATH = "/standard-documents/inspection-standards"
+APPEARANCE_PATH = "/standard-documents/appearance-standards"
 TYPE_PATHS = {
     "INBOUND": ROOT_PATH + "/inbound",
     "PROCESS": ROOT_PATH + "/process",
@@ -135,6 +136,24 @@ def _require_access(user, document_type: str, write: bool = False):
     if not write and level == "NONE":
         raise HTTPException(403, "해당 검사기준서의 조회 권한이 없습니다.")
     return document_type
+
+
+def appearance_level(user):
+    if check_admin_permission(user):
+        return "WRITE"
+    access = parse_user_permissions(user).get("menu_access")
+    value = access.get(APPEARANCE_PATH) if isinstance(access, dict) else None
+    if value is True:
+        return "READ"
+    level = str(value or "NONE").upper()
+    return level if level in {"READ", "WRITE"} else "NONE"
+
+
+def inspection_tab_context(user, document_type):
+    return {"document_type": document_type,
+            "tab_paths": TYPE_PATHS | {"APPEARANCE": APPEARANCE_PATH},
+            "tab_access": {x: _menu_level(user, x) for x in TYPE_PATHS}
+                          | {"APPEARANCE": appearance_level(user)}}
 
 
 def _numeric_revision(value: str):
@@ -345,6 +364,8 @@ def inspection_entry(request: Request, current_user=Depends(get_current_user)):
     for doc_type in ("INBOUND", "PROCESS", "FINAL"):
         if _menu_level(current_user, doc_type) in {"READ", "WRITE"}:
             return RedirectResponse(TYPE_PATHS[doc_type], status_code=303)
+    if appearance_level(current_user) != "NONE":
+        return RedirectResponse(APPEARANCE_PATH, status_code=303)
     raise HTTPException(403, "검사기준서 관리 조회 권한이 없습니다.")
 
 
@@ -363,8 +384,7 @@ def inspection_page(kind: str, request: Request, current_user=Depends(get_curren
             "user": current_user,
             "document_type": document_type,
             "document_name": DOC_NAMES[document_type],
-            "tab_paths": TYPE_PATHS,
-            "tab_access": {x: _menu_level(current_user, x) for x in ("INBOUND", "PROCESS", "FINAL")},
+            **inspection_tab_context(current_user, document_type),
             "can_write": _menu_level(current_user, document_type) == "WRITE",
         },
     )

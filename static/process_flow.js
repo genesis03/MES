@@ -26,7 +26,7 @@ function errorText(detail){
 }
 async function request(url,method='GET',body){
  const r=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
- const d=await r.json();if(!r.ok){const e=Error(errorText(d.detail));e.details=d.detail;throw e;}return d;
+ try{return await MesResponse.read(r);}catch(error){if(error.details)error.message=errorText(error.details);throw error;}
 }
 function editable(){return write&&ready&&(!selected||selected.status==='DRAFT'||(correcting&&selected.status==='CURRENT'))&&(!selected||selected.item_selectable===true);}
 function correctable(){return write&&ready&&selected?.status==='CURRENT'&&selected.item_selectable===true;}

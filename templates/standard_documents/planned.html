@@ -16,6 +16,7 @@
 <div class="document-planned-head">
     <h1>{{ page.title }}</h1>
     <p>{{ page.section | default("표준문서 관리 · 품목과 공정에 연결되는 문서 관리", true) }}</p>
+    {% if inspection_tabs %}{% include "standard_documents/inspection_tab_bar.html" %}{% endif %}
 </div>
 <section class="document-planned-card">
     <span class="document-planned-badge">개발 예정</span>

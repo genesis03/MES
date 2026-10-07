@@ -49,7 +49,7 @@
 {% block extra_script %}
 <script>
 let items=[], partCandidates=[], partActiveIndex=-1, partTimer=null;
-const today=new Date().toISOString().slice(0,10);
+const today=MesLocalDate.today();
 document.addEventListener('DOMContentLoaded', async()=>{
     document.getElementById('planDate').value=today;
     partSearch.addEventListener('input',()=>{partNo.value='';clearTimeout(partTimer);partTimer=setTimeout(searchParts,180);});

@@ -17,11 +17,11 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # 화면 제목/안내만 정의합니다. 업무 마스터나 문서 유형 공통코드를 대신하지 않습니다.
 PLANNED_PAGES = {
     "/standard-documents/work-standards": {
-        "title": "작업표준서 관리",
+        "title": "작업표준서",
         "description": "품목·공정별 작업표준서와 개정 이력을 관리하는 기능을 준비 중입니다.",
     },
     "/standard-documents/packaging-specifications": {
-        "title": "포장사양서 관리",
+        "title": "포장사양서",
         "description": "완제품 품목만 선택하는 포장사양서·개정 이력 기능을 준비 중입니다. 기존 품목마스터의 자재유형 기준을 사용합니다.",
     },
     "/standard-documents/appearance-standards": {
@@ -52,9 +52,14 @@ def planned_document_page(request: Request, db: Session = Depends(get_db)):
             context={"user": user, "can_write_control_plan": level == "WRITE"},
         )
     page = PLANNED_PAGES[request.url.path]
+    context = {"user": user, "page": page}
+    if request.url.path == "/standard-documents/appearance-standards":
+        from routers.inspection_standards import inspection_tab_context
+        context.update(inspection_tab_context(user, "APPEARANCE"))
+        context["inspection_tabs"] = True
     return templates.TemplateResponse(
         request=request, name="standard_documents/planned.html",
-        context={"user": user, "page": page},
+        context=context,
     )
 
 

@@ -10,16 +10,14 @@ let editShipmentMode = false;
 const requestedEditShipmentId = Number(new URLSearchParams(location.search).get('shipment_id') || 0);
 const allocations = new Map();
 
-function today(){ return new Date().toISOString().slice(0,10); }
+function today(){ return MesLocalDate.today(); }
 function num(v){ return Number(v || 0); }
 function fmt(v){ return num(v).toLocaleString('ko-KR', {maximumFractionDigits: 3}); }
 function esc(v){ return String(v ?? '').replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[s])); }
 
 async function getJson(url, options={}){
   const res = await fetch(url, options);
-  const data = await res.json().catch(()=>({}));
-  if(!res.ok) throw new Error(data.detail || data.message || '처리에 실패했습니다.');
-  return data;
+  return MesResponse.read(res);
 }
 
 function allocationFor(itemId){

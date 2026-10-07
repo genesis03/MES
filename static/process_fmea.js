@@ -19,9 +19,7 @@ function importMessage(text, error=false){
 }
 async function request(url, method='GET', body) {
   const response=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
-  const data=await response.json();
-  if(!response.ok) {const detail=data.detail;throw Error(Array.isArray(detail)?detail.map(x=>x.loc.join('.')+': '+x.msg).join('\n'):detail||'요청 처리에 실패했습니다.');}
-  return data;
+  return MesResponse.read(response);
 }
 function editable(){return canWrite&&loaded&&(!selected||selected.status==='DRAFT')&&(!selected||selected.item_selectable===true);}
 function updateControls(){
@@ -268,12 +266,7 @@ if(el('fmeaImportFile'))el('fmeaImportFile').addEventListener('change',()=>{
   form.append('flow_revision_id',currentFlow.id);form.append('flow_version',currentFlow.version);
   if(selected){form.append('revision_id',selected.id);form.append('revision_version',selected.version);}
   const response=await fetch('/api/process-fmea/import-excel',{method:'POST',body:form});
-  const data=await response.json();
-  if(!response.ok){
-   const detail=data.detail;
-   if(detail?.errors)throw Error(detail.message+'\n'+detail.errors.map(x=>x.cell+': '+x.message).join('\n'));
-   throw Error(typeof detail==='string'?detail:'엑셀을 불러오지 못했습니다. 기존 분석행은 변경되지 않았습니다.');
-  }
+  const data=await MesResponse.read(response);
   const imported=data.rows.map(row=>{
    const step=currentFlow.steps.find(x=>x.id===row.flow_step_id);
    if(!step)throw Error('공정 연결이 변경되었습니다. 다시 조회해 주세요. 기존 분석행은 변경되지 않았습니다.');

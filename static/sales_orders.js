@@ -8,7 +8,7 @@ let editingOrder = null;
 let readOnlyOrder = false;
 
 function today() {
-  return new Date().toISOString().slice(0, 10);
+  return MesLocalDate.today();
 }
 
 function esc(v) {
@@ -17,9 +17,7 @@ function esc(v) {
 
 async function getJson(url, options = {}) {
   const res = await fetch(url, options);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || data.message || '처리에 실패했습니다.');
-  return data;
+  return MesResponse.read(res);
 }
 
 function normalizeText(v) {

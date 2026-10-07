@@ -26,13 +26,7 @@
 
   async function request(url, options) {
     const response = await fetch(url, options);
-    let data = {};
-    try { data = await response.json(); } catch (_) {}
-    if (!response.ok) {
-      const detail = Array.isArray(data.detail) ? data.detail.map(x => x.msg).join(' / ') : data.detail;
-      throw new Error(detail || '처리하지 못했습니다.');
-    }
-    return data;
+    return MesResponse.read(response);
   }
 
   function cloneProcessSelect(value = '') {

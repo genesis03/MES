@@ -49,7 +49,7 @@
   const $=function(id){return document.getElementById(id)};
   const esc=function(v){const s=document.createElement('span');s.textContent=v==null?'':v;return s.innerHTML};
   const fmt=function(v){return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6})};
-  function dateOffset(days){const d=new Date();d.setDate(d.getDate()+days);return d.toISOString().slice(0,10)}
+  function dateOffset(days){const d=new Date();d.setDate(d.getDate()+days);return MesLocalDate.format(d)}
   async function search(){
     const p=new URLSearchParams({source:$('ds-source').value,limit:'5000'});
     if($('ds-start').value)p.set('start_date',$('ds-start').value);

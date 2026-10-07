@@ -92,8 +92,8 @@
         const end = new Date();
         const start = new Date();
         start.setDate(start.getDate() - 30);
-        document.getElementById('sourceEndDate').value = end.toISOString().slice(0, 10);
-        document.getElementById('sourceStartDate').value = start.toISOString().slice(0, 10);
+        document.getElementById('sourceEndDate').value = MesLocalDate.format(end);
+        document.getElementById('sourceStartDate').value = MesLocalDate.format(start);
     }
 
     async function loadSourceShipments() {

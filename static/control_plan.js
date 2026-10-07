@@ -33,8 +33,7 @@ async function loadDocumentList(){
  if(!documents.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=8;td.textContent='등록된 관리계획서가 없습니다.';tr.append(td);body.append(tr);}
 }
 async function api(path,options={}){
- const response=await fetch('/api/control-plans'+path,options);const data=await response.json();
- if(!response.ok){const detail=data.detail;throw new Error(typeof detail==='string'?detail:detail?.errors?detail.message+'\n'+detail.errors.map(x=>x.cell+': '+x.message).join('\n'):Array.isArray(detail)?detail.map(x=>x.msg).join('\n'):'요청을 처리하지 못했습니다.');}return data;
+ const response=await fetch('/api/control-plans'+path,options);return MesResponse.read(response);
 }
 function json(method,payload){return {method,headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)};}
 function editable(){return canWrite&&items.find(x=>x.id===Number($('cpItem').value))?.selectable!==false&&(!current||current.status==='DRAFT');}
@@ -99,11 +98,11 @@ function render(){
 function sortRows(){const order=new Map(flow.steps.map((s,i)=>[s.id,i]));rows.sort((a,b)=>order.get(a.flow_step_id)-order.get(b.flow_step_id));}
 async function loadLists(){
  const id=Number($('cpItem').value);if(!id){flows=[];revisions=[];}else [flows,revisions]=await Promise.all([api('/items/'+id+'/flows'),api('/revisions?item_id='+id)]);
- addOptions($('cpFlow'),flows,'공정흐름도 선택',x=>x.revision_code+' · '+x.status);
- addOptions($('cpRevision'),revisions,'새 문서',x=>x.document_no+' · '+x.revision_code+' · '+x.status);
+ addOptions($('cpFlow'),flows,'공정흐름도 선택',x=>x.revision_code+' · '+statusText(x.status));
+ addOptions($('cpRevision'),revisions,'새 문서',x=>x.document_no+' · '+x.revision_code+' · '+statusText(x.status));
 }
-function newDocument(){showEditor('신규 관리계획서');current=null;dirty=false;fillHeader(items.find(x=>x.id===Number($('cpItem').value))||{});$('cpDocumentNo').value='';$('cpRevisionCode').value='REV.0';$('cpRevision').value='';flow=flows.find(x=>x.status==='CURRENT')||flows[0]||null;$('cpFlow').value=flow?flow.id:'';rows=flow?flow.steps.map(emptyRow):[];render();message(flow?'공정 순서에 맞춰 관리항목을 입력하거나 회사 엑셀 파일을 불러오세요.':!$('cpItem').value?'완제품 품목을 조회하여 선택하세요.':'먼저 해당 완제품의 공정흐름도를 적용해 주세요.');}
-function display(data){showEditor(($('cpItemPartNo').value||'')+' · '+data.document_no+' · '+data.revision_code+' · '+statusText(data.status));current=data;flow=data.flow;rows=data.rows;fillHeader(data.header);$('cpDocumentNo').value=data.document_no;$('cpRevisionCode').value=data.revision_code;$('cpRevision').value=data.id;
+function newDocument(){showEditor('신규 관리계획서');current=null;dirty=false;fillHeader(items.find(x=>x.id===Number($('cpItem').value))||{});$('cpDocumentNo').value='';MesRevisionNumber.setInput($('cpRevisionCode'),'REV.0',true);$('cpRevision').value='';flow=flows.find(x=>x.status==='CURRENT')||flows[0]||null;$('cpFlow').value=flow?flow.id:'';rows=flow?flow.steps.map(emptyRow):[];render();message(flow?'공정 순서에 맞춰 관리항목을 입력하거나 회사 엑셀 파일을 불러오세요.':!$('cpItem').value?'완제품 품목을 조회하여 선택하세요.':'먼저 해당 완제품의 공정흐름도를 적용해 주세요.');}
+function display(data){showEditor(($('cpItemPartNo').value||'')+' · '+data.document_no+' · '+data.revision_code+' · '+statusText(data.status));current=data;flow=data.flow;rows=data.rows;fillHeader(data.header);$('cpDocumentNo').value=data.document_no;MesRevisionNumber.setInput($('cpRevisionCode'),data.revision_code,true);$('cpRevision').value=data.id;
  if(!Array.from($('cpFlow').options).some(x=>x.value===String(flow.id)))$('cpFlow').add(new Option(flow.revision_code,flow.id));$('cpFlow').value=flow.id;dirty=false;render();}
 async function run(action){if(busy)return;busy=true;refreshControls();try{await action();}catch(error){message(error.message,true);}finally{busy=false;refreshControls();}}
 $('cpSearchForm').onsubmit=event=>{event.preventDefault();run(loadDocumentList);};
@@ -138,16 +137,17 @@ function renderItemLookup(){
 $('cpItemLookup').onclick=()=>{if(busy)return;$('cpItemKeyword').value='';renderItemLookup();$('cpItemDialog').showModal();$('cpItemKeyword').focus();};
 $('cpItemDialogClose').onclick=()=>$('cpItemDialog').close();
 $('cpItemSearchForm').onsubmit=event=>{event.preventDefault();renderItemLookup();};
+$('cpItemReset').onclick=()=>{$('cpItemKeyword').value='';renderItemLookup();$('cpItemKeyword').focus();};
 $('cpRevision').addEventListener('change',()=>run(async()=>{if(!guard()){$('cpRevision').value=current?.id||'';return;}if(!$('cpRevision').value)newDocument();else{display(await api('/revisions/'+$('cpRevision').value));message('저장된 문서를 불러왔습니다. 적용된 문서는 개정 등록 후 수정할 수 있습니다.');}}));
 $('cpNew').onclick=()=>{if(guard())newDocument();};
 $('cpFlow').addEventListener('change',()=>{const next=flows.find(x=>x.id===Number($('cpFlow').value))||null;
  if(rows.some(r=>textFields.some(f=>r[f]))&&!confirm('공정흐름도를 바꾸면 현재 관리항목을 새 공정 기준으로 다시 작성합니다. 계속하시겠습니까?')){$('cpFlow').value=flow?.id||'';return;}
  flow=next;rows=flow?flow.steps.map(emptyRow):[];dirty=true;render();});
 document.querySelector('.cp-form').addEventListener('input',()=>{dirty=true;refreshControls();});$('cpRevisionCode').addEventListener('input',()=>{dirty=true;refreshControls();});
-if($('cpSave'))$('cpSave').onclick=()=>run(async()=>{if(!flow)throw Error('공정흐름도를 선택해 주세요.');const payload={item_id:Number($('cpItem').value),document_no:$('cpDocumentNo').value,revision_code:$('cpRevisionCode').value,flow_revision_id:flow.id,flow_version:flow.version,header:header(),rows,version:current?.version||null};
+if($('cpSave'))$('cpSave').onclick=()=>run(async()=>{if(!flow)throw Error('공정흐름도를 선택해 주세요.');const payload={item_id:Number($('cpItem').value),document_no:$('cpDocumentNo').value,revision_code:MesRevisionNumber.read($('cpRevisionCode'),true),flow_revision_id:flow.id,flow_version:flow.version,header:header(),rows,version:current?.version||null};
  const result=await api('/revisions'+(current?'/'+current.id:''),json(current?'PUT':'POST',payload));await loadLists();display(result);await loadDocumentList();message('상단 정보와 관리항목을 초안으로 저장했습니다.');});
 if($('cpActivate'))$('cpActivate').onclick=()=>run(async()=>{if(!current||dirty)throw Error('먼저 초안을 저장해 주세요.');if(!confirm('이 개정을 현재 사용하는 관리계획서로 적용하시겠습니까?'))return;const result=await api('/revisions/'+current.id+'/activate',json('POST',{version:current.version}));await loadLists();display(result);await loadDocumentList();message('현재 사용 적용을 완료했습니다.');});
-if($('cpRevise'))$('cpRevise').onclick=()=>run(async()=>{const code=prompt('새 관리계획서 개정번호를 입력하세요.');if(!code)return;const result=await api('/revisions/'+current.id+'/revise',json('POST',{version:current.version,revision_code:code}));await loadLists();display(result);await loadDocumentList();message('기존 내용으로 새 개정 초안을 만들었습니다.');});
+if($('cpRevise'))$('cpRevise').onclick=()=>run(async()=>{const code=await MesRevisionNumber.ask('관리계획서 개정 등록');if(!code)return;const result=await api('/revisions/'+current.id+'/revise',json('POST',{version:current.version,revision_code:code}));await loadLists();display(result);await loadDocumentList();message('기존 내용으로 새 개정 초안을 만들었습니다.');});
 if($('cpImport'))$('cpImport').onclick=()=>{if(!flow){message('품목과 기준 공정흐름도를 선택해 주세요.',true);return;}$('cpFile').value='';$('cpFile').click();};
 $('cpFile').onchange=()=>run(async()=>{const file=$('cpFile').files[0];if(!file)return;if(file.size>10*1024*1024)throw Error('파일 크기는 10MB 이하이어야 합니다.');
  if(rows.some(r=>textFields.some(f=>r[f]))&&!confirm('하단 관리항목을 엑셀 내용으로 교체하시겠습니까? 상단 입력은 유지됩니다.'))return;

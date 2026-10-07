@@ -15,15 +15,7 @@
 
   async function api(url, options = {}) {
     const res = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
-    if (!res.ok) {
-      let msg = `처리 중 오류가 발생했습니다. (${res.status})`;
-      try {
-        const body = await res.json();
-        msg = body.detail || body.message || msg;
-      } catch (_) {}
-      throw new Error(msg);
-    }
-    return res.json();
+    return MesResponse.read(res);
   }
 
   function message(text, error = false) {
@@ -43,7 +35,7 @@
   function todayLocal() {
     const d = new Date();
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().slice(0, 10);
+    return MesLocalDate.format(d);
   }
 
   function latestActiveInbound() {

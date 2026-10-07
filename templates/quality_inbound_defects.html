@@ -96,7 +96,7 @@
   const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6});
   let defectTypes=[], popupGroups=[], popupSelected=null, selectedGroup=null, selectedRows=[], flatLots=[];
 
-  function dateOffset(days){const d=new Date();d.setDate(d.getDate()+days);return d.toISOString().slice(0,10);}
+  function dateOffset(days){const d=new Date();d.setDate(d.getDate()+days);return MesLocalDate.format(d);}
   function setMsg(text,type=''){$('qi-msg').className='qi-msg'+(type?' '+type:'');$('qi-msg').textContent=text||'';}
 
   async function loadOptions(){

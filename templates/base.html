@@ -258,8 +258,11 @@
         }
     </style>
     <script src="/static/revision_number.js?v=numeric-revision-1"></script>
+    <script src="/static/response_json.js?v=1"></script>
+    <script src="/static/date_local.js?v=1"></script>
     {% block print_page %}<link rel="stylesheet" href="/static/css/document_print.css?v=a4-1" media="print">{% endblock %}
     {% block extra_head %}{% endblock %}
+    <link rel="stylesheet" href="/static/css/standard_document_ui.css?v=1">
 </head>
 <body>
 
@@ -314,9 +317,8 @@
                     <li class="submenu-item"><a href="/standard-documents/control-plans" id="nav-control-plans">관리계획서</a></li>
                     <li class="submenu-item"><a href="/standard-documents/process-fmea" id="nav-process-fmea">공정 FMEA</a></li>
                     <li class="submenu-item"><a href="/standard-documents/work-standards" id="nav-work-standards">작업표준서</a></li>
-                    <li class="submenu-item"><a href="/standard-documents/inspection-standards" id="nav-inspection-standards" data-permission-paths="/standard-documents/inspection-standards/inbound,/standard-documents/inspection-standards/process,/standard-documents/inspection-standards/final,/quality/inbound-standards" data-permission-items='[{"path":"/standard-documents/inspection-standards/inbound","label":"입고검사 기준서"},{"path":"/standard-documents/inspection-standards/process","label":"공정검사 기준서"},{"path":"/standard-documents/inspection-standards/final","label":"최종검사 기준서"}]'>검사기준서</a></li>
+                    <li class="submenu-item"><a href="/standard-documents/inspection-standards" id="nav-inspection-standards" data-permission-paths="/standard-documents/inspection-standards/inbound,/standard-documents/inspection-standards/process,/standard-documents/inspection-standards/final,/standard-documents/appearance-standards,/quality/inbound-standards" data-permission-items='[{"path":"/standard-documents/inspection-standards/inbound","label":"입고검사 기준서"},{"path":"/standard-documents/inspection-standards/process","label":"공정검사 기준서"},{"path":"/standard-documents/inspection-standards/final","label":"최종검사 기준서"},{"path":"/standard-documents/appearance-standards","label":"외관검사 기준서"}]'>검사기준서</a></li>
                     <li class="submenu-item"><a href="/standard-documents/packaging-specifications" id="nav-packaging-specifications">포장사양서</a></li>
-                    <li class="submenu-item"><a href="/standard-documents/appearance-standards" id="nav-appearance-standards">외관검사 기준서</a></li>
                 </ul>
             </li>
             {% endif %}
@@ -582,7 +584,7 @@
         document.addEventListener("DOMContentLoaded", function() {
             applyMenuAccess();
             applyReadOnlyMode();
-            const currentPath = window.location.pathname;
+            const currentPath = window.location.pathname.replace(/\/$/, '') || '/';
             const routeMap = {
                 "/": "nav-home",
                 "/shipping": "nav-home",
@@ -647,7 +649,13 @@
                 "/quality/production-defects": "nav-quality-production-defects",
                 "/quality/defect-status": "nav-quality-defect-status"
             };
-            const activeNavId = routeMap[currentPath];
+            // Use sidebar paths for new menus and their nested pages; retain legacy aliases.
+            const sidebarMatch = Array.from(document.querySelectorAll('.sidebar-menu .submenu a[href]'))
+                .flatMap(link => [link.getAttribute('href'), ...(link.dataset.permissionPaths || '').split(',')]
+                    .filter(Boolean).map(path => ({link, path: path.replace(/\/$/, '') || '/'})))
+                .filter(entry => currentPath === entry.path || (entry.path !== '/' && currentPath.startsWith(entry.path + '/')))
+                .sort((a, b) => b.path.length - a.path.length)[0];
+            const activeNavId = sidebarMatch?.link.id || routeMap[currentPath];
             if (activeNavId) {
                 const targetLink = document.getElementById(activeNavId);
                 if (targetLink) {

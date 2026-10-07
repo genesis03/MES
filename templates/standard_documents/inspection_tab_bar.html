@@ -1,0 +1,5 @@
+<nav class="is-tabs" aria-label="검사기준서 유형">
+  {% for kind, label in [('INBOUND', '입고검사 기준서'), ('PROCESS', '공정검사 기준서'), ('FINAL', '최종검사 기준서'), ('APPEARANCE', '외관검사 기준서')] %}
+    {% if tab_access[kind] != 'NONE' %}<a href="{{ tab_paths[kind] }}" class="{{ 'active' if document_type == kind else '' }}" {% if document_type == kind %}aria-current="page"{% endif %}>{{ label }}</a>{% endif %}
+  {% endfor %}
+</nav>

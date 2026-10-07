@@ -18,10 +18,7 @@
 
   async function request(url, options) {
     const r = await fetch(url, options);
-    let data = {};
-    try { data = await r.json(); } catch (_) {}
-    if (!r.ok) throw new Error(data.detail || '처리하지 못했습니다.');
-    return data;
+    return MesResponse.read(r);
   }
 
   function resetView() {

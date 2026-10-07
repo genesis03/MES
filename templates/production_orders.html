@@ -59,7 +59,7 @@
 
 {% block extra_script %}
 <script>
-let rows=[];const today=new Date().toISOString().slice(0,10);
+let rows=[];const today=MesLocalDate.today();
 document.addEventListener('DOMContentLoaded',()=>{orderDate.value=today;searchKeyword.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadItems();}});});
 function esc(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function fmt(v){return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:3});}

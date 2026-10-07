@@ -15,7 +15,7 @@
 <div class="cp-item-field"><label for="cpItemPartNo">완제품 품목 *</label><div class="cp-item-lookup"><input id="cpItem" type="hidden"><input id="cpItemPartNo" readonly placeholder="조회 버튼으로 선택"><button id="cpItemLookup" type="button">조회</button></div></div>
 <label>문서 개정 <select id="cpRevision"><option value="">새 문서</option></select></label>
 <label>기준 공정흐름도 <select id="cpFlow"><option value="">공정흐름도 선택</option></select></label>
-<label>개정번호 <input id="cpRevisionCode" value="REV.0" maxlength="50"></label>
+<label class="cp-revision-code-field">개정번호 <span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="cpRevisionCode" value="0" inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력" aria-label="관리계획서 개정번호 숫자"></span></label>
 <button id="cpNew" type="button">새 문서</button>
 {% if can_write_control_plan %}<button id="cpSave" type="button">초안 저장</button><button id="cpImport" type="button">관리항목 불러오기</button><button id="cpActivate" type="button">현재 사용 적용</button><button id="cpRevise" type="button">개정 등록</button>{% endif %}
 <button id="cpPrint" type="button">인쇄</button>
@@ -26,7 +26,7 @@
 <p class="cp-notice" id="cpMessage" role="status">품목과 공정흐름도를 선택하세요. 엑셀은 첫 시트의 하단 관리항목만 불러옵니다.</p>
 <dialog id="cpItemDialog" class="cp-item-dialog" aria-labelledby="cpItemDialogTitle">
   <div class="cp-item-dialog-head"><strong id="cpItemDialogTitle">완제품 품번 조회</strong><button id="cpItemDialogClose" type="button" aria-label="닫기">닫기</button></div>
-  <form id="cpItemSearchForm" class="cp-item-search"><input id="cpItemKeyword" aria-label="품번 또는 품명" placeholder="품번 또는 품명"><button type="submit">조회</button></form>
+  <form id="cpItemSearchForm" class="cp-item-search"><input id="cpItemKeyword" aria-label="품번 또는 품명" placeholder="품번 또는 품명"><button type="submit">조회</button><button id="cpItemReset" type="button">초기화</button></form>
   <div class="cp-item-results"><table><thead><tr><th>품번</th><th>품명</th><th>선택</th></tr></thead><tbody id="cpItemResults"></tbody></table></div>
 </dialog>
 <div class="cp-scroll">
@@ -108,5 +108,5 @@
 </div>
 <script src="/static/wide_table_scroll.js?v=1" defer></script>
 <script src="/static/flow_symbols.js?v=1" defer></script>
-<script src="/static/control_plan.js?v=document-list-2" defer></script>
+<script src="/static/control_plan.js?v=consistency-1" defer></script>
 {% endblock %}

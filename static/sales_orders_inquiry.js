@@ -9,9 +9,7 @@ let searchTimer = null;
 
 async function getJson(url, options = {}) {
   const res = await fetch(url, options);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || data.message || '처리에 실패했습니다.');
-  return data;
+  return MesResponse.read(res);
 }
 
 function esc(v) {
