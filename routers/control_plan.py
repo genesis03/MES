@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user, check_admin_permission, parse_user_permissions
 from models.control_plan import ControlPlanRevision, ControlPlanInspectionLink
-from models.models import ItemMasterModel, ProcessModel
+from models.models import ItemMasterModel, ProcessModel, UserModel
 from services.inspection_standard_links import INTERNAL_CODES, CATEGORIES
 from models.process_flow import ProcessFlowRevision
 from services.document_service import lock_item
@@ -207,6 +207,36 @@ def flows(item_id:int,db:Session=Depends(get_db),user=Depends(get_current_user))
     return [flow_dict(db,x) for x in db.scalars(select(ProcessFlowRevision).where(
         ProcessFlowRevision.item_id==item_id,ProcessFlowRevision.status.in_(('CURRENT','SUPERSEDED'))
     ).order_by(ProcessFlowRevision.sequence.desc()))]
+
+@router.get('/documents')
+def documents(keyword:str='',status:str='',db:Session=Depends(get_db),user=Depends(get_current_user)):
+    access(user)
+    if status and status not in {'DRAFT','CURRENT','SUPERSEDED'}:
+        raise HTTPException(422,'조회 상태가 올바르지 않습니다.')
+    query=select(ControlPlanRevision,ItemMasterModel,UserModel).join(
+        ItemMasterModel,ItemMasterModel.id==ControlPlanRevision.item_id).outerjoin(
+        UserModel,UserModel.id==ControlPlanRevision.created_by_id)
+    if keyword.strip():
+        value=f'%{keyword.strip()}%'
+        query=query.where(ItemMasterModel.part_no.ilike(value)|ItemMasterModel.part_name.ilike(value)
+                          |ControlPlanRevision.document_no.ilike(value))
+    grouped={}
+    for revision,item,author in db.execute(query.order_by(ItemMasterModel.part_no,ControlPlanRevision.id.desc())):
+        grouped.setdefault((revision.item_id,revision.document_no),[]).append((revision,item,author))
+    result=[]
+    for history in grouped.values():
+        matches=[entry for entry in history if not status or entry[0].status==status]
+        if not matches:
+            continue
+        revision,item,author=matches[0]
+        current=next((entry[0] for entry in history if entry[0].status=='CURRENT'),None)
+        result.append({'revision_id':revision.id,'item_id':item.id,'part_no':item.part_no,
+                       'part_name':item.part_name,'document_no':revision.document_no,
+                       'revision_code':revision.revision_code,'status':revision.status,
+                       'current_revision':current.revision_code if current else '',
+                       'created_by':author.username if author else '',
+                       'created_at':revision.created_at.strftime('%Y-%m-%d %H:%M:%S')})
+    return result
 
 @router.get('/revisions')
 def revisions(item_id:int,db:Session=Depends(get_db),user=Depends(get_current_user)):

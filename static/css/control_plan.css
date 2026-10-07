@@ -1,4 +1,13 @@
 .main-content{min-width:0}
+#cpEditor[hidden]{display:none}
+.cp-list-head,.cp-editor-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.cp-list-head h1{font-size:24px}.cp-editor-head h2{font-size:18px}
+.cp-list-card{background:#fff;border:1px solid #cbd5e1;border-radius:7px;padding:16px;margin-bottom:14px}
+.cp-list-search{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.cp-list-search input,.cp-list-search select{height:36px;border:1px solid #cbd5e1;border-radius:4px;padding:7px 9px;font:inherit;font-size:13px}.cp-list-search input{min-width:260px}
+.cp-list-button{height:36px;padding:7px 13px;border:0;border-radius:5px;background:#e2e8f0;color:#334155;font-size:13px;font-weight:700;cursor:pointer}.cp-list-button.primary{background:#2563eb;color:#fff}.cp-list-button:disabled{opacity:.45;cursor:default}
+.cp-list-scroll{overflow:auto}.cp-document-list{width:100%;min-width:1000px;border-collapse:collapse;font-size:12px}.cp-document-list th,.cp-document-list td{padding:9px;border:1px solid #dbe2eb;text-align:left}.cp-document-list th{background:#f1f5f9}.cp-list-search input:focus-visible,.cp-list-button:focus-visible{outline:2px solid #2563eb;outline-offset:2px}
+@media print{.cp-list-head,.cp-list-card,.cp-editor-head,#cpListMessage{display:none!important}}
 .cp-notice{margin:0 0 14px;color:#64748b;font-size:13px;line-height:1.6}
 .cp-scroll{max-width:100%;overflow:auto}
 .cp-paper{min-width:1260px;background:#fff;border:1px solid #cbd5e1;padding:24px;box-sizing:border-box;color:#111}

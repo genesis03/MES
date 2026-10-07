@@ -1,8 +1,16 @@
 {% extends "base.html" %}
 {% block title %}관리계획서{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/wide_table_scroll.css?v=1"><link rel="stylesheet" href="/static/css/control_plan.css?v=item-lookup-8">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/wide_table_scroll.css?v=1"><link rel="stylesheet" href="/static/css/control_plan.css?v=document-list-1">{% endblock %}
 {% block content %}
 <div id="cpApp" data-write="{{ 'true' if can_write_control_plan else 'false' }}">
+<div class="cp-list-head no-print"><h1>관리계획서</h1>{% if can_write_control_plan %}<button id="cpCreate" class="cp-list-button primary" type="button">신규 등록</button>{% endif %}</div>
+<div class="cp-list-card no-print">
+  <form id="cpSearchForm" class="cp-list-search"><input id="cpKeyword" aria-label="검색어" placeholder="품번 · 품명 · 문서번호"><select id="cpState" aria-label="조회 상태"><option value="">전체 상태</option><option value="DRAFT">초안</option><option value="CURRENT">현재 사용</option><option value="SUPERSEDED">구버전</option></select><button class="cp-list-button primary" type="submit">조회</button><button id="cpReset" class="cp-list-button" type="button">초기화</button></form>
+  <div class="cp-list-scroll"><table class="cp-document-list"><thead><tr><th>품번</th><th>품명</th><th>문서번호</th><th>조회 개정</th><th>상태</th><th>현재 사용 개정</th><th>등록자 / 등록일</th><th>선택</th></tr></thead><tbody id="cpDocumentList"></tbody></table></div>
+</div>
+<p id="cpListMessage" class="cp-notice no-print" role="status">관리계획서를 선택하거나 신규 등록해 주세요.</p>
+<section id="cpEditor" hidden>
+<div class="cp-editor-head no-print"><h2 id="cpEditorTitle">신규 관리계획서</h2><button id="cpBack" class="cp-list-button" type="button">목록 조회</button></div>
 <div class="cp-toolbar">
 <div class="cp-item-field"><label for="cpItemPartNo">완제품 품목 *</label><div class="cp-item-lookup"><input id="cpItem" type="hidden"><input id="cpItemPartNo" readonly placeholder="조회 버튼으로 선택"><button id="cpItemLookup" type="button">조회</button></div><div id="cpItemName" class="cp-item-name"></div></div>
 <label>문서 개정 <select id="cpRevision"><option value="">새 문서</option></select></label>
@@ -95,8 +103,9 @@
     </thead><tbody id="cpRows"></tbody></table></div>
   </section>
 </div>
+</section>
 </div>
 <script src="/static/wide_table_scroll.js?v=1" defer></script>
 <script src="/static/flow_symbols.js?v=1" defer></script>
-<script src="/static/control_plan.js?v=item-lookup-3" defer></script>
+<script src="/static/control_plan.js?v=document-list-1" defer></script>
 {% endblock %}
