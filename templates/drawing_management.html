@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}도면 관리{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="/static/css/drawing_management.css">
+<link rel="stylesheet" href="/static/css/drawing_management.css?v=eco-history-1">
 <div id="drawingApp" data-can-write="{{ 'true' if can_write_documents else 'false' }}">
     <div class="drawing-heading"><div><h2>도면 관리</h2><p>품목별 도면과 개정 이력을 관리합니다.</p></div><a href="/basic-info/items" class="drawing-link">품목 정보 관리</a></div>
     <form id="drawingSearch" class="drawing-search">
@@ -23,7 +23,7 @@
                 <div class="drawing-revisions"><label>도면 개정 이력<select id="drawingRevision"></select></label><span id="drawingRevisionStatus" class="drawing-badge"></span></div>
                 <p id="drawingRevisionMeta" class="drawing-muted"></p>
                 <h3 class="drawing-history-title">개정 이력</h3>
-                <div class="drawing-history-scroll"><table><thead><tr><th>개정번호</th><th>등록일</th><th>적용일</th><th>주요 개정 내용</th><th>등록자</th><th>상태</th><th>조회</th></tr></thead><tbody id="drawingRevisionHistory"></tbody></table></div>
+                <div class="drawing-history-scroll"><table><thead><tr><th>개정번호</th><th>등록일</th><th>적용일</th><th>주요 개정 내용</th><th>ECO NO.</th><th>등록자</th><th>상태</th><th>조회</th></tr></thead><tbody id="drawingRevisionHistory"></tbody></table></div>
                 <div class="drawing-actions"><button id="drawingRevise" type="button" data-write>개정 등록</button><button id="drawingActivate" type="button" data-write>현재 사용 적용</button><button id="drawingRetire" type="button" class="danger" data-write>도면 개정 폐기</button></div>
                 <div id="drawingDocuments"></div>
                 <form id="drawingUpload" class="drawing-upload" hidden>
@@ -41,11 +41,12 @@
     <dialog id="drawingRevisionDialog"><form id="drawingRevisionForm">
         <h3 id="drawingRevisionDialogTitle">도면 개정 등록</h3>
         <label>도면 개정번호 <span>*</span><span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="drawingRevisionCode" required inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력" aria-label="도면 개정번호 숫자"></span></label>
+        <label>ECO NO.<input id="drawingEcoNo" maxlength="100" placeholder="ECO 번호 입력" aria-label="도면 ECO 번호"></label>
         <label>개정 사유<textarea id="drawingChangeReason" maxlength="4000" rows="3"></textarea></label>
         <label>비고<textarea id="drawingRevisionNote" maxlength="8000" rows="2"></textarea></label>
         <p class="drawing-muted">새 초안에는 이번 도면 개정에 사용할 파일을 등록합니다. 기존 개정의 파일은 그대로 보존됩니다.</p>
         <div class="drawing-actions"><button type="submit" data-write>초안 생성</button><button id="drawingRevisionCancel" type="button" class="secondary">닫기</button></div>
     </form></dialog>
 </div>
-<script src="/static/drawing_management.js?v=consistency-1"></script>
+<script src="/static/drawing_management.js?v=eco-history-1"></script>
 {% endblock %}

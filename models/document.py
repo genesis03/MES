@@ -24,6 +24,7 @@ class ItemRevision(Base):
     status = Column(String(20), nullable=False, default="DRAFT")
     previous_revision_id = Column(Integer, ForeignKey("item_revisions.id", ondelete="RESTRICT"))
     change_reason = Column(Text)
+    eco_no = Column(String(100))
     note = Column(Text)
     created_by_id = Column(Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     created_by = Column(String(100), nullable=False)

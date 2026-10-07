@@ -1,7 +1,7 @@
 """기존 공통코드를 재사용하며 누락된 문서 분류만 추가합니다."""
 from datetime import datetime
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 
 DRAWING_TYPE = "DRAWING"
 DOCUMENT_TYPES = (
@@ -13,6 +13,12 @@ DOCUMENT_TYPES = (
 
 
 def ensure_document_codes(engine):
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        if inspector.has_table("item_revisions"):
+            columns = {column["name"] for column in inspector.get_columns("item_revisions")}
+            if "eco_no" not in columns:
+                connection.execute(text('ALTER TABLE "item_revisions" ADD COLUMN "eco_no" VARCHAR(100)'))
     groups = (
         ("DOCUMENT_TYPE", "기술문서 종류", DOCUMENT_TYPES),
         ("DOCUMENT_FILE_ROLE", "기술문서 파일 역할", (("VIEW", "열람용"), ("SOURCE", "원본"))),

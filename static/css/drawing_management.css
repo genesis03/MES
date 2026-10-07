@@ -60,3 +60,6 @@
 .drawing-history-scroll { overflow:auto; max-height:300px; border:1px solid #e2e8f0; border-radius:5px; }
 .drawing-history-scroll table { min-width:700px; }
 #drawingApp .drawing-history-scroll button { padding:6px 10px; }
+
+#drawingApp .drawing-history-scroll td{vertical-align:middle}
+#drawingApp .drawing-history-scroll button{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin:0;line-height:1.2}

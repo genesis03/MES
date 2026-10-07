@@ -201,7 +201,7 @@ def iso_time(value):
 def revision_dict(row):
     return {"id": row.id, "item_id": row.item_id, "revision_code": row.revision_code,
             "sequence": row.sequence, "status": row.status, "previous_revision_id": row.previous_revision_id,
-            "change_reason": row.change_reason, "note": row.note, "created_by": row.created_by,
+            "change_reason": row.change_reason, "eco_no": row.eco_no or "", "note": row.note, "created_by": row.created_by,
             "created_at": iso_time(row.created_at), "activated_at": iso_time(row.activated_at),
             "superseded_at": iso_time(row.superseded_at), "retired_at": iso_time(row.retired_at), "retire_reason": row.retire_reason}
 

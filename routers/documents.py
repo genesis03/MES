@@ -32,6 +32,7 @@ class RevisionPayload(BaseModel):
     _normalize_revision = field_validator("revision_code", mode="before")(normalize_revision_code)
     previous_revision_id: int | None = Field(default=None, gt=0)
     change_reason: str = Field(default="", max_length=4000)
+    eco_no: str = Field(default="", max_length=100)
     note: str = Field(default="", max_length=8000)
 
 
@@ -163,7 +164,7 @@ def create_revision(item_id: int, payload: RevisionPayload, db: Session = Depend
     sequence = (db.scalar(select(func.max(ItemRevision.sequence)).where(ItemRevision.item_id == item_id)) or 0) + 1
     row = ItemRevision(item_id=item.id, revision_code=payload.revision_code, sequence=sequence,
                        previous_revision_id=previous.id if previous else None, change_reason=payload.change_reason or None,
-                       note=payload.note or None, created_by_id=user.id, created_by=actor_name(user))
+                       note=payload.note or None, eco_no=payload.eco_no.strip() or None, created_by_id=user.id, created_by=actor_name(user))
     db.add(row)
     _commit(db)
     db.refresh(row)

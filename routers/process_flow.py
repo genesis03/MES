@@ -43,7 +43,6 @@ class CreatePayload(BaseModel):
     revision_code: str = Field(min_length=1, max_length=50)
     _normalize_revision = field_validator("revision_code", mode="before")(normalize_revision_code)
     note: str = Field(default="", max_length=8000)
-    eco_no: str = Field(default="", max_length=100)
     steps: list[StepPayload] = Field(default_factory=list, max_length=500)
 
 
@@ -51,7 +50,6 @@ class SavePayload(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
     version: int = Field(gt=0)
     note: str = Field(default="", max_length=8000)
-    eco_no: str | None = Field(default=None, max_length=100)
     steps: list[StepPayload] = Field(default_factory=list, max_length=500)
 
 
@@ -65,7 +63,6 @@ class RevisePayload(VersionPayload):
     revision_code: str = Field(min_length=1, max_length=50)
     _normalize_revision = field_validator("revision_code", mode="before")(normalize_revision_code)
     change_reason: str = Field(min_length=1, max_length=4000)
-    eco_no: str = Field(default="", max_length=100)
 
 
 class CorrectionStepPayload(BaseModel):
@@ -202,7 +199,7 @@ def create(payload: CreatePayload, db: Session = Depends(get_db), user=Depends(g
         raise HTTPException(409, "공정흐름도 이력이 있습니다. 기존 문서에서 개정 등록해 주세요.")
     registrant_id, registrant_name = _registrant(db, user, payload.registrant_user_id)
     row = ProcessFlowRevision(item_id=item.id, revision_code=payload.revision_code, sequence=1,
-        part_no_snapshot=item.part_no, part_name_snapshot=item.part_name, note=payload.note, eco_no=payload.eco_no.strip() or None,
+        part_no_snapshot=item.part_no, part_name_snapshot=item.part_name, note=payload.note,
         created_by_id=user.id, created_by=actor_name(user),
         registrant_user_id=registrant_id, registrant_name=registrant_name)
     db.add(row)
@@ -219,8 +216,6 @@ def save(revision_id: int, payload: SavePayload, db: Session = Depends(get_db), 
     if row.status != "DRAFT":
         raise HTTPException(409, "적용된 공정흐름도는 개정 등록으로 변경해 주세요.")
     row.note, row.updated_at = payload.note, datetime.now()
-    if payload.eco_no is not None:
-        row.eco_no = payload.eco_no.strip() or None
     row.part_no_snapshot, row.part_name_snapshot = item.part_no, item.part_name
     _save_steps(db, row, payload.steps, user)
     row.version += 1
@@ -255,8 +250,6 @@ def edit_current(revision_id: int, payload: EditPayload, request: Request,
     preserve_linked_fmea_flows(db, revision)
     _save_steps(db, revision, payload.steps, user)
     revision.note, revision.updated_at = payload.note, datetime.now()
-    if payload.eco_no is not None:
-        revision.eco_no = payload.eco_no.strip() or None
     db.flush()
     after_flow = flow_dict(db, revision)
     old_steps = {x["id"]: x for x in before["steps"]}
@@ -264,8 +257,6 @@ def edit_current(revision_id: int, payload: EditPayload, request: Request,
     changes = []
     if before["note"] != after_flow["note"]:
         changes.append({"step_no": "", "field": "문서 비고", "before": before["note"], "after": after_flow["note"]})
-    if before["eco_no"] != after_flow["eco_no"]:
-        changes.append({"step_no": "", "field": "ECO NO.", "before": before["eco_no"], "after": after_flow["eco_no"]})
     labels = {"step_no": "공정번호", "step_name": "공정명", "symbol_code": "기호 코드",
               "symbol_name": "기호 명칭", "symbol_shape": "기호 도형", "sort_order": "공정순서", "note": "공정 비고"}
     for step_id, step in new_steps.items():
@@ -364,7 +355,7 @@ def revise(revision_id: int, payload: RevisePayload, db: Session = Depends(get_d
     row = ProcessFlowRevision(item_id=item.id, revision_code=payload.revision_code,
         sequence=max(x.sequence for x in revisions) + 1, previous_revision_id=previous.id,
         part_no_snapshot=item.part_no, part_name_snapshot=item.part_name, note=previous.note,
-        change_reason=payload.change_reason, eco_no=payload.eco_no.strip() or None, created_by_id=user.id, created_by=actor_name(user),
+        change_reason=payload.change_reason, created_by_id=user.id, created_by=actor_name(user),
         registrant_user_id=registrant_id, registrant_name=registrant_name)
     db.add(row)
     db.flush()

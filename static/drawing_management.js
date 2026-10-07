@@ -56,7 +56,7 @@
     }
 
     function renderRevisionHistory() {
-        $('drawingRevisionHistory').innerHTML = state.revisions.length ? state.revisions.map(row => `<tr class="${row.id === state.revision?.id ? 'selected' : ''}"><td>${escape(row.revision_code)}</td><td>${escape(row.created_at)}</td><td>${escape(row.activated_at || '—')}</td><td>${escape(row.change_reason || (row.previous_revision_id ? '미기록' : '최초 등록'))}${row.retire_reason ? '<br>폐기: ' + escape(row.retire_reason) : ''}</td><td>${escape(row.created_by)}</td><td>${escape(statusName[row.status])}</td><td><button type="button" class="secondary" data-view-revision="${row.id}" ${state.busy ? 'disabled' : ''}>조회</button></td></tr>`).join('') : '<tr><td colspan="7">등록 이력이 없습니다.</td></tr>';
+        $('drawingRevisionHistory').innerHTML = state.revisions.length ? state.revisions.map(row => `<tr class="${row.id === state.revision?.id ? 'selected' : ''}"><td>${escape(row.revision_code)}</td><td>${escape(row.created_at)}</td><td>${escape(row.activated_at || '—')}</td><td>${escape(row.change_reason || (row.previous_revision_id ? '미기록' : '최초 등록'))}${row.retire_reason ? '<br>폐기: ' + escape(row.retire_reason) : ''}</td><td>${escape(row.eco_no||'')}</td><td>${escape(row.created_by)}</td><td>${escape(statusName[row.status])}</td><td><button type="button" class="secondary" data-view-revision="${row.id}" ${state.busy ? 'disabled' : ''}>조회</button></td></tr>`).join('') : '<tr><td colspan="8">등록 이력이 없습니다.</td></tr>';
     }
 
     async function loadItems(preferredId = state.item?.item_id) {
@@ -110,7 +110,7 @@
         const row = state.revision;
         $('drawingRevisionStatus').textContent = statusName[row.status];
         $('drawingRevisionStatus').classList.toggle('current', row.status === 'CURRENT');
-        $('drawingRevisionMeta').textContent = `등록 ${row.created_by} · ${row.created_at}${row.activated_at ? ` / 적용 ${row.activated_at}` : ''}${row.change_reason ? ` / 개정 사유: ${row.change_reason}` : ''}${row.retire_reason ? ` / 폐기 사유: ${row.retire_reason}` : ''}${row.note ? ` / 비고: ${row.note}` : ''}`;
+        $('drawingRevisionMeta').textContent = `등록 ${row.created_by} · ${row.created_at}${row.activated_at ? ` / 적용 ${row.activated_at}` : ''}${row.eco_no ? ` / ECO NO.: ${row.eco_no}` : ''}${row.change_reason ? ` / 개정 사유: ${row.change_reason}` : ''}${row.retire_reason ? ` / 폐기 사유: ${row.retire_reason}` : ''}${row.note ? ` / 비고: ${row.note}` : ''}`;
         $('drawingDocuments').innerHTML = '<p class="drawing-muted">도면을 조회 중입니다…</p>';
         $('drawingUpload').reset(); updateActions();
         const documents = await api(`/api/documents/revisions/${revisionId}/documents`);
@@ -162,7 +162,7 @@
         run(async () => {
             const row = await jsonPost(`/api/documents/items/${state.item.item_id}/revisions`, {
                 revision_code: MesRevisionNumber.read($('drawingRevisionCode')), previous_revision_id: state.previousId,
-                change_reason: $('drawingChangeReason').value.trim(), note: $('drawingRevisionNote').value.trim()});
+                eco_no: $('drawingEcoNo').value.trim(), change_reason: $('drawingChangeReason').value.trim(), note: $('drawingRevisionNote').value.trim()});
             $('drawingRevisionDialog').close();
             await loadItems();
             $('drawingRevision').value = String(row.id);

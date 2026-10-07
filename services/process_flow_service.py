@@ -46,7 +46,6 @@ def flow_dict(db, row, include_steps=True):
         "part_no_snapshot": row.part_no_snapshot, "part_name_snapshot": row.part_name_snapshot,
         "revision_code": row.revision_code, "sequence": row.sequence, "version": row.version, "status": row.status,
         "previous_revision_id": row.previous_revision_id, "change_reason": row.change_reason or "",
-        "eco_no": row.eco_no or "",
         "note": row.note or "", "created_by": row.registrant_name or row.created_by,
         "registrant_user_id": row.registrant_user_id,
         "registrant_name": row.registrant_name or row.created_by,
