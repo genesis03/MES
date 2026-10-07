@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}관리계획서{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/wide_table_scroll.css?v=1"><link rel="stylesheet" href="/static/css/control_plan.css?v=document-list-1">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/wide_table_scroll.css?v=1"><link rel="stylesheet" href="/static/css/control_plan.css?v=item-name-line-1">{% endblock %}
 {% block content %}
 <div id="cpApp" data-write="{{ 'true' if can_write_control_plan else 'false' }}">
 <div class="cp-list-head no-print"><h1>관리계획서</h1>{% if can_write_control_plan %}<button id="cpCreate" class="cp-list-button primary" type="button">신규 등록</button>{% endif %}</div>
@@ -12,7 +12,7 @@
 <section id="cpEditor" hidden>
 <div class="cp-editor-head no-print"><h2 id="cpEditorTitle">신규 관리계획서</h2><button id="cpBack" class="cp-list-button" type="button">목록 조회</button></div>
 <div class="cp-toolbar">
-<div class="cp-item-field"><label for="cpItemPartNo">완제품 품목 *</label><div class="cp-item-lookup"><input id="cpItem" type="hidden"><input id="cpItemPartNo" readonly placeholder="조회 버튼으로 선택"><button id="cpItemLookup" type="button">조회</button></div><div id="cpItemName" class="cp-item-name"></div></div>
+<div class="cp-item-field"><label for="cpItemPartNo">완제품 품목 *</label><div class="cp-item-lookup"><input id="cpItem" type="hidden"><input id="cpItemPartNo" readonly placeholder="조회 버튼으로 선택"><button id="cpItemLookup" type="button">조회</button></div></div>
 <label>문서 개정 <select id="cpRevision"><option value="">새 문서</option></select></label>
 <label>기준 공정흐름도 <select id="cpFlow"><option value="">공정흐름도 선택</option></select></label>
 <label>개정번호 <input id="cpRevisionCode" value="REV.0" maxlength="50"></label>
@@ -22,6 +22,7 @@
 {% if can_write_control_plan %}<button id="cpInspectionLinks" type="button" disabled>검사기준서 연결 설정</button>{% endif %}
 <input id="cpFile" type="file" accept=".xlsx" hidden>
 </div>
+<div id="cpItemName" class="cp-item-name no-print" aria-live="polite"></div>
 <p class="cp-notice" id="cpMessage" role="status">품목과 공정흐름도를 선택하세요. 엑셀은 첫 시트의 하단 관리항목만 불러옵니다.</p>
 <dialog id="cpItemDialog" class="cp-item-dialog" aria-labelledby="cpItemDialogTitle">
   <div class="cp-item-dialog-head"><strong id="cpItemDialogTitle">완제품 품번 조회</strong><button id="cpItemDialogClose" type="button" aria-label="닫기">닫기</button></div>

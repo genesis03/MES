@@ -90,7 +90,7 @@
 .cp-print-value{display:none}
 .cp-item-field{width:340px;max-width:100%}.cp-item-field>label{font-size:12px;margin-bottom:4px}
 .cp-item-lookup{display:flex;gap:6px}.cp-item-lookup input:not([type=hidden]){flex:1;min-width:0}.cp-item-lookup button{flex:none}
-.cp-item-name{font-size:12px;color:#475569;margin-top:4px;overflow-wrap:anywhere}
+.cp-item-name{font-size:12px;color:#475569;margin:0 0 12px;overflow-wrap:anywhere}.cp-item-name:empty{display:none}
 .cp-item-dialog{width:min(760px,94vw);max-height:88vh;margin:auto;padding:14px;border:1px solid #cbd5e1;border-radius:7px;color:#111}
 .cp-item-dialog::backdrop{background:#0f172a73}.cp-item-dialog-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .cp-item-dialog button{padding:7px 12px;border:0;border-radius:4px;background:#e2e8f0;color:#334155;cursor:pointer}
