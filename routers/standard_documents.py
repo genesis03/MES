@@ -24,12 +24,17 @@ PLANNED_PAGES = {
         "title": "포장사양서 관리",
         "description": "완제품 품목만 선택하는 포장사양서·개정 이력 기능을 준비 중입니다. 기존 품목마스터의 자재유형 기준을 사용합니다.",
     },
+    "/standard-documents/appearance-standards": {
+        "title": "외관검사 기준서",
+        "description": "완제품·반제품·원재료의 외관검사 기준서를 관리하는 기능을 준비 중입니다.",
+    },
 }
 
 
 @router.get("/standard-documents/control-plans", response_class=HTMLResponse)
 @router.get("/standard-documents/work-standards", response_class=HTMLResponse)
 @router.get("/standard-documents/packaging-specifications", response_class=HTMLResponse)
+@router.get("/standard-documents/appearance-standards", response_class=HTMLResponse)
 def planned_document_page(request: Request, db: Session = Depends(get_db)):
     user = get_current_user_optional(request, db)
     if not user:
