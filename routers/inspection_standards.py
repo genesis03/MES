@@ -49,6 +49,7 @@ class PrecheckPayload(BaseModel):
 
 class InspectionItemPayload(BaseModel):
     sort_order: int = Field(default=1, ge=1)
+    inspection_no: Optional[str] = Field(default=None, max_length=50)
     inspection_group_no: Optional[str] = Field(default=None, max_length=30)
     inspection_item_name: str = Field(max_length=200)
     detail_no: Optional[str] = Field(default=None, max_length=50)
@@ -265,6 +266,7 @@ def _replace_children(row: InspectionStandard, payload: StandardPayload):
     for x in sorted(payload.items, key=lambda x: x.sort_order):
         row.items.append(InspectionStandardItem(
             sort_order=x.sort_order,
+            inspection_no=x.inspection_no.strip() if x.inspection_no is not None else str(x.sort_order),
             inspection_group_no=_clean(x.inspection_group_no),
             inspection_item_name=x.inspection_item_name.strip(),
             detail_no=_clean(x.detail_no),
@@ -327,7 +329,7 @@ def _standard_dict(row: InspectionStandard, include_children=False):
             "frequency": x.frequency or "", "abnormal_action": x.abnormal_action or "", "note": x.note or "",
         } for x in row.prechecks]
         data["items"] = [{
-            "id": x.id, "sort_order": x.sort_order, "inspection_group_no": x.inspection_group_no or "",
+            "id": x.id, "sort_order": x.sort_order, "inspection_no": x.inspection_no if x.inspection_no is not None else str(x.sort_order), "inspection_group_no": x.inspection_group_no or "",
             "inspection_item_name": x.inspection_item_name, "detail_no": x.detail_no or "",
             "special_characteristic": x.special_characteristic or "", "inspection_tool": x.inspection_tool or "",
             "spec_text": x.spec_text or "", "nominal_value": x.nominal_value, "lower_limit": x.lower_limit,
@@ -701,7 +703,7 @@ def revise_standard(
         ))
     for x in source.items:
         row.items.append(InspectionStandardItem(
-            sort_order=x.sort_order, inspection_group_no=x.inspection_group_no,
+            sort_order=x.sort_order, inspection_no=x.inspection_no, inspection_group_no=x.inspection_group_no,
             inspection_item_name=x.inspection_item_name, detail_no=x.detail_no,
             special_characteristic=x.special_characteristic, inspection_tool=x.inspection_tool,
             spec_text=x.spec_text, nominal_value=x.nominal_value, lower_limit=x.lower_limit,

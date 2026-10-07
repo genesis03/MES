@@ -93,6 +93,7 @@ class InspectionStandardItem(Base):
         Integer, ForeignKey("inspection_standards.id", ondelete="CASCADE"), nullable=False, index=True
     )
     sort_order = Column(Integer, nullable=False, default=1)
+    inspection_no = Column(String(50), nullable=True)  # 표시 순번; 중복 허용, 행 배치 순서와 별도
     inspection_group_no = Column(String(30), nullable=True)
     inspection_item_name = Column(String(200), nullable=False)
     detail_no = Column(String(50), nullable=True)

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block title %}관리계획서{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="/static/css/wide_table_scroll.css?v=1"><link rel="stylesheet" href="/static/css/control_plan.css?v=full-print-width-7">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/wide_table_scroll.css?v=1"><link rel="stylesheet" href="/static/css/control_plan.css?v=item-lookup-8">{% endblock %}
 {% block content %}
 <div id="cpApp" data-write="{{ 'true' if can_write_control_plan else 'false' }}">
 <div class="cp-toolbar">
-<label>완제품 <select id="cpItem"><option value="">품목 선택</option></select></label>
+<div class="cp-item-field"><label for="cpItemPartNo">완제품 품목 *</label><div class="cp-item-lookup"><input id="cpItem" type="hidden"><input id="cpItemPartNo" readonly placeholder="조회 버튼으로 선택"><button id="cpItemLookup" type="button">조회</button></div><div id="cpItemName" class="cp-item-name"></div></div>
 <label>문서 개정 <select id="cpRevision"><option value="">새 문서</option></select></label>
 <label>기준 공정흐름도 <select id="cpFlow"><option value="">공정흐름도 선택</option></select></label>
 <label>개정번호 <input id="cpRevisionCode" value="REV.0" maxlength="50"></label>
@@ -15,6 +15,11 @@
 <input id="cpFile" type="file" accept=".xlsx" hidden>
 </div>
 <p class="cp-notice" id="cpMessage" role="status">품목과 공정흐름도를 선택하세요. 엑셀은 첫 시트의 하단 관리항목만 불러옵니다.</p>
+<dialog id="cpItemDialog" class="cp-item-dialog" aria-labelledby="cpItemDialogTitle">
+  <div class="cp-item-dialog-head"><strong id="cpItemDialogTitle">완제품 품번 조회</strong><button id="cpItemDialogClose" type="button" aria-label="닫기">닫기</button></div>
+  <form id="cpItemSearchForm" class="cp-item-search"><input id="cpItemKeyword" aria-label="품번 또는 품명" placeholder="품번 또는 품명"><button type="submit">조회</button></form>
+  <div class="cp-item-results"><table><thead><tr><th>품번</th><th>품명</th><th>선택</th></tr></thead><tbody id="cpItemResults"></tbody></table></div>
+</dialog>
 <div class="cp-scroll">
   <section class="cp-paper" aria-labelledby="controlPlanTitle">
     <h1 id="controlPlanTitle">관리 계획서 (Control Plan)</h1>
@@ -93,5 +98,5 @@
 </div>
 <script src="/static/wide_table_scroll.js?v=1" defer></script>
 <script src="/static/flow_symbols.js?v=1" defer></script>
-<script src="/static/control_plan.js?v=inspection-links-2" defer></script>
+<script src="/static/control_plan.js?v=item-lookup-3" defer></script>
 {% endblock %}

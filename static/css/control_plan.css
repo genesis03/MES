@@ -79,6 +79,17 @@
 @media print{.cp-toolbar,.cp-actions,.cp-analysis button{display:none!important}.cp-paper{break-inside:auto}.cp-lower-scroll{overflow:visible}.cp-analysis{min-width:0;font-size:7px}.cp-analysis th,.cp-analysis td{padding:2px;overflow-wrap:anywhere}.cp-analysis textarea,.cp-analysis input:not([type=checkbox]){border:0;font-size:7px;min-width:0;padding:0;resize:none}.cp-analysis textarea{height:auto;min-height:0}.cp-analysis thead{display:table-header-group}.cp-analysis tr{break-inside:avoid}.cp-header-grid{break-inside:avoid}}
 
 .cp-print-value{display:none}
+.cp-item-field{width:340px;max-width:100%}.cp-item-field>label{font-size:12px;margin-bottom:4px}
+.cp-item-lookup{display:flex;gap:6px}.cp-item-lookup input:not([type=hidden]){flex:1;min-width:0}.cp-item-lookup button{flex:none}
+.cp-item-name{font-size:12px;color:#475569;margin-top:4px;overflow-wrap:anywhere}
+.cp-item-dialog{width:min(760px,94vw);max-height:88vh;margin:auto;padding:14px;border:1px solid #cbd5e1;border-radius:7px;color:#111}
+.cp-item-dialog::backdrop{background:#0f172a73}.cp-item-dialog-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.cp-item-dialog button{padding:7px 12px;border:0;border-radius:4px;background:#e2e8f0;color:#334155;cursor:pointer}
+.cp-item-search{display:flex;gap:7px;margin:14px 0}.cp-item-search input{flex:1;min-width:0;border:1px solid #cbd5e1;border-radius:4px;padding:7px}
+.cp-item-search button{background:#2563eb;color:#fff}.cp-item-results{max-height:60vh;overflow:auto}
+.cp-item-results table{width:100%;border-collapse:collapse;font-size:12px}.cp-item-results th,.cp-item-results td{padding:8px;border-bottom:1px solid #e2e8f0;text-align:left}
+.cp-item-results th{background:#f8fafc;position:sticky;top:0}.cp-item-results tr:hover td{background:#eff6ff}
+@media print{.cp-item-dialog{display:none!important}}
 @media print{.cp-analysis textarea{display:none}.cp-print-value{display:block;white-space:pre-wrap;overflow-wrap:anywhere}}
 
 .cp-analysis td.cp-step{vertical-align:middle;text-align:center}.cp-analysis td.cp-step-name{text-align:left}.cp-analysis .cp-step textarea{text-align:center}

@@ -22,7 +22,7 @@ function refreshControls(){
  if($('cpActivate'))$('cpActivate').disabled=!edit||!current||dirty;
  if($('cpRevise'))$('cpRevise').disabled=!canWrite||!current||current.status==='DRAFT'||busy;
  if($('cpInspectionLinks'))$('cpInspectionLinks').disabled=!current||dirty||busy||!canWrite||!['DRAFT','CURRENT'].includes(current.status);
- $('cpItem').disabled=busy;$('cpRevision').disabled=busy;$('cpNew').disabled=busy;
+ $('cpItem').disabled=busy;$('cpItemLookup').disabled=busy;$('cpRevision').disabled=busy;$('cpNew').disabled=busy;
  document.querySelectorAll('#cpRows input,#cpRows textarea,#cpRows button').forEach(el=>el.disabled=!edit);
 }
 function header(){const result={};document.querySelectorAll('.cp-form [name]').forEach(el=>{if(el.name!=='document_no')result[el.name]=el.type==='checkbox'?el.checked:el.value;});return result;}
@@ -78,7 +78,29 @@ function newDocument(){current=null;dirty=false;fillHeader(items.find(x=>x.id===
 function display(data){current=data;flow=data.flow;rows=data.rows;fillHeader(data.header);$('cpDocumentNo').value=data.document_no;$('cpRevisionCode').value=data.revision_code;$('cpRevision').value=data.id;
  if(!Array.from($('cpFlow').options).some(x=>x.value===String(flow.id)))$('cpFlow').add(new Option(flow.revision_code,flow.id));$('cpFlow').value=flow.id;dirty=false;render();}
 async function run(action){if(busy)return;busy=true;refreshControls();try{await action();}catch(error){message(error.message,true);}finally{busy=false;refreshControls();}}
-$('cpItem').addEventListener('change',()=>run(async()=>{if(!guard()){$('cpItem').value=selectedItemId;return;}await loadLists();selectedItemId=$('cpItem').value;newDocument();}));
+function renderItemLookup(){
+ const keyword=$('cpItemKeyword').value.trim().toLocaleLowerCase();
+ const matches=items.filter(x=>!keyword||(x.part_no+' '+x.part_name).toLocaleLowerCase().includes(keyword));
+ const body=$('cpItemResults');body.replaceChildren();
+ for(const item of matches){
+  const tr=document.createElement('tr');
+  for(const value of [item.part_no,item.part_name]){const td=document.createElement('td');td.textContent=value;tr.append(td);}
+  const td=document.createElement('td'),button=document.createElement('button');button.type='button';button.textContent=item.selectable===false?'이력 조회':'선택';
+  button.onclick=()=>{
+   if(busy||!guard())return;
+   $('cpItemDialog').close();
+   run(async()=>{
+    const previousId=selectedItemId;$('cpItem').value=item.id;
+    try{await loadLists();}catch(error){$('cpItem').value=previousId;throw error;}
+    selectedItemId=String(item.id);$('cpItemPartNo').value=item.part_no;$('cpItemName').textContent=item.part_name;newDocument();
+   });
+  };td.append(button);tr.append(td);body.append(tr);
+ }
+ if(!matches.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=3;td.textContent='조회 결과가 없습니다.';tr.append(td);body.append(tr);}
+}
+$('cpItemLookup').onclick=()=>{if(busy)return;$('cpItemKeyword').value='';renderItemLookup();$('cpItemDialog').showModal();$('cpItemKeyword').focus();};
+$('cpItemDialogClose').onclick=()=>$('cpItemDialog').close();
+$('cpItemSearchForm').onsubmit=event=>{event.preventDefault();renderItemLookup();};
 $('cpRevision').addEventListener('change',()=>run(async()=>{if(!guard()){$('cpRevision').value=current?.id||'';return;}if(!$('cpRevision').value)newDocument();else{display(await api('/revisions/'+$('cpRevision').value));message('저장된 문서를 불러왔습니다. 적용된 문서는 개정 등록 후 수정할 수 있습니다.');}}));
 $('cpNew').onclick=()=>{if(guard())newDocument();};
 $('cpFlow').addEventListener('change',()=>{const next=flows.find(x=>x.id===Number($('cpFlow').value))||null;
@@ -171,5 +193,5 @@ $('cpPrint').onclick=async()=>{
  }catch(error){if(!preview.closed)preview.close();message(error.message,true);}
 };
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
-run(async()=>{items=await api('/options');addOptions($('cpItem'),items,'품목 선택',x=>x.part_no+' · '+x.part_name);render();});
+run(async()=>{items=await api('/options');render();});
 })();

@@ -35,7 +35,7 @@ def inspection_rows(plan, step_id):
         if row.get("note"):
             notes.append(row["note"])
         item = {
-            "sort_order": position, "inspection_group_no": None,
+            "sort_order": position, "inspection_no": str(row.get("item_no") or position), "inspection_group_no": None,
             "inspection_item_name": name, "detail_no": row.get("item_no") or None,
             "special_characteristic": row.get("classification") or None,
             "inspection_tool": row.get("method") or None,
