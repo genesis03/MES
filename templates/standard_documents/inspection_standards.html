@@ -19,6 +19,8 @@
 .inspection-table .is-item-selected td{background:#eff6ff}.inspection-row-actions{justify-content:flex-start;flex-wrap:wrap;align-items:center}
 .inspection-row-actions .detail-toggle{margin-right:12px}.inspection-row-actions .row-icon{width:36px;padding:0;display:inline-flex;align-items:center;justify-content:center}
 .inspection-row-actions svg{width:18px;height:18px}.inspection-selection-count{font-size:12px;color:#475569;margin:0 5px}
+.is-change-line{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:10px}
+.is-document-toolbar{align-items:center;flex-wrap:nowrap;overflow-x:auto;padding-bottom:3px}.is-document-toolbar>*{flex-shrink:0}
 @media(max-width:1000px){.is-grid{grid-template-columns:1fr 1fr}}@media(max-width:650px){.is-grid{grid-template-columns:1fr}}
 </style>
 {% endblock %}
@@ -51,14 +53,14 @@
       <div class="is-field"><label>적용일</label><input id="effectiveDate" type="date"></div>
       <div class="is-field"><label>상태</label><input id="statusName" value="작성중" readonly></div>
       <div class="is-field"><label>작성</label><select id="preparedBy"><option value="">선택</option></select></div>
-      <div class="is-field" style="grid-column:span 2"><label>개정내용</label><input id="changeSummary"></div>
-      <div class="is-field" style="grid-column:span 2"><label>개정사유</label><input id="changeReason"></div>
-      <div class="is-field" style="grid-column:1/-1"><label>비고</label><textarea id="note"></textarea></div>
     </div>
-    <div class="toolbar">
+    <div class="is-change-line">
+      <div class="is-field"><label>개정내용</label><input id="changeSummary"></div>
+      <div class="is-field"><label>개정사유</label><input id="changeReason"></div>
+      <div class="is-field"><label>비고</label><textarea id="note"></textarea></div>
+    </div>
+    <div class="toolbar is-document-toolbar">
       {% if can_write %}<button class="btn primary" id="saveBtn" type="button" onclick="saveStandard()">저장</button><button class="btn secondary" id="newBtn" type="button" onclick="newStandard()">신규</button><button class="btn orange" id="reviseBtn" type="button" onclick="openRevisionModal()" disabled>개정</button><button class="btn green" id="activateBtn" type="button" onclick="activateStandard()" disabled>현재사용 적용</button><button class="btn danger" id="deleteBtn" type="button" onclick="deleteDraft()" disabled>작성중 삭제</button>{% endif %}
-    </div>
-    <div class="toolbar">
       {% if can_write %}<button class="btn secondary" id="importPlanBtn" type="button" onclick="openPlanImport()">관리계획서 불러오기</button>{% endif %}
       <span id="planSource" style="font-size:12px;align-self:center"></span>
     </div>
@@ -77,6 +79,7 @@
 <div class="is-card">
   <div class="is-card-title">검사기준</div>
   <div class="is-card-body">
+    <datalist id="inspectionGroupSuggestions"></datalist>
     <div class="row-actions inspection-row-actions"><label class="detail-toggle"><input id="showItemDetails" type="checkbox" onchange="toggleItemDetails()" aria-controls="inspectionTable">치수·상세 항목 표시</label>
       {% if can_write %}
       <button id="inspectionRowsUp" class="btn secondary small row-icon" type="button" onclick="moveInspectionRows('up')" title="선택 행 위로 이동" aria-label="선택 행 위로 이동" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20V4m-7 7 7-7 7 7"/></svg></button>
@@ -117,6 +120,7 @@
 <script>
 const DOC_TYPE='{{ document_type }}';const CAN_WRITE={{ 'true' if can_write else 'false' }};
 let current=null,historyRows=[],inspectionItemOptions={groups:[],items:[]};
+let inspectionSuggestionId=0;
 let planSource=null,planOptions=[],planImportItemId=null,planImportBusy=false,planImportScope="";
 const $=id=>document.getElementById(id);const esc=v=>{const s=document.createElement('span');s.textContent=v??'';return s.innerHTML.replace(/"/g,'&quot;').replace(/'/g,'&#39;')};
 async function api(url,opt){
@@ -201,22 +205,22 @@ function defaultPrechecks(){return[
 ]}
 function precheckRow(x={},idx=0){return `<tr><td><input class="p-sort" type="number" min="1" value="${x.sort_order||idx+1}"></td><td><input class="p-item" value="${esc(x.check_item||'')}"></td><td><textarea class="p-criteria">${esc(x.criteria||'')}</textarea></td><td><input class="p-responsible" value="${esc(x.responsible||'')}"></td><td><input class="p-frequency" value="${esc(x.frequency||'')}"></td><td><textarea class="p-action">${esc(x.abnormal_action||'')}</textarea></td><td><textarea class="p-note">${esc(x.note||'')}</textarea></td>${CAN_WRITE?'<td><button class="btn danger small remove-pre" type="button">삭제</button></td>':''}</tr>`}
 function groupOptions(selected=''){
-  const values=[...inspectionItemOptions.groups];
-  if(selected&&!values.includes(selected))values.push(selected);
-  return '<option value="">선택</option>'+values.map(v=>`<option value="${esc(v)}"${v===selected?' selected':''}>${esc(v)}</option>`).join('');
+  const values=new Set([...inspectionItemOptions.groups,selected,...[...$('itemBody').querySelectorAll('.i-group')].map(x=>x.value.trim())]);
+  return [...values].filter(Boolean).map(v=>`<option value="${esc(v)}"></option>`).join('');
 }
+function refreshGroupSuggestions(){$('inspectionGroupSuggestions').innerHTML=groupOptions()}
 function inspectionNameOptions(group='',selected=''){
   const rows=inspectionItemOptions.items.filter(x=>!group||!inspectionItemOptions.groups.includes(group)||x.group_name===group);
-  let html='<option value="">선택</option>';
-  if(selected&&!rows.some(x=>x.item_name===selected))html+=`<option value="${esc(selected)}" selected>${esc(selected)}</option>`;
-  return html+rows.map(x=>`<option value="${esc(x.item_name)}" data-master-id="${x.id}"${x.item_name===selected?' selected':''}>${esc(x.item_name)}</option>`).join('');
+  const names=new Set([selected,...rows.map(x=>x.item_name)]);
+  $('itemBody').querySelectorAll('tr').forEach(tr=>{if(!group||tr.querySelector('.i-group').value.trim()===group)names.add(tr.querySelector('.i-name').value.trim())});
+  return [...names].filter(Boolean).map(name=>`<option value="${esc(name)}"></option>`).join('');
 }
 function selectedInspectionMaster(tr){
-  const option=tr.querySelector('.i-name').selectedOptions[0];
-  return inspectionItemOptions.items.find(x=>String(x.id)===option?.dataset.masterId);
+  const name=tr.querySelector('.i-name').value.trim(),group=tr.querySelector('.i-group').value.trim();
+  return inspectionItemOptions.items.find(x=>x.item_name===name&&(!group||x.group_name===group));
 }
 function isDimensionRow(tr){
-  return tr.querySelector('.i-group').value==='치수'||selectedInspectionMaster(tr)?.data_type==='NUMBER'||tr.querySelector('.i-name').value==='치수';
+  return tr.querySelector('.i-group').value.trim()==='치수'||selectedInspectionMaster(tr)?.data_type==='NUMBER'||tr.querySelector('.i-name').value.trim()==='치수';
 }
 function parseDimensionSpec(raw){
   const value=String(raw||'').normalize('NFKC').trim().replace(/[−–]/g,'-').replace(/\s+/g,'').replace(/^(?:Ø|ø|Φ|φ|⌀)/,'').replace(/mm$/i,'');
@@ -260,28 +264,31 @@ $('itemBody').addEventListener('input',e=>{
 $('itemBody').addEventListener('change',e=>{
   const tr=e.target.closest('tr');if(!tr)return;
   if(e.target.matches('.i-group')){
-    tr.querySelector('.i-name').innerHTML=inspectionNameOptions(e.target.value,'');
+    tr.querySelector('.i-name-suggestions').innerHTML=inspectionNameOptions(e.target.value.trim(),tr.querySelector('.i-name').value.trim());
+    refreshGroupSuggestions();
     syncDimensionSpec(tr);
   }
   if(e.target.matches('.i-name')){
     const master=selectedInspectionMaster(tr);
     if(master){
-      if(!tr.querySelector('.i-group').value){tr.querySelector('.i-group').innerHTML=groupOptions(master.group_name)}
+      if(!tr.querySelector('.i-group').value.trim()){tr.querySelector('.i-group').value=master.group_name||'';refreshGroupSuggestions()}
       const unit=tr.querySelector('.i-unit');if(!unit.value)unit.value=master.default_unit||'';
     }
+    tr.querySelector('.i-name-suggestions').innerHTML=inspectionNameOptions(tr.querySelector('.i-group').value.trim(),e.target.value.trim());
     syncDimensionSpec(tr);
   }
 });
 function roundedDimension(value){return Number(value.toPrecision(12))}
 function toleranceValue(nominal,limit){return nominal==null||limit==null?null:roundedDimension(limit-nominal)}
 function dimensionLimit(tr,cls){const field=tr.querySelector(cls),value=field.value;if(value==='')return field.dataset.legacyLimit?Number(field.dataset.legacyLimit):null;const nominal=num(tr,'.i-nominal');if(nominal==null)throw new Error('공차를 입력한 검사항목의 기준치수를 입력해 주세요.');const tolerance=Number(value);if(!Number.isFinite(nominal)||!Number.isFinite(tolerance))throw new Error('기준치수와 공차는 숫자로 입력해 주세요.');const result=roundedDimension(nominal+tolerance);if(!Number.isFinite(result))throw new Error('기준치수와 공차의 입력 범위를 확인해 주세요.');return result}
-function itemRow(x={},idx=0){const val=v=>v==null?'':v;return `<tr>${CAN_WRITE?'<td class="is-row-select"><input class="i-selected" type="checkbox" aria-label="검사항목 행 선택"></td>':''}<td><input class="i-note" type="hidden" value="${esc(x.note||'')}"><input class="i-sort" type="text" inputmode="numeric" maxlength="50" aria-label="검사항목 표시 순번" value="${esc(x.inspection_no==null?String(x.sort_order||idx+1):x.inspection_no)}"></td><td><select class="i-group">${groupOptions(x.inspection_group_no||'')}</select></td><td><select class="i-name">${inspectionNameOptions(x.inspection_group_no||'',x.inspection_item_name||'')}</select></td><td class="detail-col"><input class="i-detail" value="${esc(x.detail_no||'')}"></td><td><input class="i-special" value="${esc(x.special_characteristic||'')}"></td><td><input class="i-tool" value="${esc(x.inspection_tool||'')}"></td><td><textarea class="i-spec" placeholder="치수 예: Ø8±0.05">${esc(x.spec_text||'')}</textarea><span class="spec-hint" role="status"></span></td><td class="detail-col"><input class="i-nominal" type="number" step="any" value="${val(x.nominal_value)}"></td><td class="detail-col"><input class="i-upper" type="number" step="any" value="${val(toleranceValue(x.nominal_value,x.upper_limit))}" data-legacy-limit="${x.nominal_value==null?val(x.upper_limit):''}" title="${x.nominal_value==null&&x.upper_limit!=null?'기존 상한치수: '+esc(x.upper_limit)+' (기준치수·공차 입력 전까지 보존)':'기준치수 대비 상한공차 (예: +0.05)'}"></td><td class="detail-col"><input class="i-lower" type="number" step="any" value="${val(toleranceValue(x.nominal_value,x.lower_limit))}" data-legacy-limit="${x.nominal_value==null?val(x.lower_limit):''}" title="${x.nominal_value==null&&x.lower_limit!=null?'기존 하한치수: '+esc(x.lower_limit)+' (기준치수·공차 입력 전까지 보존)':'기준치수 대비 하한공차 (예: -0.05)'}"></td><td class="detail-col"><input class="i-unit" value="${esc(x.unit||'')}"></td><td><input class="i-frequency" value="${esc(x.inspection_frequency||'')}"></td><td><input class="i-sample" value="${esc(x.sample_qty_text||'')}"></td><td><input class="i-record" value="${esc(x.record_management||'')}"></td>${CAN_WRITE?'<td><button class="btn danger small remove-item" type="button">삭제</button></td>':''}</tr>`}
+function itemRow(x={},idx=0){const val=v=>v==null?'':v,listId='inspectionNames-'+(++inspectionSuggestionId);return `<tr>${CAN_WRITE?'<td class="is-row-select"><input class="i-selected" type="checkbox" aria-label="검사항목 행 선택"></td>':''}<td><input class="i-note" type="hidden" value="${esc(x.note||'')}"><input class="i-sort" type="text" inputmode="numeric" maxlength="50" aria-label="검사항목 표시 순번" value="${esc(x.inspection_no==null?String(x.sort_order||idx+1):x.inspection_no)}"></td><td><input class="i-group" list="inspectionGroupSuggestions" maxlength="30" value="${esc(x.inspection_group_no||'')}" placeholder="그룹 입력" aria-label="검사항목 그룹"></td><td><input class="i-name" list="${listId}" maxlength="200" value="${esc(x.inspection_item_name||'')}" placeholder="검사항목 입력" aria-label="검사항목"><datalist id="${listId}" class="i-name-suggestions">${inspectionNameOptions(x.inspection_group_no||'',x.inspection_item_name||'')}</datalist></td><td class="detail-col"><input class="i-detail" value="${esc(x.detail_no||'')}"></td><td><input class="i-special" value="${esc(x.special_characteristic||'')}"></td><td><input class="i-tool" value="${esc(x.inspection_tool||'')}"></td><td><textarea class="i-spec" placeholder="치수 예: Ø8±0.05">${esc(x.spec_text||'')}</textarea><span class="spec-hint" role="status"></span></td><td class="detail-col"><input class="i-nominal" type="number" step="any" value="${val(x.nominal_value)}"></td><td class="detail-col"><input class="i-upper" type="number" step="any" value="${val(toleranceValue(x.nominal_value,x.upper_limit))}" data-legacy-limit="${x.nominal_value==null?val(x.upper_limit):''}" title="${x.nominal_value==null&&x.upper_limit!=null?'기존 상한치수: '+esc(x.upper_limit)+' (기준치수·공차 입력 전까지 보존)':'기준치수 대비 상한공차 (예: +0.05)'}"></td><td class="detail-col"><input class="i-lower" type="number" step="any" value="${val(toleranceValue(x.nominal_value,x.lower_limit))}" data-legacy-limit="${x.nominal_value==null?val(x.lower_limit):''}" title="${x.nominal_value==null&&x.lower_limit!=null?'기존 하한치수: '+esc(x.lower_limit)+' (기준치수·공차 입력 전까지 보존)':'기준치수 대비 하한공차 (예: -0.05)'}"></td><td class="detail-col"><input class="i-unit" value="${esc(x.unit||'')}"></td><td><input class="i-frequency" value="${esc(x.inspection_frequency||'')}"></td><td><input class="i-sample" value="${esc(x.sample_qty_text||'')}"></td><td><input class="i-record" value="${esc(x.record_management||'')}"></td>${CAN_WRITE?'<td><button class="btn danger small remove-item" type="button">삭제</button></td>':''}</tr>`}
 function toggleItemDetails(){$('inspectionTable').classList.toggle('show-details',$('showItemDetails').checked);$('dimensionHelp').hidden=!$('showItemDetails').checked}
 function showDetailsForItems(items){$('showItemDetails').checked=items.some(x=>x.detail_no||x.unit||x.nominal_value!=null||x.lower_limit!=null||x.upper_limit!=null);toggleItemDetails()}
 function addPrecheck(x={}){$('precheckBody').insertAdjacentHTML('beforeend',precheckRow(x,$('precheckBody').children.length))}
 function inspectionRowsEditable(){return CAN_WRITE&&!planImportBusy&&(!current||current.status==='DRAFT')}
 function selectedInspectionRows(){return [...$('itemBody').querySelectorAll('tr')].filter(tr=>tr.querySelector('.i-selected')?.checked)}
 function refreshInspectionRowLabels(){
+  refreshGroupSuggestions();
   $('itemBody').querySelectorAll('tr').forEach((tr,index)=>{
     const checkbox=tr.querySelector('.i-selected');if(checkbox)checkbox.setAttribute('aria-label',`${index+1}번 검사항목 선택`);
   });
@@ -350,6 +357,6 @@ async function reviseStandard(){try{const rev=MesRevisionNumber.read($('newRevis
 async function activateStandard(){if(!current||current.status!=='DRAFT'||!confirm('이 REV를 현재사용 기준서로 적용하시겠습니까?'))return;try{const d=await api('/api/standard-documents/inspection-standards/'+current.id+'/activate',{method:'POST'});await openStandard(d.id);await loadHistory();message('현재사용 기준서로 적용했습니다.',true)}catch(e){message(e.message)}}
 async function deleteDraft(){if(!current||current.status!=='DRAFT'||!confirm('작성중 기준서를 삭제하시겠습니까?'))return;try{await api('/api/standard-documents/inspection-standards/'+current.id,{method:'DELETE'});await loadHistory();clearDocumentFields();message('작성중 기준서를 삭제했습니다.',true)}catch(e){message(e.message)}}
 {% endif %}
-(async()=>{try{const [users,options]=await Promise.all([api('/api/standard-documents/inspection-standards/users'),api('/api/standard-documents/inspection-standards/inspection-item-options?document_type='+DOC_TYPE)]);inspectionItemOptions=options;userOptions(users);if(DOC_TYPE==='PROCESS'){const processes=await api('/api/standard-documents/inspection-standards/internal-processes');$('inspectionProcess').innerHTML='<option value="">내부 공정 선택</option>'+processes.map(x=>`<option value="${esc(x.code)}">${esc(x.name)} (${esc(x.code)})</option>`).join('')}newStandard();if(!options.items.length)message('사용 중인 검사항목 마스터가 없습니다. 검사항목 마스터를 등록해 주세요.')}catch(e){message(e.message)}})();
+(async()=>{try{const [users,options]=await Promise.all([api('/api/standard-documents/inspection-standards/users'),api('/api/standard-documents/inspection-standards/inspection-item-options?document_type='+DOC_TYPE)]);inspectionItemOptions=options;userOptions(users);if(DOC_TYPE==='PROCESS'){const processes=await api('/api/standard-documents/inspection-standards/internal-processes');$('inspectionProcess').innerHTML='<option value="">내부 공정 선택</option>'+processes.map(x=>`<option value="${esc(x.code)}">${esc(x.name)} (${esc(x.code)})</option>`).join('')}newStandard();if(!options.items.length)message('그룹과 검사항목은 직접 입력할 수 있습니다.',true)}catch(e){message(e.message)}})();
 </script>
 {% endblock %}

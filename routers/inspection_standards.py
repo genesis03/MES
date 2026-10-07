@@ -480,7 +480,7 @@ def inspection_item_options(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _require_access(current_user, document_type)
+    document_type = _require_access(current_user, document_type)
     # 마스터에 그룹 필드가 없으므로 기존 데이터 유형을 임시 선택 분류로 사용합니다.
     group_labels = {"NUMBER": "치수", "TEXT": "문구", "PASSFAIL": "합부판정"}
     rows = (
@@ -497,7 +497,22 @@ def inspection_item_options(
         "inspection_method": x.inspection_method or "",
         "default_unit": x.default_unit or "",
     } for x in rows]
-    return {"groups": list(dict.fromkeys(x["group_name"] for x in items)), "items": items}
+    # Existing standard entries also supply suggestions; a master entry is
+    # optional, and free-text values remain editable on the standard itself.
+    known = {(x["item_name"], x["group_name"]) for x in items}
+    saved = db.query(InspectionStandardItem).join(InspectionStandard).filter(
+        InspectionStandard.document_type == document_type
+    ).order_by(InspectionStandardItem.id.desc()).limit(2000).all()
+    for row in saved:
+        group = row.inspection_group_no or ""
+        key = (row.inspection_item_name, group)
+        if key in known:
+            continue
+        known.add(key)
+        items.append({"id": None, "item_name": row.inspection_item_name, "group_name": group,
+                      "data_type": "NUMBER" if group == "치수" or row.nominal_value is not None else None,
+                      "inspection_method": row.inspection_tool or "", "default_unit": row.unit or ""})
+    return {"groups": list(dict.fromkeys(x["group_name"] for x in items if x["group_name"])), "items": items}
 
 @router.get("/api/standard-documents/inspection-standards/control-plan-options")
 def control_plan_options(item_id: int = Query(gt=0), document_type: str = "FINAL",
