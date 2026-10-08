@@ -102,6 +102,53 @@ def test_ambiguous_product_name_does_not_shift_quantities(monkeypatch):
     assert rows[0]['PRODUCT_NM'] == '' and rows[0]['F10'] == '115' and warnings
 
 
+def empty_query_response():
+    return {'SO.NET.END': ['SO.NET.END'],
+            'log.invoke.object': ['MES.Product.ProcLotL_20261008151137273_902791'],
+            'MONITOR.QUERY.START': ['2026-10-08 15:11:37'],
+            'MONITOR.QUERY.END': ['2026-10-08 15:11:38']}
+
+
+def test_empty_day_without_dataset_continues_to_next_day(setup, monkeypatch):
+    client = source.ProductionClient.__new__(source.ProductionClient)
+    client.opener = object(); client.context = {}
+    requested = []
+    def post(_, payload):
+        requested.append(payload['MES.Product.Set.JobCondSet.JOB_DATE1'])
+        return empty_query_response() if len(requested) == 1 else response([row()])
+    monkeypatch.setattr(source, 'post', post)
+    monkeypatch.setattr(sync, 'ProductionClient', lambda *_: client)
+    with setup.sessions() as db:
+        settings = sync.state(db); settings.enabled = True; db.commit()
+    start = DAY - timedelta(days=1)
+    token, run_id = sync.claim(start, DAY, 'INITIAL')
+    sync.execute(start, DAY, token, run_id)
+    assert requested == [start.isoformat(), DAY.isoformat()]
+    with setup.sessions() as db:
+        run = db.get(ProductionSyncRun, run_id)
+        assert run.status == 'SUCCESS'
+        counts = json.loads(run.counts_json)
+        assert counts['completed_days'] == 2 and counts['inserted'] == 1
+        assert db.get(ProductionSyncState, 1).initial_completed_at is not None
+
+
+@pytest.mark.parametrize('change', [
+    {'log.invoke.object': ['Common.Login.LoginOb_123']},
+    {'MONITOR.QUERY.END': ['']},
+    {'jump.form.code': ['Login']},
+    {'jump.url': ['/Login.aspx']},
+    {'jump.form.message': ['Login required']},
+    {'Common.Set.LotSet.ROW_COUNT': ['1']},
+    {'Common.Set.LotSet.JOB_QTY': ['216']},
+])
+def test_missing_dataset_is_not_treated_as_empty_when_response_is_uncertain(monkeypatch, change):
+    client = source.ProductionClient.__new__(source.ProductionClient)
+    client.opener = object(); client.context = {}
+    monkeypatch.setattr(source, 'post', lambda *_: empty_query_response() | change)
+    with pytest.raises(source.SyncError):
+        client.fetch_day(DAY)
+
+
 @pytest.mark.parametrize('change', [{'Common.Set.LotSet.ROW_COUNT': ['2']}, {'Common.Set.LotSet.F10': ['115,3']}])
 def test_adapter_rejects_count_mismatch(monkeypatch, change):
     client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
@@ -171,6 +218,7 @@ def test_partial_failure_records_progress_and_does_not_complete_initial(setup, m
     with setup.sessions() as db:
         run = db.get(ProductionSyncRun, run_id)
         assert run.status == 'FAILED' and json.loads(run.counts_json)['completed_days'] == 1
+        assert run.error.startswith(DAY.isoformat() + ' 조회:')
         assert db.get(ProductionSyncState, 1).initial_completed_at is None
         assert db.query(ExternalProductionRecord).count() == 1
         assert db.get(ProductionSyncState, 1).lease_token is None

@@ -125,6 +125,7 @@ def save_day(rows, token):
 
 def execute(start, end, token, run_id):
     counts = {'received': 0, 'inserted': 0, 'updated': 0, 'unchanged': 0, 'completed_days': 0, 'warnings': []}
+    querying_day = None
     error = None
     try:
         username, password = read_credentials()
@@ -132,6 +133,7 @@ def execute(start, end, token, run_id):
         password = ''
         day = start
         while day <= end:
+            querying_day = day
             rows, warnings = client.fetch_day(day)
             result = save_day(rows, token)
             for key in result:
@@ -140,7 +142,7 @@ def execute(start, end, token, run_id):
             counts['warnings'] = sorted(set(counts['warnings'] + warnings))
             day += timedelta(days=1)
     except (SyncError, CredentialError) as exc:
-        error = str(exc)
+        error = f'{querying_day.isoformat()} 조회: {exc}' if querying_day else str(exc)
     except Exception:
         # Do not log raw responses or authentication payloads.
         error = '동기화 저장 처리에 실패했습니다. DB 연결과 서버 설정을 확인해 주세요.'

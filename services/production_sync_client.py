@@ -82,8 +82,26 @@ class ProductionClient:
         try:
             result = post(self.opener, payload)
             prefix = 'Common.Set.LotSet.'
+            if (any(values != [''] for key, values in result.items()
+                    if key in ('jump.url', 'jump.object.name', 'jump.form.message'))
+                    or result.get('jump.form.code', [''])[0] not in ('', 'List')):
+                raise SyncError('생산실적 조회 대신 화면 전환 응답을 받았습니다. 로그인과 조회 권한을 확인해 주세요.')
             if prefix + 'ITEM_NUM' not in result:
-                raise SyncError('생산실적 응답 항목이 없습니다. 빈 조회와 인증 실패를 구분할 수 없어 저장하지 않습니다.')
+                # UNI_MES may omit the entire dataset on days without production.
+                # Require its query completion envelope rather than accepting an
+                # arbitrary response (such as a login page) as an empty day.
+                invocation = result.get('log.invoke.object', [''])[0]
+                query_completed = (invocation.startswith(('MES.Product.ProcLotL_',
+                                                          'MES.Product.ProcLotList.ProcLotListObj_'))
+                                   and bool(result.get('MONITOR.QUERY.START', [''])[0])
+                                   and bool(result.get('MONITOR.QUERY.END', [''])[0]))
+                dataset_values = [value for key, values in result.items()
+                                  if key.startswith(prefix) and key != prefix + 'ROW_COUNT'
+                                  for value in values]
+                declared = result.get(prefix + 'ROW_COUNT', [''])[0]
+                if query_completed and not any(dataset_values) and declared in ('', '0'):
+                    return [], []
+                raise SyncError('생산실적 응답 항목이 없으며 정상적인 빈 조회인지 확인할 수 없습니다. 로그인과 조회 권한을 확인해 주세요.')
             if not result[prefix + 'ITEM_NUM'][0]:
                 declared = result.get(prefix + 'ROW_COUNT', [''])[0]
                 if declared and declared != '0':
