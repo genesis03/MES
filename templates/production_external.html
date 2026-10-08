@@ -47,5 +47,5 @@
 <div class="es-card"><h3>품번 연결</h3><p class="es-muted">없는 품번의 실적도 원본으로 보관합니다. 나중에 품목을 등록하고 연결하면 기존 실적에도 적용됩니다. 같은 공정의 품목 후보를 조회하고 연결할 품번을 직접 선택해 주세요.</p><p><a href="/basic-info/items" target="_blank" rel="noopener">품목 등록 · 수정</a></p><div id="esItemMaps" class="es-scroll"></div></div>
 <dialog id="esItemDialog"><h3 id="esItemTitle">MES 품번 연결</h3><form id="esItemSearch" class="es-line"><label>품번 · 품명<br><input id="esItemKeyword"></label><button class="es-btn" type="submit">조회</button><button id="esItemReset" class="es-btn" type="button">초기화</button></form><p id="esItemHelp" class="es-muted"></p><div id="esItemCandidates"></div><p class="es-line"><button id="esItemPrev" class="es-btn" type="button">이전</button><span id="esItemPage"></span><button id="esItemNext" class="es-btn" type="button">다음</button><button id="esItemClose" class="es-btn" type="button">닫기</button></p></dialog>
 <div class="es-card"><h3>동기화 이력</h3><p class="es-muted">조회는 날짜별로 저장합니다. 일부 날짜에서 오류가 나면 완료된 날짜는 유지하며 같은 기간을 재실행할 수 있습니다.</p><div class="es-scroll"><table class="es-table"><thead><tr><th>시작</th><th>기간</th><th>실행</th><th>결과</th><th>수신 / 신규 / 수정 / 동일</th><th>확인사항</th></tr></thead><tbody id="esRuns"></tbody></table></div></div>
-<script src="/static/production_external.js?v=2" defer></script>
+<script src="/static/production_external.js?v=3" defer></script>
 {% endblock %}
