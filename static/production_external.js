@@ -36,11 +36,12 @@
     }
     async function itemMaps(){
         const d=await api('/item-maps'),writable=!!$('esSettings');
-        $('esItemMaps').innerHTML=d.length?'<table class="es-table"><thead><tr><th>원본 품번</th><th>원본 공정</th><th>MES 품번</th><th>품명</th><th>연결</th></tr></thead><tbody>'+d.map(m=>`<tr><td>${esc(m.source_part_no)}</td><td>${esc(m.source_process)}</td><td>${esc(m.part_no||'미연결')}</td><td>${esc(m.part_name)}</td><td>${writable?'<button type="button" class="es-btn" data-item-op="choose">품번 조회</button>':''} ${writable&&m.explicit?'<button type="button" class="es-btn" data-item-op="clear">연결 해제</button>':''}</td></tr>`).join('')+'</tbody></table>':'<p class="es-muted">실적을 가져오면 원본 품번이 표시됩니다.</p>';
+        const connectionNames={AUTO_STAGE:'공정 기준 자동',AUTO_EXACT:'동일 품번 자동',MANUAL:'수동'};
+        $('esItemMaps').innerHTML=d.length?'<table class="es-table"><thead><tr><th>원본 품번</th><th>원본 공정</th><th>MES 품번</th><th>품명</th><th>연결 방식</th><th>연결</th></tr></thead><tbody>'+d.map(m=>`<tr><td>${esc(m.source_part_no)}</td><td>${esc(m.source_process)}</td><td>${esc(m.part_no||'미연결')}</td><td>${esc(m.part_name)}</td><td>${esc(connectionNames[m.connection_type]||'미연결')}</td><td>${writable?'<button type="button" class="es-btn" data-item-op="choose">품번 조회</button>':''} ${writable&&m.explicit?'<button type="button" class="es-btn" data-item-op="clear">자동 연결로 전환</button>':''}</td></tr>`).join('')+'</tbody></table>':'<p class="es-muted">실적을 가져오면 원본 품번이 표시됩니다.</p>';
         $('esItemMaps').querySelectorAll('tbody tr').forEach((tr,i)=>{
             tr.querySelectorAll('button').forEach(button=>button.onclick=async()=>{
                 if(button.dataset.itemOp==='clear'){
-                    if(!confirm('직접 지정한 품번 연결을 해제할까요? 원본 실적은 유지됩니다.'))return;
+                    if(!confirm('수동 품번 연결을 해제하고 공정 기준 자동 연결로 전환할까요?'))return;
                     button.disabled=true;
                     try{await api('/item-maps','PUT',{source_part_no:d[i].source_part_no,source_process:d[i].source_process,item_id:null});await rows();await itemMaps();}catch(e){message(e.message,true);}finally{button.disabled=false;}
                     return;
@@ -56,7 +57,7 @@
         const d=await api('/item-candidates?'+q);if(requestId!==itemRequest||selected!==itemPair)return;
         itemTotal=d.total;$('esItemHelp').textContent=d.message;$('esItemPage').textContent=`${itemPage} / ${Math.max(1,Math.ceil(itemTotal/50))}`;
         $('esItemPrev').disabled=itemPage===1;$('esItemNext').disabled=itemPage*50>=itemTotal;
-        $('esItemCandidates').innerHTML=d.rows.length?'<table class="es-table"><thead><tr><th>품번</th><th>품명</th><th>선택</th></tr></thead><tbody>'+d.rows.map(r=>`<tr><td>${esc(r.part_no)}</td><td>${esc(r.part_name)}</td><td><button class="es-btn" type="button">선택</button></td></tr>`).join('')+'</tbody></table>':'<p>후보 품목이 없습니다. 품목을 등록하거나 품목/BOM의 공정 연결을 확인해 주세요.</p>';
+        $('esItemCandidates').innerHTML=d.rows.length?'<table class="es-table"><thead><tr><th>품번</th><th>품명</th><th>선택</th></tr></thead><tbody>'+d.rows.map(r=>`<tr><td>${esc(r.part_no)}</td><td>${esc(r.part_name)}</td><td><button class="es-btn" type="button">선택</button></td></tr>`).join('')+'</tbody></table>':'<p>조회된 품목이 없습니다. 검색 조건을 확인하거나 MES 품목을 등록해 주세요.</p>';
         $('esItemCandidates').querySelectorAll('tbody tr').forEach((tr,i)=>{const b=tr.querySelector('button');b.onclick=async()=>{
             b.disabled=true;
             try{await api('/item-maps','PUT',{source_part_no:selected.source_part_no,source_process:selected.source_process,item_id:d.rows[i].id});$('esItemDialog').close();await rows();await itemMaps();message('품번을 연결했습니다. 이전에 가져온 실적에도 적용됩니다.');}catch(e){$('esItemHelp').textContent=e.message;b.disabled=false;}

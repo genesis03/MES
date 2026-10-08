@@ -359,14 +359,107 @@ def test_api_late_registration_mapping_search_and_setup(setup):
     assert setup.client.get('/api/production/external-sync/records', params={'keyword':'LOCAL_B'}).json()['total'] == 0
 
 
-def test_api_denies_unrelated_item_and_flags_quantity_difference(setup):
+def test_api_allows_manual_selection_with_different_process_and_flags_quantity_difference(setup):
     token, _ = lease(setup); sync.save_day([row(LOT_QTY='999')], token)
     with setup.sessions() as db:
         db.add(ProcessModel(process_code='LT', process_name='Test machining', created_at='2026-01-01'))
         item_id = add_item(db, code='TP')
     reply = setup.client.put('/api/production/external-sync/item-maps', json={'source_part_no':'EXTERNAL-A','source_process':'Test machining','item_id':item_id})
-    assert reply.status_code == 422
+    assert reply.status_code == 200
     assert '전체수량과 양품·불량·SET-UP 합계 확인' in setup.client.get('/api/production/external-sync/records').json()['rows'][0]['notes']
+
+
+@pytest.mark.parametrize('process, source_part, target, account', [
+    ('복합선반', '310061', '310061-A', '반제품'),
+    ('탭핑가공', '310061-A', '310061-B', '반제품'),
+    ('세레이션', '310061-B', '310061-D', '반제품'),
+    ('은도금 외주 가공 후 입고', '310061-D', '310061-Ag', '반제품'),
+    ('캡조립', '310061', '310061-C', '반제품'),
+    ('조립', '310061-Ag', '310061-c', '반제품'),
+    ('포장', '310061-C', '310061', '완제품'),
+])
+def test_stage_auto_connection_is_consistent_and_searchable(setup, process, source_part, target, account):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM=source_part, PROC_TYPE_NM=process)], token)
+    with setup.sessions() as db:
+        item_id = add_item(db, part=target)
+        db.get(ItemMasterModel, item_id).account_type = account; db.commit()
+    listed = setup.client.get('/api/production/external-sync/item-maps').json()[0]
+    assert listed['part_no'] == target and listed['connection_type'] == 'AUTO_STAGE'
+    assert listed['linked'] and not listed['explicit']
+    records = setup.client.get('/api/production/external-sync/records', params={'keyword':target}).json()
+    assert records['total'] == 1
+    assert records['rows'][0]['mes_part_no'] == target and records['rows'][0]['part_no'] == source_part
+
+
+def test_assembly_does_not_fall_back_to_finished_item_then_links_after_registration(setup):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM='310061', PROC_TYPE_NM='조립')], token)
+    with setup.sessions() as db: add_item(db, part='310061')
+    assert setup.client.get('/api/production/external-sync/item-maps').json()[0]['part_no'] == ''
+    with setup.sessions() as db: add_item(db, part='310061-C')
+    assert setup.client.get('/api/production/external-sync/records').json()['rows'][0]['mes_part_no'] == '310061-C'
+
+
+def test_manual_override_with_different_base_and_reset_to_auto(setup):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM='310061', PROC_TYPE_NM='조립')], token)
+    with setup.sessions() as db:
+        add_item(db, part='310061-C')
+        manual_id = add_item(db, part='LOCAL-C', code='OTHER')
+    candidates = setup.client.get('/api/production/external-sync/item-candidates', params={'source_process':'조립', 'keyword':'LOCAL-C'}).json()
+    assert [r['id'] for r in candidates['rows']] == [manual_id]
+    payload = {'source_part_no':'310061', 'source_process':'조립', 'item_id':manual_id}
+    assert setup.client.put('/api/production/external-sync/item-maps', json=payload).status_code == 200
+    linked = setup.client.get('/api/production/external-sync/item-maps').json()[0]
+    assert linked['part_no'] == 'LOCAL-C' and linked['connection_type'] == 'MANUAL' and linked['explicit']
+    assert setup.client.get('/api/production/external-sync/records', params={'keyword':'LOCAL-C'}).json()['total'] == 1
+    assert setup.client.put('/api/production/external-sync/item-maps', json=payload | {'item_id':None}).status_code == 200
+    assert setup.client.get('/api/production/external-sync/item-maps').json()[0]['part_no'] == '310061-C'
+
+
+def test_inactive_or_case_ambiguous_stage_candidates_are_not_auto_linked(setup):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM='310061', PROC_TYPE_NM='조립')], token)
+    with setup.sessions() as db:
+        upper_id = add_item(db, part='310061-C')
+        lower_id = add_item(db, part='310061-c')
+    assert not setup.client.get('/api/production/external-sync/item-maps').json()[0]['linked']
+    with setup.sessions() as db:
+        db.get(ItemMasterModel, lower_id).is_active = 'N'; db.commit()
+    assert setup.client.get('/api/production/external-sync/item-maps').json()[0]['item_id'] == upper_id
+    assert setup.client.put('/api/production/external-sync/item-maps', json={'source_part_no':'310061', 'source_process':'조립', 'item_id':lower_id}).status_code == 422
+
+
+def test_mapped_internal_process_controls_stage_and_candidate_order(setup):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM='310061', PROC_TYPE_NM='Legacy process')], token)
+    with setup.sessions() as db:
+        db.add(ProcessModel(process_code='AS', process_name='조립', created_at='2026-01-01'))
+        c_id = add_item(db, part='310061-C')
+        add_item(db, part='000001-A')
+    assert setup.client.put('/api/production/external-sync/process-maps', json={'source_name':'Legacy process', 'process_code':'AS', 'performance_type':'ASSEMBLY'}).status_code == 200
+    record = setup.client.get('/api/production/external-sync/records').json()['rows'][0]
+    assert record['mes_part_no'] == '310061-C' and record['performance_type'] == 'ASSEMBLY'
+    candidates = setup.client.get('/api/production/external-sync/item-candidates', params={'source_process':'Legacy process'}).json()
+    assert candidates['rows'][0]['id'] == c_id
+
+
+def test_numeric_source_variant_is_not_guessed_and_can_be_manually_connected(setup):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM='310061-1', PROC_TYPE_NM='캡조립')], token)
+    with setup.sessions() as db: item_id = add_item(db, part='310061-C')
+    assert not setup.client.get('/api/production/external-sync/item-maps').json()[0]['linked']
+    assert setup.client.put('/api/production/external-sync/item-maps', json={'source_part_no':'310061-1', 'source_process':'캡조립', 'item_id':item_id}).status_code == 200
+    assert setup.client.get('/api/production/external-sync/records').json()['rows'][0]['mes_part_no'] == '310061-C'
+
+
+def test_packing_requires_finished_item_and_ambiguous_process_requires_manual_choice(setup):
+    token, _ = lease(setup)
+    sync.save_day([row('PACK', ITEM_NUM='310061-C', PROC_TYPE_NM='포장'),
+                   row('COMPOUND', ITEM_NUM='310061', PROC_TYPE_NM='조립/포장')], token)
+    with setup.sessions() as db: add_item(db, part='310061')
+    assert all(not r['linked'] for r in setup.client.get('/api/production/external-sync/item-maps').json())
 
 
 def test_readonly_user_cannot_change_settings_or_start_run(setup):

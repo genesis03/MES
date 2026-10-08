@@ -7,16 +7,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-from sqlalchemy import or_, update
+from sqlalchemy import case, or_, tuple_, update
 from sqlalchemy.orm import Session
 
 from core.database import get_db
 from core.security import check_admin_permission, get_current_user
-from models.models import ItemMasterModel, ProcessModel, ItemBomModel
+from models.models import ItemMasterModel, ProcessModel
 from models.production_sync import ExternalProductionRecord, ProductionSyncProcessMap, ProductionSyncRun, ProductionSyncItemMap, ProductionSyncState
 from services.production_sync_client import SyncError, ProductionClient
 from services.production_sync_credentials import CredentialError, credential_status, read_credentials, save_credentials
 from services.production_sync_service import credentials_ready, now, start_manual, state, today
+from services.production_sync_mapping import ItemConnections
 
 router = APIRouter(tags=['Production synchronization'])
 templates = Jinja2Templates(directory='templates')
@@ -196,38 +197,32 @@ def records(start_date: date | None = None, end_date: date | None = None,
     if start_date and end_date and start_date > end_date:
         raise HTTPException(422, '시작일과 종료일을 확인해 주세요.')
     query = db.query(ExternalProductionRecord)
+    connections = ItemConnections(db)
     if start_date:
         query = query.filter(ExternalProductionRecord.work_date >= start_date.isoformat())
     if end_date:
         query = query.filter(ExternalProductionRecord.work_date <= end_date.isoformat())
     if keyword.strip():
         pattern = '%' + keyword.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
-        mapped_match = db.query(ProductionSyncItemMap.id).join(ItemMasterModel, ProductionSyncItemMap.item_id == ItemMasterModel.id).filter(
-            ProductionSyncItemMap.source_part_no == ExternalProductionRecord.part_no,
-            ProductionSyncItemMap.source_process_name == ExternalProductionRecord.process_name,
-            ItemMasterModel.part_no.ilike(pattern, escape='\\')).exists()
+        pairs = query.with_entities(ExternalProductionRecord.part_no, ExternalProductionRecord.process_name).distinct().all()
+        matching_pairs = []
+        for part, process in pairs:
+            item, _ = connections.resolve(part, process)
+            if item and keyword.strip().casefold() in item.part_no.casefold():
+                matching_pairs.append((part, process))
+        mapped_match = or_(*[tuple_(ExternalProductionRecord.part_no, ExternalProductionRecord.process_name).in_(
+            matching_pairs[i:i + 400]) for i in range(0, len(matching_pairs), 400)]) if matching_pairs else False
         query = query.filter(or_(ExternalProductionRecord.part_no.ilike(pattern, escape='\\'),
                                  ExternalProductionRecord.lot_no.ilike(pattern, escape='\\'), mapped_match))
     total = query.count()
     rows = query.order_by(ExternalProductionRecord.work_date.desc(), ExternalProductionRecord.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
-    parts = {r.part_no for r in rows}
-    item_maps = {(m.source_part_no, m.source_process_name): m.item_id for m in db.query(ProductionSyncItemMap).filter(ProductionSyncItemMap.source_part_no.in_(parts))}
-    item_rows = db.query(ItemMasterModel).filter(or_(ItemMasterModel.part_no.in_(parts), ItemMasterModel.id.in_(list(item_maps.values())))).all()
-    items = {r.part_no: r for r in item_rows}
-    items_by_id = {r.id: r for r in item_rows}
-    processes = {r.process_code: r.process_name for r in db.query(ProcessModel).filter(ProcessModel.is_active == 'Y')}
-    by_name = {}
-    for code, name in processes.items():
-        by_name.setdefault(name, []).append(code)
-    map_rows = {r.source_name: r for r in db.query(ProductionSyncProcessMap)}
-    maps = {name: mapping.process_code for name, mapping in map_rows.items()}
+    processes = connections.processes
+    map_rows = connections.process_maps
     output = []
     for r in rows:
-        mapped_id = item_maps.get((r.part_no, r.process_name))
-        item = items_by_id.get(mapped_id) if mapped_id else items.get(r.part_no)
+        item, connection_type = connections.resolve(r.part_no, r.process_name)
         raw = json.loads(r.raw_json)
-        candidates = by_name.get(r.process_name, [])
-        code = maps.get(r.process_name) or (candidates[0] if len(candidates) == 1 else '')
+        code = connections.process_code(r.process_name)
         notes = []
         if not item or item.is_active != 'Y':
             notes.append('품번 연결 확인')
@@ -241,6 +236,7 @@ def records(start_date: date | None = None, end_date: date | None = None,
         output.append({'id': r.id, 'work_date': r.work_date, 'part_no': r.part_no,
                        'part_name': item.part_name if item else raw.get('PRODUCT_NM', ''),
                        'item_id': item.id if item else None, 'mes_part_no': item.part_no if item else '',
+                       'connection_type': connection_type,
                        'source_process': r.process_name, 'process_code': code,
                        'performance_type': map_rows[r.process_name].performance_type if r.process_name in map_rows else '',
                        'process_name': processes.get(code, ''), 'job_no': r.job_no, 'lot_no': r.lot_no,
@@ -254,16 +250,13 @@ def records(start_date: date | None = None, end_date: date | None = None,
 def item_maps(db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
     pairs = db.query(ExternalProductionRecord.part_no, ExternalProductionRecord.process_name).distinct().all()
-    maps = {(r.source_part_no, r.source_process_name): r.item_id for r in db.query(ProductionSyncItemMap)}
-    items = {r.id: r for r in db.query(ItemMasterModel)}
-    by_part = {r.part_no: r for r in items.values()}
+    connections = ItemConnections(db)
     result = []
     for part, process in sorted(pairs):
-        mapped_id = maps.get((part, process))
-        item = items.get(mapped_id) if mapped_id else by_part.get(part)
+        item, connection_type = connections.resolve(part, process)
         result.append({'source_part_no': part, 'source_process': process, 'item_id': item.id if item else None,
                        'part_no': item.part_no if item else '', 'part_name': item.part_name if item else '',
-                       'linked': bool(item and item.is_active == 'Y'), 'explicit': mapped_id is not None})
+                       'linked': bool(item), 'explicit': connection_type == 'MANUAL', 'connection_type': connection_type})
     return result
 
 
@@ -271,22 +264,21 @@ def item_maps(db: Session = Depends(get_db), user=Depends(get_current_user)):
 def item_candidates(source_process: str = Query('', max_length=200), keyword: str = Query('', max_length=200),
                     page: int = Query(1, ge=1), db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
-    process_map = db.query(ProductionSyncProcessMap).filter(ProductionSyncProcessMap.source_name == source_process).first()
-    candidates = db.query(ProcessModel).filter(ProcessModel.process_name == source_process, ProcessModel.is_active == 'Y').all()
-    code = process_map.process_code if process_map else candidates[0].process_code if len(candidates) == 1 else ''
-    if not code:
-        return {'rows': [], 'total': 0, 'page': page, 'message': '먼저 원본 공정을 MES 공정에 연결해 주세요.'}
-    bom_items = db.query(ItemBomModel.child_item_id).filter(ItemBomModel.process_code == code)
-    bom_parts = db.query(ItemBomModel.child_part_no).filter(ItemBomModel.process_code == code)
-    query = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == 'Y', or_(
-        ItemMasterModel.production_loc == code, ItemMasterModel.id.in_(bom_items), ItemMasterModel.part_no.in_(bom_parts)))
+    connections = ItemConnections(db)
+    code, suffix = connections.process_code(source_process), connections.suffix(source_process)
+    query = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == 'Y')
     if keyword.strip():
         pattern = '%' + keyword.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
         query = query.filter(or_(ItemMasterModel.part_no.ilike(pattern, escape='\\'), ItemMasterModel.part_name.ilike(pattern, escape='\\')))
     total = query.count()
+    preferred = ItemMasterModel.production_loc == code if code else False
+    if suffix and suffix != '?':
+        preferred = or_(preferred, ItemMasterModel.part_no.ilike('%' + suffix))
+    elif suffix == '':
+        preferred = or_(preferred, ItemMasterModel.account_type == '완제품')
     return {'rows': [{'id': r.id, 'part_no': r.part_no, 'part_name': r.part_name}
-                     for r in query.order_by(ItemMasterModel.part_no).offset((page - 1) * 50).limit(50)],
-            'total': total, 'page': page, 'message': '해당 공정에 등록된 품목과 BOM 품목을 표시합니다.'}
+                     for r in query.order_by(case((preferred, 0), else_=1), ItemMasterModel.part_no).offset((page - 1) * 50).limit(50)],
+            'total': total, 'page': page, 'message': '사용 중인 MES 품목을 모두 조회합니다. 해당 공정의 품목을 먼저 표시하며 다른 품번도 직접 연결할 수 있습니다.'}
 
 
 class ItemMapping(BaseModel):
@@ -302,13 +294,6 @@ def save_item_map(payload: ItemMapping, db: Session = Depends(get_db), user=Depe
         item = db.get(ItemMasterModel, payload.item_id)
         if not item or item.is_active != 'Y':
             raise HTTPException(422, '사용 중인 MES 품목을 선택해 주세요.')
-        process_map = db.query(ProductionSyncProcessMap).filter(ProductionSyncProcessMap.source_name == payload.source_process).first()
-        processes = db.query(ProcessModel).filter(ProcessModel.process_name == payload.source_process, ProcessModel.is_active == 'Y').all()
-        code = process_map.process_code if process_map else processes[0].process_code if len(processes) == 1 else ''
-        in_bom = db.query(ItemBomModel).filter(ItemBomModel.process_code == code, or_(
-            ItemBomModel.child_item_id == item.id, ItemBomModel.child_part_no == item.part_no)).first() if code else None
-        if not code or item.production_loc != code and not in_bom:
-            raise HTTPException(422, '선택한 품목이 해당 공정 또는 BOM에 등록되어 있지 않습니다.')
     row = db.query(ProductionSyncItemMap).filter(ProductionSyncItemMap.source_part_no == payload.source_part_no,
                                                ProductionSyncItemMap.source_process_name == payload.source_process).first()
     if payload.item_id is None:
