@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from core import config
 from core.database import SessionLocal
 from models.production_sync import ExternalProductionRecord, ProductionSyncRun, ProductionSyncState
+from services.production_sync_credentials import CredentialError, read_credentials
 from services.production_sync_client import ProductionClient, SyncError
 
 _LOG = logging.getLogger(__name__)
@@ -26,8 +27,12 @@ def today():
     return datetime.now(timezone(timedelta(hours=9))).date()
 
 
-def credentials_ready():
-    return bool(config.PRODUCTION_SYNC_USER and config.PRODUCTION_SYNC_PASSWORD)
+def credentials_ready(db=None):
+    try:
+        user, password = read_credentials(db)
+        return bool(user and password)
+    except CredentialError:
+        return False
 
 
 def state(db):
@@ -45,7 +50,7 @@ def state(db):
 
 def claim(start, end, trigger):
     if not credentials_ready():
-        raise SyncError('서버에 PRODUCTION_SYNC_USER와 PRODUCTION_SYNC_PASSWORD 설정이 필요합니다.')
+        raise SyncError('관리자 메뉴에서 연동 계정을 먼저 설정해 주세요.')
     with SessionLocal() as db:
         row = state(db)
         instant = now()
@@ -122,7 +127,9 @@ def execute(start, end, token, run_id):
     counts = {'received': 0, 'inserted': 0, 'updated': 0, 'unchanged': 0, 'completed_days': 0, 'warnings': []}
     error = None
     try:
-        client = ProductionClient(config.PRODUCTION_SYNC_USER, config.PRODUCTION_SYNC_PASSWORD)
+        username, password = read_credentials()
+        client = ProductionClient(username, password)
+        password = ''
         day = start
         while day <= end:
             rows, warnings = client.fetch_day(day)
@@ -132,7 +139,7 @@ def execute(start, end, token, run_id):
             counts['completed_days'] += 1
             counts['warnings'] = sorted(set(counts['warnings'] + warnings))
             day += timedelta(days=1)
-    except SyncError as exc:
+    except (SyncError, CredentialError) as exc:
         error = str(exc)
     except Exception:
         # Do not log raw responses or authentication payloads.

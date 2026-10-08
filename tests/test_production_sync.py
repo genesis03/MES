@@ -23,6 +23,8 @@ from models.production_sync import ExternalProductionRecord, ProductionSyncRun, 
 from routers.production_sync import router
 from services import production_sync_client as source
 from services import production_sync_service as sync
+from services import production_sync_credentials as secrets
+from routers import production_sync as api_module
 
 DAY = date(2026, 3, 25)
 ADMIN = SimpleNamespace(username='admin', role='SUPERADMIN', permissions=None)
@@ -49,6 +51,8 @@ def setup(tmp_path, monkeypatch):
     Base.metadata.create_all(engine)
     sessions = sessionmaker(bind=engine, expire_on_commit=False)
     monkeypatch.setattr(sync, 'SessionLocal', sessions)
+    monkeypatch.setattr(secrets, 'SessionLocal', sessions)
+    monkeypatch.setattr(secrets.config, 'PRODUCTION_SYNC_KEY_PATH', tmp_path / 'sync.key')
     monkeypatch.setattr(sync.config, 'PRODUCTION_SYNC_USER', 'test-user')
     monkeypatch.setattr(sync.config, 'PRODUCTION_SYNC_PASSWORD', 'test-password')
     monkeypatch.setattr(sync, 'today', lambda: DAY)
@@ -233,7 +237,8 @@ def test_api_denies_unrelated_item_and_flags_quantity_difference(setup):
 
 def test_readonly_user_cannot_change_settings_or_start_run(setup):
     setup.app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(username='reader', role='USER', permissions=json.dumps({'menu_access':{'/production/performance/status':'READ'}}))
-    assert setup.client.get('/api/production/external-sync/settings').status_code == 200
+    assert setup.client.get('/api/production/external-sync/settings').status_code == 403
+    assert setup.client.get('/admin/production-sync').status_code == 403
     assert setup.client.put('/api/production/external-sync/settings',json={'enabled':True}).status_code == 403
     assert setup.client.post('/api/production/external-sync/run',json={'start_date':DAY.isoformat(),'end_date':DAY.isoformat()}).status_code == 403
 
@@ -322,3 +327,63 @@ def test_external_records_do_not_create_native_performance_or_lots(setup):
         assert db.query(ExternalProductionRecord).count() == 1
         for model in [ProductionPerformance,ProductionWorkOrder,ProductionRun,ProductionLotModel,LotConsumptionModel]:
             assert db.query(model).count() == 0
+
+
+
+def test_credentials_are_encrypted_and_applied_without_restart(setup, monkeypatch):
+    seen=[]
+    monkeypatch.setattr(api_module,'ProductionClient',lambda user,password:seen.append((user,password)))
+    password='synthetic-new-password'
+    assert setup.client.put('/api/production/external-sync/credentials',json={'username':'new-user','password':password}).status_code==200
+    from models.production_sync import ProductionSyncCredential
+    with setup.sessions() as db:
+        stored=db.get(ProductionSyncCredential,1)
+        assert stored.encrypted_password != password and password not in stored.encrypted_password
+        assert secrets.read_credentials(db)==('new-user',password)
+    result=setup.client.get('/api/production/external-sync/credentials')
+    assert result.json()['configured'] is True and 'password' not in result.json() and password not in result.text
+    assert secrets.read_credentials()==('new-user',password)
+    assert sync.credentials_ready() is True
+    assert setup.client.put('/api/production/external-sync/credentials',json={'username':'new-user','password':''}).status_code==200
+    assert setup.client.put('/api/production/external-sync/credentials',json={'username':'another-user','password':''}).status_code==422
+
+
+def test_bad_login_does_not_replace_credentials(setup,monkeypatch):
+    with setup.sessions() as db:secrets.save_credentials(db,'kept-user','kept-password')
+    def fail(*_):raise source.SyncError('로그인 실패')
+    monkeypatch.setattr(api_module,'ProductionClient',fail)
+    result=setup.client.put('/api/production/external-sync/credentials',json={'username':'wrong','password':'wrong-password'})
+    assert result.status_code==422
+    assert secrets.read_credentials()==('kept-user','kept-password')
+
+
+def test_wrong_server_key_requires_reconfiguration(setup,monkeypatch):
+    with setup.sessions() as db:secrets.save_credentials(db,'kept-user','kept-password')
+    from pathlib import Path
+    monkeypatch.setattr(secrets.config,'PRODUCTION_SYNC_KEY_PATH',Path(setup.engine.url.database+'.different.key'))
+    result=setup.client.get('/api/production/external-sync/credentials').json()
+    assert not result['configured'] and result['error']
+    monkeypatch.setattr(api_module,'ProductionClient',lambda *_:None)
+    assert setup.client.put('/api/production/external-sync/credentials',json={'username':'kept-user','password':'reset-password'}).status_code==200
+    assert secrets.read_credentials()==('kept-user','reset-password')
+
+
+def test_admin_menu_move_and_old_url_redirect(setup):
+    page=setup.client.get('/admin/production-sync')
+    assert page.status_code==200 and 'esCredentials' in page.text
+    assert 'nav-admin-production-sync' in page.text
+    assert setup.client.get('/production/performance/external',follow_redirects=False).status_code==303
+    setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='reader',role='USER',permissions='{}')
+    assert setup.client.get('/api/production/external-sync/credentials').status_code==403
+    assert setup.client.get('/api/production/external-sync/records').status_code==403
+    assert setup.client.put('/api/production/external-sync/credentials',json={'username':'u','password':'p'}).status_code==403
+
+
+def test_credentials_cannot_change_during_sync_and_test_does_not_save(setup,monkeypatch):
+    from models.production_sync import ProductionSyncCredential
+    monkeypatch.setattr(api_module,'ProductionClient',lambda *_:None)
+    assert setup.client.post('/api/production/external-sync/credentials/test',json={'username':'u','password':'p'}).status_code==200
+    with setup.sessions() as db:assert db.get(ProductionSyncCredential,1) is None
+    lease(setup)
+    assert setup.client.put('/api/production/external-sync/credentials',json={'username':'u','password':'p'}).status_code==409
+    with setup.sessions() as db:assert db.get(ProductionSyncCredential,1) is None

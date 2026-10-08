@@ -66,6 +66,27 @@
     $('esItemDialog').oncancel=()=>{itemPair=null;itemRequest++;};
     $('esItemPrev').onclick=()=>{if(itemPage>1){itemPage--;itemCandidates().catch(e=>{$('esItemHelp').textContent=e.message;});}};
     $('esItemNext').onclick=()=>{if(itemPage*50<itemTotal){itemPage++;itemCandidates().catch(e=>{$('esItemHelp').textContent=e.message;});}};
+    async function credentials(){
+        const c=await api('/credentials');
+        $('esUsername').value=c.username||'';
+        $('esCredentialMessage').textContent=c.error||(c.configured?'연동 계정이 설정되어 있습니다. 비밀번호 공란으로 저장하면 기존 값을 유지합니다.':'아이디와 비밀번호를 입력하고 계정을 저장해 주세요.');
+    }
+    let credentialBusy=false;
+    async function credentialAction(save){
+        if(credentialBusy||!$('esCredentials').reportValidity())return;
+        credentialBusy=true;
+        const payload={username:$('esUsername').value.trim(),password:$('esPassword').value};
+        const controls=$('esCredentials').querySelectorAll('input,button');controls.forEach(e=>e.disabled=true);
+        $('esCredentialMessage').textContent='외부 생산 시스템의 로그인을 확인 중입니다…';
+        try{
+            const d=await api(save?'/credentials':'/credentials/test',save?'PUT':'POST',payload);
+            $('esCredentialMessage').textContent=d.message;
+            if(save){$('esPassword').value='';await state();}
+        }catch(e){$('esCredentialMessage').textContent=e.message;}
+        finally{credentialBusy=false;controls.forEach(e=>e.disabled=false);}
+    }
+    $('esCredentials').onsubmit=e=>{e.preventDefault();credentialAction(true);};
+    $('esTestLogin').onclick=()=>credentialAction(false);
     $('esSearch').onsubmit=e=>{e.preventDefault();page=1;rows().catch(e=>message(e.message,true));};
     $('esReset').onclick=()=>{$('esStart').value=date(-6);$('esEnd').value=date(0);$('esKeyword').value='';page=1;rows().catch(e=>message(e.message,true));};
     $('esPrev').onclick=()=>{if(page>1){page--;rows().catch(e=>message(e.message,true));}};
@@ -74,7 +95,7 @@
     if($('esSettings'))$('esSettings').onsubmit=async e=>{e.preventDefault();settingsBusy=true;const b=e.target.querySelector('button');b.disabled=true;try{await api('/settings','PUT',{enabled:$('esEnabled').checked,interval_minutes:Number($('esInterval').value),lookback_days:Number($('esLookback').value)});settingsDirty=false;message('설정을 저장했습니다.');await state();}catch(e){message(e.message,true);}finally{settingsBusy=false;b.disabled=false;}};
     if($('esRun'))$('esRun').onclick=async()=>{const b=$('esRun');b.disabled=true;try{await api('/run','POST',{start_date:$('esStart').value,end_date:$('esEnd').value});running=true;message('선택 기간의 실적 동기화를 시작했습니다.');await state();await runs();}catch(e){message(e.message,true);await state().catch(()=>{});}};
     $('esStart').value=date(-6);$('esEnd').value=date(0);
-    Promise.all([rows(),state(),runs(),mappings(),itemMaps()]).catch(e=>message(e.message,true));
+    Promise.all([rows(),state(),runs(),mappings(),itemMaps(),credentials()]).catch(e=>message(e.message,true));
     let polling=false;
     setInterval(async()=>{if(document.hidden||polling)return;polling=true;try{await state();await runs();}catch(e){message(e.message,true);}finally{polling=false;}},10000);
 })();

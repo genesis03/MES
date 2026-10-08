@@ -1,3 +1,4 @@
+{% set is_admin_user = user and (user.username|lower == 'admin' or user.role|upper in ['ADMIN', 'ADMINISTRATOR', 'SUPERADMIN', 'SYSTEM', '1', 'TRUE']) %}
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -274,7 +275,7 @@
         <div class="sidebar-user-panel">
             <div class="user-info-row">
                 <span class="user-name-text">{{ user.username }}</span>
-                <span class="user-role-tag">{{ "관리자" if user.role == "ADMIN" else "일반계정" }}</span>
+                <span class="user-role-tag">{{ "관리자" if is_admin_user else "일반계정" }}</span>
             </div>
             <div class="session-logout-row">
                 <div id="mesSessionCountdown" class="session-countdown" data-username="{{ user.username }}" role="timer" aria-label="자동 로그아웃까지 남은 시간">로그아웃 시간 확인 중…</div>
@@ -440,10 +441,11 @@
             {% endif %}
 
             <!-- 8. 관리자 메뉴 (공정 및 저장위치 관리 매핑) -->
-            {% if user.role == "ADMIN" %}
+            {% if is_admin_user %}
             <li class="menu-item{% if request.url.path.startswith('/admin/') %} open{% endif %}" id="adminMenu" data-perm-key="admin">
                 <div class="menu-title" onclick="toggleAccordion('adminMenu')"><span>관리자 메뉴</span><span class="arrow-icon">▼</span></div>
                 <ul class="submenu">
+                    <li class="submenu-item"><a href="/admin/production-sync" id="nav-admin-production-sync">외부 연동 생산실적</a></li>
                     <li class="submenu-item"><a href="/admin/users" id="nav-admin-users">계정 관리</a></li>
                     <li class="submenu-item"><a href="/admin/common-codes" id="nav-admin-common-codes">공통 코드 관리</a></li>
                     <li class="submenu-item"><a href="/admin/processes-locations" id="nav-admin-processes-locations">공정 및 저장위치 관리</a></li>
@@ -468,7 +470,7 @@
             if (!wasOpen) el.classList.add('open');
         }
 
-        {% if user and user.role != "ADMIN" %}
+        {% if user and not is_admin_user %}
         window.MES_MENU_ACCESS = (() => {
             try {
                 const raw = {{ (user.permissions or "{}") | tojson }};
@@ -504,7 +506,7 @@
         }
 
         function applyReadOnlyMode() {
-            {% if user and user.role != "ADMIN" %}
+            {% if user and not is_admin_user %}
             const level = mesCurrentMenuLevel();
             window.MES_CURRENT_MENU_LEVEL = level;
             window.MES_READ_ONLY = level === 'READ';
@@ -548,7 +550,7 @@
         }
 
         function applyMenuAccess() {
-            {% if user and user.role != "ADMIN" %}
+            {% if user and not is_admin_user %}
             const menuAccess = window.MES_MENU_ACCESS || {};
             if (!menuAccess || Object.keys(menuAccess).length === 0) {
                 document.querySelectorAll('.sidebar-menu > .menu-item[data-perm-key]').forEach(menu => {
@@ -633,7 +635,7 @@
                 "/production/rework": "nav-production-rework",
                 "/production/packing": "nav-production-packing",
                 "/production/performance/status": "nav-production-status",
-                "/production/performance/external": "nav-production-status",
+                "/admin/production-sync": "nav-admin-production-sync",
                 "/production/packing/status": "nav-production-packing-status",
                 "/production/equipment/status": "nav-production-equipment",
                 "/inventory/status": "nav-inventory-status",

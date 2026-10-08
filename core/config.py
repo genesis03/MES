@@ -27,6 +27,8 @@ SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() in {
 if SESSION_ADMIN_IDLE_MINUTES < 1 or SESSION_USER_IDLE_MINUTES < 1:
     raise ValueError("로그인 미사용 제한은 1분 이상이어야 합니다.")
 
-# Credentials stay on each server; they are never stored in the copied DB.
+# Environment credentials remain supported as a fallback for server-managed accounts.
 PRODUCTION_SYNC_USER = os.getenv("PRODUCTION_SYNC_USER", "")
 PRODUCTION_SYNC_PASSWORD = os.getenv("PRODUCTION_SYNC_PASSWORD", "")
+
+PRODUCTION_SYNC_KEY_PATH = Path(os.getenv("PRODUCTION_SYNC_KEY_PATH", str(DOCUMENT_STORAGE_ROOT.parent / "production-sync.key"))).resolve()

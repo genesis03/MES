@@ -4,46 +4,96 @@ from datetime import date, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-from sqlalchemy import or_
+from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.security import check_admin_permission, get_current_user, parse_user_permissions
+from core.security import check_admin_permission, get_current_user
 from models.models import ItemMasterModel, ProcessModel, ItemBomModel
-from models.production_sync import ExternalProductionRecord, ProductionSyncProcessMap, ProductionSyncRun, ProductionSyncItemMap
-from services.production_sync_client import SyncError
+from models.production_sync import ExternalProductionRecord, ProductionSyncProcessMap, ProductionSyncRun, ProductionSyncItemMap, ProductionSyncState
+from services.production_sync_client import SyncError, ProductionClient
+from services.production_sync_credentials import CredentialError, credential_status, read_credentials, save_credentials
 from services.production_sync_service import credentials_ready, now, start_manual, state, today
 
 router = APIRouter(tags=['Production synchronization'])
 templates = Jinja2Templates(directory='templates')
-MENU = '/production/performance/status'
-
-
 def access(user, admin=False):
-    if check_admin_permission(user):
-        return
-    if admin:
-        raise HTTPException(403, '관리자만 연동 설정과 즉시 동기화를 실행할 수 있습니다.')
-    permissions = parse_user_permissions(user).get('menu_access')
-    if permissions:
-        matching = sorted((p for p in permissions if MENU == p or MENU.startswith(p.rstrip('/') + '/')), key=len, reverse=True)
-        level = permissions.get(matching[0]) if matching else None
-        if level is not True and str(level).upper() not in {'READ', 'WRITE'}:
-            raise HTTPException(403, '생산 실적 현황 조회 권한이 없습니다.')
+    if not check_admin_permission(user):
+        raise HTTPException(403, '관리자만 외부 연동 생산실적에 접근할 수 있습니다.')
 
 
 def local_time(value):
     return value.replace(tzinfo=timezone.utc).astimezone(timezone(timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S') if value else ''
 
 
-@router.get('/production/performance/external', response_class=HTMLResponse)
+@router.get('/admin/production-sync', response_class=HTMLResponse)
 def page(request: Request, user=Depends(get_current_user)):
     access(user)
     return templates.TemplateResponse(request=request, name='production_external.html',
                                       context={'user': user, 'can_manage': check_admin_permission(user)})
+
+
+@router.get('/production/performance/external')
+def old_page(user=Depends(get_current_user)):
+    access(user)
+    return RedirectResponse('/admin/production-sync', status_code=303)
+
+
+class Credentials(BaseModel):
+    username: str = Field(min_length=1, max_length=200)
+    password: str = Field(default='', max_length=4096)
+
+
+def validate_login(payload, db):
+    username = payload.username.strip()
+    if not username:
+        raise HTTPException(422, '연동 아이디를 입력해 주세요.')
+    try:
+        password = payload.password
+        if not password:
+            saved_user, password = read_credentials(db)
+            if saved_user != username or not password:
+                raise CredentialError('아이디를 변경하거나 처음 설정할 때는 비밀번호를 입력해 주세요.')
+        ProductionClient(username, password)
+        return username, password
+    except (CredentialError, SyncError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get('/api/production/external-sync/credentials')
+def credentials(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    access(user)
+    return credential_status(db)
+
+
+@router.post('/api/production/external-sync/credentials/test')
+def test_credentials(payload: Credentials, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    access(user)
+    validate_login(payload, db)
+    return {'message': '외부 생산 시스템 로그인에 성공했습니다.'}
+
+
+@router.put('/api/production/external-sync/credentials')
+def update_credentials(payload: Credentials, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    access(user)
+    username, password = validate_login(payload, db)
+    state(db)
+    instant = now()
+    changed = db.execute(update(ProductionSyncState).where(
+        ProductionSyncState.id == 1, or_(ProductionSyncState.lease_until.is_(None), ProductionSyncState.lease_until < instant)
+    ).values(last_error=None))
+    if changed.rowcount != 1:
+        db.rollback()
+        raise HTTPException(409, '동기화 실행 중에는 연동 계정을 변경할 수 없습니다.')
+    try:
+        save_credentials(db, username, password)
+    except CredentialError as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc)) from exc
+    return {'message': '로그인을 확인하고 연동 계정을 저장했습니다. 서버 재시작 없이 적용됩니다.'}
 
 
 @router.get('/api/production/external-sync/settings')
@@ -51,7 +101,7 @@ def settings(db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
     row = state(db)
     return {'enabled': row.enabled, 'interval_minutes': row.interval_minutes, 'lookback_days': row.lookback_days,
-            'credentials_ready': credentials_ready(), 'running': bool(row.lease_until and row.lease_until > now()),
+            'credentials_ready': credentials_ready(db), 'running': bool(row.lease_until and row.lease_until > now()),
             'initial_completed_at': local_time(row.initial_completed_at), 'initial_start_date': today().replace(month=1, day=1).isoformat(),
             'last_run_at': local_time(row.last_run_at), 'last_success_at': local_time(row.last_success_at),
             'next_run_at': local_time(row.next_run_at), 'last_error': row.last_error or '',
@@ -67,8 +117,8 @@ class Settings(BaseModel):
 @router.put('/api/production/external-sync/settings')
 def save_settings(payload: Settings, db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user, True)
-    if payload.enabled and not credentials_ready():
-        raise HTTPException(422, '먼저 서버에 외부 시스템의 연동 계정을 설정해 주세요.')
+    if payload.enabled and not credentials_ready(db):
+        raise HTTPException(422, '먼저 연동 계정 설정에서 아이디와 비밀번호를 저장해 주세요.')
     row = state(db)
     row.enabled = payload.enabled; row.interval_minutes = payload.interval_minutes; row.lookback_days = payload.lookback_days
     row.next_run_at = now() if payload.enabled else None

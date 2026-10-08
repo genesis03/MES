@@ -13,7 +13,7 @@ from models.audit_log import AuditLogModel
 _AUDIT_CONTEXT: ContextVar[dict[str, Any]] = ContextVar("mes_audit_context", default={})
 _INSTALLED = False
 
-_SENSITIVE_FIELDS = {"password_hash"}
+_SENSITIVE_FIELDS = {"password_hash", "encrypted_password"}
 _DOCUMENT_KEYS = (
     "document_no",
     "revision_code",

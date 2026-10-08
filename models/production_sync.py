@@ -68,3 +68,10 @@ class ProductionSyncItemMap(Base):
     source_part_no = Column(String(200), nullable=False)
     source_process_name = Column(String(200), nullable=False)
     item_id = Column(Integer, ForeignKey('item_master.id'), nullable=False)
+
+
+class ProductionSyncCredential(Base):
+    __tablename__ = 'production_sync_credentials'
+    id = Column(Integer, primary_key=True)
+    username = Column(String(200), nullable=False)
+    encrypted_password = Column(Text, nullable=False)
