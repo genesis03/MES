@@ -36,7 +36,7 @@
     }
     async function itemMaps(){
         const d=await api('/item-maps'),writable=!!$('esSettings');
-        const connectionNames={AUTO_STAGE:'공정 기준 자동',AUTO_EXACT:'동일 품번 자동',MANUAL:'수동'};
+        const connectionNames={AUTO_BOM:'BOM 기준 자동',AUTO_STAGE:'공정 기준 자동',AUTO_EXACT:'동일 품번 자동',MANUAL:'수동'};
         $('esItemMaps').innerHTML=d.length?'<table class="es-table"><thead><tr><th>원본 품번</th><th>원본 공정</th><th>MES 품번</th><th>품명</th><th>연결 방식</th><th>연결</th></tr></thead><tbody>'+d.map(m=>`<tr><td>${esc(m.source_part_no)}</td><td>${esc(m.source_process)}</td><td>${esc(m.part_no||'미연결')}</td><td>${esc(m.part_name)}</td><td>${esc(connectionNames[m.connection_type]||'미연결')}</td><td>${writable?'<button type="button" class="es-btn" data-item-op="choose">품번 조회</button>':''} ${writable&&m.explicit?'<button type="button" class="es-btn" data-item-op="clear">자동 연결로 전환</button>':''}</td></tr>`).join('')+'</tbody></table>':'<p class="es-muted">실적을 가져오면 원본 품번이 표시됩니다.</p>';
         $('esItemMaps').querySelectorAll('tbody tr').forEach((tr,i)=>{
             tr.querySelectorAll('button').forEach(button=>button.onclick=async()=>{
@@ -53,7 +53,7 @@
     }
     async function itemCandidates(){
         const selected=itemPair,requestId=++itemRequest;
-        const q=new URLSearchParams({source_process:selected.source_process,keyword:$('esItemKeyword').value.trim(),page:itemPage});
+        const q=new URLSearchParams({source_process:selected.source_process,source_part_no:selected.source_part_no,keyword:$('esItemKeyword').value.trim(),page:itemPage});
         const d=await api('/item-candidates?'+q);if(requestId!==itemRequest||selected!==itemPair)return;
         itemTotal=d.total;$('esItemHelp').textContent=d.message;$('esItemPage').textContent=`${itemPage} / ${Math.max(1,Math.ceil(itemTotal/50))}`;
         $('esItemPrev').disabled=itemPage===1;$('esItemNext').disabled=itemPage*50>=itemTotal;

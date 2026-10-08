@@ -261,11 +261,12 @@ def item_maps(db: Session = Depends(get_db), user=Depends(get_current_user)):
 
 
 @router.get('/api/production/external-sync/item-candidates')
-def item_candidates(source_process: str = Query('', max_length=200), keyword: str = Query('', max_length=200),
+def item_candidates(source_process: str = Query('', max_length=200), source_part_no: str = Query('', max_length=200), keyword: str = Query('', max_length=200),
                     page: int = Query(1, ge=1), db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
     connections = ItemConnections(db)
     code, suffix = connections.process_code(source_process), connections.suffix(source_process)
+    bom_candidates, _ = connections.bom_candidates(source_part_no, suffix)
     query = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == 'Y')
     if keyword.strip():
         pattern = '%' + keyword.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
@@ -277,8 +278,9 @@ def item_candidates(source_process: str = Query('', max_length=200), keyword: st
     elif suffix == '':
         preferred = or_(preferred, ItemMasterModel.account_type == '완제품')
     return {'rows': [{'id': r.id, 'part_no': r.part_no, 'part_name': r.part_name}
-                     for r in query.order_by(case((preferred, 0), else_=1), ItemMasterModel.part_no).offset((page - 1) * 50).limit(50)],
-            'total': total, 'page': page, 'message': '사용 중인 MES 품목을 모두 조회합니다. 해당 공정의 품목을 먼저 표시하며 다른 품번도 직접 연결할 수 있습니다.'}
+                     for r in query.order_by(case((ItemMasterModel.id.in_([item.id for item in bom_candidates]), 0),
+                                                   (preferred, 1), else_=2), ItemMasterModel.part_no).offset((page - 1) * 50).limit(50)],
+            'total': total, 'page': page, 'message': '사용 중인 MES 품목을 모두 조회합니다. BOM의 해당 공정 품목을 먼저 표시하며 다른 품번도 직접 연결할 수 있습니다.'}
 
 
 class ItemMapping(BaseModel):

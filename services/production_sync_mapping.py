@@ -1,7 +1,7 @@
-"""Resolve external production items using the company's stage suffixes."""
+"""Resolve external production items using BOM relationships and stage suffixes."""
 import re
 
-from models.models import ItemMasterModel, ProcessModel
+from models.models import ItemBomModel, ItemMasterModel, ProcessModel
 from models.production_sync import ProductionSyncItemMap, ProductionSyncProcessMap
 
 
@@ -26,6 +26,14 @@ class ItemConnections:
         for item in self.items:
             if item.is_active == 'Y':
                 self.by_part.setdefault(item.part_no.casefold(), []).append(item)
+        self.children, self.parents = {}, {}
+        self.bom_cache = {}
+        for row in db.query(ItemBomModel):
+            parent_item, child_item = self.by_id.get(row.parent_item_id), self.by_id.get(row.child_item_id)
+            parent = (parent_item.part_no if parent_item else row.parent_part_no).strip().casefold()
+            child = (child_item.part_no if child_item else row.child_part_no).strip().casefold()
+            self.children.setdefault(parent, set()).add(child)
+            self.parents.setdefault(child, set()).add(parent)
         self.manual = {(row.source_part_no, row.source_process_name): row.item_id
                        for row in db.query(ProductionSyncItemMap)}
         self.processes = {row.process_code: row.process_name for row in
@@ -45,6 +53,44 @@ class ItemConnections:
     def suffix(self, source_process):
         return stage_suffix(self.processes.get(self.process_code(source_process), ''), source_process)
 
+    def bom_candidates(self, source_part, suffix):
+        if suffix is None or suffix == '?':
+            return [], False
+        original = source_part.strip().casefold()
+        if not original:
+            return [], False
+        if (original, suffix) in self.bom_cache:
+            return self.bom_cache[original, suffix]
+        base = re.sub(r'-(?:ag|a|b|c|d)$', '', original)
+        roots = {original, base}
+        # Production stages are descendants of a finished item's BOM. Packing
+        # reverses the lookup: an assembly item may belong to a different-number
+        # finished parent. Walk all levels and guard against malformed cycles.
+        seen, frontier = set(roots), list(roots)
+        while frontier:
+            for related in self.parents.get(frontier.pop(), ()):
+                if related not in seen:
+                    seen.add(related); frontier.append(related)
+        if suffix != '':
+            frontier = list(seen)
+            while frontier:
+                for related in self.children.get(frontier.pop(), ()):
+                    if related not in seen:
+                        seen.add(related); frontier.append(related)
+        has_bom = any(root in self.children or root in self.parents for root in roots)
+        candidates = {}
+        for part in seen:
+            if part in roots and part not in self.children and part not in self.parents:
+                continue
+            for item in self.by_part.get(part, []):
+                matches = (item.account_type == '완제품' if suffix == ''
+                           else item.part_no.casefold().endswith(suffix.casefold()))
+                if matches:
+                    candidates[item.id] = item
+        result = list(candidates.values()), has_bom
+        self.bom_cache[original, suffix] = result
+        return result
+
     def resolve(self, source_part, source_process):
         manual_id = self.manual.get((source_part, source_process))
         if manual_id is not None:
@@ -53,6 +99,9 @@ class ItemConnections:
         suffix = self.suffix(source_process)
         if suffix == '?':
             return None, ''
+        candidates, has_bom = self.bom_candidates(source_part, suffix)
+        if has_bom:
+            return (candidates[0], 'AUTO_BOM') if len(candidates) == 1 else (None, '')
         target = source_part.strip()
         if suffix is not None:
             base = re.sub(r'-(?:ag|a|b|c|d)$', '', target, flags=re.IGNORECASE)

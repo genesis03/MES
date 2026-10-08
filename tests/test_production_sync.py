@@ -18,7 +18,7 @@ _bootstrap = tempfile.TemporaryDirectory()
 os.environ.setdefault('DATABASE_URL', 'sqlite:///' + str(Path(_bootstrap.name) / 'bootstrap.db'))
 from core.database import Base, get_db
 from core.security import get_current_user
-from models.models import ItemMasterModel, ProcessModel
+from models.models import ItemBomModel, ItemMasterModel, ProcessModel
 from models.production_sync import ExternalProductionRecord, ProductionSyncRun, ProductionSyncState
 from routers.production_sync import router
 from services import production_sync_client as source
@@ -460,6 +460,100 @@ def test_packing_requires_finished_item_and_ambiguous_process_requires_manual_ch
                    row('COMPOUND', ITEM_NUM='310061', PROC_TYPE_NM='조립/포장')], token)
     with setup.sessions() as db: add_item(db, part='310061')
     assert all(not r['linked'] for r in setup.client.get('/api/production/external-sync/item-maps').json())
+
+
+def add_bom(db, parent, child, part_only=False):
+    db.add(ItemBomModel(parent_item_id=None if part_only else parent.id,
+                        child_item_id=None if part_only else child.id,
+                        parent_part_no=parent.part_no, child_part_no=child.part_no,
+                        created_at='2026-01-01'))
+    db.commit()
+
+
+@pytest.mark.parametrize('process, target', [
+    ('복합선반', '310062-A'), ('탭핑', '310062-B'), ('세레이션', '310062-D'),
+    ('은도금 외주 가공 후 입고', '310062-Ag'), ('캡조립', '310062-c'),
+])
+def test_bom_connects_different_base_parts_at_each_production_stage(setup, process, target):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM='310061', PROC_TYPE_NM=process)], token)
+    with setup.sessions() as db:
+        chain = []
+        for part in ['310061', '310062-c', '310062-Ag', '310062-D', '310062-B', '310062-A']:
+            chain.append(db.get(ItemMasterModel, add_item(db, part=part)))
+        chain[0].account_type = '완제품'; db.commit()
+        for parent, child in zip(chain, chain[1:]): add_bom(db, parent, child)
+    listed = setup.client.get('/api/production/external-sync/item-maps').json()[0]
+    assert listed['part_no'] == target and listed['connection_type'] == 'AUTO_BOM'
+    record = setup.client.get('/api/production/external-sync/records', params={'keyword':target}).json()
+    assert record['total'] == 1 and record['rows'][0]['mes_part_no'] == target
+    candidates = setup.client.get('/api/production/external-sync/item-candidates', params={'source_process':process,'source_part_no':'310061'}).json()
+    assert candidates['rows'][0]['part_no'] == target
+
+
+def test_bom_ambiguity_does_not_fall_back_to_same_base_suffix_and_manual_wins(setup):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM='310061', PROC_TYPE_NM='조립')], token)
+    with setup.sessions() as db:
+        parent = db.get(ItemMasterModel, add_item(db, part='310061'))
+        first = db.get(ItemMasterModel, add_item(db, part='310062-C'))
+        second = db.get(ItemMasterModel, add_item(db, part='310063-C'))
+        add_item(db, part='310061-C')
+        add_bom(db, parent, first); add_bom(db, parent, second)
+        manual_id = second.id
+    assert not setup.client.get('/api/production/external-sync/item-maps').json()[0]['linked']
+    assert setup.client.put('/api/production/external-sync/item-maps', json={'source_part_no':'310061','source_process':'조립','item_id':manual_id}).status_code == 200
+    assert setup.client.get('/api/production/external-sync/records').json()['rows'][0]['mes_part_no'] == '310063-C'
+
+
+def test_bom_part_only_links_and_cycles_are_handled(setup):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM='310061', PROC_TYPE_NM='조립')], token)
+    with setup.sessions() as db:
+        parent = db.get(ItemMasterModel, add_item(db, part='310061'))
+        child = db.get(ItemMasterModel, add_item(db, part='310062-C'))
+        add_bom(db, parent, child, part_only=True)
+        add_bom(db, child, parent, part_only=True)
+    assert setup.client.get('/api/production/external-sync/item-maps').json()[0]['part_no'] == '310062-C'
+
+
+def test_bom_packing_finds_different_finished_parent(setup):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM='310062-C', PROC_TYPE_NM='포장')], token)
+    with setup.sessions() as db:
+        parent = db.get(ItemMasterModel, add_item(db, part='310061'))
+        parent.account_type = '완제품'; db.commit()
+        child = db.get(ItemMasterModel, add_item(db, part='310062-C'))
+        add_bom(db, parent, child)
+    record = setup.client.get('/api/production/external-sync/records').json()['rows'][0]
+    assert record['mes_part_no'] == '310061' and record['connection_type'] == 'AUTO_BOM'
+
+
+@pytest.mark.parametrize('source_part', ['310062-C', '310062-Ag'])
+def test_bom_connections_from_registered_intermediate_part(setup, source_part):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM=source_part, PROC_TYPE_NM='조립')], token)
+    with setup.sessions() as db:
+        parent = db.get(ItemMasterModel, add_item(db, part='310061'))
+        assembly = db.get(ItemMasterModel, add_item(db, part='310062-C'))
+        silver = db.get(ItemMasterModel, add_item(db, part='310062-Ag'))
+        add_bom(db, parent, assembly); add_bom(db, assembly, silver)
+    assert setup.client.get('/api/production/external-sync/records').json()['rows'][0]['mes_part_no'] == '310062-C'
+
+
+def test_bom_prefers_real_child_over_same_base_guess_and_respects_inactive_items(setup):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM='310061', PROC_TYPE_NM='조립')], token)
+    with setup.sessions() as db:
+        parent = db.get(ItemMasterModel, add_item(db, part='310061'))
+        add_item(db, part='310061-C')
+        child = db.get(ItemMasterModel, add_item(db, part='310062-C'))
+        child_id = child.id
+        add_bom(db, parent, child)
+    assert setup.client.get('/api/production/external-sync/item-maps').json()[0]['part_no'] == '310062-C'
+    with setup.sessions() as db:
+        db.get(ItemMasterModel, child_id).is_active = 'N'; db.commit()
+    assert not setup.client.get('/api/production/external-sync/item-maps').json()[0]['linked']
 
 
 def test_readonly_user_cannot_change_settings_or_start_run(setup):
