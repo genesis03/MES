@@ -232,7 +232,7 @@ $('cpPrint').onclick=async()=>{
   toolbar.append(label,button);doc.body.replaceChildren(toolbar,doc.importNode(paper,true));
  }catch(error){if(!preview.closed)preview.close();message(error.message,true);}
 };
-correction=MesDocumentCorrection.install({kind:'control-plan',saveId:'cpSave',canWrite:()=>canWrite&&items.find(x=>x.id===current?.item_id)?.selectable!==false,getDocument:()=>current,busy:()=>busy,onChange:refreshControls,refresh:async id=>display(await api('/revisions/'+id))});
+correction=MesDocumentCorrection.install({kind:'control-plan',historyId:'cpCorrectionHistory',saveId:'cpSave',canWrite:()=>canWrite&&items.find(x=>x.id===current?.item_id)?.selectable!==false,getDocument:()=>current,busy:()=>busy,onChange:refreshControls,refresh:async id=>display(await api('/revisions/'+id))});
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
 run(async()=>{items=await api('/options');render();await loadDocumentList();});
 })();

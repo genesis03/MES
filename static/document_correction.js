@@ -25,7 +25,8 @@
         const label=document.createElement('label');label.textContent='수정 사유 *';
         const reason=document.createElement('textarea');reason.maxLength=4000;reason.rows=2;reason.style.width='100%';reason.setAttribute('aria-label','수정 사유');label.append(reason);panel.append(label);
         save.parentElement.after(panel);
-        const log=document.createElement('section');log.className='no-print';panel.after(log);
+        const log=config.historyId ? document.getElementById(config.historyId) : document.createElement('section');
+        log.classList.add('no-print');if(!config.historyId)panel.after(log);
         let editing=false, generation=0, key='';
         const api={
             get editing(){return editing;},

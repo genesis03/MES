@@ -303,7 +303,7 @@ if(el('fmeaRetire'))el('fmeaRetire').addEventListener('click',()=>{
   const reason=prompt('폐기 사유를 입력해 주세요. 기존 분석표와 이력은 보존됩니다.');if(!reason?.trim())return;
   task(async()=>{const result=await request('/api/process-fmea/revisions/'+selected.id+'/retire','POST',{version:selected.version,reason:reason.trim()});fill(result);await selectRevision(result.id);await list();message('개정을 폐기 처리했습니다. 기존 이력은 보존되며 구버전을 자동 적용하지 않습니다.');});
 });
-correction=MesDocumentCorrection.install({kind:'fmea',saveId:'fmeaSave',canWrite:()=>canWrite&&selected?.item_selectable===true,getDocument:()=>selected,busy:()=>busy,onChange:updateControls,refresh:selectRevision});
+correction=MesDocumentCorrection.install({kind:'fmea',historyId:'fmeaCorrectionHistory',saveId:'fmeaSave',canWrite:()=>canWrite&&selected?.item_selectable===true,getDocument:()=>selected,busy:()=>busy,onChange:updateControls,refresh:selectRevision});
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
 task(async()=>{
   options=await request('/api/process-fmea/options');

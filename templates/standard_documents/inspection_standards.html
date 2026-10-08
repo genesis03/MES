@@ -95,6 +95,8 @@
   <div class="is-card-body"><table class="history"><thead><tr><th>REV</th><th>상태</th><th>적용일</th><th>개정내용</th><th>개정사유</th><th>작성자</th><th>등록일</th></tr></thead><tbody id="historyBody"><tr><td colspan="7">품번을 선택해 주세요.</td></tr></tbody></table></div>
 </div>
 
+<section id="inspectionCorrectionHistory" class="no-print"></section>
+
 <div class="modal" id="itemModal"><div class="modal-box"><div class="modal-head"><strong>품번 조회</strong><button class="close" onclick="closeModal('itemModal')">×</button></div><div class="modal-body"><form id="itemSearchForm" class="search-grid"><input id="itemKeyword" placeholder="품번 또는 품명" aria-label="품번 또는 품명"><button class="btn primary" type="submit">조회</button><button id="itemSearchReset" class="btn secondary" type="button">초기화</button></form><table class="search-results"><thead><tr><th>품번</th><th>품명</th><th>선택</th></tr></thead><tbody id="itemSearchBody"></tbody></table></div><div class="modal-foot"><button class="btn secondary" onclick="closeModal('itemModal')">닫기</button></div></div></div>
 
 {% if can_write %}
@@ -113,7 +115,7 @@
 {% endblock %}
 
 {% block extra_script %}
-<script src="/static/document_correction.js?v=1"></script>
+<script src="/static/document_correction.js?v=2"></script>
 <script>
 let correction=null, correctionSaving=false;
 const DOC_TYPE='{{ document_type }}';const CAN_WRITE={{ 'true' if can_write else 'false' }};
@@ -343,7 +345,7 @@ async function reviseStandard(){try{const rev=MesRevisionNumber.read($('newRevis
 async function activateStandard(){if(!current||current.status!=='DRAFT'||!confirm('이 REV를 현재사용 기준서로 적용하시겠습니까?'))return;try{const d=await api('/api/standard-documents/inspection-standards/'+current.id+'/activate',{method:'POST'});await openStandard(d.id);await loadHistory();message('현재사용 기준서로 적용했습니다.',true)}catch(e){message(e.message)}}
 async function deleteDraft(){if(!current||current.status!=='DRAFT'||!confirm('작성중 기준서를 삭제하시겠습니까?'))return;try{await api('/api/standard-documents/inspection-standards/'+current.id,{method:'DELETE'});await loadHistory();clearDocumentFields();message('작성중 기준서를 삭제했습니다.',true)}catch(e){message(e.message)}}
 {% endif %}
-correction=MesDocumentCorrection.install({kind:'inspection',saveId:'saveBtn',canWrite:()=>CAN_WRITE,getDocument:()=>current,busy:()=>planImportBusy||correctionSaving,onChange:updateButtons,refresh:id=>openStandard(id,true)});
+correction=MesDocumentCorrection.install({kind:'inspection',historyId:'inspectionCorrectionHistory',saveId:'saveBtn',canWrite:()=>CAN_WRITE,getDocument:()=>current,busy:()=>planImportBusy||correctionSaving,onChange:updateButtons,refresh:id=>openStandard(id,true)});
 (async()=>{try{const [users,options]=await Promise.all([api('/api/standard-documents/inspection-standards/users'),api('/api/standard-documents/inspection-standards/inspection-item-options?document_type='+DOC_TYPE)]);inspectionItemOptions=options;userOptions(users);if(DOC_TYPE==='PROCESS'){const processes=await api('/api/standard-documents/inspection-standards/internal-processes');$('inspectionProcess').innerHTML='<option value="">내부 공정 선택</option>'+processes.map(x=>`<option value="${esc(x.code)}">${esc(x.name)} (${esc(x.code)})</option>`).join('')}newStandard();if(!options.items.length)message('그룹과 검사항목은 직접 입력할 수 있습니다.',true)}catch(e){message(e.message)}})();
 </script>
 {% endblock %}
