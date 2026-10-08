@@ -26,3 +26,7 @@ SESSION_COOKIE_MAX_AGE_SECONDS = 86400 * 7  # 기존 로그인 쿠키 보관 상
 SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "false").lower() in {"1", "true", "yes"}
 if SESSION_ADMIN_IDLE_MINUTES < 1 or SESSION_USER_IDLE_MINUTES < 1:
     raise ValueError("로그인 미사용 제한은 1분 이상이어야 합니다.")
+
+# Credentials stay on each server; they are never stored in the copied DB.
+PRODUCTION_SYNC_USER = os.getenv("PRODUCTION_SYNC_USER", "")
+PRODUCTION_SYNC_PASSWORD = os.getenv("PRODUCTION_SYNC_PASSWORD", "")

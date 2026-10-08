@@ -1,0 +1,324 @@
+"""Production sync uses temporary DBs and synthetic source responses only."""
+import json
+import os
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
+from pathlib import Path
+from types import SimpleNamespace
+from urllib.parse import parse_qs, urlencode
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import sessionmaker
+
+_bootstrap = tempfile.TemporaryDirectory()
+os.environ.setdefault('DATABASE_URL', 'sqlite:///' + str(Path(_bootstrap.name) / 'bootstrap.db'))
+from core.database import Base, get_db
+from core.security import get_current_user
+from models.models import ItemMasterModel, ProcessModel
+from models.production_sync import ExternalProductionRecord, ProductionSyncRun, ProductionSyncState
+from routers.production_sync import router
+from services import production_sync_client as source
+from services import production_sync_service as sync
+
+DAY = date(2026, 3, 25)
+ADMIN = SimpleNamespace(username='admin', role='SUPERADMIN', permissions=None)
+
+
+def row(lot='TEST-LOT-001', day=DAY, **changes):
+    result = {'ITEM_NUM': 'EXTERNAL-A', 'PRODUCT_NM': 'Example terminal', 'PROC_TYPE_NM': 'Test machining',
+              'JOB_TIME': day.strftime('%Y%m%d'), 'JOB_ST_TIME': day.strftime('%Y%m%d') + '104408',
+              'JOB_END_TIME': day.strftime('%Y%m%d') + '192500', 'JOB_NUM': 'TEST-JOB-001', 'LOT_NUM': lot,
+              'JOB_QTY': '216', 'LOT_QTY': '331', 'FAULT_QTY': '0', 'F10': '115'}
+    return result | changes
+
+
+def response(rows):
+    return {'Common.Set.LotSet.' + key: [','.join(r[key] for r in rows)] for key in row()} | {'SO.NET.END': ['SO.NET.END']}
+
+
+@pytest.fixture
+def setup(tmp_path, monkeypatch):
+    engine = create_engine('sqlite:///' + str(tmp_path / 'test.db'), connect_args={'check_same_thread': False, 'timeout': 30})
+    @event.listens_for(engine, 'connect')
+    def foreign_keys(connection, _):
+        connection.execute('PRAGMA foreign_keys=ON')
+    Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine, expire_on_commit=False)
+    monkeypatch.setattr(sync, 'SessionLocal', sessions)
+    monkeypatch.setattr(sync.config, 'PRODUCTION_SYNC_USER', 'test-user')
+    monkeypatch.setattr(sync.config, 'PRODUCTION_SYNC_PASSWORD', 'test-password')
+    monkeypatch.setattr(sync, 'today', lambda: DAY)
+    app = FastAPI(); app.include_router(router)
+    def db_override():
+        with sessions() as db:
+            yield db
+    app.dependency_overrides[get_db] = db_override
+    app.dependency_overrides[get_current_user] = lambda: ADMIN
+    with TestClient(app) as client:
+        yield SimpleNamespace(engine=engine, sessions=sessions, app=app, client=client)
+    engine.dispose()
+
+
+def lease(setup, trigger='MANUAL'):
+    return sync.claim(DAY, DAY, trigger)
+
+
+def test_adapter_uses_exact_command_dates_and_preserves_setup(monkeypatch):
+    client = source.ProductionClient.__new__(source.ProductionClient)
+    client.opener = object(); client.context = {'Common.Set.LoginUserSet.USER_ID': 'test-user'}
+    captured = []
+    def post(opener, payload):
+        captured.append(payload)
+        return response([row()])
+    monkeypatch.setattr(source, 'post', post)
+    rows, warnings = client.fetch_day(DAY)
+    assert rows == [row()] and not warnings
+    assert captured[0]['run.object.name'] == 'MES.Product.ProcLotList.ProcLotListObj'
+    assert captured[0]['jump.form.code'] == 'List'
+    assert captured[0]['MES.Product.Set.JobCondSet.JOB_DATE1'] == DAY.isoformat()
+    assert captured[0]['MES.Product.Set.JobCondSet.PROC_TYPE'] == ''
+
+
+@pytest.mark.parametrize('change', [{'F10': ''}, {'F10': '-1'}, {'JOB_QTY': 'NaN'}, {'JOB_TIME': '20260324'}, {'JOB_ST_TIME': 'invalid'}, {'LOT_NUM': ''}])
+def test_adapter_rejects_invalid_rows(monkeypatch, change):
+    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
+    monkeypatch.setattr(source, 'post', lambda *_: response([row(**change)]))
+    with pytest.raises(source.SyncError):
+        client.fetch_day(DAY)
+
+
+def test_ambiguous_product_name_does_not_shift_quantities(monkeypatch):
+    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
+    monkeypatch.setattr(source, 'post', lambda *_: response([row(PRODUCT_NM='A,B')]))
+    rows, warnings = client.fetch_day(DAY)
+    assert rows[0]['PRODUCT_NM'] == '' and rows[0]['F10'] == '115' and warnings
+
+
+@pytest.mark.parametrize('change', [{'Common.Set.LotSet.ROW_COUNT': ['2']}, {'Common.Set.LotSet.F10': ['115,3']}])
+def test_adapter_rejects_count_mismatch(monkeypatch, change):
+    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
+    monkeypatch.setattr(source, 'post', lambda *_: response([row()]) | change)
+    with pytest.raises(source.SyncError):
+        client.fetch_day(DAY)
+
+
+def test_post_places_end_marker_last_and_does_not_leak_server_exception():
+    class Reply:
+        headers = SimpleNamespace(get_content_charset=lambda: 'utf-8')
+        def __enter__(self): return self
+        def __exit__(self, *_): pass
+        def read(self, *_): return urlencode({'SO.NET.END': 'SO.NET.END', 'THROW.MESS': 'private-password'}).encode()
+    class Opener:
+        def open(self, request, **kwargs):
+            assert request.data.decode().endswith('SO.NET.END=SO.NET.END')
+            assert parse_qs(request.data.decode())['run.object.name'] == ['Example.List']
+            return Reply()
+    with pytest.raises(source.SyncError) as error:
+        source.post(Opener(), {'SO.NET.END': 'SO.NET.END', 'run.object.name': 'Example.List'})
+    assert 'private-password' not in str(error.value)
+
+
+def test_save_is_idempotent_updates_and_preserves_unregistered_parts(setup):
+    token, _ = lease(setup)
+    assert sync.save_day([row()], token)['inserted'] == 1
+    assert sync.save_day([row()], token)['unchanged'] == 1
+    assert sync.save_day([row(JOB_QTY='217', LOT_QTY='332')], token)['updated'] == 1
+    with setup.sessions() as db:
+        assert db.query(ExternalProductionRecord).count() == 1
+        record = db.query(ExternalProductionRecord).one()
+        assert record.part_no == 'EXTERNAL-A' and record.job_qty == '217'
+        assert json.loads(record.raw_json)['F10'] == '115'
+        assert db.query(ItemMasterModel).count() == 0
+
+
+def test_duplicate_rows_and_expired_lease_do_not_write(setup):
+    token, _ = lease(setup)
+    with pytest.raises(source.SyncError): sync.save_day([row(), row()], token)
+    with setup.sessions() as db:
+        state = db.get(ProductionSyncState, 1); state.lease_until = sync.now() - timedelta(seconds=1); db.commit()
+    with pytest.raises(source.SyncError): sync.save_day([row()], token)
+    with setup.sessions() as db: assert db.query(ExternalProductionRecord).count() == 0
+
+
+def test_concurrent_claims_have_single_owner(setup):
+    with setup.sessions() as db: sync.state(db)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        claims = list(pool.map(lambda _: lease(setup), range(4)))
+    assert sum(claim is not None for claim in claims) == 1
+    with setup.sessions() as db: assert db.query(ProductionSyncRun).filter_by(status='RUNNING').count() == 1
+
+
+def test_partial_failure_records_progress_and_does_not_complete_initial(setup, monkeypatch):
+    start = DAY - timedelta(days=1)
+    with setup.sessions() as db:
+        settings = sync.state(db); settings.enabled = True; db.commit()
+    class Client:
+        def __init__(self, *_): pass
+        def fetch_day(self, day):
+            if day == DAY: raise source.SyncError('Test day failed')
+            return [row(day=day)], []
+    monkeypatch.setattr(sync, 'ProductionClient', Client)
+    token, run_id = sync.claim(start, DAY, 'INITIAL')
+    sync.execute(start, DAY, token, run_id)
+    with setup.sessions() as db:
+        run = db.get(ProductionSyncRun, run_id)
+        assert run.status == 'FAILED' and json.loads(run.counts_json)['completed_days'] == 1
+        assert db.get(ProductionSyncState, 1).initial_completed_at is None
+        assert db.query(ExternalProductionRecord).count() == 1
+        assert db.get(ProductionSyncState, 1).lease_token is None
+
+
+def test_scheduler_fetches_january_once_then_recent_period(setup, monkeypatch):
+    class OneCycle:
+        def __init__(self): self.calls = 0
+        def wait(self, *_): self.calls += 1; return self.calls > 1
+    class Client:
+        def __init__(self, *_): pass
+        def fetch_day(self, day): return [], []
+    monkeypatch.setattr(sync, 'ProductionClient', Client)
+    with setup.sessions() as db:
+        settings = sync.state(db); settings.enabled = True; db.commit()
+    monkeypatch.setattr(sync, '_stop', OneCycle()); sync.loop()
+    with setup.sessions() as db:
+        run = db.query(ProductionSyncRun).one()
+        assert run.start_date == '2026-01-01' and run.end_date == DAY.isoformat()
+        assert run.trigger == 'INITIAL' and run.status == 'SUCCESS'
+        settings = db.get(ProductionSyncState, 1)
+        assert settings.initial_completed_at is not None
+        settings.next_run_at = sync.now() - timedelta(seconds=1); db.commit()
+    monkeypatch.setattr(sync, '_stop', OneCycle()); sync.loop()
+    with setup.sessions() as db:
+        run = db.query(ProductionSyncRun).order_by(ProductionSyncRun.id.desc()).first()
+        assert run.trigger == 'AUTO' and run.start_date == (DAY - timedelta(days=6)).isoformat()
+
+
+def add_item(db, part='LOCAL-B', code='LT'):
+    item = ItemMasterModel(part_no=part, part_name='Registered local product', account_type='반제품', material_type='기타', production_loc=code, is_active='Y', created_at='2026-01-01', updated_at='2026-01-01')
+    db.add(item); db.commit(); return item.id
+
+
+def test_api_late_registration_mapping_search_and_setup(setup):
+    token, _ = lease(setup); sync.save_day([row()], token)
+    result = setup.client.get('/api/production/external-sync/records').json()['rows'][0]
+    assert result['mes_part_no'] == '' and result['setup_qty'] == '115' and result['good_qty'] == '216'
+    assert '품번 연결 확인' in result['notes']
+    with setup.sessions() as db:
+        db.add(ProcessModel(process_code='LT', process_name='Internal lathe', created_at='2026-01-01'))
+        item_id = add_item(db)
+    assert setup.client.put('/api/production/external-sync/process-maps', json={'source_name':'Test machining','process_code':'LT','performance_type':'MACHINING'}).status_code == 200
+    candidates = setup.client.get('/api/production/external-sync/item-candidates', params={'source_process':'Test machining','keyword':'LOCAL'}).json()
+    assert candidates['total'] == 1
+    assert setup.client.put('/api/production/external-sync/item-maps', json={'source_part_no':'EXTERNAL-A','source_process':'Test machining','item_id':item_id}).status_code == 200
+    result = setup.client.get('/api/production/external-sync/records', params={'keyword':'LOCAL-B'}).json()
+    assert result['total'] == 1
+    record = result['rows'][0]
+    assert record['part_no'] == 'EXTERNAL-A' and record['mes_part_no'] == 'LOCAL-B'
+    assert record['performance_type'] == 'MACHINING' and record['notes'] == []
+    assert setup.client.get('/api/production/external-sync/records', params={'keyword':'LOCAL_B'}).json()['total'] == 0
+
+
+def test_api_denies_unrelated_item_and_flags_quantity_difference(setup):
+    token, _ = lease(setup); sync.save_day([row(LOT_QTY='999')], token)
+    with setup.sessions() as db:
+        db.add(ProcessModel(process_code='LT', process_name='Test machining', created_at='2026-01-01'))
+        item_id = add_item(db, code='TP')
+    reply = setup.client.put('/api/production/external-sync/item-maps', json={'source_part_no':'EXTERNAL-A','source_process':'Test machining','item_id':item_id})
+    assert reply.status_code == 422
+    assert '전체수량과 양품·불량·SET-UP 합계 확인' in setup.client.get('/api/production/external-sync/records').json()['rows'][0]['notes']
+
+
+def test_readonly_user_cannot_change_settings_or_start_run(setup):
+    setup.app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(username='reader', role='USER', permissions=json.dumps({'menu_access':{'/production/performance/status':'READ'}}))
+    assert setup.client.get('/api/production/external-sync/settings').status_code == 200
+    assert setup.client.put('/api/production/external-sync/settings',json={'enabled':True}).status_code == 403
+    assert setup.client.post('/api/production/external-sync/run',json={'start_date':DAY.isoformat(),'end_date':DAY.isoformat()}).status_code == 403
+
+
+def test_missing_credentials_disable_enable_and_manual_requests(setup, monkeypatch):
+    monkeypatch.setattr(sync.config,'PRODUCTION_SYNC_PASSWORD','')
+    assert setup.client.get('/api/production/external-sync/settings').json()['credentials_ready'] is False
+    assert setup.client.put('/api/production/external-sync/settings',json={'enabled':True}).status_code == 422
+    assert setup.client.post('/api/production/external-sync/run',json={'start_date':DAY.isoformat(),'end_date':DAY.isoformat()}).status_code == 409
+
+
+def test_pagination_and_empty_day_preserve_previous_records(setup):
+    token, _ = lease(setup)
+    sync.save_day([row(lot=f'LOT-{i}') for i in range(3)], token)
+    sync.save_day([], token)
+    first = setup.client.get('/api/production/external-sync/records',params={'page_size':2}).json()
+    second = setup.client.get('/api/production/external-sync/records',params={'page_size':2,'page':2}).json()
+    assert first['total'] == 3 and len(first['rows']) == 2 and len(second['rows']) == 1
+    assert set(r['id'] for r in first['rows']).isdisjoint(r['id'] for r in second['rows'])
+    assert setup.client.get('/production/performance/external').status_code == 200
+
+
+def test_http_login_cookie_and_list_protocol(monkeypatch):
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    import threading
+    seen = []
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_): pass
+        def do_GET(self):
+            self.send_response(200); self.end_headers(); self.wfile.write(b'login page')
+        def do_POST(self):
+            raw = self.rfile.read(int(self.headers['Content-Length'])).decode()
+            assert raw.endswith('SO.NET.END=SO.NET.END')
+            payload = parse_qs(raw, keep_blank_values=True)
+            action = payload['jump.form.code'][0]; seen.append(action)
+            if action == 'Login':
+                assert payload['Common.Set.LoginShortSet.USER_ID'] == ['test-user']
+                assert payload['run.object.name'] == ['Common.Login.LoginObj']
+                body = {'Common.Set.LoginUserSet.USER_ID':'test-user', 'Common.Set.LoginUserSet.COMP_NO':'company-id',
+                        'Common.Set.LoginUserSet.USER_PASS':'', 'SO.NET.END':'SO.NET.END'}
+                self.send_response(200); self.send_header('Set-Cookie','ASP.NET_SessionId=synthetic-session; Path=/')
+            else:
+                assert 'ASP.NET_SessionId=synthetic-session' in self.headers.get('Cookie', '')
+                assert payload['Common.Set.LoginUserSet.COMP_NO'] == ['company-id']
+                assert payload['run.object.name'] == ['MES.Product.ProcLotList.ProcLotListObj']
+                body = {key: values[0] for key, values in response([row()]).items()}
+                self.send_response(200)
+            self.send_header('Content-Type','application/x-www-form-urlencoded; charset=utf-8'); self.end_headers()
+            self.wfile.write(urlencode(body).encode())
+    server = ThreadingHTTPServer(('127.0.0.1',0),Handler)
+    thread = threading.Thread(target=server.serve_forever,daemon=True); thread.start()
+    base = f'http://127.0.0.1:{server.server_port}'
+    monkeypatch.setattr(source,'BASE',base); monkeypatch.setattr(source,'ENDPOINT',base+'/HttpPort.aspx')
+    try:
+        client = source.ProductionClient('test-user','test-password')
+        rows, warnings = client.fetch_day(DAY)
+        assert rows == [row()] and not warnings and seen == ['Login','List']
+    finally:
+        server.shutdown(); server.server_close(); thread.join(timeout=2)
+
+
+def test_late_worker_cannot_release_new_lease(setup, monkeypatch):
+    token, old_run = lease(setup)
+    with setup.sessions() as db:
+        settings = db.get(ProductionSyncState,1); settings.lease_until = sync.now()-timedelta(seconds=1); db.commit()
+    new_token, new_run = lease(setup)
+    class Client:
+        def __init__(self,*_): pass
+        def fetch_day(self,day): return [row()],[]
+    monkeypatch.setattr(sync,'ProductionClient',Client)
+    sync.execute(DAY,DAY,token,old_run)
+    with setup.sessions() as db:
+        assert db.get(ProductionSyncState,1).lease_token == new_token
+        assert db.get(ProductionSyncRun,new_run).status == 'RUNNING'
+        assert db.get(ProductionSyncRun,old_run).status == 'FAILED'
+        assert db.query(ExternalProductionRecord).count() == 0
+
+
+def test_external_records_do_not_create_native_performance_or_lots(setup):
+    from models.production import ProductionPerformance, ProductionWorkOrder
+    from models.production_run import ProductionRun
+    from models.production_lot import ProductionLotModel
+    from models.lot_consumption import LotConsumptionModel
+    token,_ = lease(setup); sync.save_day([row()],token)
+    with setup.sessions() as db:
+        assert db.query(ExternalProductionRecord).count() == 1
+        for model in [ProductionPerformance,ProductionWorkOrder,ProductionRun,ProductionLotModel,LotConsumptionModel]:
+            assert db.query(model).count() == 0

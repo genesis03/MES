@@ -125,7 +125,9 @@ def test_validate_then_save_activate_revise_and_keep_history(api):
     assert client.put(f'/api/control-plans/revisions/{id}',json=body).status_code==409
     applied=client.post(f'/api/control-plans/revisions/{id}/activate',json={'version':saved['version']});assert applied.status_code==200,applied.text
     body['version']=applied.json()['version']
-    assert client.put(f'/api/control-plans/revisions/{id}',json=body).status_code==409
+    rejected=client.put(f'/api/control-plans/revisions/{id}',json=body)
+    assert rejected.status_code==422 and '수정 사유' in rejected.json()['detail']
+    assert client.get(f'/api/control-plans/revisions/{id}').json()['header']==applied.json()['header']
     revised=client.post(f'/api/control-plans/revisions/{id}/revise',json={'version':applied.json()['version'],'revision_code':'1'});assert revised.status_code==200,revised.text
     assert revised.json()['status']=='DRAFT' and revised.json()['rows']==applied.json()['rows']
     new=client.post(f"/api/control-plans/revisions/{revised.json()['id']}/activate",json={'version':1});assert new.status_code==200,new.text

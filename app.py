@@ -27,6 +27,8 @@ from services.audit_log import (
 )
 
 from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, subcontract_inbound_lot_policy, subcontract_inbound_edit, purchase_unreceived, quality_pages, quality, quality_standard, quality_production_defects, quality_defect_status, production_pages, production, production_complete, production_run, production_run_delete, production_run_lot_fix, production_extra, inventory_lot_location, inventory, inventory_lot_trace, inventory_lot_trace_tree, inventory_lot_usage_trace, internal_labels, packing, sales, sales_order_policy, sales_shipping_direct, sales_shipping_direct_page, sales_shipping_fifo_auto, sales_shipping_partial_confirm, sales_shipping_entry, sales_order_delete, shipping_inquiry
+from routers import production_sync
+from services.production_sync_service import start_scheduler, stop_scheduler
 from routers import control_plan
 from routers import documents, inspection_standards, standard_documents, process_fmea, process_flow
 
@@ -45,6 +47,17 @@ repair_subcontract_inbound_sample_stock()
 install_audit_logging()
 
 app = FastAPI(title="출하 바코드 관리 시스템")
+
+
+@app.on_event("startup")
+def production_sync_startup():
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+def production_sync_shutdown():
+    stop_scheduler()
+
 
 
 def _menu_level(value) -> str:
@@ -221,6 +234,7 @@ app.include_router(inspection_standards.router)
 app.include_router(standard_documents.router)
 app.include_router(process_fmea.router)
 app.include_router(control_plan.router)
+app.include_router(production_sync.router)
 app.include_router(process_flow.router)
 app.include_router(basic_info_workers.router)
 app.include_router(basic_info_equipment.router)
