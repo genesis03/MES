@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from core import config
 from core.database import get_db
+from services.document_correction_service import validate_correction, record_correction, correction_history
 from services.revision_number_service import normalize_revision_code, revision_key
 from core.security import get_current_user, get_current_user_optional
 from models.document import DocumentFile, ItemDocument, ItemRevision
@@ -39,6 +40,87 @@ class RevisionPayload(BaseModel):
 class ReasonPayload(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
     reason: str = Field(min_length=1, max_length=4000)
+
+
+class RevisionCorrectionPayload(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    eco_no: str = Field(default="", max_length=100)
+    change_reason: str = Field(default="", max_length=4000)
+    note: str = Field(default="", max_length=8000)
+    correction_reason: str = Field(min_length=1, max_length=4000)
+    correction_token: str = Field(min_length=64, max_length=64)
+
+
+class DocumentCorrectionPayload(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    title: str = Field(min_length=1, max_length=200)
+    document_no: str = Field(default="", max_length=100)
+    note: str = Field(default="", max_length=8000)
+    correction_reason: str = Field(min_length=1, max_length=4000)
+    correction_token: str = Field(min_length=64, max_length=64)
+
+
+@router.put("/api/documents/revisions/{revision_id}")
+def correct_revision(revision_id: int, payload: RevisionCorrectionPayload,
+                     db: Session = Depends(get_db), user=Depends(get_current_user)):
+    require_document_access(user, "WRITE")
+    _, row = lock_revision(db, revision_id)
+    if row.status not in {"DRAFT", "CURRENT"}:
+        raise HTTPException(409, "초안 또는 현재 사용 도면만 수정할 수 있습니다.")
+    before = revision_dict(row)
+    validate_correction(payload.correction_reason, payload.correction_token, before)
+    row.eco_no, row.change_reason, row.note = payload.eco_no or None, payload.change_reason or None, payload.note or None
+    record_correction(db, user, "item_revisions", row.id, payload.correction_reason, before, revision_dict(row))
+    _commit(db)
+    return revision_dict(row)
+
+
+@router.put("/api/documents/{document_id}/metadata")
+def correct_document(document_id: int, payload: DocumentCorrectionPayload,
+                     db: Session = Depends(get_db), user=Depends(get_current_user)):
+    require_document_access(user, "WRITE")
+    row = db.get(ItemDocument, document_id)
+    if not row:
+        raise HTTPException(404, "문서를 찾을 수 없습니다.")
+    _, revision = lock_revision(db, row.revision_id)
+    db.refresh(row)
+    if revision.status not in {"DRAFT", "CURRENT"} or row.retired_at:
+        raise HTTPException(409, "초안 또는 현재 사용 문서의 기본정보만 수정할 수 있습니다.")
+    before = document_dict(db, row)
+    validate_correction(payload.correction_reason, payload.correction_token, before)
+    row.title, row.document_no, row.note = payload.title, payload.document_no or None, payload.note or None
+    record_correction(db, user, "item_documents", row.id, payload.correction_reason, before, document_dict(db, row))
+    _commit(db)
+    return document_dict(db, row)
+
+
+@router.get("/api/document-corrections/{kind}/{record_id}")
+def read_corrections(kind: str, record_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    if kind in {"drawing", "drawing-file"}:
+        require_document_access(user)
+        row = db.get(ItemRevision if kind == "drawing" else ItemDocument, record_id)
+        table = "item_revisions" if kind == "drawing" else "item_documents"
+    elif kind == "fmea":
+        from services.fmea_service import require_fmea_access
+        from models.fmea import FmeaRevision
+        require_fmea_access(user)
+        row, table = db.get(FmeaRevision, record_id), "fmea_revisions"
+    elif kind == "control-plan":
+        from routers.control_plan import access
+        from models.control_plan import ControlPlanRevision
+        access(user)
+        row, table = db.get(ControlPlanRevision, record_id), "control_plan_revisions"
+    elif kind == "inspection":
+        from routers.inspection_standards import _require_access
+        from models.inspection_standard import InspectionStandard
+        row, table = db.get(InspectionStandard, record_id), "inspection_standards"
+        if row:
+            _require_access(user, row.document_type)
+    else:
+        raise HTTPException(404, "문서 유형을 찾을 수 없습니다.")
+    if not row:
+        raise HTTPException(404, "문서를 찾을 수 없습니다.")
+    return correction_history(db, table, record_id)
 
 
 def _commit(db):

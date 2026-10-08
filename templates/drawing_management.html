@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}도면 관리{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="/static/css/drawing_management.css?v=eco-history-1">
+<link rel="stylesheet" href="/static/css/drawing_management.css?v=correction-1">
 <div id="drawingApp" data-can-write="{{ 'true' if can_write_documents else 'false' }}">
     <div class="drawing-heading"><div><h2>도면 관리</h2><p>품목별 도면과 개정 이력을 관리합니다.</p></div><a href="/basic-info/items" class="drawing-link">품목 정보 관리</a></div>
     <form id="drawingSearch" class="drawing-search">
@@ -24,8 +24,8 @@
                 <p id="drawingRevisionMeta" class="drawing-muted"></p>
                 <h3 class="drawing-history-title">개정 이력</h3>
                 <div class="drawing-history-scroll"><table><thead><tr><th>개정번호</th><th>등록일</th><th>적용일</th><th>주요 개정 내용</th><th>ECO NO.</th><th>등록자</th><th>상태</th><th>조회</th></tr></thead><tbody id="drawingRevisionHistory"></tbody></table></div>
-                <div class="drawing-actions"><button id="drawingRevise" type="button" data-write>개정 등록</button><button id="drawingActivate" type="button" data-write>현재 사용 적용</button><button id="drawingRetire" type="button" class="danger" data-write>도면 개정 폐기</button></div>
-                <div id="drawingDocuments"></div>
+                <div class="drawing-actions"><button id="drawingCorrect" type="button" data-write>수정</button><button id="drawingRevise" type="button" data-write>개정 등록</button><button id="drawingActivate" type="button" data-write>현재 사용 적용</button><button id="drawingRetire" type="button" class="danger" data-write>도면 개정 폐기</button></div>
+                <section id="drawingCorrectionHistory" class="no-print"></section><div id="drawingDocuments"></div>
                 <form id="drawingUpload" class="drawing-upload" hidden>
                     <h3>초안 도면 등록</h3><p class="drawing-muted">초안 저장 후 현재 사용 적용을 실행해 주세요. PDF와 CAD 원본을 함께 등록할 수 있습니다.</p>
                     <div class="drawing-form-grid">
@@ -47,6 +47,18 @@
         <p class="drawing-muted">새 초안에는 이번 도면 개정에 사용할 파일을 등록합니다. 기존 개정의 파일은 그대로 보존됩니다.</p>
         <div class="drawing-actions"><button type="submit" data-write>초안 생성</button><button id="drawingRevisionCancel" type="button" class="secondary">닫기</button></div>
     </form></dialog>
+    <dialog id="drawingMetadataDialog"><form id="drawingMetadataForm">
+        <h3 id="drawingMetadataTitle">도면 정보 수정</h3>
+        <label id="drawingEditTitleLabel">제목<input id="drawingEditTitle" maxlength="200"></label>
+        <label id="drawingEditNoLabel">도면번호<input id="drawingEditNo" maxlength="100"></label>
+        <label id="drawingEditEcoLabel">ECO NO.<input id="drawingEditEco" maxlength="100"></label>
+        <label id="drawingEditChangeLabel">개정 사유<textarea id="drawingEditChange" maxlength="4000" rows="2"></textarea></label>
+        <label>비고<textarea id="drawingEditNote" maxlength="8000" rows="2"></textarea></label>
+        <label>수정 사유 *<textarea id="drawingEditReason" maxlength="4000" rows="2" required></textarea></label>
+        <p class="drawing-muted">개정번호와 원본 파일을 유지하고 변경 전후를 수정 이력에 기록합니다.</p>
+        <div class="drawing-actions"><button type="submit" data-write>수정 저장</button><button id="drawingMetadataCancel" type="button" class="secondary">수정 취소</button></div>
+    </form></dialog>
 </div>
-<script src="/static/drawing_management.js?v=eco-history-1"></script>
+<script src="/static/document_correction.js?v=1"></script>
+<script src="/static/drawing_management.js?v=correction-1"></script>
 {% endblock %}

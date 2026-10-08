@@ -12,6 +12,7 @@ from sqlalchemy.exc import OperationalError
 
 from core import config
 from core.security import check_admin_permission, check_permission, parse_user_permissions
+from services.document_correction_service import with_correction_token
 from models.document import DocumentFile, ItemDocument, ItemRevision
 from models.models import CommonCodeModel, ItemMasterModel
 
@@ -199,16 +200,16 @@ def iso_time(value):
 
 
 def revision_dict(row):
-    return {"id": row.id, "item_id": row.item_id, "revision_code": row.revision_code,
+    return with_correction_token({"id": row.id, "item_id": row.item_id, "revision_code": row.revision_code,
             "sequence": row.sequence, "status": row.status, "previous_revision_id": row.previous_revision_id,
             "change_reason": row.change_reason, "eco_no": row.eco_no or "", "note": row.note, "created_by": row.created_by,
             "created_at": iso_time(row.created_at), "activated_at": iso_time(row.activated_at),
-            "superseded_at": iso_time(row.superseded_at), "retired_at": iso_time(row.retired_at), "retire_reason": row.retire_reason}
+            "superseded_at": iso_time(row.superseded_at), "retired_at": iso_time(row.retired_at), "retire_reason": row.retire_reason})
 
 
 def document_dict(db, row, type_names=None):
     files = db.scalars(select(DocumentFile).where(DocumentFile.document_id == row.id).order_by(DocumentFile.id)).all()
-    return {"id": row.id, "revision_id": row.revision_id, "document_type": row.document_type,
+    return with_correction_token({"id": row.id, "revision_id": row.revision_id, "document_type": row.document_type,
             "document_type_name": (type_names or {}).get(row.document_type, row.document_type),
             "document_no": row.document_no, "title": row.title, "document_revision": row.document_revision,
             "note": row.note, "created_by": row.created_by, "created_at": iso_time(row.created_at),
@@ -218,4 +219,4 @@ def document_dict(db, row, type_names=None):
                        "file_role": file.file_role, "created_by": file.created_by, "created_at": iso_time(file.created_at),
                        "can_preview": file.extension in {"pdf", "png", "jpg", "jpeg", "bmp"},
                        "download_url": f"/api/documents/files/{file.id}/download",
-                       "preview_url": f"/api/documents/files/{file.id}/preview"} for file in files]}
+                       "preview_url": f"/api/documents/files/{file.id}/preview"} for file in files]})

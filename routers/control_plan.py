@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from core.database import get_db
+from services.document_correction_service import with_correction_token, validate_correction, record_correction
 from core.security import get_current_user, check_admin_permission, parse_user_permissions
 from models.control_plan import ControlPlanRevision, ControlPlanInspectionLink
 from models.models import ItemMasterModel, ProcessModel, UserModel
@@ -56,6 +57,8 @@ class Row(BaseModel):
     engineering:bool=False
 
 class Save(BaseModel):
+    correction_reason:str=Field(default='',max_length=4000)
+    correction_token:str=Field(default='',max_length=64)
     model_config=ConfigDict(extra='forbid',str_strip_whitespace=True)
     item_id:int=Field(gt=0)
     document_no:str=Field(min_length=1,max_length=100)
@@ -98,9 +101,9 @@ def access(user,write=False):
         raise HTTPException(403,'관리계획서 쓰기 권한이 필요합니다.' if write else '관리계획서 조회 권한이 없습니다.')
 
 def output(row):
-    return {k:getattr(row,k) for k in ('id','item_id','document_no','revision_code','status','version',
+    return with_correction_token({k:getattr(row,k) for k in ('id','item_id','document_no','revision_code','status','version',
             'flow_revision_id','flow_version','previous_revision_id')} | {
-        'header':json.loads(row.header_json),'rows':json.loads(row.rows_json),'flow':json.loads(row.flow_snapshot_json)}
+        'header':json.loads(row.header_json),'rows':json.loads(row.rows_json),'flow':json.loads(row.flow_snapshot_json)})
 
 
 class InspectionLinkPayload(BaseModel):
@@ -174,9 +177,17 @@ def validate_flow(db,item_id,flow_id,version):
         raise HTTPException(409,'공정흐름도가 변경되었습니다. 최신 공정흐름도를 조회하고 다시 불러와 주세요.')
     return flow
 
-def assign(db,row,payload,user):
-    flow=validate_flow(db,payload.item_id,payload.flow_revision_id,payload.flow_version)
-    steps=flow_steps(db,flow.id); order={s.id:i for i,s in enumerate(steps)}
+def assign(db,row,payload,user,frozen=False):
+    if frozen:
+        snapshot=json.loads(row.flow_snapshot_json)
+        if payload.flow_version!=snapshot['version']:
+            raise HTTPException(422,'수정 시 기존 기준 공정흐름도 버전을 유지해야 합니다.')
+        order={s['id']:i for i,s in enumerate(snapshot['steps'])}
+        step_names={s['id']:s['step_name'] for s in snapshot['steps']}
+    else:
+        flow=validate_flow(db,payload.item_id,payload.flow_revision_id,payload.flow_version)
+        steps=flow_steps(db,flow.id); order={s.id:i for i,s in enumerate(steps)}
+        step_names={s.id:s.step_name for s in steps}
     positions=[]
     for n,input_row in enumerate(payload.rows,1):
         if input_row.flow_step_id not in order: raise HTTPException(422,f'{n}행: 기준 공정흐름도에 없는 공정입니다.')
@@ -185,10 +196,10 @@ def assign(db,row,payload,user):
     header=dict(payload.header);item=db.get(ItemMasterModel,payload.item_id)
     header.update(part_no=item.part_no,part_name=item.part_name,vehicle_model=item.vehicle_model or '')
     row.header_json=json.dumps(header,ensure_ascii=False)
-    step_names={s.id:s.step_name for s in steps}
     row.rows_json=json.dumps([x.model_dump() | {'process_detail':step_names[x.flow_step_id]} for x in payload.rows],ensure_ascii=False)
-    row.flow_revision_id=flow.id;row.flow_version=flow.version
-    row.flow_snapshot_json=json.dumps(flow_dict(db,flow),ensure_ascii=False)
+    if not frozen:
+        row.flow_revision_id=flow.id;row.flow_version=flow.version
+        row.flow_snapshot_json=json.dumps(flow_dict(db,flow),ensure_ascii=False)
     row.updated_by_id=user.id;row.updated_at=datetime.now()
 
 @router.get('/options')
@@ -260,10 +271,18 @@ def save(id:int,payload:Save,db:Session=Depends(get_db),user=Depends(get_current
     access(user,True)
     if payload.version is None: raise HTTPException(422,'문서 버전이 필요합니다.')
     row=existing(db,id,payload.version)
-    if row.status!='DRAFT': raise HTTPException(409,'적용된 문서는 개정 등록 후 수정해 주세요.')
+    if row.status not in {'DRAFT','CURRENT'}: raise HTTPException(409,'초안 또는 현재 사용 문서만 수정할 수 있습니다.')
+    before=output(row) if row.status=='CURRENT' else None
+    if before is not None:
+        validate_correction(payload.correction_reason,payload.correction_token,before)
+        if payload.flow_revision_id!=row.flow_revision_id:
+            raise HTTPException(422,'수정 시 기준 공정흐름도 연결은 유지해야 합니다. 연결 변경은 개정 등록을 이용해 주세요.')
     if (row.item_id,row.document_no,row.revision_code)!=(payload.item_id,payload.document_no,payload.revision_code):
         raise HTTPException(422,'저장된 문서의 품목·문서번호·개정번호는 변경할 수 없습니다.')
-    assign(db,row,payload,user);row.version+=1;commit(db);return output(row)
+    assign(db,row,payload,user,frozen=before is not None);row.version+=1
+    if before is not None:
+        record_correction(db,user,'control_plan_revisions',row.id,payload.correction_reason,before,output(row))
+    commit(db);return output(row)
 
 @router.post('/revisions/{id}/activate')
 def activate(id:int,payload:Version,db:Session=Depends(get_db),user=Depends(get_current_user)):

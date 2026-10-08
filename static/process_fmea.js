@@ -1,5 +1,6 @@
 (() => {
 'use strict';
+let correction=null;
 const root = document.getElementById('fmeaApp');
 if (!root) return;
 const el = id => document.getElementById(id);
@@ -21,7 +22,7 @@ async function request(url, method='GET', body) {
   const response=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});
   return MesResponse.read(response);
 }
-function editable(){return canWrite&&loaded&&(!selected||selected.status==='DRAFT')&&(!selected||selected.item_selectable===true);}
+function editable(){return canWrite&&loaded&&(!selected||selected.status==='DRAFT'||correction?.editing)&&(!selected||selected.item_selectable===true);}
 function updateControls(){
   const write=editable()&&!busy;
   root.querySelectorAll('.pf-fields input,.pf-fields select,.pf-fields textarea,#fmeaRows input,#fmeaRows textarea,#fmeaRows select').forEach(x=>x.disabled=!write);
@@ -29,16 +30,18 @@ function updateControls(){
   root.querySelectorAll('[data-pick-item]').forEach(x=>x.disabled=!!selected||!write);
   el('fmeaItem').disabled=!!selected||!write;el('fmeaNumber').disabled=!!selected||!write;el('fmeaCode').disabled=!!selected||!write;
   ['fmeaAddRow','fmeaSave'].forEach(id=>{if(el(id))el(id).disabled=!write;});
-  if(el('fmeaImport'))el('fmeaImport').disabled=!canWrite||!loaded||busy;
+  if(el('fmeaImport'))el('fmeaImport').disabled=!write||selected?.status==='CURRENT';
   if(el('fmeaImportFile'))el('fmeaImportFile').disabled=!write;
-  if(el('fmeaActivate'))el('fmeaActivate').disabled=!selected||!write;
-  if(el('fmeaRevise'))el('fmeaRevise').disabled=busy||!canWrite||!selected||selected.item_selectable!==true||!['CURRENT','SUPERSEDED'].includes(selected.status);
-  if(el('fmeaRetire'))el('fmeaRetire').disabled=busy||!canWrite||!selected||selected.status==='RETIRED';
+  if(el('fmeaActivate'))el('fmeaActivate').disabled=!selected||selected.status!=='DRAFT'||!write;
+  if(el('fmeaRevise'))el('fmeaRevise').disabled=busy||!canWrite||!selected||selected.item_selectable!==true||!!correction?.editing||!['CURRENT','SUPERSEDED'].includes(selected.status);
+  if(el('fmeaRetire'))el('fmeaRetire').disabled=busy||!canWrite||!selected||selected.status==='RETIRED'||!!correction?.editing;
   if(el('fmeaNew'))el('fmeaNew').disabled=busy||!loaded;
   el('fmeaRevisionSelect').disabled=busy||!selected;
   root.querySelectorAll('[data-remove-row],[data-add-flow-row]').forEach(x=>x.disabled=!write);
   root.querySelectorAll('[data-select-document],[data-history-revision]').forEach(x=>x.disabled=busy);
   ['fmeaSearch','fmeaReset'].forEach(id=>el(id).disabled=busy||!loaded);
+  if(correction?.editing){el('fmeaFlow').disabled=true;el('fmeaBasis').disabled=true;}
+  correction?.sync();
   const print=el('fmeaPrint');print.removeAttribute('href');print.setAttribute('aria-disabled','true');
   if(selected&&!dirty&&!busy){print.href='/api/process-fmea/revisions/'+selected.id+'/print';print.setAttribute('aria-disabled','false');}
 }
@@ -111,11 +114,12 @@ async function list(){
   updateControls();
 }
 function fill(detail){
+  correction?.reset();
   el('fmeaImportMessage').hidden=true;
   el('fmeaItemKeyword').value=detail.part_no;
   el('fmeaItemDisplay').textContent=detail.part_no+' · '+detail.part_name+(detail.item_selectable?'':' · 기존 이력 조회 전용');
   el('fmeaItemResults').hidden=true;el('fmeaItemResults').innerHTML='';
-  importedFlowVersion=null;selected=detail;rows=detail.rows;currentFlow=detail.flow||null;dirty=false;el('fmeaEditor').hidden=false;
+  importedFlowVersion=null;selected=detail;correction?.reset();rows=detail.rows;currentFlow=detail.flow||null;dirty=false;el('fmeaEditor').hidden=false;
   el('fmeaEditorTitle').textContent=detail.part_no+' · '+detail.part_name+' · 공정 FMEA';
   el('fmeaItem').value=detail.item_id;el('fmeaNumber').value=detail.document_no;MesRevisionNumber.setInput(el('fmeaCode'),detail.revision_code);
   const fields={fmeaCompany:'company',fmeaModelYear:'model_year',fmeaTeam:'team',fmeaAuthor:'prepared_by',fmeaDate:'date_prepared',fmeaNote:'note'};
@@ -142,7 +146,7 @@ async function startNew(){
   el('fmeaImportMessage').hidden=true;
   el('fmeaItemKeyword').value='';el('fmeaItemDisplay').textContent='선택된 품목 없음';
   el('fmeaItemResults').hidden=true;el('fmeaItemResults').innerHTML='';
-  importedFlowVersion=null;selected=null;rows=[];currentFlow=null;flowChoices=[];dirty=false;el('fmeaEditor').hidden=false;el('fmeaEditorTitle').textContent='신규 공정 FMEA';
+  importedFlowVersion=null;selected=null;correction?.reset();rows=[];currentFlow=null;flowChoices=[];dirty=false;el('fmeaEditor').hidden=false;el('fmeaEditorTitle').textContent='신규 공정 FMEA';
   ['fmeaNumber','fmeaCompany','fmeaModelYear','fmeaNote'].forEach(id=>el(id).value='');MesRevisionNumber.setInput(el('fmeaCode'),'');
   el('fmeaItem').value='';el('fmeaTeam').value=root.dataset.team;el('fmeaAuthor').value=root.dataset.author;el('fmeaDate').value=root.dataset.today;
   el('fmeaStatus').textContent='신규 · 초안';el('fmeaRevisionSelect').innerHTML='';el('fmeaHistoryNote').textContent='';el('fmeaChangeReason').textContent='';
@@ -277,15 +281,15 @@ if(el('fmeaImportFile'))el('fmeaImportFile').addEventListener('change',()=>{
  },error=>importMessage(error.message,true));
 });
 if(el('fmeaSave'))el('fmeaSave').addEventListener('click',()=>task(async()=>{
-  const body=payload();let result;
+  const body={...payload(),...correction?.fields()};const amended=!!correction?.editing;let result;
   if(selected){body.version=selected.version;result=await request('/api/process-fmea/revisions/'+selected.id,'PUT',body);}
   else{body.item_id=Number(el('fmeaItem').value);if(!body.item_id||el('fmeaItemKeyword').value.trim()!==options.items.find(x=>x.id===body.item_id)?.part_no){message('품번 조회 후 완제품을 선택해 주세요.',true);return;}body.document_no=el('fmeaNumber').value;body.revision_code=MesRevisionNumber.read(el('fmeaCode'));result=await request('/api/process-fmea/documents','POST',body);}
   // 저장 성공 직후 서버 값을 반영하여 후속 목록 조회 실패가 중복 저장을 만들지 않게 합니다.
-  fill(result);await selectRevision(result.id);await list();message('초안을 저장했습니다. 확인 후 현재 사용 적용해 주세요.');
+  fill(result);await selectRevision(result.id);await list();message(amended?'수정을 저장하고 변경 이력을 기록했습니다.':'초안을 저장했습니다. 확인 후 현재 사용 적용해 주세요.');
 }));
 if(el('fmeaActivate'))el('fmeaActivate').addEventListener('click',()=>{
   if(dirty){message('입력을 먼저 초안 저장한 뒤 적용해 주세요.',true);return;}
-  if(!confirm('이 개정을 현재 사용으로 적용할까요? 적용 후 수정은 개정 등록으로만 가능합니다.'))return;
+  if(!confirm('이 개정을 현재 사용으로 적용할까요? 적용 후 수정은 수정 버튼, 새 개정번호는 개정 등록을 사용합니다.'))return;
   task(async()=>{const result=await request('/api/process-fmea/revisions/'+selected.id+'/activate','POST',{version:selected.version});fill(result);await selectRevision(result.id);await list();message('현재 사용으로 적용했습니다. 이전 현재 사용본은 구버전으로 보존됩니다.');});
 });
 if(el('fmeaRevise'))el('fmeaRevise').addEventListener('click',async()=>{
@@ -299,6 +303,7 @@ if(el('fmeaRetire'))el('fmeaRetire').addEventListener('click',()=>{
   const reason=prompt('폐기 사유를 입력해 주세요. 기존 분석표와 이력은 보존됩니다.');if(!reason?.trim())return;
   task(async()=>{const result=await request('/api/process-fmea/revisions/'+selected.id+'/retire','POST',{version:selected.version,reason:reason.trim()});fill(result);await selectRevision(result.id);await list();message('개정을 폐기 처리했습니다. 기존 이력은 보존되며 구버전을 자동 적용하지 않습니다.');});
 });
+correction=MesDocumentCorrection.install({kind:'fmea',saveId:'fmeaSave',canWrite:()=>canWrite&&selected?.item_selectable===true,getDocument:()=>selected,busy:()=>busy,onChange:updateControls,refresh:selectRevision});
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
 task(async()=>{
   options=await request('/api/process-fmea/options');

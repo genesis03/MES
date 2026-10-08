@@ -1,5 +1,6 @@
 (() => {
     'use strict';
+    let correctionTarget=null, drawingHistoryRequest=0;
     const $ = id => document.getElementById(id);
     const state = {items: [], revisions: [], item: null, revision: null, options: null, previousId: null,
         canWrite: $('drawingApp').dataset.canWrite === 'true', busy: false, itemRequest: 0, documentRequest: 0};
@@ -31,6 +32,7 @@
         $('drawingNewRevision').hidden = state.revisions.length > 0;
         $('drawingNewRevision').disabled = !writable || !state.item;
         $('drawingRevise').disabled = !writable || !state.revision || state.revision.status === 'RETIRED';
+        $('drawingCorrect').disabled=!writable||!state.revision||!['DRAFT','CURRENT'].includes(state.revision.status);
         $('drawingActivate').disabled = !writable || state.revision?.status !== 'DRAFT';
         // 폐기는 사용중지 품목에서도 허용합니다.
         $('drawingRetire').disabled = !state.canWrite || state.busy || !state.revision || state.revision.status === 'RETIRED';
@@ -77,6 +79,8 @@
         state.documentRequest++;
         state.item = state.items.find(row => row.item_id === itemId);
         state.revision = null;
+        drawingHistoryRequest++;
+        $('drawingCorrectionHistory').replaceChildren();
         state.revisions = [];
         $('drawingDocuments').innerHTML = '';
         $('drawingUpload').reset();
@@ -115,6 +119,9 @@
         $('drawingUpload').reset(); updateActions();
         const documents = await api(`/api/documents/revisions/${revisionId}/documents`);
         if (request !== state.documentRequest) return;
+        state.documents=documents;
+        const historyRequest=++drawingHistoryRequest;
+        MesDocumentCorrection.history('drawing',row.id,$('drawingCorrectionHistory'),()=>historyRequest===drawingHistoryRequest).catch(error=>{if(historyRequest===drawingHistoryRequest)$('drawingCorrectionHistory').textContent=error.message;});
         $('drawingDocuments').innerHTML = documents.length ? documents.map(document => `
             <article class="drawing-document ${document.retired_at ? 'retired' : ''}">
                 <h3>${escape(document.title)} ${document.retired_at ? '<span class="drawing-badge">폐기</span>' : ''}</h3>
@@ -123,10 +130,51 @@
                 ${document.files.map(file => `<div class="drawing-file"><span class="drawing-file-name">${escape(file.original_name)}<br><small>${(file.size_bytes / 1024).toFixed(1)} KB · ${escape(file.extension.toUpperCase())}</small></span>
                     ${file.can_preview ? `<a class="drawing-view-link" href="${escape(file.preview_url)}" target="_blank" rel="noopener noreferrer" title="도면 보기" aria-label="도면 보기">도면 보기</a>` : ''}
                     <a class="drawing-icon-link" href="${escape(file.download_url)}" title="다운로드" aria-label="다운로드">${downloadIcon}</a></div>`).join('')}
+                ${['DRAFT','CURRENT'].includes(row.status)&&!document.retired_at&&state.canWrite?`<button type="button" class="secondary" data-write data-edit-document="${document.id}">정보 수정</button>`:''}
+                <button type="button" class="secondary" data-document-history="${document.id}">수정 이력</button><section id="drawingFileHistory${document.id}" hidden></section>
                 ${row.status === 'DRAFT' && !document.retired_at && state.canWrite ? `<button type="button" class="danger" data-write data-retire-document="${document.id}">문서 폐기</button>` : ''}
             </article>`).join('') : '<p class="drawing-muted">등록된 도면이 없습니다.</p>';
         updateActions();
     }
+
+    function openCorrection(document=null) {
+        correctionTarget=document||state.revision;
+        if(!correctionTarget||state.busy)return;
+        const file=!!document;
+        $('drawingMetadataForm').reset();
+        $('drawingMetadataTitle').textContent=file?'도면 기본정보 수정':'도면 개정정보 수정';
+        $('drawingEditTitleLabel').hidden=!file;$('drawingEditNoLabel').hidden=!file;
+        $('drawingEditEcoLabel').hidden=file;$('drawingEditChangeLabel').hidden=file;
+        $('drawingEditTitle').required=file;
+        $('drawingEditTitle').value=correctionTarget.title||'';$('drawingEditNo').value=correctionTarget.document_no||'';
+        $('drawingEditEco').value=correctionTarget.eco_no||'';$('drawingEditChange').value=correctionTarget.change_reason||'';
+        $('drawingEditNote').value=correctionTarget.note||'';
+        $('drawingMetadataDialog').dataset.file=String(file);
+        $('drawingMetadataDialog').showModal();$('drawingEditReason').focus();
+    }
+    $('drawingCorrect').onclick=()=>openCorrection();
+    $('drawingMetadataCancel').onclick=()=>{if(!state.busy)$('drawingMetadataDialog').close();};
+    $('drawingMetadataDialog').addEventListener('cancel',event=>{if(state.busy)event.preventDefault();});
+    $('drawingDocuments').addEventListener('click',event=>{
+        const edit=event.target.closest('[data-edit-document]');
+        if(edit)openCorrection(state.documents.find(x=>x.id===Number(edit.dataset.editDocument)));
+        const history=event.target.closest('[data-document-history]');
+        if(history){const id=Number(history.dataset.documentHistory),target=$('drawingFileHistory'+id);target.hidden=!target.hidden;if(!target.hidden)MesDocumentCorrection.history('drawing-file',id,target).catch(error=>target.textContent=error.message);}
+    });
+    $('drawingMetadataForm').onsubmit=event=>{
+        event.preventDefault();
+        run(async()=>{
+            const file=$('drawingMetadataDialog').dataset.file==='true';
+            const body={correction_reason:$('drawingEditReason').value.trim(),correction_token:correctionTarget.correction_token,note:$('drawingEditNote').value.trim()};
+            if(file){body.title=$('drawingEditTitle').value.trim();body.document_no=$('drawingEditNo').value.trim();}
+            else{body.eco_no=$('drawingEditEco').value.trim();body.change_reason=$('drawingEditChange').value.trim();}
+            const revisionId=state.revision.id;
+            await api(file?`/api/documents/${correctionTarget.id}/metadata`:`/api/documents/revisions/${correctionTarget.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+            $('drawingMetadataDialog').close();
+            await loadItems();$('drawingRevision').value=String(revisionId);await selectRevision(revisionId);
+            message('수정을 저장하고 변경 이력을 기록했습니다.');
+        });
+    };
 
     function openRevision(previous = null) {
         state.previousId = previous?.id || null;

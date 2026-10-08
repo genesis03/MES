@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session, object_session
 
 from core.config import BASE_DIR
 from core.database import get_db
+from services.document_service import lock_item
+from services.document_correction_service import with_correction_token, validate_correction, record_correction
 from core.security import check_admin_permission, get_current_user, parse_user_permissions
 from models.inspection_standard import InspectionStandard, InspectionStandardItem, InspectionStandardPrecheck
 from models.models import ItemMasterModel, UserModel
@@ -68,6 +70,8 @@ class InspectionItemPayload(BaseModel):
 
 
 class StandardPayload(BaseModel):
+    correction_reason: str = Field(default="", max_length=4000)
+    correction_token: str = Field(default="", max_length=64)
     document_type: str = Field(max_length=20)
     item_id: int = Field(gt=0)
     process_flow_step_key_id: Optional[int] = Field(default=None, gt=0)
@@ -356,7 +360,7 @@ def _standard_dict(row: InspectionStandard, include_children=False):
             "inspection_frequency": x.inspection_frequency or "", "sample_qty_text": x.sample_qty_text or "",
             "record_management": x.record_management or "", "note": x.note or "",
         } for x in row.items]
-    return data
+    return with_correction_token(data)
 
 
 @router.get(ROOT_PATH, response_class=HTMLResponse)
@@ -651,8 +655,18 @@ def update_standard(
     if not row:
         raise HTTPException(404, "검사기준서를 찾을 수 없습니다.")
     _require_access(current_user, row.document_type, write=True)
-    if row.status != "DRAFT":
-        raise HTTPException(409, "작성중 기준서만 수정할 수 있습니다. 현재사용 문서는 개정해 주세요.")
+    lock_item(db, row.item_id)
+    db.refresh(row)
+    if row.status not in {"DRAFT", "CURRENT"}:
+        raise HTTPException(409, "초안 또는 현재 사용 문서만 수정할 수 있습니다.")
+    before = _standard_dict(row, include_children=True) if row.status == "CURRENT" else None
+    if before is not None:
+        validate_correction(payload.correction_reason, payload.correction_token, before)
+        if revision_key(payload.revision) != revision_key(row.revision):
+            raise HTTPException(422, "수정 시 개정번호는 유지해야 합니다.")
+        if (payload.process_flow_step_key_id, payload.control_plan_revision_id, payload.control_plan_flow_step_id) != (
+            row.process_flow_step_key_id, row.control_plan_revision_id, before["control_plan_flow_step_id"]):
+            raise HTTPException(422, "수정 시 공정·관리계획서 연결은 유지해야 합니다.")
     if payload.document_type.strip().upper() != row.document_type or payload.item_id != row.item_id:
         raise HTTPException(422, "기준서 구분과 품번은 작성 후 변경할 수 없습니다.")
     category, code = scope(db, row.document_type, payload.inspection_category, payload.inspection_process_code)
@@ -669,7 +683,8 @@ def update_standard(
     if any(revision_key(x.revision) == revision_key(revision) for x in query.all()):
         raise HTTPException(409, "동일 REV 기준서가 이미 존재합니다.")
     _validate_items(payload.items)
-    row.revision = revision
+    if before is None:
+        row.revision = revision
     row.management_no = _clean(payload.management_no)
     row.effective_date = _clean(payload.effective_date)
     row.change_summary = _clean(payload.change_summary)
@@ -678,8 +693,12 @@ def update_standard(
     row.prepared_by = _clean(payload.prepared_by)
     row.reviewed_by = _clean(payload.reviewed_by)
     row.approved_by = _clean(payload.approved_by)
-    _assign_plan_source(db, row, payload, current_user)
+    if before is None:
+        _assign_plan_source(db, row, payload, current_user)
     _replace_children(row, payload)
+    if before is not None:
+        db.flush()
+        record_correction(db, current_user, "inspection_standards", row.id, payload.correction_reason, before, _standard_dict(row, include_children=True))
     db.commit()
     db.refresh(row)
     return _standard_dict(row, include_children=True)

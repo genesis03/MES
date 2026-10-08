@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from core.config import BASE_DIR
 from core.database import get_db
+from services.document_correction_service import validate_correction, record_correction
 from services.revision_number_service import normalize_revision_code, revision_key
 from services.fmea_excel_import import FmeaImportError, MAX_FILE_BYTES, parse_company_fmea
 from core.security import get_current_user, get_current_user_optional
@@ -22,7 +23,7 @@ from services.document_service import actor_name, lock_item
 from services.standard_document_item_service import require_finished_item, selectable_finished_items
 from services.fmea_service import (
     FMEA_MENU_PATH, HEADER_FIELDS, ROW_FIELDS, commit_fmea, get_revision, has_fmea_access,
-    lock_fmea_revision, require_fmea_access, revision_dict,
+    lock_fmea_revision, require_fmea_access, revision_dict, frozen_steps,
 )
 
 router = APIRouter(tags=["Process FMEA"])
@@ -81,6 +82,8 @@ class CreatePayload(HeaderPayload):
 
 
 class SavePayload(HeaderPayload):
+    correction_reason: str = Field(default="", max_length=4000)
+    correction_token: str = Field(default="", max_length=64)
     version: int = Field(gt=0)
     rows: list[RowPayload] = Field(default_factory=list, max_length=500)
 
@@ -126,6 +129,8 @@ def _save_rows(db, revision, payload_rows, user):
     if len(ids) != len(set(ids)) or any(row_id not in existing for row_id in ids):
         raise HTTPException(422, "분석행이 중복되었거나 다른 개정의 행이 포함되어 있습니다.")
     steps = {x.id: x for x in flow_steps(db, revision.flow_revision_id)} if revision.flow_revision_id else {}
+    if revision.status == "CURRENT" and revision.flow_snapshot_json:
+        steps = frozen_steps(json.loads(revision.flow_snapshot_json))
     for index, payload in enumerate(payload_rows, 1):
         if payload.flow_step_id and payload.flow_step_id not in steps:
             raise HTTPException(422, f"{index}행: 선택한 공정흐름도의 공정으로 연결해 주세요. 기존 행을 임의로 변경하지 않습니다.")
@@ -304,12 +309,20 @@ def create_document(payload: CreatePayload, db: Session = Depends(get_db), user=
 def save_draft(revision_id: int, payload: SavePayload, db: Session = Depends(get_db), user=Depends(get_current_user)):
     require_fmea_access(user, "WRITE")
     item, _, revision = lock_fmea_revision(db, revision_id, payload.version)
-    if revision.status != "DRAFT":
-        raise HTTPException(409, "초안만 수정할 수 있습니다. 적용된 문서는 개정 등록해 주세요.")
+    if revision.status not in {"DRAFT", "CURRENT"}:
+        raise HTTPException(409, "초안 또는 현재 사용 문서만 수정할 수 있습니다.")
+    before = revision_dict(db, revision) if revision.status == "CURRENT" else None
+    if before is not None:
+        validate_correction(payload.correction_reason, payload.correction_token, before)
+        if payload.flow_revision_id != revision.flow_revision_id or payload.basis_item_revision_id != revision.basis_item_revision_id:
+            raise HTTPException(422, "수정 시 기준 공정흐름도·도면 연결은 유지해야 합니다. 연결 변경은 개정 등록을 이용해 주세요.")
     _header(db, revision, item, payload)
     _save_rows(db, revision, payload.rows, user)
     revision.version += 1
     revision.updated_by_id, revision.updated_at = user.id, datetime.now()
+    if before is not None:
+        db.flush()
+        record_correction(db, user, "fmea_revisions", revision.id, payload.correction_reason, before, revision_dict(db, revision))
     commit_fmea(db)
     return revision_dict(db, revision)
 

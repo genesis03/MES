@@ -1,5 +1,6 @@
 """공정 FMEA 권한/직렬화/동시 수정 방지. 파일 도면의 현재 사용 상태는 변경하지 않습니다."""
 import json
+from services.document_correction_service import with_correction_token
 from types import SimpleNamespace
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -170,4 +171,4 @@ def revision_dict(db, row, include_rows=True):
             for step in result["flow"]["steps"]:
                 if step["id"] in names:
                     step["step_name"] = names[step["id"]]
-    return result
+    return with_correction_token(result)
