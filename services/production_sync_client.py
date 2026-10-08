@@ -1,5 +1,7 @@
 """Read-only adapter for the observed UNI_MES Login/List protocol."""
 import http.cookiejar
+import time
+from http.client import IncompleteRead, RemoteDisconnected
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError, URLError
@@ -43,6 +45,24 @@ def post(opener, values):
     return values
 
 
+def query_with_retry(opener, payload):
+    """Retry only read-only List transport failures, never login or bad data."""
+    for attempt in range(3):
+        try:
+            return post(opener, payload)
+        except HTTPError as exc:
+            if exc.code not in (408, 429, 500, 502, 503, 504):
+                raise SyncError(f'외부 실적 조회 HTTP 오류({exc.code}). 로그인과 조회 권한을 확인해 주세요.') from exc
+            failure = f'외부 실적 조회 HTTP 오류({exc.code}).'
+        except (TimeoutError, URLError, OSError, IncompleteRead, RemoteDisconnected) as exc:
+            failure = ('외부 실적 조회 응답 시간이 초과되었습니다.' if isinstance(exc, TimeoutError)
+                       or isinstance(getattr(exc, 'reason', None), TimeoutError)
+                       else '외부 실적 조회 연결이 끊기거나 연결할 수 없습니다.')
+        if attempt < 2:
+            time.sleep(attempt + 1)
+    raise SyncError(failure + ' 같은 날짜를 총 3회 시도했으나 실패했습니다.')
+
+
 class ProductionClient:
     def __init__(self, username, password):
         try:
@@ -80,7 +100,7 @@ class ProductionClient:
                         'MES.Product.Set.JobCondSet.JOB_DATE1': day.isoformat(),
                         'MES.Product.Set.JobCondSet.JOB_DATE2': day.isoformat()})
         try:
-            result = post(self.opener, payload)
+            result = query_with_retry(self.opener, payload)
             prefix = 'Common.Set.LotSet.'
             if (any(values != [''] for key, values in result.items()
                     if key in ('jump.url', 'jump.object.name', 'jump.form.message'))
@@ -124,17 +144,29 @@ class ProductionClient:
                 row['PRODUCT_NM'] = names[i] if len(names) == count else ''
                 if not all(row[key].strip() for key in ('ITEM_NUM', 'PROC_TYPE_NM', 'JOB_TIME', 'JOB_NUM', 'LOT_NUM')):
                     raise SyncError('품번·공정·작업일·작업번호·LOT 중 누락된 항목이 있습니다.')
-                actual = datetime.strptime(row['JOB_TIME'], '%Y%m%d').date()
+                location = f'{i + 1}행'
+                try:
+                    actual = datetime.strptime(row['JOB_TIME'], '%Y%m%d').date()
+                except ValueError as exc:
+                    raise SyncError(f'{location} 작업일(JOB_TIME) 형식이 잘못되었습니다. YYYYMMDD 형식이 필요합니다.') from exc
                 if actual != day:
                     raise SyncError('요청한 작업일과 반환된 실적 날짜가 일치하지 않습니다.')
                 for key in ('JOB_QTY', 'LOT_QTY', 'FAULT_QTY', 'F10'):
-                    number = Decimal(row[key])
+                    label = {'JOB_QTY': '양품', 'LOT_QTY': 'LOT 수량', 'FAULT_QTY': '불량', 'F10': 'SET-UP'}[key]
+                    try:
+                        number = Decimal(row[key])
+                    except InvalidOperation as exc:
+                        raise SyncError(f'{location} {label}({key}) 수량이 비어 있거나 숫자 형식이 아닙니다.') from exc
                     if not number.is_finite() or number < 0:
-                        raise SyncError('실적 수량이 유효하지 않습니다.')
+                        raise SyncError(f'{location} {label}({key}) 수량이 유효하지 않습니다.')
                 for key in ('JOB_ST_TIME', 'JOB_END_TIME'):
                     if row[key]:
-                        datetime.strptime(row[key], '%Y%m%d%H%M%S')
+                        try:
+                            datetime.strptime(row[key], '%Y%m%d%H%M%S')
+                        except ValueError as exc:
+                            label = '시작시간' if key == 'JOB_ST_TIME' else '종료시간'
+                            raise SyncError(f'{location} {label}({key}) 형식이 잘못되었습니다. YYYYMMDDHHMMSS 형식이 필요합니다.') from exc
                 rows.append(row)
             return rows, warnings
-        except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, ValueError, InvalidOperation) as exc:
-            raise SyncError('실적 조회 통신 또는 날짜·수량 형식 확인에 실패했습니다.') from exc
+        except UnicodeError as exc:
+            raise SyncError('외부 실적 조회 응답의 문자 인코딩을 읽을 수 없습니다.') from exc

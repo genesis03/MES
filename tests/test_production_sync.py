@@ -95,6 +95,62 @@ def test_adapter_rejects_invalid_rows(monkeypatch, change):
         client.fetch_day(DAY)
 
 
+@pytest.mark.parametrize('change, field', [
+    ({'F10': ''}, 'F10'), ({'JOB_TIME': 'invalid'}, 'JOB_TIME'),
+    ({'JOB_END_TIME': '20260325250000'}, 'JOB_END_TIME')])
+def test_format_error_identifies_row_and_field_without_retry(monkeypatch, change, field):
+    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
+    calls = []
+    def reply(*_):
+        calls.append(1)
+        return response([row(**change)])
+    monkeypatch.setattr(source, 'post', reply)
+    with pytest.raises(source.SyncError) as error:
+        client.fetch_day(DAY)
+    assert '1행' in str(error.value) and field in str(error.value)
+    assert len(calls) == 1
+
+
+def test_transient_timeout_retries_same_day_without_duplicate_save(setup, monkeypatch):
+    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
+    calls = []
+    def reply(_, payload):
+        calls.append(payload['MES.Product.Set.JobCondSet.JOB_DATE1'])
+        if len(calls) < 3: raise TimeoutError('private transport details')
+        return response([row()])
+    monkeypatch.setattr(source, 'post', reply)
+    monkeypatch.setattr(source.time, 'sleep', lambda _: None)
+    monkeypatch.setattr(sync, 'ProductionClient', lambda *_: client)
+    token, run_id = lease(setup)
+    sync.execute(DAY, DAY, token, run_id)
+    assert calls == [DAY.isoformat()] * 3
+    with setup.sessions() as db:
+        assert db.get(ProductionSyncRun, run_id).status == 'SUCCESS'
+        assert db.query(ExternalProductionRecord).count() == 1
+
+
+def test_exhausted_transport_retry_is_distinct_from_format_error(monkeypatch):
+    monkeypatch.setattr(source.time, 'sleep', lambda _: None)
+    calls = []
+    def fail(*_):
+        calls.append(1); raise TimeoutError('private transport details')
+    monkeypatch.setattr(source, 'post', fail)
+    with pytest.raises(source.SyncError) as error:
+        source.query_with_retry(object(), {})
+    assert len(calls) == 3 and '총 3회' in str(error.value) and '응답 시간' in str(error.value)
+    assert 'private transport details' not in str(error.value)
+
+
+def test_http_auth_failure_is_not_retried(monkeypatch):
+    calls = []
+    def fail(*_):
+        calls.append(1); raise source.HTTPError('url', 401, 'private', {}, None)
+    monkeypatch.setattr(source, 'post', fail)
+    with pytest.raises(source.SyncError, match='HTTP 오류\\(401\\)'):
+        source.query_with_retry(object(), {})
+    assert len(calls) == 1
+
+
 def test_ambiguous_product_name_does_not_shift_quantities(monkeypatch):
     client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
     monkeypatch.setattr(source, 'post', lambda *_: response([row(PRODUCT_NM='A,B')]))
