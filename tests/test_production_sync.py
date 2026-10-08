@@ -83,11 +83,41 @@ def test_adapter_uses_exact_command_dates_and_preserves_setup(monkeypatch):
     assert rows == [row()] and not warnings
     assert captured[0]['run.object.name'] == 'MES.Product.ProcLotList.ProcLotListObj'
     assert captured[0]['jump.form.code'] == 'List'
-    assert captured[0]['MES.Product.Set.JobCondSet.JOB_DATE1'] == DAY.isoformat()
+    assert captured[0]['MES.Product.Set.JobCondSet.JOB_DATE1'] == (DAY - timedelta(days=1)).isoformat()
+    assert captured[0]['MES.Product.Set.JobCondSet.JOB_DATE2'] == (DAY + timedelta(days=1)).isoformat()
     assert captured[0]['MES.Product.Set.JobCondSet.PROC_TYPE'] == ''
 
 
-@pytest.mark.parametrize('change', [{'F10': ''}, {'F10': '-1'}, {'JOB_QTY': 'NaN'}, {'JOB_TIME': '20260324'}, {'JOB_ST_TIME': 'invalid'}, {'LOT_NUM': ''}])
+def test_padded_query_recovers_rows_from_exclusive_bounds_and_filters_neighbors(monkeypatch):
+    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
+    def reply(_, payload):
+        start = date.fromisoformat(payload['MES.Product.Set.JobCondSet.JOB_DATE1'])
+        end = date.fromisoformat(payload['MES.Product.Set.JobCondSet.JOB_DATE2'])
+        if start == end: return empty_query_response()
+        return response([row('PREVIOUS', DAY - timedelta(days=1)), row(),
+                         row('NEXT', DAY + timedelta(days=1))])
+    monkeypatch.setattr(source, 'post', reply)
+    rows, _ = client.fetch_day(DAY)
+    assert rows == [row()]
+
+
+def test_zero_year_import_does_not_complete_initial_sync(setup, monkeypatch):
+    class Client:
+        def __init__(self, *_): pass
+        def fetch_day(self, day): return [], []
+    monkeypatch.setattr(sync, 'ProductionClient', Client)
+    with setup.sessions() as db:
+        settings = sync.state(db); settings.enabled = True; db.commit()
+    start = DAY.replace(month=1, day=1)
+    token, run_id = sync.claim(start, DAY, 'INITIAL')
+    sync.execute(start, DAY, token, run_id)
+    with setup.sessions() as db:
+        run = db.get(ProductionSyncRun, run_id)
+        assert run.status == 'FAILED' and '0건' in run.error
+        assert db.get(ProductionSyncState, 1).initial_completed_at is None
+
+
+@pytest.mark.parametrize('change', [{'F10': ''}, {'F10': '-1'}, {'JOB_QTY': 'NaN'}, {'JOB_TIME': '20260322'}, {'JOB_ST_TIME': 'invalid'}, {'LOT_NUM': ''}])
 def test_adapter_rejects_invalid_rows(monkeypatch, change):
     client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
     monkeypatch.setattr(source, 'post', lambda *_: response([row(**change)]))
@@ -123,7 +153,7 @@ def test_transient_timeout_retries_same_day_without_duplicate_save(setup, monkey
     monkeypatch.setattr(sync, 'ProductionClient', lambda *_: client)
     token, run_id = lease(setup)
     sync.execute(DAY, DAY, token, run_id)
-    assert calls == [DAY.isoformat()] * 3
+    assert calls == [(DAY - timedelta(days=1)).isoformat()] * 3
     with setup.sessions() as db:
         assert db.get(ProductionSyncRun, run_id).status == 'SUCCESS'
         assert db.query(ExternalProductionRecord).count() == 1
@@ -179,7 +209,7 @@ def test_empty_day_without_dataset_continues_to_next_day(setup, monkeypatch):
     start = DAY - timedelta(days=1)
     token, run_id = sync.claim(start, DAY, 'INITIAL')
     sync.execute(start, DAY, token, run_id)
-    assert requested == [start.isoformat(), DAY.isoformat()]
+    assert requested == [(start - timedelta(days=1)).isoformat(), (DAY - timedelta(days=1)).isoformat()]
     with setup.sessions() as db:
         run = db.get(ProductionSyncRun, run_id)
         assert run.status == 'SUCCESS'
@@ -286,7 +316,7 @@ def test_scheduler_fetches_january_once_then_recent_period(setup, monkeypatch):
         def wait(self, *_): self.calls += 1; return self.calls > 1
     class Client:
         def __init__(self, *_): pass
-        def fetch_day(self, day): return [], []
+        def fetch_day(self, day): return ([row()], []) if day == DAY else ([], [])
     monkeypatch.setattr(sync, 'ProductionClient', Client)
     with setup.sessions() as db:
         settings = sync.state(db); settings.enabled = True; db.commit()

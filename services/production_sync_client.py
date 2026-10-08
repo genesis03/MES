@@ -2,7 +2,7 @@
 import http.cookiejar
 import time
 from http.client import IncompleteRead, RemoteDisconnected
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlencode
@@ -93,12 +93,16 @@ class ProductionClient:
             raise SyncError('외부 생산 시스템에 접속하거나 로그인할 수 없습니다.') from exc
 
     def fetch_day(self, day):
+        # The successful external probe used distinct date bounds. Same-day
+        # bounds can describe an empty interval on this server. Pad both ends
+        # to cover inclusive/exclusive boundaries, then retain only this day.
+        query_start, query_end = day - timedelta(days=1), day + timedelta(days=1)
         payload = common()
         payload.update({'MES.Product.Set.JobCondSet.' + key: '' for key in CONDITIONS})
         payload.update(self.context)
         payload.update({'run.object.name': 'MES.Product.ProcLotList.ProcLotListObj', 'jump.form.code': 'List',
-                        'MES.Product.Set.JobCondSet.JOB_DATE1': day.isoformat(),
-                        'MES.Product.Set.JobCondSet.JOB_DATE2': day.isoformat()})
+                        'MES.Product.Set.JobCondSet.JOB_DATE1': query_start.isoformat(),
+                        'MES.Product.Set.JobCondSet.JOB_DATE2': query_end.isoformat()})
         try:
             result = query_with_retry(self.opener, payload)
             prefix = 'Common.Set.LotSet.'
@@ -149,8 +153,10 @@ class ProductionClient:
                     actual = datetime.strptime(row['JOB_TIME'], '%Y%m%d').date()
                 except ValueError as exc:
                     raise SyncError(f'{location} 작업일(JOB_TIME) 형식이 잘못되었습니다. YYYYMMDD 형식이 필요합니다.') from exc
-                if actual != day:
+                if not query_start <= actual <= query_end:
                     raise SyncError('요청한 작업일과 반환된 실적 날짜가 일치하지 않습니다.')
+                if actual != day:
+                    continue
                 for key in ('JOB_QTY', 'LOT_QTY', 'FAULT_QTY', 'F10'):
                     label = {'JOB_QTY': '양품', 'LOT_QTY': 'LOT 수량', 'FAULT_QTY': '불량', 'F10': 'SET-UP'}[key]
                     try:

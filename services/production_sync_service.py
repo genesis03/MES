@@ -141,6 +141,9 @@ def execute(start, end, token, run_id):
             counts['completed_days'] += 1
             counts['warnings'] = sorted(set(counts['warnings'] + warnings))
             day += timedelta(days=1)
+        if not counts['received'] and ((end - start).days >= 30 or (start.month, start.day) == (1, 1)):
+            querying_day = None
+            raise SyncError('전체 기간에서 수신한 실적이 0건입니다. 조회 조건과 계정 권한을 확인해야 하므로 가져오기 완료로 확정하지 않습니다.')
     except (SyncError, CredentialError) as exc:
         error = f'{querying_day.isoformat()} 조회: {exc}' if querying_day else str(exc)
     except Exception:
