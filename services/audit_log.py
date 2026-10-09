@@ -134,6 +134,15 @@ def _after_update(mapper, connection, target) -> None:
     if not changed:
         return
 
+    # Polling timestamps are operational metadata, not business changes.
+    polling_fields = {
+        "external_production_records": {"last_seen_at"},
+        "external_packing_records": {"last_seen_at"},
+        "packing_source_presence": {"checked_at"},
+    }
+    if set(changed).issubset(polling_fields.get(target.__table__.name, set())):
+        return
+
     _insert_log(
         connection,
         target,
