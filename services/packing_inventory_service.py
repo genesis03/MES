@@ -6,6 +6,7 @@ visible in packing status but cannot contribute to stock totals.
 from collections import Counter
 from decimal import Decimal, InvalidOperation
 
+from models.inventory_movement import InventoryMovementModel
 from models.models import PurchaseInboundItem, ItemMasterModel
 from models.production_lot import ProductionLotModel
 from models.packing import PackingBox, PackingMaster
@@ -118,4 +119,11 @@ def packing_stock_snapshot(db, connections=None):
                      'lot_qty': float(packed), 'used_qty': float(shipped),
                      'remaining_qty': float(max(packed - shipped, Decimal(0))), 'adjustment_qty': 0.0,
                      'storage_location': item.inbound_loc or '', 'read_only': True})
+    # Location changes are MES metadata, independent of imported balances.
+    movements = {}
+    for movement in db.query(InventoryMovementModel).order_by(
+            InventoryMovementModel.created_at.desc(), InventoryMovementModel.id.desc()):
+        movements.setdefault(identity(movement.item_id, movement.lot_no), movement.to_location)
+    for row in rows:
+        row['storage_location'] = movements.get(identity(row['item_id'], row['lot_no']), row['storage_location'])
     return rows, info

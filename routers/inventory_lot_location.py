@@ -82,11 +82,11 @@ def _storage_display(code: Optional[str], names: dict[str, str]) -> str:
     return names.get(value, value) if value else ""
 
 
-def _current_storage(db: Session, lot_no: str, original: Optional[str]) -> str:
+def _current_storage(db: Session, lot_no: str, original: Optional[str], item_id: int) -> str:
     # 수동 창고/저장위치 이동 이력이 있으면 가장 최신 위치를 최우선으로 봅니다.
     movement = (
         db.query(InventoryMovementModel)
-        .filter(InventoryMovementModel.lot_no == lot_no)
+        .filter(InventoryMovementModel.lot_no == lot_no, InventoryMovementModel.item_id == item_id)
         .order_by(InventoryMovementModel.created_at.desc(), InventoryMovementModel.id.desc())
         .first()
     )
@@ -165,7 +165,7 @@ def inventory_lots_with_current_location(
             "lot_no": item.internal_lot_no,
             "created_at": master.created_at.strftime("%Y-%m-%d %H:%M:%S") if master.created_at else master.inbound_date,
             "lot_qty": qty, "used_qty": used, "adjustment_qty": _adjustment_qty(db, item.internal_lot_no, item.item_id), "remaining_qty": max(qty - used + _adjustment_qty(db, item.internal_lot_no, item.item_id), 0.0),
-            "storage_location": _storage_display(_current_storage(db, item.internal_lot_no, item.storage_location), names),
+            "storage_location": _storage_display(_current_storage(db, item.internal_lot_no, item.storage_location, item.item_id), names),
         })
 
     production_rows = (
@@ -186,7 +186,7 @@ def inventory_lots_with_current_location(
             "lot_no": lot.lot_no,
             "created_at": lot.created_at.strftime("%Y-%m-%d %H:%M:%S") if lot.created_at else "",
             "lot_qty": qty, "used_qty": used, "adjustment_qty": _adjustment_qty(db, lot.lot_no, lot.item_id), "remaining_qty": max(qty - used + _adjustment_qty(db, lot.lot_no, lot.item_id), 0.0),
-            "storage_location": _storage_display(_current_storage(db, lot.lot_no, lot.storage_location), names),
+            "storage_location": _storage_display(_current_storage(db, lot.lot_no, lot.storage_location, lot.item_id), names),
         })
 
     packed_rows, _ = packing_stock_snapshot(db)
@@ -239,7 +239,7 @@ def inventory_status(
         remaining = max(float(lot_qty or 0) - _used_qty(db, lot_no, item_id) + _adjustment_qty(db, lot_no, item_id), 0.0)
         if remaining <= 1e-9:
             return
-        location_code = _current_storage(db, lot_no, original_location)
+        location_code = _current_storage(db, lot_no, original_location, item_id)
         key = (int(item_id), str(location_code or ""))
         item = item_map.get(item_id)
         if item is None:
@@ -350,6 +350,10 @@ def inventory_adjustment_lots(
             or_(
                 ItemMasterModel.part_no.ilike(f"%{q}%"),
                 ItemMasterModel.part_name.ilike(f"%{q}%"),
+                ItemMasterModel.id.in_(db.query(PurchaseInboundItem.item_id).filter(
+                    PurchaseInboundItem.internal_lot_no.ilike(f"%{q}%"))),
+                ItemMasterModel.id.in_(db.query(ProductionLotModel.item_id).filter(
+                    ProductionLotModel.lot_no.ilike(f"%{q}%"))),
             )
         )
     items = item_query.limit(limit).all()
@@ -387,7 +391,7 @@ def inventory_adjustment_lots(
                 "part_no": part.part_no if part else item.part_no,
                 "part_name": part.part_name if part else "",
                 "lot_no": item.internal_lot_no,
-                "storage_location": _storage_display(_current_storage(db, item.internal_lot_no, item.storage_location), names),
+                "storage_location": _storage_display(_current_storage(db, item.internal_lot_no, item.storage_location, item.item_id), names),
                 "current_qty": current_qty,
                 "unit": part.unit if part else item.unit,
                 "created_at": master.inbound_date,
@@ -416,7 +420,7 @@ def inventory_adjustment_lots(
                 "part_no": part.part_no if part else lot.part_no,
                 "part_name": part.part_name if part else "",
                 "lot_no": lot.lot_no,
-                "storage_location": _storage_display(_current_storage(db, lot.lot_no, lot.storage_location), names),
+                "storage_location": _storage_display(_current_storage(db, lot.lot_no, lot.storage_location, lot.item_id), names),
                 "current_qty": current_qty,
                 "unit": part.unit if part else "EA",
                 "created_at": lot.created_at.strftime("%Y-%m-%d") if lot.created_at else "",
@@ -450,7 +454,7 @@ def create_inventory_adjustment(
     if abs(adjustment_qty) <= 1e-9:
         raise HTTPException(422, "현재 재고와 조정 후 재고가 같습니다.")
 
-    location_code = _current_storage(db, lot_no, original_location)
+    location_code = _current_storage(db, lot_no, original_location, payload.item_id)
     row = InventoryAdjustmentModel(
         item_id=item.id,
         part_no=item.part_no,
@@ -547,7 +551,22 @@ def inventory_movement_lots(
     current_user=Depends(get_current_user),
 ):
     data = inventory_adjustment_lots(keyword=keyword, limit=limit, db=db, current_user=current_user)
-    return data
+    # Adjustments remain restricted to native input/production stock. Packing
+    # balances can move locations without changing the source quantities.
+    names = _storage_map(db)
+    rows = list(data['items'])
+    packed, _ = packing_stock_snapshot(db)
+    search = str(keyword or '').strip().casefold()
+    for row in packed:
+        if row['remaining_qty'] <= 1e-9:
+            continue
+        if search and not any(search in str(row[key]).casefold() for key in ('part_no', 'part_name', 'lot_no')):
+            continue
+        item = db.get(ItemMasterModel, row['item_id'])
+        rows.append({**row, 'current_qty': row['remaining_qty'], 'unit': item.unit or 'EA',
+                     'storage_location': _storage_display(row['storage_location'], names)})
+    rows.sort(key=lambda row: (row['part_no'], row['lot_no']))
+    return {'items': rows[:limit], 'total': len(rows)}
 
 
 @router.post("/api/inventory/movements")
@@ -563,16 +582,25 @@ def create_inventory_movement(
 
     base = _lot_base_info(db, payload.item_id, lot_no)
     if base is None:
-        raise HTTPException(404, "이동할 LOT를 찾을 수 없습니다.")
-    base_qty, original_location, _source = base
-    current_qty = max(
-        base_qty - _used_qty(db, lot_no, payload.item_id) + _adjustment_qty(db, lot_no, payload.item_id),
-        0.0,
-    )
+        packed, _ = packing_stock_snapshot(db)
+        matches = [row for row in packed if row['item_id'] == item.id
+                   and row['lot_no'].strip().casefold() == lot_no.casefold()]
+        if len(matches) != 1:
+            raise HTTPException(404, "이동할 LOT를 찾을 수 없습니다.")
+        stock = matches[0]
+        lot_no = stock['lot_no']
+        current_qty = stock['remaining_qty']
+        original_location = stock['storage_location']
+    else:
+        base_qty, original_location, _source = base
+        current_qty = max(
+            base_qty - _used_qty(db, lot_no, payload.item_id) + _adjustment_qty(db, lot_no, payload.item_id),
+            0.0,
+        )
     if current_qty <= 1e-9:
         raise HTTPException(409, "현재 재고가 0인 LOT는 이동할 수 없습니다.")
 
-    from_location = _current_storage(db, lot_no, original_location)
+    from_location = _current_storage(db, lot_no, original_location, payload.item_id)
     to_location = payload.to_location.strip()
     if from_location == to_location:
         raise HTTPException(422, "현재 저장위치와 이동할 저장위치가 같습니다.")
