@@ -40,6 +40,22 @@ class ProductionRun(Base):
 
     materials = relationship("ProductionRunMaterial", back_populates="run", cascade="all, delete-orphan", order_by="ProductionRunMaterial.id")
     defects = relationship("ProductionRunDefect", back_populates="run", cascade="all, delete-orphan", order_by="ProductionRunDefect.id")
+    downtimes = relationship("ProductionRunDowntime", back_populates="run", cascade="all, delete-orphan", order_by="ProductionRunDowntime.started_at, ProductionRunDowntime.id")
+
+
+class ProductionRunDowntime(Base):
+    __tablename__ = "production_run_downtimes"
+    id = Column(Integer, primary_key=True)
+    run_id = Column(Integer, ForeignKey("production_runs.id"), nullable=False, index=True)
+    type_code = Column(String(30), nullable=False)
+    type_name = Column(String(100), nullable=False)
+    started_at = Column(String(16), nullable=False)
+    ended_at = Column(String(16), nullable=False)
+    action = Column(Text, nullable=False, default="")
+    quality_confirmed = Column(Integer, nullable=False, default=0)
+    created_by = Column(String(50), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    run = relationship("ProductionRun", back_populates="downtimes")
 
 
 class ProductionRunMaterial(Base):

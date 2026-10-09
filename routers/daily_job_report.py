@@ -16,6 +16,7 @@ from models.models import CommonCodeModel
 from models.production_defect import QualityProductionDefect, QualityProductionDefectDetail
 from models.production_lot import ProductionLotModel
 from services.production_lot_service import performance_id_from_lot_note
+from services.production_downtime import serialize_downtime
 from routers.production_extra import production_performance_status
 from services.daily_job_report import build_workbook,workbook_html
 
@@ -80,6 +81,7 @@ def records(db,day,user):
         supplement=Supplement.model_validate_json(saved.data_json) if saved else Supplement()
         run=runs.get(row['source_record_id']) if row['record_source']=='MES' else None
         row['defects']=[{'name':d.defect_type_name,'qty':d.defect_qty} for d in run.defects] if run else []
+        row['downtimes']=[serialize_downtime(d) for d in run.downtimes] if run and run.performance_type=='MACHINING' else []
         if row['record_source']=='MES':
             row['defects'].extend(processed_defects.get(row['source_record_id'],[]))
         row['work_time']='';row['material_lots']=row['source_lot_no']

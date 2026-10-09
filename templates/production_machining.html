@@ -57,6 +57,12 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
       <div style="grid-column:span 2"><label>비고</label><input type="text" id="runNote" maxlength="1000"></div>
     </div>
     <div class="actions" id="editActions"><button class="btn danger" id="defectBtn" onclick="openDefectModal()">불량 유형 설정</button><button class="btn green" id="lotAssignBtn" onclick="openLotAllocationModal()">LOT 배정</button><button class="btn danger" id="completeBtn" onclick="completeRun()">종료 / 생산실적 등록</button></div>
+    {% if performance_type == 'MACHINING' %}
+    <div style="margin-top:14px;border-top:1px solid #e2e8f0;padding-top:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:13px">비가동 내역 <span id="downtimeTotal"></span></strong><button type="button" class="btn secondary" id="downtimeAddBtn" onclick="openDowntime()">비가동 등록</button></div>
+      <div class="history-wrap" style="margin-top:8px"><table><thead><tr><th>유형</th><th>시작 / 종료</th><th>시간(분)</th><th>조치내역</th><th>품질확인</th><th>처리</th></tr></thead><tbody id="downtimeRows"></tbody></table></div>
+    </div>
+    {% endif %}
 
     <div id="materialList" style="display:none"></div>
     <div id="scanRow" style="display:none"><input id="scanLotInput"><button id="scanBtn"></button></div>
@@ -81,6 +87,20 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
   </div>
 </div>
 
+{% if performance_type == 'MACHINING' %}
+<div class="modal mes-popup-backdrop" id="downtimeModal"><div class="modal-box mes-popup" style="width:min(650px,94vw)">
+  <div class="modal-head mes-popup-head"><strong>비가동 등록</strong><button type="button" class="close-x" onclick="closeModal('downtimeModal')">×</button></div>
+  <div class="modal-body mes-popup-body"><p class="hint" id="downtimeContext"></p><div class="grid" style="grid-template-columns:1fr 1fr">
+    <div style="grid-column:span 2"><label for="downtimeType">유형 *</label><select id="downtimeType"></select></div>
+    <div><label for="downtimeStart">시작시간 *</label><input type="datetime-local" id="downtimeStart"></div>
+    <div><label for="downtimeEnd">종료시간 *</label><input type="datetime-local" id="downtimeEnd"></div>
+    <div><label>비가동 시간(분)</label><input id="downtimeMinutes" readonly></div>
+    <div><label for="downtimeQuality">품질확인</label><select id="downtimeQuality"><option value="0">미확인</option><option value="1">확인</option></select></div>
+    <div style="grid-column:span 2"><label for="downtimeAction">조치내역</label><textarea id="downtimeAction" maxlength="1000" rows="3" style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:4px;padding:8px"></textarea></div>
+  </div><div id="downtimeMsg" class="msg"></div></div>
+  <div class="modal-foot mes-popup-foot"><button type="button" class="btn secondary" onclick="closeModal('downtimeModal')">취소</button><button type="button" class="btn primary" id="downtimeSaveBtn" onclick="saveDowntime()">저장</button></div>
+</div></div>
+{% endif %}
 <div class="modal mes-popup-backdrop" id="orderModal">
   <div class="modal-box mes-popup">
     <div class="modal-head mes-popup-head"><strong>작업지시 선택</strong><button class="close-x" onclick="closeModal('orderModal')">×</button></div>
@@ -159,7 +179,7 @@ async function deleteRun(id,orderNo){if(!confirm(`${orderNo} 생산중 가동내
 async function deleteCompletedRun(performanceId,orderNo){if(!performanceId)return;if(!confirm(`${orderNo} 완료 생산실적을 삭제하시겠습니까?\n후공정·외주·포장에서 생성 LOT가 사용된 경우 삭제할 수 없습니다.\n삭제되면 투입 LOT 소비량은 복원되고 생성 LOT는 제거됩니다.`))return;try{const d=await jf(`/api/production/performances/${performanceId}`,{method:'DELETE'});if(currentRun&&Number(currentRun.performance_id||0)===Number(performanceId)){currentRun=null;defects=[];runEditorPanel.style.display='none';}await loadRunHistory();msg(topMsg,d.message,true);}catch(e){msg(topMsg,e.message);}}
 function dtLocal(v){return (v||'').replace(' ','T');}
 function setReadonlyMode(readonly){[startTime,endTime,goodQty,setupQty,runNote].forEach(x=>x.disabled=readonly);defectBtn.disabled=readonly;if(document.getElementById('lotAssignBtn'))lotAssignBtn.disabled=readonly;scanLotInput.disabled=readonly;scanBtn.disabled=readonly;clearBtn.disabled=readonly;completeBtn.disabled=readonly;scanRow.style.display=(readonly||PERFORMANCE_TYPE==='ASSEMBLY')?'none':'grid';editActions.style.display=readonly?'none':'flex';runActions.style.display='none';readonlyNote.classList.toggle('show',readonly);readonlyNote.textContent=readonly?(currentRun.status==='COMPLETED'?'완료된 가동내역입니다. 상세는 읽기 전용이며 라벨은 가동내역 목록에서 재출력할 수 있습니다.':'취소된 가동내역입니다. 이력 확인만 가능합니다.') : '';}
-async function selectRun(id){currentRun=await jf('/api/production-run/'+id);defects=(currentRun.defects||[]).map(x=>({code:x.code,qty:n(x.qty)}));runEditorPanel.style.display='block';runStatusBadge.textContent=currentRun.status_name||'';runStatusBadge.className='badge '+(currentRun.status==='COMPLETED'?'status-completed':currentRun.status==='CANCELLED'?'status-cancelled':'');runOrderBadge.textContent='작업지시 '+currentRun.work_order_no;runPartBadge.textContent='품번 '+currentRun.part_no;runProcessBadge.textContent='공정 '+(currentRun.process_name||'');runShiftBadge.textContent=currentRun.shift_name;runEquipmentBadge.textContent=currentRun.equipment_name;startTime.value=dtLocal(currentRun.start_time);endTime.value=dtLocal(currentRun.end_time);goodQty.value=n(currentRun.good_qty)||'';setupQty.value=n(currentRun.setup_qty);defectQty.value=n(currentRun.defect_qty);runNote.value=currentRun.note||'';updateProcessQty();renderMaterials();setReadonlyMode(currentRun.status!=='IN_PROGRESS');msg(runMsg,'');updateRunDrawingLink(currentRun);}
+async function selectRun(id){currentRun=await jf('/api/production-run/'+id);defects=(currentRun.defects||[]).map(x=>({code:x.code,qty:n(x.qty)}));runEditorPanel.style.display='block';runStatusBadge.textContent=currentRun.status_name||'';runStatusBadge.className='badge '+(currentRun.status==='COMPLETED'?'status-completed':currentRun.status==='CANCELLED'?'status-cancelled':'');runOrderBadge.textContent='작업지시 '+currentRun.work_order_no;runPartBadge.textContent='품번 '+currentRun.part_no;runProcessBadge.textContent='공정 '+(currentRun.process_name||'');runShiftBadge.textContent=currentRun.shift_name;runEquipmentBadge.textContent=currentRun.equipment_name;startTime.value=dtLocal(currentRun.start_time);endTime.value=dtLocal(currentRun.end_time);goodQty.value=n(currentRun.good_qty)||'';setupQty.value=n(currentRun.setup_qty);defectQty.value=n(currentRun.defect_qty);runNote.value=currentRun.note||'';updateProcessQty();renderMaterials();setReadonlyMode(currentRun.status!=='IN_PROGRESS');msg(runMsg,'');updateRunDrawingLink(currentRun);if(typeof renderDowntimes==='function')renderDowntimes();}
 
 async function updateRunDrawingLink(run){
   const link=document.getElementById('runDrawingLink');
@@ -264,4 +284,5 @@ async function completeRun(){if(!currentRun||currentRun.status!=='IN_PROGRESS')r
 function printRunLabel(performanceId){if(!performanceId)return;window.open(`/internal-labels/production/${performanceId}?auto=1`,'_blank','width=980,height=900');}
 </script>
 <script src="/static/internal_label_buttons.js?v=20260917-2"></script>
+{% if performance_type == 'MACHINING' %}<script src="/static/production_downtime.js?v=20261009-1"></script>{% endif %}
 {% endblock %}

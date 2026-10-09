@@ -93,7 +93,8 @@ def build_workbook(rows):
     for key,items in sorted(groups.items()):
         for offset in range(0,len(items),2):
             pair=items[offset:offset+2]
-            inspection_pages=max(1,max(math.ceil(len(row['supplement']['measurements'])/8) for row in pair))
+            changes=sorted([d for row in pair for d in row.get('downtimes',[])],key=lambda d:d['started_at'])
+            inspection_pages=max(1,max(math.ceil(len(row['supplement']['measurements'])/8) for row in pair),math.ceil(len(changes)/5))
             for section in range(inspection_pages):
                 sheet=workbook.copy_worksheet(template);page_no+=1;sheet.title=f'Job{page_no}'
                 for row_cells in sheet:
@@ -158,6 +159,20 @@ def build_workbook(rows):
                     put(sheet,'Y'+str(r),source['part_no']);put(sheet,'AA'+str(r),defect['qty']);put(sheet,'AD'+str(r),defect['name'])
                     put(sheet,'AJ'+str(r),None)
                 if section>0:put(sheet,'F1',f'작업일보 — 검사 계속 {section+1}/{inspection_pages}')
+                if section>0 and section*8>=max(len(row['supplement']['measurements']) for row in pair):
+                    put(sheet,'F1',f'작업일보 — 비가동 계속 {section+1}/{inspection_pages}')
+                for line in range(27,32):
+                    for col in ['C','E','J','P']:put(sheet,f'{col}{line}',None)
+                for line,change in enumerate(changes[section*5:(section+1)*5],27):
+                    put(sheet,f'C{line}',change['type_code'])
+                    put(sheet,f'E{line}',f"{time_text(change['started_at'])}~{time_text(change['ended_at'])} ({change['minutes']}분)")
+                    put(sheet,f'J{line}',change['action'])
+                    put(sheet,f'P{line}','☑' if change['quality_confirmed'] else '□')
+                for change in changes:
+                    code=change['type_code']
+                    if code in [str(i) for i in range(1,11)] and change.get('type_name'):
+                        number=int(code)
+                        put(sheet,('T' if number%2 else 'X')+str(27+(number-1)//2),f"{code}. {change['type_name']}")
                 notes=[r['supplement']['notes'] for r in pair if r['supplement']['notes']]
                 if len(defects)>4:notes.append('추가 불량: '+' / '.join(f"{source['part_no']} {defect['name']} {defect['qty']:g}" for source,defect in defects[4:]))
                 put(sheet,'AG26','\n'.join(notes))

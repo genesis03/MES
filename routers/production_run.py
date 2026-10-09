@@ -16,7 +16,8 @@ from models.packing import PackingLotAllocation, PackingMaster
 from models.models import CommonCodeModel, ItemBomModel, ItemMasterModel, ProcessModel, PurchaseInboundItem, PurchaseInboundMaster
 from models.production import ProductionPerformance, ProductionWorkOrder
 from models.production_lot import ProductionLotModel
-from models.production_run import ProductionRun, ProductionRunDefect, ProductionRunLotAllocation, ProductionRunMaterial
+from models.production_run import ProductionRun, ProductionRunDefect, ProductionRunLotAllocation, ProductionRunMaterial, ProductionRunDowntime
+from services.production_downtime import parse_time, validate_bounds, serialize_downtime
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundLot, SubcontractInboundMaster
 from services.production_defect_service import active_production_defect_qty
@@ -52,6 +53,64 @@ class UpdateRunPayload(BaseModel):
 
 class ScanLotPayload(BaseModel):
     lot_no: str
+
+
+class DowntimePayload(BaseModel):
+    type_code: str = Field(min_length=1, max_length=30)
+    started_at: str
+    ended_at: str
+    action: str = Field(default='', max_length=1000)
+    quality_confirmed: bool = False
+
+
+def editable_downtime_run(db, run_id):
+    run = _get_run(db, run_id)
+    if run.performance_type != 'MACHINING' or run.status != 'IN_PROGRESS':
+        raise HTTPException(409, '생산중인 가공 실적에서만 비가동 내역을 등록·수정·삭제할 수 있습니다.')
+    return run
+
+
+@router.get('/downtime-types')
+def downtime_types(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    return [{'code':c.code,'name':c.code_name} for c in db.query(CommonCodeModel).filter(CommonCodeModel.group_code=='PRODUCTION_CHANGE_TYPE',CommonCodeModel.is_active=='Y').order_by(CommonCodeModel.sort_order,CommonCodeModel.id)]
+
+
+def store_downtime(db, run, payload, current_user, row=None):
+    code=db.query(CommonCodeModel).filter_by(group_code='PRODUCTION_CHANGE_TYPE',code=payload.type_code,is_active='Y').first()
+    if not code and not (row and row.type_code==payload.type_code):
+        raise HTTPException(422, '사용 가능한 비가동 유형을 선택하세요.')
+    start,end=validate_bounds(payload.started_at,payload.ended_at,run.start_time,run.end_time)
+    for other in run.downtimes:
+        if (not row or other.id!=row.id) and start<parse_time(other.ended_at) and end>parse_time(other.started_at):
+            raise HTTPException(409, '같은 가동 건의 비가동 시간이 겹칩니다.')
+    if row is None:
+        row=ProductionRunDowntime(run_id=run.id,created_by=_user_name(current_user));db.add(row)
+    row.type_code=payload.type_code
+    if code:row.type_name=code.code_name
+    row.started_at=start.strftime('%Y-%m-%d %H:%M');row.ended_at=end.strftime('%Y-%m-%d %H:%M')
+    row.action=payload.action.strip();row.quality_confirmed=int(payload.quality_confirmed)
+    db.commit();return serialize_downtime(row)
+
+
+@router.post('/{run_id}/downtimes')
+def create_downtime(run_id:int,payload:DowntimePayload,db:Session=Depends(get_db),current_user=Depends(get_current_user)):
+    return store_downtime(db,editable_downtime_run(db,run_id),payload,current_user)
+
+
+@router.put('/{run_id}/downtimes/{downtime_id}')
+def update_downtime(run_id:int,downtime_id:int,payload:DowntimePayload,db:Session=Depends(get_db),current_user=Depends(get_current_user)):
+    run=editable_downtime_run(db,run_id)
+    row=next((r for r in run.downtimes if r.id==downtime_id),None)
+    if row is None:raise HTTPException(404,'비가동 내역을 찾을 수 없습니다.')
+    return store_downtime(db,run,payload,current_user,row)
+
+
+@router.delete('/{run_id}/downtimes/{downtime_id}')
+def delete_downtime(run_id:int,downtime_id:int,db:Session=Depends(get_db),current_user=Depends(get_current_user)):
+    run=editable_downtime_run(db,run_id)
+    row=next((r for r in run.downtimes if r.id==downtime_id),None)
+    if row is None:raise HTTPException(404,'비가동 내역을 찾을 수 없습니다.')
+    db.delete(row);db.commit();return {'message':'비가동 내역을 삭제했습니다.'}
 
 
 def _user_name(user) -> str:
@@ -348,6 +407,7 @@ def _serialize_run(run: ProductionRun, db: Optional[Session] = None):
         "note": run.note or "",
         "materials": [_serialize_material(x) for x in run.materials],
         "defects": [{"code": x.defect_type_code, "name": x.defect_type_name, "qty": x.defect_qty} for x in run.defects],
+        "downtimes": [serialize_downtime(x) for x in run.downtimes],
     }
 
 
@@ -648,6 +708,8 @@ def update_run_details(run_id: int, payload: UpdateRunPayload, db: Session = Dep
         raise HTTPException(400, "생산중 가동내역만 수정할 수 있습니다.")
     if not payload.start_time.strip():
         raise HTTPException(400, "시작시간을 입력하세요.")
+    for downtime in run.downtimes:
+        validate_bounds(downtime.started_at,downtime.ended_at,payload.start_time,payload.end_time)
     run.start_time = payload.start_time.strip()
     run.end_time = (payload.end_time or "").strip() or None
     run.good_qty = float(payload.good_qty or 0)
