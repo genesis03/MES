@@ -96,7 +96,7 @@ def key_for(row, kind='production'):
     return hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
 
 
-def save_day(rows, token, kind='production'):
+def save_day(rows, token, kind='production', queried_day=None):
     State, _, Record, _ = backend(kind)
     counts = {'received': len(rows), 'inserted': 0, 'updated': 0, 'unchanged': 0}
     keys = [key_for(row, kind) for row in rows]
@@ -142,12 +142,23 @@ def save_day(rows, token, kind='production'):
                 record.job_qty = source['JOB_QTY']; record.lot_qty = source['LOT_QTY']; record.fault_qty = source['FAULT_QTY']
             record.raw_json = raw; record.content_hash = digest
             record.last_seen_at = instant; record.changed_at = instant
+        if kind == 'packing' and queried_day is not None:
+            from models.packing_sync import PackingSourcePresence
+            db.flush()
+            seen = set(keys)
+            for record in db.query(Record).filter(Record.packing_date == queried_day.isoformat()):
+                presence = db.get(PackingSourcePresence, record.id)
+                if presence is None:
+                    presence = PackingSourcePresence(record_id=record.id)
+                    db.add(presence)
+                presence.present = record.source_key in seen
+                presence.checked_at = instant
         db.commit()
     return counts
 
 
 def execute(start, end, token, run_id, kind='production'):
-    State, Run, _, Client = backend(kind)
+    State, Run, Record, Client = backend(kind)
     counts = {'received': 0, 'inserted': 0, 'updated': 0, 'unchanged': 0, 'completed_days': 0, 'warnings': []}
     querying_day = None
     error = None
@@ -155,16 +166,25 @@ def execute(start, end, token, run_id, kind='production'):
         username, password = read_credentials()
         client = Client(username, password)
         password = ''
-        day = start
-        while day <= end:
+        days = {start + timedelta(days=offset) for offset in range((end - start).days + 1)}
+        if kind == 'packing':
+            with SessionLocal() as db:
+                run = db.get(Run, run_id)
+                if run and run.trigger == 'AUTO':
+                    # Packing queries filter CREATE_DATE, not shipment date.
+                    # Revisit all known dates, including previously shipped lots:
+                    # a later shipment cancellation can restore old stock too.
+                    for (packing_date,) in db.query(Record.packing_date).filter(
+                            Record.packing_date < start.isoformat()).distinct():
+                        days.add(datetime.strptime(packing_date, '%Y-%m-%d').date())
+        for day in sorted(days):
             querying_day = day
             rows, warnings = client.fetch_day(day)
-            result = save_day(rows, token) if kind == 'production' else save_day(rows, token, kind)
+            result = save_day(rows, token) if kind == 'production' else save_day(rows, token, kind, queried_day=day)
             for key in result:
                 counts[key] += result[key]
             counts['completed_days'] += 1
             counts['warnings'] = sorted(set(counts['warnings'] + warnings))
-            day += timedelta(days=1)
         if not counts['received'] and ((end - start).days >= 30 or (start.month, start.day) == (1, 1)):
             querying_day = None
             raise SyncError('전체 기간에서 수신한 실적이 0건입니다. 조회 조건과 계정 권한을 확인해야 하므로 가져오기 완료로 확정하지 않습니다.')

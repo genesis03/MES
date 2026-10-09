@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 from models.models import PurchaseInboundItem
 import services.purchase_service as purchase_service
+from services.external_lot_guard import external_lot_numbers
 
 
 def _next_internal_lot(db, inbound_date: str, reserved: set[str]) -> str:
@@ -21,6 +22,7 @@ def _next_internal_lot(db, inbound_date: str, reserved: set[str]) -> str:
         if row[0]
     }
     existing.update(reserved)
+    existing.update(external_lot_numbers(db, prefix))
 
     for seq in range(1, 1000):
         lot_no = f"{prefix}{seq:03d}"

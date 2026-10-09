@@ -2,6 +2,7 @@ from fastapi import HTTPException
 
 from models.models import PurchaseInboundItem
 from models.production_lot import ProductionLotModel
+from services.external_lot_guard import external_lot_numbers
 
 
 LOT_PREFIXES = {
@@ -69,6 +70,8 @@ def next_lot_no(db, prefix: str, work_date: str, equipment_no: int | str | None 
         if row[0]
     )
     existing.update(reserved)
+    existing.update(external_lot_numbers(db, date_prefix))
+    existing = {str(value).upper() for value in existing}
 
     used = set()
     expected_length = len(date_prefix) + 4  # 설비번호 2자리 + 순번 2자리
@@ -79,7 +82,7 @@ def next_lot_no(db, prefix: str, work_date: str, equipment_no: int | str | None 
                 used.add(int(suffix))
 
     for sequence in range(1, 100):
-        if sequence not in used:
+        if sequence not in used and f'{base}{sequence:02d}'.upper() not in existing:
             return f"{base}{sequence:02d}"
 
     raise HTTPException(

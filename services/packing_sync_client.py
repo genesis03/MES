@@ -57,6 +57,8 @@ def parse_response(result, start, end):
                 raise SyncError(f'{i + 1}행 포장·출고수량이 비어 있거나 숫자가 아닙니다.') from exc
             if not number.is_finite() or number < 0:
                 raise SyncError(f'{i + 1}행 포장·출고수량이 유효하지 않습니다.')
+        if Decimal(row['JOB_QTY']) > Decimal(row['LOT_QTY']):
+            raise SyncError(f'{i + 1}행 출고수량이 포장수량을 초과합니다. 저장을 중단했습니다.')
         rows.append(row)
     return rows, warnings
 

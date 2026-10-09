@@ -62,15 +62,15 @@
           <th>출고수량</th>
           <th>출고일</th>
           <th>거래처</th>
-          <th>구분</th>
+          <th>재고수량</th><th>구분 / 확인사항</th>
         </tr>
       </thead>
       <tbody id="resultBody">
-        <tr><td colspan="9" class="ps-empty">조회해 주세요.</td></tr>
+        <tr><td colspan="10" class="ps-empty">조회해 주세요.</td></tr>
       </tbody>
     </table>
   </div>
-  <div class="ps-summary"><span id="resultCount">0건</span><span>외부 연동 포장은 조회용이며 재고·출고 처리에는 반영하지 않습니다. 취소된 MES 포장은 제외됩니다.</span></div>
+  <div class="ps-summary"><span id="resultCount">0건</span><span>미출고 포장은 재고에 반영합니다. MES 품목·LOT와 중복되는 외부 내역은 재고에서 제외합니다. 취소된 MES 포장은 제외됩니다.</span></div>
 </div>
 {% endblock %}
 
@@ -90,7 +90,7 @@ async function loadRows(){
   if($('endDate').value) params.set('end_date',$('endDate').value);
   if($('partNo').value.trim()) params.set('part_no',$('partNo').value.trim());
   if($('lotNo').value.trim()) params.set('lot_no',$('lotNo').value.trim());
-  $('resultBody').innerHTML='<tr><td colspan="9" class="ps-empty">조회 중...</td></tr>';
+  $('resultBody').innerHTML='<tr><td colspan="10" class="ps-empty">조회 중...</td></tr>';
   try{
     const r=await fetch('/api/packing/status?'+params.toString());
     const d=await MesResponse.read(r);
@@ -106,11 +106,12 @@ async function loadRows(){
         <td class="num">${x.shipment_qty?fmt(x.shipment_qty):''}</td>
         <td>${esc(x.shipment_date||'')}</td>
         <td class="left">${esc(x.customer_name||'')}</td>
-        <td>${x.record_source==='EXTERNAL'?'외부 연동'+(x.linked?'':' · 품번 미연결'):'MES'}</td>
-      </tr>`).join(''):'<tr><td colspan="9" class="ps-empty">조회된 포장현황이 없습니다.</td></tr>';
+        <td class="num">${x.record_source==='EXTERNAL'?(x.stock_qty==null?'미반영':fmt(x.stock_qty)):fmt(Math.max(Number(x.packing_qty)-Number(x.shipment_qty),0))}</td>
+        <td>${x.record_source==='EXTERNAL'?'외부 연동'+(x.stock_note?' · '+esc(x.stock_note):''):'MES'}</td>
+      </tr>`).join(''):'<tr><td colspan="10" class="ps-empty">조회된 포장현황이 없습니다.</td></tr>';
   }catch(e){
     $('resultCount').textContent='0건';
-    $('resultBody').innerHTML=`<tr><td colspan="9" class="ps-empty">${esc(e.message)}</td></tr>`;
+    $('resultBody').innerHTML=`<tr><td colspan="10" class="ps-empty">${esc(e.message)}</td></tr>`;
   }
 }
 function resetFilters(){

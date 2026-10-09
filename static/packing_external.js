@@ -12,7 +12,7 @@
         const d=await api('/records?'+q);if(id!==request)return;
         total=d.total;if(page>1&&!d.rows.length){page=Math.max(1,Math.ceil(total/50));return rows();}
         $('pkTotal').textContent=`총 ${total.toLocaleString()}건`;
-        $('pkRows').innerHTML=d.rows.length?d.rows.map(r=>'<tr>'+[r.part_no,r.part_name,r.lot_no,r.packing_date,qty(r.packing_qty),qty(r.shipment_qty),r.shipment_date,r.customer_name,r.linked?(r.connection_type==='MANUAL'?'수동 연결':'자동 연결'):'미연결',r.source_part_no].map(v=>`<td>${esc(v)}</td>`).join('')+'</tr>').join(''):'<tr><td colspan="10">조회된 외부 포장 내역이 없습니다.</td></tr>';
+        $('pkRows').innerHTML=d.rows.length?d.rows.map(r=>'<tr>'+[r.part_no,r.part_name,r.lot_no,r.packing_date,qty(r.packing_qty),qty(r.shipment_qty),r.shipment_date,r.customer_name,r.stock_qty==null?'미반영':qty(r.stock_qty),r.stock_note||({READY:'반영',SHIPPED:'출고 완료'}[r.stock_status]||'미반영'),r.linked?(r.connection_type==='MANUAL'?'수동 연결':'자동 연결'):'미연결',r.source_part_no].map(v=>`<td>${esc(v)}</td>`).join('')+'</tr>').join(''):'<tr><td colspan="12">조회된 외부 포장 내역이 없습니다.</td></tr>';
         $('pkPage').textContent=`${page} / ${Math.max(1,Math.ceil(total/50))}`;
         $('pkPrev').disabled=page===1;$('pkNext').disabled=page*50>=total;
     }

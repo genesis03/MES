@@ -1,5 +1,5 @@
 """External packing snapshots do not create stock or shipping transactions."""
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, ForeignKey
 from core.database import Base
 
 
@@ -48,5 +48,12 @@ class PackingSyncRun(Base):
     status = Column(String(20), nullable=False)
     counts_json = Column(Text, nullable=False, default='{}')
     error = Column(Text)
+
+
+class PackingSourcePresence(Base):
+    __tablename__ = 'packing_source_presence'
+    record_id = Column(Integer, ForeignKey('external_packing_records.id'), primary_key=True)
+    present = Column(Boolean, nullable=False)
+    checked_at = Column(DateTime, nullable=False)
 
 

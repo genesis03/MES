@@ -25,6 +25,9 @@ def is_finished(item):
 
 class ItemConnections:
     def __init__(self, db):
+        self.db = db
+        self.packing_stock_cache = None
+        self.native_lot_cache = None
         self.items = db.query(ItemMasterModel).all()
         self.by_id = {item.id: item for item in self.items}
         self.by_part = {}

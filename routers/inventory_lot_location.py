@@ -17,6 +17,7 @@ from models.production_lot import ProductionLotModel
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundLot, SubcontractInboundMaster
 from models.subcontract_outbound import SubcontractOutboundItem, SubcontractOutboundLot, SubcontractOutboundMaster
+from services.packing_inventory_service import packing_stock_snapshot
 from services.production_defect_service import active_production_defect_qty
 
 router = APIRouter(tags=["Inventory LOT Location"])
@@ -188,6 +189,13 @@ def inventory_lots_with_current_location(
             "storage_location": _storage_display(_current_storage(db, lot.lot_no, lot.storage_location), names),
         })
 
+    packed_rows, _ = packing_stock_snapshot(db)
+    for row in packed_rows:
+        if row['item_id'] not in item_map:
+            continue
+        row['storage_location'] = _storage_display(row['storage_location'], names)
+        rows.append(row)
+
     status = str(stock_status or "ALL").strip().upper()
     if status not in {"ALL", "REMAINING", "USED"}:
         status = "ALL"
@@ -276,6 +284,21 @@ def inventory_status(
     )
     for lot in production_rows:
         add_stock(lot.item_id, lot.lot_no, lot.lot_qty, lot.storage_location)
+
+    packed_rows, _ = packing_stock_snapshot(db)
+    for packed in packed_rows:
+        item = item_map.get(packed['item_id'])
+        if item is None or packed['remaining_qty'] <= 1e-9:
+            continue
+        key = (item.id, str(packed['storage_location'] or ''))
+        row = grouped.setdefault(key, {
+            'item_id': item.id, 'part_no': item.part_no, 'part_name': item.part_name or '',
+            'spec': item.spec or '', 'unit': item.unit or 'EA',
+            'storage_location': _storage_display(packed['storage_location'], names),
+            'lot_count': 0, 'stock_qty': 0.0,
+        })
+        row['lot_count'] += 1
+        row['stock_qty'] += packed['remaining_qty']
 
     rows = list(grouped.values())
     rows.sort(key=lambda row: (row["part_no"], row["storage_location"]))

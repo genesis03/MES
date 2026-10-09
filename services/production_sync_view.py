@@ -2,6 +2,7 @@
 import json
 from datetime import timedelta, timezone
 from decimal import Decimal
+from services.packing_inventory_service import native_lot_identities, identity
 
 def external_record_view(record, connections):
     item, connection_type = connections.resolve(record.part_no, record.process_name)
@@ -9,6 +10,10 @@ def external_record_view(record, connections):
     raw = json.loads(record.raw_json)
     setup = raw.get('F10', '')
     notes = []
+    if connections.native_lot_cache is None:
+        connections.native_lot_cache = native_lot_identities(connections.db)
+    if item and identity(item.id, record.lot_no) in connections.native_lot_cache:
+        notes.append('MES에서 이미 사용한 품목·LOT: 외부 생산 재고 미반영')
     if not item:
         notes.append('품번 연결 확인')
     if code not in connections.processes:

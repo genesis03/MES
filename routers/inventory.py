@@ -20,6 +20,7 @@ from models.packing import PackingLotAllocation, PackingMaster
 from models.production_lot import ProductionLotModel
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundLot, SubcontractInboundMaster
+from services.packing_inventory_service import packing_stock_snapshot
 from services.production_defect_service import active_production_defect_qty
 
 router = APIRouter(tags=["Inventory"])
@@ -212,6 +213,12 @@ def inventory_lots(
             "remaining_qty": max(lot_qty - used_qty, 0.0),
             "storage_location": _storage_display(lot.storage_location, storage_map),
         })
+
+    packed_rows, _ = packing_stock_snapshot(db)
+    for row in packed_rows:
+        if row['item_id'] in item_map:
+            row['storage_location'] = _storage_display(row['storage_location'], storage_map)
+            rows.append(row)
 
     rows.sort(key=lambda x: (x["part_no"], x["created_at"], x["lot_no"]), reverse=True)
     return {"items": rows, "total": len(rows), "selected_parts": selected}

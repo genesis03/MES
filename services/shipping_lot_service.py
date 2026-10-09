@@ -6,6 +6,7 @@ from models.models import ItemMasterModel
 from models.packing import PackingBox, PackingMaster
 from models.sales import ShipmentDirectLot, ShipmentItem
 from models.shipping_lot import ShippingLotRegistry
+from services.external_lot_guard import external_lot_numbers
 
 
 def _shipping_prefix(shipping_date: str) -> str:
@@ -66,6 +67,11 @@ def used_shipping_sequences(db: Session, part_no: str, shipping_date: str) -> se
         .all()
     )
     for (lot_no,) in direct_rows:
+        suffix = _lot_suffix(lot_no, prefix)
+        if suffix is not None:
+            used.add(suffix)
+
+    for lot_no in external_lot_numbers(db, prefix, item.id):
         suffix = _lot_suffix(lot_no, prefix)
         if suffix is not None:
             used.add(suffix)

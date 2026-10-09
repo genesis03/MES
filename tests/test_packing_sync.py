@@ -191,3 +191,130 @@ def test_settings_routes_permissions_and_shared_credential_lock(setup,monkeypatc
     for path in ('/admin/packing-sync','/api/packing/external-sync/settings','/api/packing/external-sync/records','/api/packing/external-sync/runs'):
         assert setup.client.get(path).status_code==403
     assert setup.client.get('/api/packing/status').status_code==200
+
+
+def add_finished(db, part='SOURCE'):
+    item=ItemMasterModel(part_no=part,part_name='Finished',account_type='PROD',material_type='FINISHED',
+        is_active='Y',inbound_loc='PACK',created_at='2026-01-01',updated_at='2026-01-01')
+    db.add(item);db.flush();return item
+
+
+def inventory_routes(setup):
+    from routers.inventory_lot_location import router
+    setup.app.include_router(router)
+
+
+def test_packing_inventory_partial_full_shipments_repeat_and_updates(setup):
+    inventory_routes(setup);enable_routes(setup)
+    with setup.sessions() as db:add_finished(db);db.commit()
+    token,_=sync.claim(DAY,DAY,'MANUAL','packing')
+    incoming=[row(lot='PARTIAL',JOB_QTY='80'),row(lot='COMPLETE',JOB_QTY='240')]
+    sync.save_day(incoming,token,'packing');sync.save_day(incoming,token,'packing')
+    assert setup.client.get('/api/inventory/status').json()['stock_qty']==160
+    lots=setup.client.get('/api/inventory/lots?part_no=SOURCE&stock_status=REMAINING').json()['items']
+    assert len(lots)==1 and lots[0]['remaining_qty']==160 and lots[0]['used_qty']==80
+    assert setup.client.get('/api/inventory/lots?part_no=SOURCE&stock_status=USED').json()['items'][0]['lot_no']=='COMPLETE'
+    sync.save_day([row(lot='PARTIAL',JOB_QTY='240')],token,'packing')
+    assert setup.client.get('/api/inventory/status').json()['stock_qty']==0
+    with setup.sessions() as db:
+        assert db.query(ProductionLotModel).count()==0
+        assert db.query(PackingMaster).count()==0
+
+
+def test_native_lot_collision_blocks_external_stock_without_overwriting_native(setup):
+    inventory_routes(setup);enable_routes(setup)
+    with setup.sessions() as db:
+        item=add_finished(db);db.flush()
+        db.add(ProductionLotModel(item_id=item.id,part_no=item.part_no,lot_no='COLLISION',lot_qty=10,status='ACTIVE'))
+        db.commit()
+    token,_=sync.claim(DAY,DAY,'MANUAL','packing');sync.save_day([row(lot='COLLISION')],token,'packing')
+    assert setup.client.get('/api/inventory/status').json()['stock_qty']==10
+    lots=setup.client.get('/api/inventory/lots?part_no=SOURCE').json()['items']
+    assert len(lots)==1 and lots[0]['source']=='생산'
+    view=setup.client.get('/api/packing/external-sync/records').json()['rows'][0]
+    assert view['stock_status']=='CONFLICT' and view['stock_qty'] is None
+    with setup.sessions() as db:assert db.query(ProductionLotModel).one().lot_qty==10
+
+
+def test_duplicate_external_mapping_excludes_both_and_recovers_after_remapping(setup):
+    from models.production_sync import ProductionSyncItemMap
+    inventory_routes(setup);enable_routes(setup)
+    token,_=sync.claim(DAY,DAY,'MANUAL','packing');sync.save_day([row(part='FIRST'),row(part='SECOND')],token,'packing')
+    assert setup.client.get('/api/inventory/status').json()['stock_qty']==0
+    with setup.sessions() as db:
+        item=add_finished(db,part='MES');other=add_finished(db,part='OTHER');db.flush();other_id=other.id
+        db.add_all([ProductionSyncItemMap(source_part_no=p,source_process_name='포장',item_id=item.id) for p in ('FIRST','SECOND')]);db.commit()
+    assert setup.client.get('/api/inventory/status').json()['stock_qty']==0
+    assert {r['stock_status'] for r in setup.client.get('/api/packing/external-sync/records').json()['rows']}=={'CONFLICT'}
+    assert setup.client.put('/api/production/external-sync/item-maps',json={'source_part_no':'SECOND','source_process':'포장','item_id':other_id}).status_code==200
+    assert setup.client.get('/api/inventory/status').json()['stock_qty']==480
+
+
+def test_native_packing_collision_counts_native_box_only(setup):
+    inventory_routes(setup);enable_routes(setup)
+    with setup.sessions() as db:
+        item=add_finished(db)
+        master=PackingMaster(packing_no='NATIVE',packing_date=DAY.isoformat(),item_id=item.id,part_no=item.part_no,
+            box_count=1,box_qty=20,total_qty=20,status='PACKED')
+        master.boxes.append(PackingBox(box_no=1,package_lot_no='COLLISION',box_qty=20));db.add(master);db.commit()
+    token,_=sync.claim(DAY,DAY,'MANUAL','packing');sync.save_day([row(lot='COLLISION')],token,'packing')
+    assert setup.client.get('/api/inventory/status').json()['stock_qty']==20
+    lots=setup.client.get('/api/inventory/lots?part_no=SOURCE').json()['items']
+    assert len(lots)==1 and lots[0]['source']=='MES 포장'
+    assert setup.client.get('/api/packing/external-sync/records').json()['rows'][0]['stock_status']=='CONFLICT'
+
+
+def test_external_lots_reserve_native_production_packing_and_purchase_numbers(setup):
+    from services.lot_service import next_lot_no
+    from services.shipping_lot_service import next_shipping_lot_no
+    from services.purchase_lot_format import _next_internal_lot
+    from test_production_sync import row as production_row
+    with setup.sessions() as db:add_finished(db);db.commit()
+    token,_=sync.claim(DAY,DAY,'MANUAL','packing')
+    sync.save_day([row(lot='26032501001'),row(lot='LR260325001')],token,'packing')
+    production_token,_=sync.claim(DAY,DAY,'MANUAL')
+    sync.save_day([production_row(lot='LX202603250101')],production_token)
+    with setup.sessions() as db:
+        assert next_shipping_lot_no(db,'SOURCE',DAY.isoformat())=='26032501002'
+        add_finished(db,part='OTHER')
+        assert next_shipping_lot_no(db,'OTHER',DAY.isoformat())=='26032501001'
+        assert next_lot_no(db,'LX',DAY.isoformat(),1)=='LX202603250102'
+        assert _next_internal_lot(db,DAY.isoformat(),set())=='LR260325002'
+
+
+def test_old_packing_dates_are_revisited_even_after_full_shipment(setup,monkeypatch):
+    inventory_routes(setup)
+    old=DAY-timedelta(days=100)
+    with setup.sessions() as db:add_finished(db);db.commit()
+    token,_=sync.claim(old,old,'MANUAL','packing');sync.save_day([row(day=old,JOB_QTY='240')],token,'packing')
+    with setup.sessions() as db:
+        st=sync.state(db,'packing');st.enabled=True;st.lease_token=None;st.lease_until=None;st.next_run_at=None;db.commit()
+    visited=[]
+    class Client:
+        def __init__(self,*args):pass
+        def fetch_day(self,day):
+            visited.append(day)
+            return ([row(day=old,JOB_QTY='80')],[]) if day==old else ([],[])
+    monkeypatch.setattr(source,'PackingClient',Client)
+    token,run_id=sync.claim(DAY,DAY,'AUTO','packing');sync.execute(DAY,DAY,token,run_id,'packing')
+    assert visited==[old,DAY]
+    assert setup.client.get('/api/inventory/status').json()['stock_qty']==160
+
+
+def test_missing_source_lot_excluded_then_recovers_without_duplicate(setup):
+    inventory_routes(setup);enable_routes(setup)
+    with setup.sessions() as db:add_finished(db);db.commit()
+    token,_=sync.claim(DAY,DAY,'MANUAL','packing')
+    sync.save_day([row()],token,'packing',queried_day=DAY)
+    assert setup.client.get('/api/inventory/status').json()['stock_qty']==240
+    sync.save_day([],token,'packing',queried_day=DAY)
+    assert setup.client.get('/api/inventory/status').json()['stock_qty']==0
+    assert setup.client.get('/api/packing/external-sync/records').json()['rows'][0]['stock_status']=='MISSING'
+    sync.save_day([row(JOB_QTY='80')],token,'packing',queried_day=DAY)
+    assert setup.client.get('/api/inventory/status').json()['stock_qty']==160
+    with setup.sessions() as db:assert db.query(ExternalPackingRecord).count()==1
+
+
+def test_shipment_exceeding_packing_is_rejected():
+    with pytest.raises(SyncError,match='초과'):
+        source.parse_response(response([row(JOB_QTY='241')]),DAY,DAY)
