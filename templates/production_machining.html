@@ -5,6 +5,7 @@
 <style>
 .page-head{margin-bottom:14px}.page-head h1{font-size:23px;margin:0 0 4px}.page-head p{font-size:12.5px;color:#64748b}
 .panel{background:#fff;border:1px solid #dbe3ec;border-radius:6px;margin-bottom:14px}.panel-title{padding:10px 14px;border-bottom:1px solid #6495ed;font-weight:800;font-size:13px}.panel-body{padding:14px}
+.run-workspace{display:grid;grid-template-columns:minmax(280px,1fr) minmax(0,2fr);gap:14px;align-items:start;margin-bottom:14px}.run-workspace>.panel{min-width:0;margin-bottom:0}.run-workspace .grid{grid-template-columns:repeat(4,minmax(0,1fr))}.run-workspace .condition-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.run-workspace input,.run-workspace select{min-width:0;box-sizing:border-box}.run-workspace .actions{flex-wrap:wrap}
 .grid{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:10px 12px;align-items:end}.grid-3{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:10px 12px;align-items:end}.history-filter{display:grid;grid-template-columns:170px 170px 170px 160px auto;gap:8px 10px;align-items:end;margin-bottom:10px}.history-actions{display:flex;gap:6px}
 label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4px}input,select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;background:#fff;font-size:13px}input[readonly]{background:#f8fafc}
 .btn{border:0;border-radius:4px;padding:8px 14px;font-weight:800;cursor:pointer}.primary{background:#2563eb;color:#fff}.secondary{background:#e2e8f0;color:#334155}.danger{background:#b91c1c;color:#fff}.green{background:#65a30d;color:#fff}.orange{background:#f59e0b;color:#fff}.teal{background:#0f766e;color:#fff}.btn:disabled{opacity:.45;cursor:not-allowed}
@@ -16,17 +17,20 @@ label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:4
 table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px solid #e2e8f0;padding:8px;text-align:left;white-space:nowrap}th{background:#f8fafc}.num{text-align:right}.empty{text-align:center;color:#94a3b8;padding:22px}.history-wrap{overflow:auto}.history-table{min-width:1550px}.row-actions{display:flex;gap:5px}.row-actions .btn{padding:5px 8px;font-size:11px}.st-progress{color:#1d4ed8;font-weight:800}.st-completed{color:#15803d;font-weight:800}.st-cancelled{color:#b91c1c;font-weight:800}
 .modal{position:fixed;inset:0;background:rgba(15,23,42,.45);display:none;align-items:center;justify-content:center;z-index:1000}.modal.show{display:flex}.modal-box{width:min(1180px,94vw);max-height:90vh;overflow:auto;background:#fff;border-radius:7px;box-shadow:0 20px 50px rgba(0,0,0,.25)}.modal-head{padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center}.modal-body{padding:14px}.modal-foot{padding:12px 14px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;gap:8px}.close-x{border:0;background:none;font-size:22px;cursor:pointer}
 .defect-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.defect-item{display:grid;grid-template-columns:1fr 90px;gap:6px;align-items:center}.lot-popup-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:18px}.lot-pane{border:1px solid #dbe3ec;min-height:470px}.lot-pane-title{padding:10px 12px;border-bottom:1px solid #dbe3ec;font-weight:800;font-size:13px;background:#f8fafc}.lot-material-row{cursor:pointer}.lot-material-row:hover,.lot-material-row.active{background:#eef6ff}.lot-popup-scan{display:grid;grid-template-columns:80px 1fr;gap:8px;align-items:center;margin-bottom:10px}.lot-popup-table{max-height:390px;overflow:auto}.lot-popup-table table{margin:0}.fifo-wait{color:#94a3b8;font-size:11px}.hint{font-size:12px;color:#64748b}.readonly-note{display:none;margin-bottom:10px;padding:8px 10px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;color:#475569}.readonly-note.show{display:block}
-@media(max-width:900px){.grid,.history-filter{grid-template-columns:1fr}.material-top{grid-template-columns:1fr 1fr}.scan-row{grid-template-columns:1fr}}
+@media(max-width:1400px){.run-workspace #runEditorPanel .grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:1100px){.run-workspace{grid-template-columns:1fr}}
+@media(max-width:900px){.grid,.history-filter,.run-workspace .condition-grid,.run-workspace #runEditorPanel .grid{grid-template-columns:1fr}.run-workspace #runEditorPanel .grid>div{grid-column:auto!important}.material-top{grid-template-columns:1fr 1fr}.scan-row{grid-template-columns:1fr}}
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="page-head"><h1>{{ page_title }}</h1><p>공정·작업자·생산호기 선택 후 {{ action_label }}을 시작하고, BOM 자재 LOT 배정을 완료한 뒤 종료합니다.</p></div>
 
-<div class="panel">
+<div class="run-workspace">
+<div class="panel" id="runConditionPanel">
   <div class="panel-title">1. 가동 조건</div>
   <div class="panel-body">
-    <div class="grid">
+    <div class="grid condition-grid">
       <div><label>생산일자 *</label><input type="date" id="performanceDate"></div>
       <div><label>제조공정 *</label><select id="processCode"><option value="">공정 선택</option></select></div>
       <div><label>작업자 *</label><select id="operatorId" disabled><option value="">공정을 먼저 선택하세요</option></select></div>
@@ -61,6 +65,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}th,td{border-bottom:1px
   </div>
 </div>
 
+</div>
 <div class="panel">
   <div class="panel-title">3. 가동내역</div>
   <div class="panel-body">
