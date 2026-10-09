@@ -76,3 +76,36 @@ def test_duplicate_production_lot_blocks_label(setup):
         db.add(ExternalProductionRecord(**{column.name: getattr(source, column.name) for column in source.__table__.columns if column.name not in ('id', 'source_key')}, source_key='legacy-duplicate'))
         db.commit()
     assert setup.client.get(f'/internal-labels/external-production/{rid}').status_code == 409
+
+
+def test_packing_work_all_and_individual_external_labels(setup):
+    from test_packing_waiting import native_box
+    from core.security import get_current_user
+    from types import SimpleNamespace
+    setup.app.include_router(router)
+    setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='operator',role='USER',permissions=None)
+    with setup.sessions() as db:
+        item=add_finished(db);native_box(db,item);db.commit()
+    token,_=sync.claim(DAY,DAY,'MANUAL','packing')
+    sync.save_day([packing_row(lot='EXTERNAL1',JOB_QTY='80'),packing_row(lot='EXTERNAL2',LOT_QTY='120')],token,'packing')
+    url='/internal-labels/packing-waiting?part_no=SOURCE&auto=0'
+    printed=labels(setup.client.get(url))
+    assert {x['lot_no']:x['qty'] for x in printed}=={'26091501006':120,'EXTERNAL1':240,'EXTERNAL2':120}
+    assert len(labels(setup.client.get(url+'&lot_no=EXTERNAL2')))==1
+    assert labels(setup.client.get(url+'&lot_no=EXTERNAL2'))[0]['lot_no']=='EXTERNAL2'
+    assert setup.client.get(url+'&lot_no=MISSING').status_code==404
+    assert setup.client.get('/internal-labels/packing-waiting?part_no=UNKNOWN').status_code==404
+    with setup.sessions() as db:
+        assert db.query(PackingBox).count()==1 and db.query(ProductionLotModel).count()==0
+        db.query(ExternalPackingRecord).filter_by(lot_no='EXTERNAL2').update({'shipment_qty':'120'});db.commit()
+    assert setup.client.get(url+'&lot_no=EXTERNAL2').status_code==404
+    assert len(labels(setup.client.get(url)))==2
+
+
+def test_packing_work_external_only_labels(setup):
+    setup.app.include_router(router)
+    with setup.sessions() as db:add_finished(db);db.commit()
+    token,_=sync.claim(DAY,DAY,'MANUAL','packing')
+    sync.save_day([packing_row()],token,'packing')
+    printed=labels(setup.client.get('/internal-labels/packing-waiting?part_no=SOURCE&auto=0'))
+    assert len(printed)==1 and printed[0]['lot_no']=='26100501001' and printed[0]['qty']==240

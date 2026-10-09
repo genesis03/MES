@@ -79,5 +79,5 @@ async function cancelPackingBox(id,lotNo){if(!confirm(`${lotNo} 포장 LOT 1건�
 function resetPage(){currentItem=null;allocations=[];$('partQuery').value='';$('partName').value='';$('standardQty').value='';$('boxCount').value='';$('targetQty').value='';$('lotInput').value='';$('lotRemaining').value='';$('suggestions').replaceChildren();$('remainingBody').innerHTML='';renderScanned();$('waitingBody').innerHTML='';$('waitingSummary').textContent='건수: 0 · 계: 0';showMsg('');$('partQuery').focus();}
 document.addEventListener('DOMContentLoaded',()=>{resetPage();});
 </script>
-<script src="/static/internal_label_buttons.js?v=20260916-1"></script>
+<script src="/static/internal_label_buttons.js?v=20261009-2"></script>
 {% endblock %}

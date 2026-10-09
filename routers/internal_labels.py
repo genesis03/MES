@@ -236,7 +236,7 @@ def _direct_shipment_labels(db: Session, shipment_id: int) -> list[dict]:
     return result
 
 
-def _external_labels(db: Session, record_id: int, kind: str) -> list[dict]:
+def _external_labels(db: Session, record_id: int, kind: str, connections=None) -> list[dict]:
     from models.production_sync import ExternalProductionRecord
     from models.packing_sync import ExternalPackingRecord
     from services.production_sync_mapping import ItemConnections
@@ -247,7 +247,7 @@ def _external_labels(db: Session, record_id: int, kind: str) -> list[dict]:
     record = db.get(model, record_id)
     if not record:
         raise HTTPException(404, '외부 실적을 찾을 수 없습니다.')
-    connections = ItemConnections(db)
+    connections = connections or ItemConnections(db)
     view = external_record_view(record, connections) if kind == 'production' else packing_record_view(record, connections)
     if not view['can_print_label']:
         raise HTTPException(409, view['label_error'])
@@ -266,6 +266,32 @@ def _external_labels(db: Session, record_id: int, kind: str) -> list[dict]:
         equipment=view['machine_no'] + '호기' if production and view['machine_no'] else '',
         compact_production=production, extras=extras,
     )]
+
+
+@router.get('/internal-labels/packing-waiting', response_class=HTMLResponse)
+def print_waiting_packing_labels(
+    request: Request, part_no: str = Query(..., min_length=1, max_length=50),
+    lot_no: str | None = Query(None, max_length=100), auto: int = Query(1, ge=0, le=1),
+    db: Session = Depends(get_db), current_user=Depends(get_current_user),
+):
+    from routers.packing import packing_records
+    from services.production_sync_mapping import ItemConnections
+
+    connections = ItemConnections(db)
+    records = packing_records(part_no=part_no, db=db, current_user=current_user)
+    labels = []
+    for record in records:
+        for box in record['waiting_boxes']:
+            if lot_no is not None and box['package_lot_no'] != lot_no:
+                continue
+            if record['record_source'] == 'EXTERNAL':
+                labels.extend(_external_labels(db, record['source_record_id'], 'packing', connections))
+            else:
+                labels.extend(_packing_labels(db, record['id'], box['package_lot_no']))
+    if not labels:
+        raise HTTPException(404, '출력할 출고 대기 LOT가 없습니다.')
+    return templates.TemplateResponse(request=request, name='internal_label_print.html',
+        context={'request': request, 'user': current_user, 'labels': labels, 'auto_print': bool(auto)})
 
 
 @router.get("/internal-labels/{source}/{record_id}", response_class=HTMLResponse)

@@ -7,6 +7,7 @@
     subcontractOutboundId: null,
     subcontractInboundId: null,
     packingId: null,
+    packingPart: null,
     packingLots: [],
     directShipmentId: null,
   };
@@ -24,12 +25,12 @@
     enable('production-label-btn', !!state.performanceId);
     enable('ob-label', !!state.subcontractOutboundId);
     enable('si-label', !!state.subcontractInboundId);
-    enable('pack-label-one', !!state.packingId && state.packingLots.length > 0);
-    enable('pack-label-all', !!state.packingId);
+    enable('pack-label-one', !!state.packingPart && state.packingLots.length > 0);
+    enable('pack-label-all', !!state.packingPart && state.packingLots.length > 0);
     enable('direct-internal-label-btn', !!state.directShipmentId);
   }
 
-  function handleJson(path, method, data) {
+  function handleJson(path, method, data, searchParams) {
     const upperMethod = String(method || 'GET').toUpperCase();
 
     if (/^\/api\/purchase\/inbound\/drafts\/\d+\/confirm$/.test(path) && upperMethod === 'POST') {
@@ -74,14 +75,11 @@
       state.packingId = Number(data?.id || 0) || null;
       state.packingLots = Array.isArray(data?.waiting_lots) ? data.waiting_lots.filter(Boolean) : [];
     } else if (path === '/api/packing/records' && upperMethod === 'GET') {
-      const rows = Array.isArray(data) ? data : [];
-      const active = rows.find(row =>
-        Number(row?.id || 0) > 0 &&
-        Array.isArray(row?.waiting_lots) &&
-        row.waiting_lots.length > 0
-      );
-      state.packingId = active ? Number(active.id) : null;
-      state.packingLots = active ? active.waiting_lots.filter(Boolean) : [];
+      const part = searchParams.get('part_no') || '';
+      if ($('partQuery') && $('partQuery').value.trim() !== part) return;
+      const rows = (Array.isArray(data) ? data : []).filter(row => row.part_no === part);
+      state.packingPart = part || null;
+      state.packingLots = [...new Set(rows.flatMap(row => Array.isArray(row.waiting_lots) ? row.waiting_lots : []))];
     }
 
     if (path === '/api/sales/shipping-entry/direct-confirm' && upperMethod === 'POST') {
@@ -102,7 +100,7 @@
       const url = new URL(rawUrl, window.location.origin);
       const method = init?.method || (typeof input !== 'string' && input?.method) || 'GET';
       if (response.ok && url.origin === window.location.origin) {
-        response.clone().json().then(data => handleJson(url.pathname, method, data)).catch(() => {});
+        response.clone().json().then(data => handleJson(url.pathname, method, data, url.searchParams)).catch(() => {});
       }
     } catch (_) {}
     return response;
@@ -137,25 +135,31 @@
     $('pi-label')?.addEventListener('click', () => openLabels('purchase', state.purchaseId));
     $('production-label-btn')?.addEventListener('click', () => openLabels('production', state.performanceId));
     $('si-label')?.addEventListener('click', () => openLabels('subcontract-inbound', state.subcontractInboundId));
-    $('pack-label-all')?.addEventListener('click', () => openLabels('packing', state.packingId));
+    const openPackingLabels = lot => {
+      if (!state.packingPart || !state.packingLots.length) return;
+      const params = new URLSearchParams({part_no: state.packingPart, auto: 1});
+      if (lot) params.set('lot_no', lot);
+      window.open('/internal-labels/packing-waiting?' + params.toString(), '_blank', 'width=980,height=900');
+    };
+    $('pack-label-all')?.addEventListener('click', () => openPackingLabels());
     $('pack-label-one')?.addEventListener('click', () => {
-      if (!state.packingId || !state.packingLots.length) return;
+      if (!state.packingPart || !state.packingLots.length) return;
       let lot = state.packingLots[0];
       if (state.packingLots.length > 1) {
         const entered = window.prompt(`출력할 출고대기 LOT를 입력하세요.\n${state.packingLots.join('\n')}`, lot);
         if (!entered) return;
         lot = entered.trim();
-        if (!state.packingLots.includes(lot)) {
-          alert('금회 포장으로 생성된 LOT가 아닙니다.');
-          return;
-        }
+        if (!state.packingLots.includes(lot)) { alert('현재 출고 대기 목록에 없는 LOT입니다.'); return; }
       }
-      openLabels('packing', state.packingId, `lot_no=${encodeURIComponent(lot)}`);
+      openPackingLabels(lot);
+    });
+    $('partQuery')?.addEventListener('input', () => {
+      state.packingPart = null; state.packingLots = []; refreshButtons();
     });
 
     $('pi-new')?.addEventListener('click', () => { state.purchaseId = null; refreshButtons(); });
     document.querySelector('button[onclick="resetPage()"]')?.addEventListener('click', () => {
-      state.packingId = null; state.packingLots = []; refreshButtons();
+      state.packingId = null; state.packingPart = null; state.packingLots = []; refreshButtons();
     });
     $('newEntryBtn')?.addEventListener('click', () => { state.directShipmentId = null; refreshButtons(); });
 
