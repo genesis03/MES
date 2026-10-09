@@ -21,6 +21,7 @@ from models.sales import ShipmentBox, ShipmentItem, ShipmentMaster
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from services.production_sync_mapping import ItemConnections
 from services.packing_sync_view import packing_record_view
+from services.packing_inventory_service import packing_stock_snapshot
 from services.shipping_lot_service import next_shipping_lot_no
 from services.production_defect_service import active_production_defect_qty
 
@@ -584,6 +585,7 @@ def packing_records(
             continue
         result.append({
             "id": master.id,
+            "record_source": "MES",
             "packing_no": master.packing_no,
             "packing_date": master.packing_date,
             "item_id": master.item_id,
@@ -602,6 +604,26 @@ def packing_records(
                 }
                 for box in waiting_boxes
             ],
+        })
+    # Use the same validated external balances as inventory and warehouse moves.
+    # No native packing rows/boxes are created to display imported stock.
+    packed, _ = packing_stock_snapshot(db)
+    selected_part = (part_no or '').strip()
+    for row in packed:
+        if row.get('record_source') != 'EXTERNAL' or row['remaining_qty'] <= 1e-9:
+            continue
+        if selected_part and row['part_no'] != selected_part:
+            continue
+        qty = row['remaining_qty']
+        result.append({
+            'id': f"external:{row['source_record_id']}", 'record_source': 'EXTERNAL',
+            'source_record_id': row['source_record_id'], 'packing_no': '',
+            'packing_date': row['created_at'], 'item_id': row['item_id'],
+            'part_no': row['part_no'], 'part_name': row['part_name'],
+            'total_qty': qty, 'box_count': 1, 'box_qty': qty,
+            'waiting_lots': [row['lot_no']],
+            'waiting_boxes': [{'id': None, 'package_lot_no': row['lot_no'],
+                               'box_qty': qty, 'can_cancel': False, 'record_source': 'EXTERNAL'}],
         })
     return result
 
