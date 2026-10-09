@@ -65,7 +65,8 @@
         const params = new URLSearchParams({keyword: $('drawingKeyword').value.trim(), drawing_no: $('drawingNoSearch').value.trim(), drawing_state: $('drawingState').value});
         state.items = await api(`/api/documents/items?${params}`);
         renderItems();
-        const selected = state.items.find(row => row.item_id === Number(preferredId)) || state.items[0];
+        const keyword=$('drawingKeyword').value.trim();
+        const selected = MESPartSearch.pick(state.items,keyword) || (!keyword?(state.items.find(row => row.item_id === Number(preferredId)) || state.items[0]):null);
         if (selected) await selectItem(selected.item_id);
         else {
             state.itemRequest++; state.documentRequest++;

@@ -112,7 +112,7 @@
     const data = await request('/api/purchase/items/search?' + new URLSearchParams({keyword: query.trim(), limit: '100'}));
     if (version !== row.version || !rows.includes(row)) return null;
     const value = query.trim().toLocaleLowerCase();
-    const exact = data.items.find(x => x.part_no.toLocaleLowerCase() === value) ||
+    const exact = MESPartSearch.pick(data.items, query, data.total) ||
       (data.items.filter(x => x.part_name.toLocaleLowerCase() === value).length === 1
         ? data.items.find(x => x.part_name.toLocaleLowerCase() === value) : null);
     if (exact) {
@@ -189,6 +189,7 @@
       }
     });
 
+    query.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();clearTimeout(row.timer);const version=++row.version;lookupPart(row,query.value,version).catch(error=>{if(version===row.version)status.textContent=error.message;});}});
     rows.push(row);
     $('po-lines').append(tr);
 

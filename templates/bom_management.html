@@ -325,7 +325,7 @@
                 <option value="FINISHED">완제품</option>
                 <option value="SEMI">반제품</option>
             </select>
-            <input type="text" id="searchKeyword" class="search-input" placeholder="품번 / 품명 검색" onkeydown="if(event.key==='Enter') loadParentItems()">
+            <input type="text" id="searchKeyword" class="search-input" placeholder="품번 / 품명 검색" onkeydown="if(event.key==='Enter'){event.preventDefault();loadParentItems(true)}">
             <button class="btn-search" onclick="loadParentItems()">조회</button>
             <button class="btn-search" style="background:#e2e8f0;color:#334155;" onclick="resetParentSearch()">초기화</button>
         </div>
@@ -479,7 +479,7 @@
             <button onclick="closeItemSearchModal()" style="background: none; border: none; font-size: 18px; cursor: pointer; color: #64748b;">&times;</button>
         </div>
         <div class="modal-search-bar mes-popup-filters">
-            <input type="text" id="modalKeyword" class="search-input" placeholder="품번 / 품명 검색" onkeydown="if(event.key==='Enter') filterModalItems()">
+            <input type="text" id="modalKeyword" class="search-input" placeholder="품번 / 품명 검색" onkeydown="if(event.key==='Enter'){event.preventDefault();filterModalItems(true)}">
             <button class="btn-search" onclick="filterModalItems()">조회</button>
             <button class="btn-search" style="background:#e2e8f0;color:#334155;" onclick="resetModalSearch()">초기화</button>
         </div>
@@ -567,7 +567,7 @@
         }
 
         // 1) 입력값과 대소문자 무관하게 완전 일치하는 품목이 있는지 검사
-        const exactMatch = ALL_ITEMS.find(x => x.part_no.toLowerCase() === inputVal.toLowerCase());
+        const exactMatch = MESPartSearch.pick(ALL_ITEMS.filter(x=>(x.part_no+' '+x.part_name).toLowerCase().includes(inputVal.toLowerCase())),inputVal);
         if (exactMatch) {
             selectItemFromModal(exactMatch.part_no, exactMatch.part_name, exactMatch.unit);
             // 다음 입력란인 소요량 필드로 포커스 이동
@@ -587,7 +587,7 @@
     }
 
     // 2. 모품목 목록 조회 (유형, 품번 위주)
-    async function loadParentItems() {
+    async function loadParentItems(autoSelect=false) {
         const matType = document.getElementById('searchMaterialType').value;
         const keyword = document.getElementById('searchKeyword').value.trim();
 
@@ -604,6 +604,7 @@
             const j = await res.json();
             PARENT_ITEMS = j.data || [];
             renderParentTable();
+            const match=autoSelect?MESPartSearch.pick(PARENT_ITEMS,keyword):null;if(match)await selectParentItem(match.part_no);
         } catch (err) {
             tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 20px; color: #dc2626;">조회 오류 발생</td></tr>`;
         }
@@ -630,7 +631,7 @@
         });
         tbody.innerHTML = html;
 
-        if (!CURRENT_PARENT && PARENT_ITEMS.length > 0) {
+        if (!CURRENT_PARENT && PARENT_ITEMS.length > 0 && !document.getElementById('searchKeyword').value.trim()) {
             selectParentItem(PARENT_ITEMS[0].part_no);
         }
     }
@@ -765,7 +766,7 @@ function renderTreeNode(node, isRoot = false) {
         document.getElementById('modalKeyword').focus();
     }
 
-    function filterModalItems() {
+    function filterModalItems(autoSelect=false) {
         const kw = document.getElementById('modalKeyword').value.trim().toLowerCase();
         const tbody = document.getElementById('modalItemTableBody');
 
@@ -774,6 +775,7 @@ function renderTreeNode(node, isRoot = false) {
             return it.part_no.toLowerCase().includes(kw) || it.part_name.toLowerCase().includes(kw);
         });
 
+        const match=autoSelect?MESPartSearch.pick(filtered,kw):null;if(match){selectItemFromModal(match.part_no,match.part_name,match.unit);return;}
         if (filtered.length === 0) {
             tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; padding: 30px; color: #94a3b8;">검색 결과가 없습니다.</td></tr>`;
             return;

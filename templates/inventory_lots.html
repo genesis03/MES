@@ -87,15 +87,17 @@ function renderSuggestions(){
   suggestions.innerHTML=candidateRows.map((x,i)=>`<div class="suggestion${i===activeIndex?' active':''}" onmousedown="event.preventDefault();addPart(candidateRows[${i}])"><span class="pn">${esc(x.part_no)}</span><span class="name">${esc(x.part_name||'')}</span></div>`).join('');
   suggestions.style.display='block';
 }
-async function searchCandidates(){
+async function searchCandidates(autoSelect=false){
   const q=partSearch.value.trim();
   if(!q){hideSuggestions();return;}
   try{
     const r=await fetch('/api/inventory/items?q='+encodeURIComponent(q));
     const d=await r.json();
     if(!r.ok)throw new Error(d.detail||'품번 검색 실패');
+    if(partSearch.value.trim()!==q)return;
     candidateRows=(d||[]).filter(x=>!selectedParts.some(s=>s.part_no===x.part_no));
     activeIndex=-1;
+    const match=autoSelect?MESPartSearch.pick(candidateRows,q):null;if(match){addPart(match);return;}
     renderSuggestions();
   }catch(e){suggestions.innerHTML=`<div class="suggestion" style="color:#b91c1c">${esc(e.message)}</div>`;suggestions.style.display='block';}
 }
@@ -134,13 +136,13 @@ async function loadLots(){
   }catch(e){body.innerHTML=`<tr><td colspan="9" class="empty" style="color:#b91c1c">${esc(e.message)}</td></tr>`;}
 }
 
-partSearch.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(searchCandidates,180);});
+partSearch.addEventListener('input',()=>{clearTimeout(searchTimer);candidateRows=[];activeIndex=-1;searchTimer=setTimeout(searchCandidates,180);});
 partSearch.addEventListener('keydown',e=>{
   if(e.key==='ArrowDown'&&candidateRows.length){e.preventDefault();activeIndex=Math.min(activeIndex+1,candidateRows.length-1);renderSuggestions();}
   else if(e.key==='ArrowUp'&&candidateRows.length){e.preventDefault();activeIndex=Math.max(activeIndex-1,0);renderSuggestions();}
   else if(e.key==='Enter'){
     e.preventDefault();
-    if(candidateRows.length){addPart(candidateRows[activeIndex>=0?activeIndex:0]);}
+    if(partSearch.value.trim()){clearTimeout(searchTimer);if(activeIndex>=0)addPart(candidateRows[activeIndex]);else searchCandidates(true);}
     else if(selectedParts.length){loadLots();}
   }else if(e.key==='Backspace'&&!partSearch.value&&selectedParts.length){selectedParts.pop();renderChips();}
   else if(e.key==='Escape'){hideSuggestions();}

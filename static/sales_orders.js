@@ -128,7 +128,7 @@ function choosePart(tr, row) {
   closeSuggestions(tr);
 }
 
-async function searchPart(tr) {
+async function searchPart(tr, autoSelect=false) {
   const input = tr.querySelector('.part-input');
   const q = input.value.trim();
   tr.dataset.partNo = '';
@@ -139,7 +139,11 @@ async function searchPart(tr) {
     return;
   }
   try {
-    tr._candidates = await getJson('/api/sales/items?q=' + encodeURIComponent(q) + '&limit=30');
+    const candidates = await getJson('/api/sales/items?q=' + encodeURIComponent(q) + '&limit=30');
+    if(input.value.trim()!==q)return;
+    tr._candidates=candidates;
+    const match=autoSelect?MESPartSearch.pick(tr._candidates,q):null;
+    if(match){choosePart(tr,match);return;}
     tr._activeIndex = -1;
     renderSuggestions(tr);
   } catch (e) {
@@ -165,7 +169,7 @@ function addRow(data = null) {
   const input = tr.querySelector('.part-input');
   let timer = null;
   input.addEventListener('input', () => {
-    clearTimeout(timer);
+    clearTimeout(timer);tr._candidates=[];tr._activeIndex=-1;tr.dataset.partNo='';
     timer = setTimeout(() => searchPart(tr), 180);
   });
   input.addEventListener('focus', () => {
@@ -181,9 +185,10 @@ function addRow(data = null) {
       e.preventDefault();
       tr._activeIndex = Math.max((tr._activeIndex ?? 0) - 1, 0);
       renderSuggestions(tr);
-    } else if (e.key === 'Enter' && rows.length) {
-      e.preventDefault();
-      choosePart(tr, rows[tr._activeIndex >= 0 ? tr._activeIndex : 0]);
+    } else if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();clearTimeout(timer);
+      if(tr._activeIndex>=0&&rows[tr._activeIndex]?.part_no)choosePart(tr,rows[tr._activeIndex]);
+      else searchPart(tr,true);
     } else if (e.key === 'Escape') {
       closeSuggestions(tr);
     }

@@ -17,7 +17,7 @@
 <div class="card"><div class="grid">
     <div><label>시작일</label><input type="date" id="startDate"></div>
     <div><label>종료일</label><input type="date" id="endDate"></div>
-    <div><label>품번</label><input type="text" id="searchPartNo" placeholder="품번 / 품명 검색"></div>
+    <div><label>품번</label><input type="text" id="searchPartNo" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();loadOrders()}" placeholder="품번 / 품명 검색"></div>
     <div><label>작업지시번호</label><input type="text" id="searchWorkOrderNo" placeholder="작업지시번호"></div>
     <div><label>상태</label><select id="searchStatus"><option value="">전체</option><option value="WAITING">대기</option><option value="IN_PROGRESS">생산중</option><option value="COMPLETED">완료</option><option value="CANCELLED">취소</option></select></div>
     <div style="display:flex;gap:6px"><button class="btn primary" onclick="loadOrders()">조회</button><button class="btn secondary" onclick="resetFilters()">초기화</button></div>

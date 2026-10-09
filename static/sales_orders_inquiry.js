@@ -84,7 +84,7 @@ function renderSuggestions() {
   });
 }
 
-async function searchPartCandidates() {
+async function searchPartCandidates(autoSelect=false) {
   const q = $('partSearch').value.trim();
   if (!q) {
     hideSuggestions();
@@ -93,10 +93,12 @@ async function searchPartCandidates() {
 
   try {
     const rows = await getJson('/api/sales/items?q=' + encodeURIComponent(q) + '&limit=30');
+    if($('partSearch').value.trim()!==q)return;
     candidateRows = (rows || []).filter(row =>
       !selectedParts.some(selected => Number(selected.item_id) === Number(row.item_id))
     );
     activeIndex = -1;
+    const match=autoSelect?MESPartSearch.pick(candidateRows,q):null;if(match){addPart(match);return;}
     renderSuggestions();
   } catch (e) {
     $('suggestions').innerHTML = `<div class="suggestion" style="color:#b91c1c">${esc(e.message)}</div>`;
@@ -266,7 +268,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   $('partSearch').addEventListener('input', () => {
-    clearTimeout(searchTimer);
+    clearTimeout(searchTimer);candidateRows=[];activeIndex=-1;
     searchTimer = setTimeout(searchPartCandidates, 180);
   });
   $('partSearch').addEventListener('keydown', e => {
@@ -280,7 +282,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderSuggestions();
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (candidateRows.length) addPart(candidateRows[activeIndex >= 0 ? activeIndex : 0]);
+      if ($('partSearch').value.trim()) {clearTimeout(searchTimer);if(activeIndex>=0)addPart(candidateRows[activeIndex]);else searchPartCandidates(true);}
       else searchOrders().catch(err => alert(err.message));
     } else if (e.key === 'Backspace' && !$('partSearch').value && selectedParts.length) {
       selectedParts.pop();

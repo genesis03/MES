@@ -182,7 +182,7 @@ async function searchItems(){
  el('fmeaItemResults').innerHTML='<div class="pf-item-result-head"><span>완제품 조회 결과</span><button type="button" id="fmeaItemResultsClose" class="pf-btn light">닫기</button></div>'+ (matches.length?'<table><thead><tr><th>품번</th><th>품명</th><th>선택</th></tr></thead><tbody>'+matches.map(item=>'<tr><td>'+esc(item.part_no)+'</td><td>'+esc(item.part_name)+'</td><td><button type="button" class="pf-btn primary" data-pick-item="'+item.id+'">선택</button></td></tr>').join('')+'</tbody></table>':'<p>일치하는 사용 중인 완제품이 없습니다.</p>');
 }
 el('fmeaItemSearch').addEventListener('click',()=>{if(!selected&&editable()&&!busy)task(searchItems);});
-el('fmeaItemKeyword').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();if(!selected&&editable()&&!busy)task(searchItems);}});
+el('fmeaItemKeyword').addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();if(!selected&&editable()&&!busy){const keyword=el('fmeaItemKeyword').value;task(searchItems).then(()=>{if(el('fmeaItemKeyword').value!==keyword)return;const match=MESPartSearch.pick(options.items.filter(x=>x.is_active==='Y'&&x.part_no.toLowerCase().includes(keyword.trim().toLowerCase())),keyword);if(match)el('fmeaItemResults').querySelector('[data-pick-item="'+match.id+'"]')?.click();});}}});
 el('fmeaItemKeyword').addEventListener('input',()=>{el('fmeaItemResults').hidden=true;});
 el('fmeaItemResults').addEventListener('click',event=>{
  if(event.target.closest('#fmeaItemResultsClose')){el('fmeaItemResults').hidden=true;return;}

@@ -33,7 +33,7 @@
     <div class="grid" style="grid-template-columns:160px 160px minmax(220px,1fr) auto;">
         <div><label>시작일</label><input type="date" id="startDate"></div>
         <div><label>종료일</label><input type="date" id="endDate"></div>
-        <div><label>품번</label><input type="text" id="searchPartNo" placeholder="품번 입력"></div>
+        <div><label>품번</label><input type="text" id="searchPartNo" onkeydown="if(event.key==='Enter'&&!event.isComposing){event.preventDefault();loadPlans()}" placeholder="품번 입력"></div>
         <div style="display:flex;gap:6px"><button class="btn primary" onclick="loadPlans()">조회</button><button class="btn secondary" onclick="resetPlanSearch()">초기화</button></div>
     </div>
 </div>
@@ -52,12 +52,12 @@ let items=[], partCandidates=[], partActiveIndex=-1, partTimer=null;
 const today=MesLocalDate.today();
 document.addEventListener('DOMContentLoaded', async()=>{
     document.getElementById('planDate').value=today;
-    partSearch.addEventListener('input',()=>{partNo.value='';clearTimeout(partTimer);partTimer=setTimeout(searchParts,180);});
+    partSearch.addEventListener('input',()=>{partNo.value='';partCandidates=[];partActiveIndex=-1;clearTimeout(partTimer);partTimer=setTimeout(searchParts,180);});
     partSearch.addEventListener('focus',()=>{if(partSearch.value.trim()&&!partNo.value)searchParts();});
     partSearch.addEventListener('keydown',e=>{
         if(e.key==='ArrowDown'&&partCandidates.length){e.preventDefault();partActiveIndex=Math.min(partActiveIndex+1,partCandidates.length-1);renderPartSuggestions();}
         else if(e.key==='ArrowUp'&&partCandidates.length){e.preventDefault();partActiveIndex=Math.max(partActiveIndex-1,0);renderPartSuggestions();}
-        else if(e.key==='Enter'&&partCandidates.length){e.preventDefault();choosePart(partCandidates[partActiveIndex>=0?partActiveIndex:0]);}
+        else if(e.key==='Enter'&&!e.isComposing){e.preventDefault();clearTimeout(partTimer);if(partActiveIndex>=0)choosePart(partCandidates[partActiveIndex]);else searchParts(true);}
         else if(e.key==='Escape')closePartSuggestions();
     });
     document.addEventListener('click',e=>{if(!e.target.closest('.part-picker'))closePartSuggestions();});
@@ -72,10 +72,11 @@ function renderPartSuggestions(){
     partSuggestions.querySelectorAll('[data-i]').forEach(el=>el.addEventListener('mousedown',e=>{e.preventDefault();choosePart(partCandidates[Number(el.dataset.i)]);}));
     partSuggestions.style.display='block';
 }
-async function searchParts(){
+async function searchParts(autoSelect=false){
     const q=partSearch.value.trim();if(!q){closePartSuggestions();return;}
     const r=await fetch('/api/production/items?keyword='+encodeURIComponent(q));const d=await r.json();
     if(!r.ok){setMsg(d.detail||'품번 검색에 실패했습니다.');return;}
+    if(partSearch.value.trim()!==q)return;const match=autoSelect?MESPartSearch.pick(d,q):null;if(match){choosePart(match);return;}
     partCandidates=d.slice(0,30);partActiveIndex=-1;renderPartSuggestions();
 }
 function setMsg(t,ok=false){const e=document.getElementById('msg');e.textContent=t;e.className='msg '+(ok?'ok':'err');}

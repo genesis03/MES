@@ -117,7 +117,7 @@ if($('cpCreate'))$('cpCreate').onclick=()=>{
  newDocument();$('cpEditor').scrollIntoView({block:'start'});$('cpItemLookup').focus();
 };
 $('cpBack').onclick=()=>{if(busy||!guard())return;dirty=false;$('cpEditor').hidden=true;$('cpListMessage').textContent='관리계획서를 선택하거나 신규 등록해 주세요.';$('cpListMessage').dataset.error='false';run(loadDocumentList);$('cpSearchForm').scrollIntoView({block:'start'});};
-function renderItemLookup(){
+function renderItemLookup(autoSelect=false){
  const keyword=$('cpItemKeyword').value.trim().toLocaleLowerCase();
  const matches=items.filter(x=>!keyword||(x.part_no+' '+x.part_name).toLocaleLowerCase().includes(keyword));
  const body=$('cpItemResults');body.replaceChildren();
@@ -135,11 +135,12 @@ function renderItemLookup(){
    });
   };td.append(button);tr.append(td);body.append(tr);
  }
+ const match=autoSelect?MESPartSearch.pick(matches,keyword):null;if(match){const index=matches.indexOf(match);body.children[index]?.querySelector('button')?.click();}
  if(!matches.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=3;td.textContent='조회 결과가 없습니다.';tr.append(td);body.append(tr);}
 }
 $('cpItemLookup').onclick=()=>{if(busy)return;$('cpItemKeyword').value='';renderItemLookup();$('cpItemDialog').showModal();$('cpItemKeyword').focus();};
 $('cpItemDialogClose').onclick=()=>$('cpItemDialog').close();
-$('cpItemSearchForm').onsubmit=event=>{event.preventDefault();renderItemLookup();};
+$('cpItemSearchForm').onsubmit=event=>{event.preventDefault();renderItemLookup(true);};
 $('cpItemReset').onclick=()=>{$('cpItemKeyword').value='';renderItemLookup();$('cpItemKeyword').focus();};
 $('cpRevision').addEventListener('change',()=>run(async()=>{if(!guard()){$('cpRevision').value=current?.id||'';return;}if(!$('cpRevision').value)newDocument();else{display(await api('/revisions/'+$('cpRevision').value));message('저장된 문서를 불러왔습니다. 적용된 문서는 개정 등록 후 수정할 수 있습니다.');}}));
 $('cpNew').onclick=()=>{if(guard())newDocument();};

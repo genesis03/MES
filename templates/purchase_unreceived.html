@@ -56,6 +56,7 @@
     }catch(e){$('unr-body').innerHTML=`<tr><td colspan="17" class="unr-empty" style="color:#dc2626">${esc(e.message)}</td></tr>`;}
   }
   document.querySelectorAll('.unr-tab').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.unr-tab').forEach(x=>x.classList.remove('active'));btn.classList.add('active');kind=btn.dataset.kind;load();}));
+  $('unr-part-no').addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();load();}});
   $('unr-search').addEventListener('click',load); $('unr-reset').addEventListener('click',()=>{['unr-order-no','unr-partner','unr-part-no'].forEach(id=>$(id).value='');load();});
   load();
 })();

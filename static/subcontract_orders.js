@@ -102,9 +102,11 @@
     });
   }
 
-  async function searchPart(row, keyword, version) {
+  async function searchPart(row, keyword, version, autoSelect=false) {
     const data = await request('/api/purchase/items/search?' + new URLSearchParams({keyword, limit: '100'}));
     if (row.version !== version || !rows.includes(row)) return;
+    const match=autoSelect?MESPartSearch.pick(data.items||[],keyword,data.total):null;
+    if(match){selectOutputPart(row,match);return;}
     showSuggestions(row, data.items || []);
   }
 
@@ -195,6 +197,7 @@
       const version = row.version;
       if (keyword) row.timer = setTimeout(() => searchPart(row, keyword, version).catch(error => { msg(error.message); }), 180);
     });
+    orderPart.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();clearTimeout(row.timer);searchPart(row,orderPart.value.trim(),++row.version,true).catch(error=>msg(error.message));}});
     process.addEventListener('change', () => { if (row.outputPart) resolveBomInput(row); });
     qty.addEventListener('input', () => { allocationStatus(row); updateConfirmState(); });
     lotBtn.addEventListener('click', () => openLotModal(row));
