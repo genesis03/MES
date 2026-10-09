@@ -38,6 +38,8 @@ def test_replace_preserves_history_and_blocks_repeat(setup):
         sync_order_status(old);assert old.status=='CANCELLED'
         new=db.query(SalesOrderMaster).filter_by(status='ORDERED').one();assert new.items[0].order_qty==120 and new.items[0].shipped_qty==0
     assert post(setup,'preview',data).status_code==409
+    assert post(setup,'preview',workbook(121)).status_code==409
+    assert '전환이 이미 완료' in setup.client.get('/admin/sales-unsold-migration').text
 
 
 def test_invalid_and_stale_preview_do_not_close_orders(setup):
@@ -49,3 +51,11 @@ def test_invalid_and_stale_preview_do_not_close_orders(setup):
         row=db.query(SalesOrderItem).one();row.shipped_qty=101;db.commit()
     assert post(setup,'apply',data,preview['fingerprint']).status_code==409
     with setup.sessions() as db:assert db.query(SalesOrderMaster).one().status=='PARTIAL'
+
+
+def test_one_time_page_is_separate_from_regular_inquiry(setup):
+    initialize(setup)
+    response=setup.client.get('/admin/sales-unsold-migration')
+    assert response.status_code==200 and 'importPreview' in response.text
+    from pathlib import Path
+    assert 'importPreview' not in Path('templates/sales_unsold.html').read_text()

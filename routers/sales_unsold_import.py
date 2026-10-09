@@ -6,8 +6,9 @@ import math
 import re
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, Request
 from openpyxl import load_workbook
+from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -65,7 +66,19 @@ def read_rows(data):
         raise HTTPException(422, f'엑셀 확인 실패: {exc}') from exc
 
 
+def completed(db):
+    return bool(db.query(SalesOrderMaster.id).filter(SalesOrderMaster.po_no.like('UNSOLD-XLSX:%')).first())
+
+
+@router.get('/admin/sales-unsold-migration')
+def migration_page(request: Request, db: Session = Depends(get_db), user=Depends(require_admin_user)):
+    return Jinja2Templates(directory='templates').TemplateResponse(request=request, name='sales_unsold_migration.html',
+        context={'request': request, 'user': user, 'completed': completed(db)})
+
+
 def prepare(db, data):
+    if completed(db):
+        raise HTTPException(409, '미판매 잔량 일회성 전환이 이미 완료되었습니다. 재실행할 수 없습니다.')
     rows = read_rows(data)
     customers = {}
     for partner in db.query(Partner).filter(Partner.is_active == 'Y', Partner.partner_type.in_(['CUSTOMER', 'BOTH'])):
@@ -76,7 +89,9 @@ def prepare(db, data):
         if len(matches) != 1:
             raise HTTPException(409, f"판매처 연결을 확인해 주세요: {row['customer']}")
         if row['part_no'] not in items:
-            raise HTTPException(409, f"수주 가능한 품번이 없습니다: {row['part_no']}")
+            registered = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == row['part_no']).first()
+            state = '품목 미등록' if not registered else f'자재유형 {registered.material_type}, 사용여부 {registered.is_active}'
+            raise HTTPException(409, f"{row['part_no']}: {state}. 기초정보 품목정보에서 사용 중인 완제품/반제품인지 확인해 주세요. 자료는 변경되지 않았습니다.")
         row['customer_id'] = matches[0].id
         row['item_id'] = items[row['part_no']].id
     marker = 'UNSOLD-XLSX:' + hashlib.sha256(data).hexdigest()
