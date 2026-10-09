@@ -143,10 +143,10 @@ def test_processed_defects_link_to_exact_performance_and_exclude_cancelled(setup
     response=setup.client.get('/api/production/daily-job-report',params={'day':DAY.isoformat()})
     assert response.status_code==200,response.text
     data=response.json()['items'][0]
-    assert data['defects']==[{'name':'치수 불량','qty':3,'result':'검사 불량 / 선별 후 폐기'}]
+    assert data['defects']==[{'name':'치수 불량','qty':3}]
     assert data['total_qty']==100 and data['defect_qty']==0
     sheet=build_workbook([data]).active
     assert cell(sheet,'AD15').value=='치수 불량'
-    assert cell(sheet,'AJ15').value=='검사 불량 / 선별 후 폐기'
+    assert cell(sheet,'AJ15').value is None
     assert cell(sheet,'AA15').value==3
-    assert '선별 후 폐기' in workbook_html(build_workbook([data]))
+    assert '선별 후 폐기' not in workbook_html(build_workbook([data]))

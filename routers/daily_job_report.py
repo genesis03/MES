@@ -60,7 +60,7 @@ def records(db,day,user):
     native_items={r['source_record_id']:r.get('item_id') for r in rows if r['record_source']=='MES'}
     processed_defects={}
     if native_items:
-        codes={(c.group_code,c.code):c.code_name for c in db.query(CommonCodeModel).filter(CommonCodeModel.group_code.in_(['DEFECT_TYPE','PRODUCTION_DEFECT_REASON']))}
+        codes={c.code:c.code_name for c in db.query(CommonCodeModel).filter(CommonCodeModel.group_code=='DEFECT_TYPE')}
         treatments=db.query(QualityProductionDefect,ProductionLotModel).join(ProductionLotModel,ProductionLotModel.id==QualityProductionDefect.production_lot_id).filter(QualityProductionDefect.status=='ACTIVE',QualityProductionDefect.item_id.in_(list(native_items.values()))).order_by(QualityProductionDefect.id).all()
         matching=[]
         for treatment,lot in treatments:
@@ -72,10 +72,8 @@ def records(db,day,user):
             for detail in db.query(QualityProductionDefectDetail).filter(QualityProductionDefectDetail.defect_id.in_([t.id for _,t in matching])).order_by(QualityProductionDefectDetail.id):
                 details.setdefault(detail.defect_id,[]).append(detail)
         for performance_id,treatment in matching:
-            reason=codes.get(('PRODUCTION_DEFECT_REASON',treatment.defect_reason_code),treatment.defect_reason_code or '')
-            result=' / '.join(value for value in [reason,treatment.remark or ''] if value)
             for detail in details.get(treatment.id,[]):
-                processed_defects.setdefault(performance_id,[]).append({'name':codes.get(('DEFECT_TYPE',detail.defect_type_code),detail.defect_type_code),'qty':detail.defect_qty,'result':result})
+                processed_defects.setdefault(performance_id,[]).append({'name':codes.get(detail.defect_type_code,detail.defect_type_code),'qty':detail.defect_qty})
     for row in rows:
         row['key']=row['record_source']+':'+str(row['source_record_id'])
         saved=supplements.get((row['record_source'],row['source_record_id']))
