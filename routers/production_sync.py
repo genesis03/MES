@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import check_admin_permission, get_current_user
 from models.models import ItemMasterModel, ProcessModel
+from models.packing_sync import ExternalPackingRecord, PackingSyncState
 from models.production_sync import ExternalProductionRecord, ProductionSyncProcessMap, ProductionSyncRun, ProductionSyncItemMap, ProductionSyncState
 from services.production_sync_client import SyncError, ProductionClient
 from services.production_sync_credentials import CredentialError, credential_status, read_credentials, save_credentials
@@ -23,7 +24,7 @@ router = APIRouter(tags=['Production synchronization'])
 templates = Jinja2Templates(directory='templates')
 def access(user, admin=False):
     if not check_admin_permission(user):
-        raise HTTPException(403, '관리자만 외부 연동 생산실적에 접근할 수 있습니다.')
+        raise HTTPException(403, '관리자만 외부 연동 관리에 접근할 수 있습니다.')
 
 
 def local_time(value):
@@ -82,6 +83,7 @@ def update_credentials(payload: Credentials, db: Session = Depends(get_db), user
     access(user)
     username, password = validate_login(payload, db)
     state(db)
+    state(db, 'packing')
     instant = now()
     changed = db.execute(update(ProductionSyncState).where(
         ProductionSyncState.id == 1, or_(ProductionSyncState.lease_until.is_(None), ProductionSyncState.lease_until < instant)
@@ -89,6 +91,12 @@ def update_credentials(payload: Credentials, db: Session = Depends(get_db), user
     if changed.rowcount != 1:
         db.rollback()
         raise HTTPException(409, '동기화 실행 중에는 연동 계정을 변경할 수 없습니다.')
+    packing_lock = db.execute(update(PackingSyncState).where(
+        PackingSyncState.id == 1, or_(PackingSyncState.lease_until.is_(None), PackingSyncState.lease_until < instant)
+    ).values(last_error=None))
+    if packing_lock.rowcount != 1:
+        db.rollback()
+        raise HTTPException(409, '포장 동기화 실행 중에는 연동 계정을 변경할 수 없습니다.')
     try:
         save_credentials(db, username, password)
     except CredentialError as exc:
@@ -223,7 +231,8 @@ def records(start_date: date | None = None, end_date: date | None = None,
 @router.get('/api/production/external-sync/item-maps')
 def item_maps(db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
-    pairs = db.query(ExternalProductionRecord.part_no, ExternalProductionRecord.process_name).distinct().all()
+    pairs = set(db.query(ExternalProductionRecord.part_no, ExternalProductionRecord.process_name).distinct().all())
+    pairs.update((part, '포장') for (part,) in db.query(ExternalPackingRecord.part_no).distinct())
     connections = ItemConnections(db)
     result = []
     for part, process in sorted(pairs):

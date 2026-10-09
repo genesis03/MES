@@ -14,10 +14,13 @@ from models.lot_consumption import LotConsumptionModel
 from models.lot_relation import LotRelationModel
 from models.models import ItemBomModel, ItemMasterModel, ShippingMasterModel
 from models.packing import PackingBox, PackingLotAllocation, PackingMaster
+from models.packing_sync import ExternalPackingRecord
 from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunLotAllocation, ProductionRunMaterial
 from models.sales import ShipmentBox, ShipmentItem, ShipmentMaster
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
+from services.production_sync_mapping import ItemConnections
+from services.packing_sync_view import packing_record_view
 from services.shipping_lot_service import next_shipping_lot_no
 from services.production_defect_service import active_production_defect_qty
 
@@ -261,7 +264,6 @@ def packing_status(
             PackingBox.package_lot_no.desc(),
             PackingBox.id.desc(),
         )
-        .limit(limit)
         .all()
     )
 
@@ -283,25 +285,40 @@ def packing_status(
             for shipment_box, shipment in shipped_rows
         }
 
-    return {
-        "items": [
-            {
-                "packing_box_id": box.id,
-                "part_no": master.part_no,
-                "part_name": master.part_name or "",
-                "lot_no": box.package_lot_no,
-                "packing_date": master.packing_date,
-                "packing_qty": float(box.box_qty or 0),
-                "shipment_qty": float(shipped_by_box[box.id][0].shipped_qty or 0)
-                if box.id in shipped_by_box else 0.0,
-                "shipment_date": shipped_by_box[box.id][1].shipment_date
-                if box.id in shipped_by_box else "",
-                "customer_name": shipped_by_box[box.id][1].customer_name
-                if box.id in shipped_by_box else "",
-            }
-            for box, master in rows
-        ]
-    }
+    items = [
+        {
+            "packing_box_id": box.id,
+            "record_source": "MES",
+            "part_no": master.part_no,
+            "part_name": master.part_name or "",
+            "lot_no": box.package_lot_no,
+            "packing_date": master.packing_date,
+            "packing_qty": float(box.box_qty or 0),
+            "shipment_qty": float(shipped_by_box[box.id][0].shipped_qty or 0)
+            if box.id in shipped_by_box else 0.0,
+            "shipment_date": shipped_by_box[box.id][1].shipment_date
+            if box.id in shipped_by_box else "",
+            "customer_name": shipped_by_box[box.id][1].customer_name
+            if box.id in shipped_by_box else "",
+        }
+        for box, master in rows
+    ]
+    external = db.query(ExternalPackingRecord)
+    if start_date:
+        external = external.filter(ExternalPackingRecord.packing_date >= start_date)
+    if end_date:
+        external = external.filter(ExternalPackingRecord.packing_date <= end_date)
+    connections = ItemConnections(db)
+    for record in external:
+        item = packing_record_view(record, connections)
+        if part_no and part_no.strip() and not any(part_no.strip().casefold() in item[k].casefold()
+                for k in ('part_no', 'part_name', 'source_part_no')):
+            continue
+        if lot_no and lot_no.strip() and lot_no.strip().casefold() not in item['lot_no'].casefold():
+            continue
+        items.append(item)
+    items.sort(key=lambda r: (r['packing_date'], r['lot_no'], str(r['packing_box_id'] or '')), reverse=True)
+    return {'items': items[:limit], 'total': len(items), 'truncated': len(items) > limit}
 
 
 @router.get("/api/packing/items")
