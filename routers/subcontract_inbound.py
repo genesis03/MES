@@ -292,6 +292,22 @@ def get_inbound_source(
     return _serialize_outbound_source(db, outbound)
 
 
+@router.get("/{inbound_id}/source")
+def get_existing_inbound_source(
+    inbound_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    # Existing receipts must remain viewable/cancellable after outbound cancellation.
+    inbound = db.get(SubcontractInboundMaster, inbound_id)
+    if inbound is None:
+        raise HTTPException(404, "외주가공 입고 내역을 찾을 수 없습니다.")
+    outbound = db.get(SubcontractOutboundMaster, inbound.outbound_id)
+    if outbound is None:
+        raise HTTPException(404, "연결된 외주가공 출고 내역을 찾을 수 없습니다.")
+    return _serialize_outbound_source(db, outbound)
+
+
 @router.get("/{inbound_id}")
 def get_inbound(
     inbound_id: int,

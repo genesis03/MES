@@ -92,7 +92,7 @@
     $("si-total-received").textContent = fmt(received);
     $("si-total-current").textContent = fmt(current);
     $("si-total-remaining").textContent = fmt(afterRemaining);
-    $("si-confirm").disabled = !!state.viewInbound || current <= 0;
+    $("si-confirm").disabled = !!state.viewInbound || state.source?.status !== "OUTBOUND" || current <= 0;
   }
 
   function renderItems() {
@@ -396,7 +396,7 @@
 
   async function loadInboundById(inboundId) {
     const inbound = await api(`/api/subcontract/inbound/${encodeURIComponent(inboundId)}`);
-    const source = await api(`/api/subcontract/inbound/outbound/${encodeURIComponent(inbound.outbound_id)}`);
+    const source = await api(`/api/subcontract/inbound/${encodeURIComponent(inbound.id)}/source`);
     renderSource(source, inbound);
     $("si-number").value = inbound.inbound_no || "";
     message(`입고번호 ${inbound.inbound_no} 조회 완료. 확정 LOT는 'LOT 조회'에서 확인할 수 있습니다.`);
@@ -491,7 +491,7 @@
     $("si-cancel").disabled = true;
     try {
       await api(`/api/subcontract/inbound/${inbound.id}/cancel`, { method: "POST" });
-      const refreshed = await api(`/api/subcontract/inbound/outbound/${state.source.outbound_id}`);
+      const refreshed = await api(`/api/subcontract/inbound/${inbound.id}/source`);
       renderSource(refreshed, null);
       message("최근 입고가 취소되었습니다.");
     } catch (e) {
