@@ -22,6 +22,7 @@ from models.production import ProductionPerformance, ProductionPlan, ProductionW
 from models.production_lot import ProductionLotModel
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from models.worker import WorkerMaster, WorkerProcess
+from services.production_process_type import performance_type_for_process
 
 router = APIRouter(prefix="/api/production", tags=["Production"])
 
@@ -335,8 +336,10 @@ def search_order_items(
 
 
 @router.get("/processes")
-def production_processes(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+def production_processes(performance_type: Optional[str] = Query(None, pattern="^(MACHINING|ASSEMBLY)$"), db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     rows = db.query(ProcessModel).filter(ProcessModel.is_active == "Y").order_by(ProcessModel.sort_order.asc(), ProcessModel.process_code.asc()).all()
+    if performance_type:
+        rows = [row for row in rows if performance_type_for_process(row) == performance_type]
     return [{"process_code": x.process_code, "process_name": x.process_name} for x in rows]
 
 

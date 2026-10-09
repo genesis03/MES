@@ -21,6 +21,7 @@ from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, S
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundLot, SubcontractInboundMaster
 from services.production_defect_service import active_production_defect_qty
 from models.worker import WorkerMaster, WorkerProcess
+from services.production_process_type import performance_type_for_process
 
 router = APIRouter(prefix="/api/production-run", tags=["Production Run"])
 
@@ -449,6 +450,8 @@ def start_run(payload: StartRunPayload, db: Session = Depends(get_db), current_u
     process = db.query(ProcessModel).filter(ProcessModel.process_code == payload.process_code.strip(), ProcessModel.is_active == "Y").first()
     if not process:
         raise HTTPException(400, "사용 가능한 공정을 선택하세요.")
+    if performance_type_for_process(process) != run_type:
+        raise HTTPException(400, "가공 실적은 가공 공정만, 조립 실적은 조립 공정만 선택할 수 있습니다.")
     worker = (
         db.query(WorkerMaster)
         .join(WorkerProcess, WorkerProcess.worker_id == WorkerMaster.id)
@@ -463,9 +466,9 @@ def start_run(payload: StartRunPayload, db: Session = Depends(get_db), current_u
     shift = payload.shift_type.strip().upper()
     if shift not in {"DAY", "NIGHT"}:
         raise HTTPException(400, "주간 또는 야간을 선택하세요.")
-    existing = db.query(ProductionRun.id).filter(ProductionRun.work_order_id == order.id, ProductionRun.status == "IN_PROGRESS").first()
+    existing = db.query(ProductionRun.id).join(ProductionWorkOrder, ProductionWorkOrder.id == ProductionRun.work_order_id).filter(ProductionWorkOrder.item_id == order.item_id, ProductionRun.equipment_id == equipment.id, ProductionRun.status == "IN_PROGRESS").first()
     if existing:
-        raise HTTPException(409, "이 작업지시는 이미 생산중 가동내역이 있습니다.")
+        raise HTTPException(409, "같은 품번이 해당 생산호기에서 이미 가동중입니다. 다른 생산호기를 선택하세요.")
 
     now_text = datetime.now().strftime("%Y-%m-%d %H:%M")
     run = ProductionRun(
