@@ -6,9 +6,9 @@
     performanceId: null,
     subcontractOutboundId: null,
     subcontractInboundId: null,
-    packingId: null,
     packingPart: null,
     packingLots: [],
+    packingSelectedLot: null,
     directShipmentId: null,
   };
 
@@ -25,12 +25,12 @@
     enable('production-label-btn', !!state.performanceId);
     enable('ob-label', !!state.subcontractOutboundId);
     enable('si-label', !!state.subcontractInboundId);
-    enable('pack-label-one', !!state.packingPart && state.packingLots.length > 0);
+    enable('pack-label-one', !!state.packingPart && state.packingLots.includes(state.packingSelectedLot));
     enable('pack-label-all', !!state.packingPart && state.packingLots.length > 0);
     enable('direct-internal-label-btn', !!state.directShipmentId);
   }
 
-  function handleJson(path, method, data, searchParams) {
+  function handleJson(path, method, data) {
     const upperMethod = String(method || 'GET').toUpperCase();
 
     if (/^\/api\/purchase\/inbound\/drafts\/\d+\/confirm$/.test(path) && upperMethod === 'POST') {
@@ -71,17 +71,6 @@
       state.subcontractInboundId = null;
     }
 
-    if (path === '/api/packing' && upperMethod === 'POST') {
-      state.packingId = Number(data?.id || 0) || null;
-      state.packingLots = Array.isArray(data?.waiting_lots) ? data.waiting_lots.filter(Boolean) : [];
-    } else if (path === '/api/packing/records' && upperMethod === 'GET') {
-      const part = searchParams.get('part_no') || '';
-      if ($('partQuery') && $('partQuery').value.trim() !== part) return;
-      const rows = (Array.isArray(data) ? data : []).filter(row => row.part_no === part);
-      state.packingPart = part || null;
-      state.packingLots = [...new Set(rows.flatMap(row => Array.isArray(row.waiting_lots) ? row.waiting_lots : []))];
-    }
-
     if (path === '/api/sales/shipping-entry/direct-confirm' && upperMethod === 'POST') {
       state.directShipmentId = Number(data?.shipment_id || 0) || null;
     } else if (/^\/api\/shipping\/inquiry\/\d+$/.test(path) && upperMethod === 'GET') {
@@ -100,7 +89,7 @@
       const url = new URL(rawUrl, window.location.origin);
       const method = init?.method || (typeof input !== 'string' && input?.method) || 'GET';
       if (response.ok && url.origin === window.location.origin) {
-        response.clone().json().then(data => handleJson(url.pathname, method, data, url.searchParams)).catch(() => {});
+        response.clone().json().then(data => handleJson(url.pathname, method, data)).catch(() => {});
       }
     } catch (_) {}
     return response;
@@ -143,23 +132,46 @@
     };
     $('pack-label-all')?.addEventListener('click', () => openPackingLabels());
     $('pack-label-one')?.addEventListener('click', () => {
-      if (!state.packingPart || !state.packingLots.length) return;
-      let lot = state.packingLots[0];
-      if (state.packingLots.length > 1) {
-        const entered = window.prompt(`출력할 출고대기 LOT를 입력하세요.\n${state.packingLots.join('\n')}`, lot);
-        if (!entered) return;
-        lot = entered.trim();
-        if (!state.packingLots.includes(lot)) { alert('현재 출고 대기 목록에 없는 LOT입니다.'); return; }
+      if (!state.packingLots.includes(state.packingSelectedLot)) return;
+      openPackingLabels(state.packingSelectedLot);
+    });
+    const selectPackingRow = row => {
+      const lot = row?.dataset.packLot;
+      if (!lot || !state.packingLots.includes(lot)) return;
+      state.packingSelectedLot = lot;
+      $('waitingBody')?.querySelectorAll('[data-pack-lot]').forEach(el => {
+        const selected = el === row;
+        el.classList.toggle('packing-selected', selected);
+        el.setAttribute('aria-selected', String(selected));
+      });
+      refreshButtons();
+    };
+    $('waitingBody')?.addEventListener('click', event => {
+      if (event.target.closest('button,a')) return;
+      selectPackingRow(event.target.closest('[data-pack-lot]'));
+    });
+    $('waitingBody')?.addEventListener('keydown', event => {
+      if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('[data-pack-lot]')) {
+        event.preventDefault(); selectPackingRow(event.target);
       }
-      openPackingLabels(lot);
+    });
+    document.addEventListener('packing-waiting-rendered', event => {
+      state.packingPart = event.detail.part || null;
+      state.packingLots = event.detail.lots || [];
+      state.packingSelectedLot = null;
+      refreshButtons();
     });
     $('partQuery')?.addEventListener('input', () => {
-      state.packingPart = null; state.packingLots = []; refreshButtons();
+      state.packingPart = null; state.packingLots = []; state.packingSelectedLot = null;
+      $('waitingBody')?.querySelectorAll('[data-pack-lot]').forEach(row => {row.classList.remove('packing-selected');row.setAttribute('aria-selected','false');});
+      refreshButtons();
     });
 
     $('pi-new')?.addEventListener('click', () => { state.purchaseId = null; refreshButtons(); });
     document.querySelector('button[onclick="resetPage()"]')?.addEventListener('click', () => {
-      state.packingId = null; state.packingPart = null; state.packingLots = []; refreshButtons();
+      state.packingPart = null; state.packingLots = []; state.packingSelectedLot = null;
+      $('waitingBody')?.querySelectorAll('[data-pack-lot]').forEach(row => {row.classList.remove('packing-selected');row.setAttribute('aria-selected','false');});
+      refreshButtons();
     });
     $('newEntryBtn')?.addEventListener('click', () => { state.directShipmentId = null; refreshButtons(); });
 

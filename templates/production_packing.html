@@ -3,6 +3,7 @@
 {% block extra_head %}
 <style>
 .pack-page{font-size:13px}.pack-page h1{font-size:20px;margin:0 0 14px}.pack-top{display:grid;grid-template-columns:2fr 1.4fr 1fr 1fr 1fr auto;gap:12px 18px;align-items:end;border-top:1px solid #60a5fa;padding-top:12px}.field label{display:block;font-weight:700;margin-bottom:5px}.field input{width:100%;height:36px;border:1px solid #cbd5e1;border-radius:4px;padding:0 9px}.field input[readonly]{background:#f8fafc}.btn{border:0;border-radius:4px;padding:9px 18px;font-weight:800;cursor:pointer}.blue{background:#1d74a8;color:#fff}.green{background:#5cb85c;color:#fff}.dark{background:#1769a6;color:#fff}.red{background:#c62828;color:#fff}.gray{background:#e2e8f0;color:#334155}.btn:disabled{opacity:.5;cursor:default}.toolbar{display:flex;gap:10px;justify-content:flex-end}.divider{border-top:1px solid #60a5fa;margin:14px 0}.scan-row{display:grid;grid-template-columns:100px 260px 120px;gap:12px;align-items:end;margin-bottom:16px}.columns{display:grid;grid-template-columns:1.15fr .75fr 1.2fr;gap:28px}.section-title{font-weight:800;border-bottom:1px solid #60a5fa;padding-bottom:8px;margin-bottom:10px}.table-wrap{border:1px solid #d7dee8;min-height:360px}.tbl{width:100%;border-collapse:collapse}.tbl th,.tbl td{border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;padding:8px;text-align:center}.tbl th{background:#f8fafc}.tbl td.num{text-align:right}.empty{padding:70px 10px;text-align:center;color:#94a3b8}.help{font-size:12px;color:#2563eb;line-height:1.8;margin-top:12px}.msg{margin:8px 0;min-height:18px}.ok{color:#15803d}.err{color:#b91c1c}.suggestions{position:absolute;background:white;border:1px solid #cbd5e1;z-index:50;max-height:220px;overflow:auto;width:100%}.suggestions button{width:100%;border:0;border-bottom:1px solid #e5e7eb;background:#fff;text-align:left;padding:8px;cursor:pointer}.search-wrap{position:relative}.summary{font-weight:700;background:#f8fafc}.cancel-btn{border:0;background:#dc2626;color:#fff;border-radius:3px;padding:5px 8px;cursor:pointer}
+.tbl tr[data-pack-lot]{cursor:pointer}.tbl tr[data-pack-lot]:hover td{background:#eff6ff}.tbl tr.packing-selected td{background:#dbeafe;color:#1e3a8a}.tbl tr[data-pack-lot]:focus-visible{outline:2px solid #2563eb;outline-offset:-2px}
 </style>
 {% endblock %}
 {% block content %}
@@ -37,6 +38,7 @@
     </div>
     <div>
       <div class="section-title">출고 대기 Lot 리스트</div>
+      <div class="help">행을 선택한 뒤 라벨 출력 (개별)을 누르세요.</div>
       <div class="table-wrap"><table class="tbl"><thead><tr><th>출고대기LOT</th><th>품번</th><th>수량</th><th>처리</th></tr></thead><tbody id="waitingBody"></tbody></table></div>
       <div id="waitingSummary" class="summary">건수: 0 · 계: 0</div>
       <div class="help">※ 1. 완제품 품번 검색<br>※ 2. Box 수량 입력<br>※ 3. 하위 품번 생산 LOT 스캔<br>※ 4. 저장<br><br>※ 완제품 BOM의 직속 하위 생산품 LOT가 잔여 LOT로 표시됩니다.<br>※ MOQ/표준포장수량 1박스마다 출고대기LOT가 1개씩 생성됩니다.<br>※ 출고대기LOT 형식: YYMMDD + 01(금형번호 고정) + 3자리 순번<br>※ 출고대기LOT는 실제 출고 시 그대로 출고 LOT로 사용합니다.<br>※ 외부 연동 LOT도 미출고 잔량으로 표시하며, 취소는 원본 시스템에서 처리합니다.<br>※ 포장 취소는 출고에 사용되지 않은 가장 후 포장 LOT부터 1건씩 가능합니다.<br>※ 취소한 수량만큼 원 생산 LOT 잔량이 복원됩니다.</div>
@@ -62,22 +64,23 @@ $('lotInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefaul
 async function scanLot(){if(!currentItem){showMsg('완제품 품번을 먼저 선택하세요.');return;}const t=target();if(t<=0){showMsg('Box 수량과 포장수량을 확인하세요.');return;}const lot=$('lotInput').value.trim();if(!lot){showMsg('LOT 번호를 입력하세요.');return;}try{const d=await jf('/api/packing/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({part_no:currentItem.part_no,lot_no:lot,target_qty:t})});allocations=d.allocations||[];renderScanned();const row=(currentItem.lots||[]).find(x=>x.lot_no.toUpperCase()===lot.toUpperCase());$('lotRemaining').value=row?n(row.remaining_qty).toLocaleString():'';$('lotInput').value='';$('lotInput').focus();showMsg(d.complete?'포장수량 LOT 배정이 완료되었습니다.':`미배정 ${n(d.remaining_qty).toLocaleString()} - 더 후 LOT를 스캔하세요.`,d.complete);}catch(e){showMsg(e.message);$('lotInput').select();}}
 async function savePacking(){if(!currentItem){showMsg('완제품 품번을 선택하세요.');return;}const t=target();const total=allocations.reduce((s,x)=>s+n(x.qty),0);if(t<=0||Math.abs(t-total)>1e-6){showMsg(`포장할 수량 ${t.toLocaleString()}과 LOT 배정수량 ${total.toLocaleString()}이 일치해야 합니다.`);return;}try{const d=await jf('/api/packing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({packing_date:MesLocalDate.today(),part_no:currentItem.part_no,box_count:Math.trunc(n($('boxCount').value)),box_qty:n($('standardQty').value),allocations:allocations.map(x=>({lot_no:x.lot_no,qty:x.qty}))})});const lots=(d.waiting_lots||[]).join(', ');showMsg(`포장 완료${lots?' / 출고대기LOT: '+lots:''}`,true);await selectItem(currentItem.part_no);$('boxCount').value='';updateTarget();}catch(e){showMsg(e.message)}}
 async function loadWaiting(){
-  if(!currentItem){$('waitingBody').innerHTML='<tr><td colspan="4" class="empty">출고 대기 LOT 없음</td></tr>';$('waitingSummary').textContent='건수: 0 · 계: 0';return;}
+  if(!currentItem){$('waitingBody').innerHTML='<tr><td colspan="4" class="empty">출고 대기 LOT 없음</td></tr>';$('waitingSummary').textContent='건수: 0 · 계: 0';document.dispatchEvent(new CustomEvent('packing-waiting-rendered',{detail:{part:null,lots:[]}}));return;}
   const selectedPart=currentItem.part_no;
   const rows=await jf('/api/packing/records?part_no='+encodeURIComponent(selectedPart));
   if(!currentItem||currentItem.part_no!==selectedPart)return;
   const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const boxes=rows.flatMap(x=>(x.waiting_boxes||[]).map(box=>({...box,part_no:x.part_no,record_source:x.record_source||'MES'})));
-  $('waitingBody').innerHTML=boxes.length?boxes.map(box=>`<tr>
+  $('waitingBody').innerHTML=boxes.length?boxes.map(box=>`<tr data-pack-lot="${esc(box.package_lot_no)}" tabindex="0" aria-selected="false">
     <td>${esc(box.package_lot_no)}</td><td>${esc(box.part_no)}</td><td class="num">${n(box.box_qty).toLocaleString()}</td>
     <td>${box.record_source==='EXTERNAL'?'<span class="help">외부 연동</span>':box.can_cancel?`<button class="cancel-btn" data-box-id="${Number(box.id)}" data-lot="${esc(box.package_lot_no)}">포장 취소</button>`:''}</td>
   </tr>`).join(''):'<tr><td colspan="4" class="empty">출고 대기 LOT 없음</td></tr>';
   $('waitingSummary').textContent=`건수: ${boxes.length.toLocaleString()} · 계: ${boxes.reduce((sum,x)=>sum+n(x.box_qty),0).toLocaleString()}`;
+  document.dispatchEvent(new CustomEvent('packing-waiting-rendered',{detail:{part:selectedPart,lots:boxes.map(x=>x.package_lot_no)}}));
 }
 $('waitingBody').addEventListener('click',event=>{const button=event.target.closest('[data-box-id]');if(button)cancelPackingBox(Number(button.dataset.boxId),button.dataset.lot);});
 async function cancelPackingBox(id,lotNo){if(!confirm(`${lotNo} 포장 LOT 1건을 취소하시겠습니까?\n가장 후 미출고 LOT부터 한 건씩 취소됩니다.`))return;try{const d=await jf(`/api/packing/boxes/${id}/cancel`,{method:'POST'});showMsg(d.message,true);await selectItem(currentItem.part_no);}catch(e){showMsg(e.message)}}
-function resetPage(){currentItem=null;allocations=[];$('partQuery').value='';$('partName').value='';$('standardQty').value='';$('boxCount').value='';$('targetQty').value='';$('lotInput').value='';$('lotRemaining').value='';$('suggestions').replaceChildren();$('remainingBody').innerHTML='';renderScanned();$('waitingBody').innerHTML='';$('waitingSummary').textContent='건수: 0 · 계: 0';showMsg('');$('partQuery').focus();}
+function resetPage(){currentItem=null;allocations=[];$('partQuery').value='';$('partName').value='';$('standardQty').value='';$('boxCount').value='';$('targetQty').value='';$('lotInput').value='';$('lotRemaining').value='';$('suggestions').replaceChildren();$('remainingBody').innerHTML='';renderScanned();$('waitingBody').innerHTML='';$('waitingSummary').textContent='건수: 0 · 계: 0';document.dispatchEvent(new CustomEvent('packing-waiting-rendered',{detail:{part:null,lots:[]}}));showMsg('');$('partQuery').focus();}
 document.addEventListener('DOMContentLoaded',()=>{resetPage();});
 </script>
-<script src="/static/internal_label_buttons.js?v=20261009-2"></script>
+<script src="/static/internal_label_buttons.js?v=20261009-3"></script>
 {% endblock %}
