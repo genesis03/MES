@@ -8,6 +8,10 @@ from models.daily_job_report import DailyJobReportSupplement
 from models.production_sync import ExternalProductionRecord
 from models.production_lot import ProductionLotModel
 
+def cell(sheet,coordinate):
+    return sheet[sheet._report_cell_map.get(coordinate,coordinate)]
+
+
 
 def test_external_supplement_round_trip_and_readonly_export(setup):
     setup.app.include_router(router)
@@ -25,10 +29,11 @@ def test_external_supplement_round_trip_and_readonly_export(setup):
     response=setup.client.post('/api/production/daily-job-report/excel',json=payload)
     assert response.status_code==200,response.text
     sheet=load_workbook(io.BytesIO(response.content)).active
-    assert [sheet[x].value for x in ['D16','F16','G16']]==[9.99,10,10.01]
-    assert sheet['Y12'].value=='5 / 2' and sheet['AC12'].value==1 and sheet['AF12'].value==7
-    assert sheet['C3'].value=='야간' and sheet['O7'].value==331 and sheet['Q7'].value==115
-    assert sheet['AA15'].value is None
+    sheet._report_cell_map=build_workbook([persisted]).active._report_cell_map
+    assert [cell(sheet,x).value for x in ['D16','F16','G16']]==[9.99,10,10.01]
+    assert cell(sheet,'Y12').value=='5 / 2' and cell(sheet,'AC12').value==1 and cell(sheet,'AF12').value==7
+    assert cell(sheet,'C3').value=='야간' and cell(sheet,'O7').value==331 and cell(sheet,'Q7').value==115
+    assert cell(sheet,'AA15').value is None
     html=setup.client.post('/api/production/daily-job-report/print',json=payload)
     assert html.status_code==200 and '측정 3' in html.text
     with setup.sessions() as db:
@@ -49,11 +54,11 @@ def report_row(lot,measurements=0):
 def test_multiple_work_rows_and_inspection_items_are_not_truncated():
     workbook=build_workbook([report_row('LOT1',10),report_row('LOT2'),report_row('LOT3')])
     assert len(workbook.worksheets)==3
-    assert workbook.worksheets[0]['AH7'].value=='LOT1' and workbook.worksheets[0]['AH8'].value=='LOT2'
-    assert workbook.worksheets[1]['D16'].value==8
-    assert workbook.worksheets[2]['AH7'].value=='LOT3'
-    assert workbook.worksheets[0]['G7'].data_type=='s'
-    assert workbook.worksheets[0]['M7'].value=='09:00 ~ 18:00'
+    assert cell(workbook.worksheets[0],'AH7').value=='LOT1' and cell(workbook.worksheets[0],'AH8').value=='LOT2'
+    assert cell(workbook.worksheets[1],'D16').value==8
+    assert cell(workbook.worksheets[2],'AH7').value=='LOT3'
+    assert cell(workbook.worksheets[0],'G7').data_type=='s'
+    assert cell(workbook.worksheets[0],'M7').value=='09:00 ~ 18:00'
     assert 'LOT3' in workbook_html(workbook) and '검사 계속 2/2' in workbook_html(workbook)
 
 
@@ -84,9 +89,29 @@ def test_print_preserves_original_fonts_fills_borders_and_blank_spacers():
     output=workbook_html(workbook)
     assert 'font-size:18.0pt' in output
     assert 'font-weight:700' in output and 'background:#E0E0E0' in output
-    assert 'background:#FFFF00' in output
+    assert 'background:#FFFF00' not in output
     assert 'border-left:1pt solid' in output
     assert 'font-size:0pt' in output
-    assert workbook.active['D7'].alignment.horizontal=='left'
-    assert workbook.active['F16'].fill.fgColor.rgb=='FFFFFF00'
-    assert workbook.active['G14'].font.sz==7
+    assert cell(workbook.active,'D7').alignment.horizontal=='left'
+    assert cell(workbook.active,'F16').fill.patternType is None
+    assert cell(workbook.active,'G14').font.sz==7
+
+
+def test_measurement_widths_grow_without_moving_other_report_sections():
+    from services.daily_job_report import _column_widths,TEMPLATE
+    source=load_workbook(TEMPLATE).active
+    target=build_workbook([report_row('LOT1',1)]).active
+    widths=_column_widths(target);original=_column_widths(source)
+    assert abs(sum(widths)-sum(original))<1e-5
+    for coordinate in ['A1','C5','Z5','AH5','A26','B34']:
+        before=source[coordinate];after=cell(target,coordinate)
+        assert abs(sum(original[:before.column-1])-sum(widths[:after.column-1]))<1e-5
+    def width(coordinate):
+        c=cell(target,coordinate)
+        area=next((a for a in target.merged_cells.ranges if c.coordinate in a),None)
+        return sum(widths[area.min_col-1:area.max_col]) if area else widths[c.column-1]
+    samples=[width(c) for c in ['D16','F16','G16']]
+    assert max(samples)-min(samples)<1e-5
+    assert samples[0]>sum(original[3:7])/3*2
+    assert width('H16')<sum(original[7:9]) and width('J16')<original[9]
+    assert all(c.fill.fgColor.rgb!='FFFFFF00' for row in target for c in row)

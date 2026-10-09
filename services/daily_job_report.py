@@ -21,6 +21,67 @@ def time_text(value):
     return text
 
 
+def _column_widths(sheet):
+    from openpyxl.utils import column_index_from_string
+    dimensions=[(d.min or column_index_from_string(key),d.max or d.min or column_index_from_string(key),d.width) for key,d in sheet.column_dimensions.items()]
+    return [next((width for start,end,width in dimensions if start<=c<=end),8) for c in range(1,sheet.max_column+1)]
+
+
+def _inspection_layout(workbook,source):
+    """Add column boundaries so only inspection widths change, not other sections."""
+    from openpyxl.utils import get_column_letter
+    widths=_column_widths(source)
+    edges=[0.0]
+    for width in widths:edges.append(round(edges[-1]+width,6))
+    blocks=[]
+    for start,end,columns in [(4,10,['D','F','G','H','J']),(12,21,['L','M','N','O','R'])]:
+        left,right=edges[start-1],edges[end]
+        span=right-left
+        boundaries=[left]+[round(left+span*f,6) for f in [7/30,14/30,.7,.85]]+[right]
+        blocks.append((start,end,columns,boundaries))
+    grid=sorted(set(edges+[x for _,_,_,points in blocks for x in points]))
+    index={x:n+1 for n,x in enumerate(grid)}
+    target=workbook.create_sheet(source.title+'-layout')
+    target.sheet_properties=copy.copy(source.sheet_properties)
+    target.sheet_view.showGridLines=False
+    target.page_setup=copy.copy(source.page_setup)
+    target.page_margins=copy.copy(source.page_margins)
+    for n in range(len(grid)-1):target.column_dimensions[get_column_letter(n+1)].width=grid[n+1]-grid[n]
+    for r,dimension in source.row_dimensions.items():target.row_dimensions[r]=copy.copy(dimension)
+    merged={(area.min_row,area.min_col):area for area in source.merged_cells.ranges}
+    covered={(r,c) for area in source.merged_cells.ranges for r in range(area.min_row,area.max_row+1) for c in range(area.min_col,area.max_col+1) if (r,c)!=(area.min_row,area.min_col)}
+    mapped={}
+    def place(cell,r1,c1,r2,c2):
+        dest=target.cell(r1,c1)
+        if dest.__class__.__name__=='MergedCell':raise ValueError(f'overlap {cell.coordinate} -> {r1}:{c1}, {r2}:{c2}')
+        dest.value=cell.value;dest.data_type=cell.data_type
+        dest._style=copy.copy(cell._style)
+        if cell.comment:dest.comment=copy.copy(cell.comment)
+        if r1!=r2 or c1!=c2:target.merge_cells(start_row=r1,start_column=c1,end_row=r2,end_column=c2)
+        return dest.coordinate
+    for row in source:
+        for cell in row:
+            if cell.__class__.__name__=='MergedCell' or (cell.row,cell.column) in covered:continue
+            if 14<=cell.row<=24 and any(start<=cell.column<=end for start,end,_,_ in blocks):continue
+            area=merged.get((cell.row,cell.column))
+            endcol=area.max_col if area else cell.column;endrow=area.max_row if area else cell.row
+            mapped[cell.coordinate]=place(cell,cell.row,index[edges[cell.column-1]],endrow,index[edges[endcol]]-1)
+    for _,_,columns,points in blocks:
+        for r in [14]+list(range(16,25)):
+            for n,col in enumerate(columns):
+                cell=source[f'{col}{r}']
+                mapped[cell.coordinate]=place(cell,r,index[points[n]],15 if r==14 else r,index[points[n+1]]-1)
+    # Yellow was an input guide; finished forms retain the original grey headers.
+    from openpyxl.styles import PatternFill
+    for row in target:
+        for cell in row:
+            if cell.fill.patternType=='solid' and cell.fill.fgColor.type=='rgb' and cell.fill.fgColor.rgb=='FFFFFF00':
+                cell.fill=PatternFill()
+    target.print_area=f'A1:{get_column_letter(len(grid)-1)}34'
+    title=source.title;workbook.remove(source);target.title=title
+    target._report_cell_map=mapped
+    return target
+
 def build_workbook(rows):
     workbook=load_workbook(TEMPLATE);template=workbook.active
     groups=defaultdict(list)
@@ -106,6 +167,7 @@ def build_workbook(rows):
                 sheet.page_setup.fitToWidth=1;sheet.page_setup.fitToHeight=1
                 sheet.sheet_view.showGridLines=False
     workbook.remove(template)
+    for sheet in list(workbook.worksheets):_inspection_layout(workbook,sheet)
     return workbook
 
 
@@ -130,15 +192,12 @@ def workbook_html(workbook):
             merged[(area.min_row,area.min_col)]=(area.max_row-area.min_row+1,area.max_col-area.min_col+1)
             skip.update((r,c) for r in range(area.min_row,area.max_row+1) for c in range(area.min_col,area.max_col+1) if (r,c)!=(area.min_row,area.min_col))
         parts.append('<section class="paper"><table><colgroup>')
-        widths=[]
-        for c in range(1,38):
-            dimension=next((d for d in sheet.column_dimensions.values() if (d.min or 0)<=c<=(d.max or 0)),None)
-            widths.append(dimension.width if dimension else 8)
+        widths=_column_widths(sheet)
         for width in widths:parts.append(f'<col style="width:{width/sum(widths)*100:.4f}%">')
         parts.append('</colgroup>')
         for r in range(1,35):
             parts.append(f'<tr style="height:{sheet.row_dimensions[r].height or 14}pt">')
-            for c in range(1,38):
+            for c in range(1,sheet.max_column+1):
                 if (r,c) in skip:continue
                 cell=sheet.cell(r,c);value=cell.value if cell.value is not None else ''
                 if isinstance(value,float):value=f'{value:g}'
