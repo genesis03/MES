@@ -216,6 +216,8 @@ def inventory_lots_with_current_location(
 @router.get("/api/inventory/status")
 def inventory_status(
     q: Optional[str] = Query(None, max_length=100),
+    material_type: Optional[str] = Query(None, pattern="^(FINISHED|SEMI|RAW)$"),
+    storage_location: Optional[str] = Query(None, max_length=100),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -224,6 +226,8 @@ def inventory_status(
     grouped: dict[tuple[int, str], dict] = {}
 
     item_query = db.query(ItemMasterModel)
+    if material_type:
+        item_query = item_query.filter(ItemMasterModel.material_type == material_type)
     if keyword:
         item_query = item_query.filter(
             (ItemMasterModel.part_no.ilike(f"%{keyword}%"))
@@ -301,6 +305,10 @@ def inventory_status(
         row['stock_qty'] += packed['remaining_qty']
 
     rows = list(grouped.values())
+    if storage_location == "__UNSPECIFIED__":
+        rows = [row for row in rows if not row["storage_location"]]
+    elif storage_location:
+        rows = [row for row in rows if row["storage_location"] == storage_location]
     rows.sort(key=lambda row: (row["part_no"], row["storage_location"]))
     total_qty = sum(float(row["stock_qty"] or 0) for row in rows)
     return {"items": rows, "total": len(rows), "stock_qty": total_qty}

@@ -5,11 +5,11 @@
 .inv-page{font-size:13px}.inv-page h1{font-size:22px;margin:0 0 6px}.inv-sub{color:#64748b;margin-bottom:14px}
 .inv-panel{background:#fff;border:1px solid #cbd5e1;border-radius:7px;margin-bottom:14px}
 .inv-panel-title{padding:10px 14px;border-bottom:1px solid #dbe3ec;font-weight:800}
-.inv-filter{display:grid;grid-template-columns:90px minmax(320px,620px) 100px 100px 1fr;gap:8px;align-items:center;padding:12px 14px}
-.inv-filter input{height:36px;border:1px solid #cbd5e1;border-radius:4px;padding:0 10px}
+.inv-filter{display:grid;grid-template-columns:55px minmax(180px,1fr) 65px 120px 65px 180px 80px 80px;gap:8px;align-items:center;padding:12px 14px}
+.inv-filter input,.inv-filter select{height:36px;border:1px solid #cbd5e1;border-radius:4px;padding:0 10px}
 .inv-btn{height:36px;border:0;border-radius:4px;padding:0 15px;font-weight:800;cursor:pointer}
 .inv-primary{background:#2563eb;color:#fff}.inv-light{background:#e2e8f0;color:#334155}
-.inv-summary{justify-self:end;color:#475569;font-weight:700}
+.inv-summary{grid-column:1/-1;justify-self:end;color:#475569;font-weight:700}
 .inv-table-wrap{overflow:auto}
 .inv-table{width:100%;border-collapse:collapse;min-width:900px}
 .inv-table th,.inv-table td{border:1px solid #e2e8f0;padding:8px;text-align:center;white-space:nowrap}
@@ -17,7 +17,7 @@
 .inv-table td.left{text-align:left}.inv-table td.num{text-align:right}
 .inv-total td{background:#e2e8f0;font-weight:900;border-top:2px solid #64748b}
 .inv-empty{padding:34px!important;color:#94a3b8;text-align:center}
-@media(max-width:1000px){.inv-filter{grid-template-columns:80px 1fr 90px 90px}.inv-summary{grid-column:1/-1;justify-self:start}}
+@media(max-width:1000px){.inv-filter{grid-template-columns:80px minmax(0,1fr)}.inv-summary{grid-column:1/-1;justify-self:start}}
 </style>
 {% endblock %}
 {% block content %}
@@ -30,6 +30,10 @@
     <div class="inv-filter">
       <strong>품번</strong>
       <input id="invKeyword" placeholder="품번 / 품명 검색" autocomplete="off">
+      <strong>자재 유형</strong>
+      <select id="invMaterial"><option value="">전체</option><option value="FINISHED">완제품</option><option value="SEMI">반제품</option><option value="RAW">원재료</option></select>
+      <strong>저장위치</strong>
+      <select id="invLocation"><option value="">전체</option><option value="__UNSPECIFIED__">미지정</option></select>
       <button class="inv-btn inv-primary" id="invSearch">조회</button>
       <button class="inv-btn inv-light" id="invReset">초기화</button>
       <div class="inv-summary" id="invSummary">총 0건 · 재고 0</div>
@@ -54,15 +58,20 @@ const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
 const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:3});
 
+let inventoryRequest=0;
 async function loadInventoryStatus(){
+  const request=++inventoryRequest;
   const body=$('invBody');
   body.innerHTML='<tr><td colspan="8" class="inv-empty">조회 중입니다...</td></tr>';
   const q=new URLSearchParams();
   const keyword=$('invKeyword').value.trim();
   if(keyword) q.set('q',keyword);
+  if($('invMaterial').value) q.set('material_type',$('invMaterial').value);
+  if($('invLocation').value) q.set('storage_location',$('invLocation').value);
   try{
     const r=await fetch('/api/inventory/status?'+q.toString());
     const d=await r.json();
+    if(request!==inventoryRequest)return;
     if(!r.ok) throw new Error(d.detail||'조회 실패');
     const rows=d.items||[];
     $('invSummary').textContent=`총 ${Number(d.total||0).toLocaleString()}건 · 재고 ${fmt(d.stock_qty)}`;
@@ -82,12 +91,16 @@ async function loadInventoryStatus(){
       <td class="num"><strong>${fmt(x.stock_qty)}</strong></td>
     </tr>`).join('')+`<tr class="inv-total"><td colspan="7">전체 합계</td><td class="num">${fmt(total)}</td></tr>`;
   }catch(e){
+    if(request!==inventoryRequest)return;
+    $('invSummary').textContent='조회 실패';
     body.innerHTML=`<tr><td colspan="8" class="inv-empty" style="color:#b91c1c">${esc(e.message)}</td></tr>`;
   }
 }
 
 function resetInventoryStatus(){
   $('invKeyword').value='';
+  $('invMaterial').value='';
+  $('invLocation').value='';
   loadInventoryStatus();
   $('invKeyword').focus();
 }
@@ -95,6 +108,16 @@ function resetInventoryStatus(){
 $('invSearch').addEventListener('click',loadInventoryStatus);
 $('invReset').addEventListener('click',resetInventoryStatus);
 $('invKeyword').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadInventoryStatus();}});
+async function loadStorageOptions(){
+  try{
+    const response=await fetch('/api/inventory/movements/locations');
+    const data=await response.json();
+    if(!response.ok)throw new Error(data.detail||'저장위치 조회 실패');
+    const names=[...new Set((data.items||[]).map(row=>row.name))].sort((a,b)=>a.localeCompare(b,'ko'));
+    $('invLocation').innerHTML='<option value="">전체</option><option value="__UNSPECIFIED__">미지정</option>'+names.map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('');
+  }catch(error){$('invLocation').title=error.message;}
+}
+loadStorageOptions();
 loadInventoryStatus();
 </script>
 {% endblock %}
