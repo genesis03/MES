@@ -5,9 +5,11 @@
 .mv-page{font-size:13px}.mv-page h1{font-size:22px;margin:0 0 6px}.mv-sub{color:#64748b;margin-bottom:14px}
 .mv-panel{background:#fff;border:1px solid #cbd5e1;border-radius:7px;margin-bottom:14px}
 .mv-panel-title{padding:10px 14px;border-bottom:1px solid #dbe3ec;font-weight:800}
-.mv-filter{display:grid;grid-template-columns:90px minmax(320px,620px) 100px 100px 1fr;gap:8px;align-items:center;padding:12px 14px}
-.mv-filter input,.mv-form input,.mv-form select,.mv-form textarea{border:1px solid #cbd5e1;border-radius:4px;padding:8px 10px;font:inherit;background:#fff}
-.mv-filter input{height:36px}.mv-btn{height:36px;border:0;border-radius:4px;padding:0 15px;font-weight:800;cursor:pointer}
+.mv-filter{display:grid;grid-template-columns:90px minmax(180px,1fr) 70px minmax(160px,240px) 100px 100px auto;gap:8px;align-items:center;padding:12px 14px}
+.mv-filter input,.mv-filter select,.mv-form input,.mv-form select,.mv-form textarea{border:1px solid #cbd5e1;border-radius:4px;padding:8px 10px;font:inherit;background:#fff}
+.mv-filter input,.mv-filter select{height:36px}
+.mv-selection{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid #dbe3ec}.mv-btn:disabled{opacity:.5;cursor:default}
+@media(max-width:1000px){.mv-filter{grid-template-columns:90px 1fr}.mv-summary{justify-self:start}}.mv-btn{height:36px;border:0;border-radius:4px;padding:0 15px;font-weight:800;cursor:pointer}
 .mv-primary{background:#2563eb;color:#fff}.mv-light{background:#e2e8f0;color:#334155}.mv-green{background:#059669;color:#fff}
 .mv-summary{justify-self:end;color:#475569;font-weight:700}
 .mv-table-wrap{overflow:auto}.mv-table{width:100%;border-collapse:collapse;min-width:960px}
@@ -33,6 +35,7 @@
     <div class="mv-filter">
       <strong>품번 / LOT</strong>
       <input id="mvKeyword" placeholder="품번 / 품명 / LOT 검색" autocomplete="off">
+      <strong>저장위치</strong><select id="mvLocation"><option value="">전체</option><option value="__UNSPECIFIED__">미지정</option></select>
       <button class="mv-btn mv-primary" id="mvSearch">조회</button>
       <button class="mv-btn mv-light" id="mvReset">초기화</button>
       <div class="mv-summary" id="mvSummary">총 0건</div>
@@ -41,10 +44,11 @@
 
   <div class="mv-panel">
     <div class="mv-panel-title">이동 가능 재고</div>
+    <div class="mv-selection"><button type="button" class="mv-btn mv-primary" id="mvBatch" disabled>선택 이동</button><span id="mvSelectedCount">선택 0건</span></div>
     <div class="mv-table-wrap">
       <table class="mv-table">
-        <thead><tr><th>No.</th><th>구분</th><th>품번</th><th>품명</th><th>LOT</th><th>현재 저장위치</th><th>현재재고</th><th>단위</th><th>이동</th></tr></thead>
-        <tbody id="mvBody"><tr><td colspan="9" class="mv-empty">조회해 주세요.</td></tr></tbody>
+        <thead><tr><th><input type="checkbox" id="mvSelectAll" aria-label="조회된 재고 전체 선택"></th><th>No.</th><th>구분</th><th>품번</th><th>품명</th><th>LOT</th><th>현재 저장위치</th><th>현재재고</th><th>단위</th><th>이동</th></tr></thead>
+        <tbody id="mvBody"><tr><td colspan="10" class="mv-empty">조회해 주세요.</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -89,29 +93,37 @@
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
 const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:3});
-let currentRows=[], selected=null, locations=[];
+let currentRows=[], selected=[], locations=[], checked=new Set(), loadingId=0;
 
 async function loadLocations(){
   const r=await fetch('/api/inventory/movements/locations');
   const d=await r.json();
   if(!r.ok)throw new Error(d.detail||'저장위치 조회 실패');
   locations=d.items||[];
+  $('mvLocation').innerHTML='<option value="">전체</option><option value="__UNSPECIFIED__">미지정</option>'+[...new Set(locations.map(x=>x.name))].map(name=>`<option value="${esc(name)}">${esc(name)}</option>`).join('');
 }
 
 async function loadLots(){
-  const q=new URLSearchParams();
+  const requestId=++loadingId;
+  checked.clear(); updateSelection();
+  const q=new URLSearchParams({limit:1000});
+  if($('mvLocation').value)q.set('storage_location',$('mvLocation').value);
   const keyword=$('mvKeyword').value.trim();
   if(keyword)q.set('keyword',keyword);
   const r=await fetch('/api/inventory/movements/lots?'+q.toString());
   const d=await r.json();
   if(!r.ok)throw new Error(d.detail||'조회 실패');
+  if(requestId!==loadingId)return;
   currentRows=d.items||[];
-  $('mvSummary').textContent=`총 ${currentRows.length.toLocaleString()}건`;
+  checked.clear();updateSelection();
+  const known=new Set([...$('mvLocation').options].map(x=>x.value));
+  for(const row of currentRows){if(row.storage_location&&!known.has(row.storage_location)){const option=new Option(row.storage_location,row.storage_location);$('mvLocation').add(option);known.add(row.storage_location);}}
+  $('mvSummary').textContent=`총 ${Number(d.total||0).toLocaleString()}건${d.total>currentRows.length?' · '+currentRows.length+'건 표시':''}`;
   $('mvBody').innerHTML=currentRows.length?currentRows.map((x,i)=>`<tr>
-    <td>${i+1}</td><td>${esc(x.source)}</td><td>${esc(x.part_no)}</td><td class="left">${esc(x.part_name)}</td>
+    <td><input type="checkbox" data-move-index="${i}" aria-label="${esc(x.part_no)} ${esc(x.lot_no)} 선택"></td><td>${i+1}</td><td>${esc(x.source)}</td><td>${esc(x.part_no)}</td><td class="left">${esc(x.part_name)}</td>
     <td>${esc(x.lot_no)}</td><td>${esc(x.storage_location||'미지정')}</td><td class="num"><strong>${fmt(x.current_qty)}</strong></td>
     <td>${esc(x.unit)}</td><td><button class="mv-btn mv-primary" type="button" onclick="openMove(${i})">이동</button></td>
-  </tr>`).join(''):'<tr><td colspan="9" class="mv-empty">이동 가능한 재고가 없습니다.</td></tr>';
+  </tr>`).join(''):'<tr><td colspan="10" class="mv-empty">이동 가능한 재고가 없습니다.</td></tr>';
 }
 
 async function loadHistory(){
@@ -126,50 +138,73 @@ async function loadHistory(){
   </tr>`).join(''):'<tr><td colspan="9" class="mv-empty">이동 이력이 없습니다.</td></tr>';
 }
 
-function openMove(index){
-  selected=currentRows[index];
-  if(!selected)return;
-  $('fPartNo').value=selected.part_no||'';
-  $('fLotNo').value=selected.lot_no||'';
-  $('fFrom').value=selected.storage_location||'미지정';
-  $('fQty').value=fmt(selected.current_qty)+' '+(selected.unit||'');
+function updateSelection(){
+  $('mvSelectedCount').textContent=`선택 ${checked.size}건`;
+  $('mvBatch').disabled=checked.size===0;
+  $('mvSelectAll').checked=currentRows.length>0&&checked.size===currentRows.length;
+  $('mvSelectAll').indeterminate=checked.size>0&&checked.size<currentRows.length;
+}
+function openMove(index){openMoves([currentRows[index]].filter(Boolean));}
+function openMoves(rows){
+  selected=rows;
+  if(!selected.length)return;
+  const summary=key=>[...new Set(selected.map(x=>x[key]||''))];
+  $('fPartNo').value=summary('part_no').join(', ');
+  $('fLotNo').value=selected.length===1?selected[0].lot_no:`선택 ${selected.length}개 LOT`;
+  $('fFrom').value=summary('storage_location').map(x=>x||'미지정').join(', ');
+  const quantities=new Map();
+  for(const row of selected){const unit=row.unit||'';quantities.set(unit,(quantities.get(unit)||0)+Number(row.current_qty));}
+  $('fQty').value=[...quantities].map(([unit,qty])=>fmt(qty)+' '+unit).join(' / ');
   $('fTo').innerHTML='<option value="">선택</option>'+locations
-    .filter(x=>x.name!==(selected.storage_location||''))
+    .filter(x=>!selected.some(row=>row.storage_location===x.name))
     .map(x=>`<option value="${esc(x.code)}">${esc(x.name)}</option>`).join('');
-  $('fReason').value='';
-  $('fNote').value='';
+  $('fReason').value='';$('fNote').value='';
+  document.querySelector('.mv-head h2').textContent=selected.length===1?'LOT 전체 이동':`LOT 일괄 이동 (${selected.length}건)`;
   $('mvModal').classList.add('show');
 }
-
-function closeMove(){selected=null;$('mvModal').classList.remove('show');}
+function closeMove(){selected=[];$('mvModal').classList.remove('show');}
 
 async function saveMove(){
-  if(!selected)return;
-  const to=$('fTo').value;
-  const reason=$('fReason').value;
+  if(!selected.length||$('mvSave').disabled)return;
+  const to=$('fTo').value,reason=$('fReason').value;
   if(!to)return alert('이동할 저장위치를 선택해 주세요.');
   if(!reason)return alert('이동 사유를 선택해 주세요.');
   const target=locations.find(x=>x.code===to);
-  if(!confirm(`${selected.lot_no}의 현재재고 ${fmt(selected.current_qty)} ${selected.unit||''} 전량을 ${target?target.name:to}(으)로 이동하시겠습니까?`))return;
-  const r=await fetch('/api/inventory/movements',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({item_id:selected.item_id,lot_no:selected.lot_no,to_location:to,reason,note:$('fNote').value.trim()})
-  });
-  const d=await r.json();
-  if(!r.ok)throw new Error(d.detail||'창고 이동 실패');
-  closeMove();
-  await Promise.all([loadLots(),loadHistory()]);
-  alert(`이동 완료: ${d.lot_no} / ${d.from_location||'미지정'} → ${d.to_location}`);
+  if(!confirm(`선택한 ${selected.length}개 LOT의 현재재고 전량을 ${target?target.name:to}(으)로 이동하시겠습니까?`))return;
+  const selection=[...selected];
+  const common={to_location:to,reason,note:$('fNote').value.trim()};
+  const bulk=selection.length>1;
+  const payload=bulk?{...common,lots:selection.map(x=>({item_id:x.item_id,lot_no:x.lot_no}))}:{...common,item_id:selection[0].item_id,lot_no:selection[0].lot_no};
+  $('mvSave').disabled=true;
+  try{
+    const r=await fetch('/api/inventory/movements'+(bulk?'/batch':''),{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
+    });
+    const d=await MesResponse.read(r,'창고 이동');
+    closeMove();
+    alert(`이동 완료: ${bulk?d.total:1}개 LOT → ${target?target.name:to}`);
+    await Promise.all([loadLots(),loadHistory()]);
+  }finally{$('mvSave').disabled=false;}
 }
 
+$('mvBatch').addEventListener('click',()=>openMoves([...checked].map(i=>currentRows[i])));
+$('mvSelectAll').addEventListener('change',e=>{
+  checked=e.target.checked?new Set(currentRows.map((_,i)=>i)):new Set();
+  document.querySelectorAll('[data-move-index]').forEach(box=>{box.checked=e.target.checked;});updateSelection();
+});
+$('mvBody').addEventListener('change',e=>{
+  if(!e.target.matches('[data-move-index]'))return;
+  const index=Number(e.target.dataset.moveIndex);
+  if(e.target.checked)checked.add(index);else checked.delete(index);updateSelection();
+});
+$('mvLocation').addEventListener('change',()=>loadLots().catch(e=>alert(e.message)));
 $('mvSearch').addEventListener('click',()=>loadLots().catch(e=>alert(e.message)));
-$('mvReset').addEventListener('click',()=>{$('mvKeyword').value='';loadLots().catch(e=>alert(e.message));});
+$('mvReset').addEventListener('click',()=>{$('mvKeyword').value='';$('mvLocation').value='';loadLots().catch(e=>alert(e.message));});
 $('mvKeyword').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadLots().catch(err=>alert(err.message));}});
 $('mvClose').addEventListener('click',closeMove);
 $('mvCancel').addEventListener('click',closeMove);
 $('mvSave').addEventListener('click',()=>saveMove().catch(e=>alert(e.message)));
 $('mvModal').addEventListener('click',e=>{if(e.target===$('mvModal'))closeMove();});
-Promise.all([loadLocations(),loadLots(),loadHistory()]).catch(e=>alert(e.message));
+loadLocations().then(()=>Promise.all([loadLots(),loadHistory()])).catch(e=>alert(e.message));
 </script>
 {% endblock %}

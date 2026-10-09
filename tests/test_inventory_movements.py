@@ -69,3 +69,57 @@ def test_native_packing_move_without_recreating_stock(setup):
     rows=setup.client.get('/api/inventory/status').json()['items']
     assert rows[0]['storage_location']=='New location' and rows[0]['stock_qty']==30
     with setup.sessions() as db:assert db.query(PackingBox).count()==1
+
+
+def prepare_batch(setup):
+    setup.app.include_router(router)
+    with setup.sessions() as db:
+        native=add_item(db); finished=add_finished(db);finished.inbound_loc=None
+        fid=finished.id;locations(db)
+        db.add(ProductionLotModel(item_id=native,part_no='LOCAL-B',lot_no='NATIVE',lot_qty=20,storage_location=None));db.commit()
+    token,_=sync.claim(DAY,DAY,'MANUAL','packing')
+    sync.save_day([row(JOB_QTY='80')],token,'packing')
+    return [{'item_id':native,'lot_no':'NATIVE'}, {'item_id':fid,'lot_no':'26100501001'}]
+
+
+def batch(client, lots, **changes):
+    return client.post('/api/inventory/movements/batch',json={'lots':lots,'to_location':'TARGET',
+        'reason':'창고정리','note':'Bulk location assignment',**changes})
+
+
+def test_batch_mixed_stock_filter_and_history(setup):
+    lots=prepare_batch(setup)
+    assert setup.client.get('/api/inventory/movements/lots?storage_location=__UNSPECIFIED__').json()['total']==2
+    response=batch(setup.client,lots)
+    assert response.status_code==200 and response.json()['total']==2
+    assert [x['moved_qty'] for x in response.json()['items']]==[20,160]
+    assert setup.client.get('/api/inventory/movements/lots?storage_location=__UNSPECIFIED__').json()['total']==0
+    result=setup.client.get('/api/inventory/movements/lots',params={'storage_location':'New location','limit':1}).json()
+    assert result['total']==2 and len(result['items'])==1
+    assert len(setup.client.get('/api/inventory/movements/history').json()['items'])==2
+    assert batch(setup.client,lots).status_code==422
+    assert len(setup.client.get('/api/inventory/movements/history').json()['items'])==2
+
+
+def test_batch_validation_has_no_partial_moves(setup):
+    lots=prepare_batch(setup)
+    bad=lots+[{'item_id':lots[0]['item_id'],'lot_no':'MISSING'}]
+    assert batch(setup.client,bad).status_code==404
+    assert setup.client.get('/api/inventory/movements/history').json()['items']==[]
+    assert setup.client.get('/api/inventory/movements/lots?storage_location=__UNSPECIFIED__').json()['total']==2
+    assert batch(setup.client,[lots[0],lots[0]]).status_code==422
+    assert batch(setup.client,lots,reason=' ').status_code==422
+    assert batch(setup.client,lots,to_location='MISSING').status_code==404
+    assert setup.client.get('/api/inventory/movements/history').json()['items']==[]
+
+
+def test_location_filter_before_result_limit(setup):
+    setup.app.include_router(router)
+    with setup.sessions() as db:
+        item=add_item(db);locations(db)
+        for index in range(5):
+            db.add(ProductionLotModel(item_id=item,part_no='LOCAL-B',lot_no=f'LOT{index}',lot_qty=10,
+                                      storage_location='TARGET' if index<4 else None))
+        db.commit()
+    data=setup.client.get('/api/inventory/movements/lots',params={'storage_location':'__UNSPECIFIED__','limit':1}).json()
+    assert data['total']==1 and data['items'][0]['lot_no']=='LOT4'

@@ -342,6 +342,11 @@ def inventory_adjustment_lots(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    rows = _adjustment_lot_rows(db, keyword)
+    return {'items': rows[:limit], 'total': min(len(rows), limit)}
+
+
+def _adjustment_lot_rows(db: Session, keyword: Optional[str] = None):
     q = str(keyword or "").strip()
     names = _storage_map(db)
     item_query = db.query(ItemMasterModel)
@@ -356,7 +361,7 @@ def inventory_adjustment_lots(
                     ProductionLotModel.lot_no.ilike(f"%{q}%"))),
             )
         )
-    items = item_query.limit(limit).all()
+    items = item_query.all()
     item_map = {row.id: row for row in items}
     item_ids = list(item_map)
 
@@ -427,7 +432,7 @@ def inventory_adjustment_lots(
             })
 
     rows.sort(key=lambda row: (row["part_no"], row["lot_no"]))
-    return {"items": rows[:limit], "total": min(len(rows), limit)}
+    return rows
 
 
 @router.post("/api/inventory/adjustments")
@@ -545,16 +550,16 @@ def inventory_movement_locations(
 
 @router.get("/api/inventory/movements/lots")
 def inventory_movement_lots(
+    storage_location: Optional[str] = Query(None, max_length=100),
     keyword: Optional[str] = Query(None, max_length=100),
     limit: int = Query(200, ge=1, le=1000),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    data = inventory_adjustment_lots(keyword=keyword, limit=limit, db=db, current_user=current_user)
+    rows = _adjustment_lot_rows(db, keyword)
     # Adjustments remain restricted to native input/production stock. Packing
     # balances can move locations without changing the source quantities.
     names = _storage_map(db)
-    rows = list(data['items'])
     packed, _ = packing_stock_snapshot(db)
     search = str(keyword or '').strip().casefold()
     for row in packed:
@@ -565,16 +570,26 @@ def inventory_movement_lots(
         item = db.get(ItemMasterModel, row['item_id'])
         rows.append({**row, 'current_qty': row['remaining_qty'], 'unit': item.unit or 'EA',
                      'storage_location': _storage_display(row['storage_location'], names)})
+    if storage_location:
+        value = '' if storage_location == '__UNSPECIFIED__' else storage_location.strip()
+        rows = [row for row in rows if str(row['storage_location'] or '').strip() == value]
     rows.sort(key=lambda row: (row['part_no'], row['lot_no']))
     return {'items': rows[:limit], 'total': len(rows)}
 
 
-@router.post("/api/inventory/movements")
-def create_inventory_movement(
-    payload: InventoryMovementInput,
-    db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
-):
+class InventoryMovementLot(BaseModel):
+    item_id: int = Field(gt=0)
+    lot_no: str = Field(min_length=1, max_length=100)
+
+
+class InventoryMovementBatchInput(BaseModel):
+    lots: list[InventoryMovementLot] = Field(min_length=1, max_length=1000)
+    to_location: str = Field(min_length=1, max_length=20)
+    reason: str = Field(min_length=1, max_length=100)
+    note: Optional[str] = Field(None, max_length=1000)
+
+
+def _prepare_movement(db, payload, current_user, packed=None):
     lot_no = payload.lot_no.strip()
     item = db.get(ItemMasterModel, payload.item_id)
     if item is None:
@@ -582,7 +597,8 @@ def create_inventory_movement(
 
     base = _lot_base_info(db, payload.item_id, lot_no)
     if base is None:
-        packed, _ = packing_stock_snapshot(db)
+        if packed is None:
+            packed, _ = packing_stock_snapshot(db)
         matches = [row for row in packed if row['item_id'] == item.id
                    and row['lot_no'].strip().casefold() == lot_no.casefold()]
         if len(matches) != 1:
@@ -602,7 +618,10 @@ def create_inventory_movement(
 
     from_location = _current_storage(db, lot_no, original_location, payload.item_id)
     to_location = payload.to_location.strip()
-    if from_location == to_location:
+    names = _storage_map(db)
+    if not payload.reason.strip():
+        raise HTTPException(422, '이동 사유를 선택해 주세요.')
+    if _storage_display(from_location, names) == _storage_display(to_location, names):
         raise HTTPException(422, "현재 저장위치와 이동할 저장위치가 같습니다.")
 
     target = (
@@ -627,20 +646,53 @@ def create_inventory_movement(
         note=(payload.note or "").strip() or None,
         created_by=getattr(current_user, "username", None),
     )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
+    return row
+
+
+def _movement_result(row, names):
     return {
         "id": row.id,
         "part_no": row.part_no,
         "lot_no": row.lot_no,
-        "from_location": _storage_display(row.from_location, _storage_map(db)),
-        "to_location": _storage_display(row.to_location, _storage_map(db)),
+        "from_location": _storage_display(row.from_location, names),
+        "to_location": _storage_display(row.to_location, names),
         "moved_qty": row.moved_qty,
         "reason": row.reason,
         "created_by": row.created_by,
         "created_at": row.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
     }
+
+
+@router.post("/api/inventory/movements")
+def create_inventory_movement(payload: InventoryMovementInput, db: Session = Depends(get_db),
+                              current_user=Depends(get_current_user)):
+    row = _prepare_movement(db, payload, current_user)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _movement_result(row, _storage_map(db))
+
+
+@router.post("/api/inventory/movements/batch")
+def create_inventory_movement_batch(payload: InventoryMovementBatchInput, db: Session = Depends(get_db),
+                                    current_user=Depends(get_current_user)):
+    keys = [(lot.item_id, lot.lot_no.strip().casefold()) for lot in payload.lots]
+    if len(keys) != len(set(keys)):
+        raise HTTPException(422, '같은 품목·LOT가 중복 선택됐습니다.')
+    packed, _ = packing_stock_snapshot(db)
+    rows = []
+    for lot in payload.lots:
+        try:
+            data = InventoryMovementInput(**lot.model_dump(), to_location=payload.to_location,
+                                          reason=payload.reason, note=payload.note)
+            rows.append(_prepare_movement(db, data, current_user, packed))
+        except HTTPException as error:
+            raise HTTPException(error.status_code, f'{lot.lot_no}: {error.detail}') from error
+    # All validation precedes the only commit: no partially moved selection.
+    db.add_all(rows)
+    db.commit()
+    names = _storage_map(db)
+    return {'total': len(rows), 'items': [_movement_result(row, names) for row in rows]}
 
 
 @router.get("/api/inventory/movements/history")
