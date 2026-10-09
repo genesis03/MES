@@ -47,10 +47,11 @@
 .internal-label-box.production-label .production-worker-grid span{display:flex;align-items:center;padding:0 .55mm;border-right:1px solid #111;overflow:hidden;white-space:nowrap;font-size:8.2pt}
 .internal-label-box.production-label .production-worker-grid span:nth-child(odd){font-weight:900;justify-content:center}
 .internal-label-box.production-label .production-worker-grid span:last-child{border-right:0}
-.internal-label-box.production-label .internal-extra{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:5mm 5mm}
+.internal-label-box.production-label .internal-extra{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,minmax(5mm,1fr));flex:1 0 10mm;border-top:1px solid #111}
 .internal-label-box.production-label .internal-extra .extra-label,.internal-label-box.production-label .internal-extra .extra-value{padding:0 .3mm;font-size:7.8pt;border-right:1px solid #111}
 .internal-label-box.production-label .internal-extra .extra-value{font-size:8.8pt;font-weight:900;border-top:1px solid #111}
-.internal-label-box.production-label .internal-extra .extra-label:nth-child(7),.internal-label-box.production-label .internal-extra .extra-value:nth-child(8){border-right:0}
+.internal-label-box.production-label .internal-extra div:nth-child(4n){border-right:0}
+.internal-label-box.production-label .internal-barcode{margin-top:0}
 @media print{.sidebar,.internal-print-toolbar{display:none!important}.main-content{padding:0!important}.internal-label-page{margin:0!important}.internal-label-box{box-shadow:none!important}}
 </style>
 {% endblock %}
