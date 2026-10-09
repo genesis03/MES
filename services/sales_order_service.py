@@ -3,6 +3,8 @@ from models.sales import SalesOrderMaster
 
 def sync_order_status(order: SalesOrderMaster) -> None:
     """수주 품목의 출고수량을 기준으로 품목/수주 상태를 일관되게 동기화합니다."""
+    if order.status == "CANCELLED":
+        return
     if not order.items:
         order.status = "ORDERED"
         return

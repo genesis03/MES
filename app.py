@@ -283,6 +283,8 @@ app.include_router(internal_labels.router)
 app.include_router(packing.router)
 # 수주 목적(양산/샘플/개발)과 거래구분(유상/무상) API를 기존 sales보다 먼저 적용합니다.
 app.include_router(sales_order_policy.router)
+from routers import sales_unsold_import
+app.include_router(sales_unsold_import.router)
 # 샘플/개발은 포장 없이 미포장 생산 LOT에서 직접 출고할 수 있습니다.
 app.include_router(sales_shipping_direct.router)
 # 출고 입력 화면은 직출고 확장 스크립트를 포함한 템플릿을 우선 사용합니다.
