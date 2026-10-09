@@ -12,6 +12,10 @@ from models.daily_job_report import DailyJobReportSupplement
 from models.production_run import ProductionRun
 from models.production_sync import ExternalProductionRecord
 from models.inspection_standard import InspectionStandard
+from models.models import CommonCodeModel
+from models.production_defect import QualityProductionDefect, QualityProductionDefectDetail
+from models.production_lot import ProductionLotModel
+from services.production_lot_service import performance_id_from_lot_note
 from routers.production_extra import production_performance_status
 from services.daily_job_report import build_workbook,workbook_html
 
@@ -53,12 +57,33 @@ def records(db,day,user):
         process_code=None,work_order_no=None,part_no=None,operator_name=None,db=db,current_user=user)
     supplements={(s.record_source,s.record_id):s for s in db.query(DailyJobReportSupplement)}
     runs={r.performance_id:r for r in db.query(ProductionRun).filter(ProductionRun.performance_date==day.isoformat(),ProductionRun.status=='COMPLETED')}
+    native_items={r['source_record_id']:r.get('item_id') for r in rows if r['record_source']=='MES'}
+    processed_defects={}
+    if native_items:
+        codes={(c.group_code,c.code):c.code_name for c in db.query(CommonCodeModel).filter(CommonCodeModel.group_code.in_(['DEFECT_TYPE','PRODUCTION_DEFECT_REASON']))}
+        treatments=db.query(QualityProductionDefect,ProductionLotModel).join(ProductionLotModel,ProductionLotModel.id==QualityProductionDefect.production_lot_id).filter(QualityProductionDefect.status=='ACTIVE',QualityProductionDefect.item_id.in_(list(native_items.values()))).order_by(QualityProductionDefect.id).all()
+        matching=[]
+        for treatment,lot in treatments:
+            performance_id=performance_id_from_lot_note(lot.note)
+            if performance_id in native_items and native_items[performance_id]==treatment.item_id==lot.item_id and treatment.lot_no==lot.lot_no:
+                matching.append((performance_id,treatment))
+        details={}
+        if matching:
+            for detail in db.query(QualityProductionDefectDetail).filter(QualityProductionDefectDetail.defect_id.in_([t.id for _,t in matching])).order_by(QualityProductionDefectDetail.id):
+                details.setdefault(detail.defect_id,[]).append(detail)
+        for performance_id,treatment in matching:
+            reason=codes.get(('PRODUCTION_DEFECT_REASON',treatment.defect_reason_code),treatment.defect_reason_code or '')
+            result=' / '.join(value for value in [reason,treatment.remark or ''] if value)
+            for detail in details.get(treatment.id,[]):
+                processed_defects.setdefault(performance_id,[]).append({'name':codes.get(('DEFECT_TYPE',detail.defect_type_code),detail.defect_type_code),'qty':detail.defect_qty,'result':result})
     for row in rows:
         row['key']=row['record_source']+':'+str(row['source_record_id'])
         saved=supplements.get((row['record_source'],row['source_record_id']))
         supplement=Supplement.model_validate_json(saved.data_json) if saved else Supplement()
         run=runs.get(row['source_record_id']) if row['record_source']=='MES' else None
         row['defects']=[{'name':d.defect_type_name,'qty':d.defect_qty} for d in run.defects] if run else []
+        if row['record_source']=='MES':
+            row['defects'].extend(processed_defects.get(row['source_record_id'],[]))
         row['work_time']='';row['material_lots']=row['source_lot_no']
         if run:
             row['work_time']=run.start_time+' ~ '+(run.end_time or '')

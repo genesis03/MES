@@ -115,3 +115,38 @@ def test_measurement_widths_grow_without_moving_other_report_sections():
     assert samples[0]>sum(original[3:7])/3*2
     assert width('H16')<sum(original[7:9]) and width('J16')<original[9]
     assert all(c.fill.fgColor.rgb!='FFFFFF00' for row in target for c in row)
+
+
+def test_processed_defects_link_to_exact_performance_and_exclude_cancelled(setup):
+    from test_production_sync import add_item
+    from models.models import CommonCodeModel, ProcessModel
+    from models.production import ProductionWorkOrder, ProductionPerformance
+    from models.production_defect import QualityProductionDefect, QualityProductionDefectDetail
+    setup.app.include_router(router)
+    with setup.sessions() as db:
+        item=add_item(db)
+        db.add(ProcessModel(process_code='LT',process_name='복합선반',created_at='2026-01-01'))
+        db.flush()
+        order=ProductionWorkOrder(work_order_no='W-DEFECT',order_date=DAY.isoformat(),item_id=item,part_no='LOCAL-B',order_qty=100)
+        db.add(order);db.flush()
+        performance=ProductionPerformance(work_order_id=order.id,performance_date=DAY.isoformat(),process_code='LT',shift_type='DAY',good_qty=100,defect_qty=0,setup_qty=0)
+        db.add(performance);db.flush()
+        db.add(CommonCodeModel(group_code='DEFECT_TYPE',group_name='보고서 테스트',created_at='2026-01-01',code='REPORT_TEST',code_name='치수 불량',is_active='N'))
+        db.add(CommonCodeModel(group_code='PRODUCTION_DEFECT_REASON',group_name='보고서 테스트',created_at='2026-01-01',code='REPORT_TEST',code_name='검사 불량',is_active='N'))
+        for number,status,marker in [(1,'ACTIVE',performance.id),(2,'CANCELLED',performance.id),(3,'ACTIVE',performance.id+100)]:
+            lot=ProductionLotModel(lot_no=f'REPORTLOT{number}',item_id=item,part_no='LOCAL-B',lot_qty=100,note=f'PERF:{marker}|생산실적 자동생성')
+            db.add(lot);db.flush()
+            treatment=QualityProductionDefect(production_lot_id=lot.id,item_id=item,lot_no=lot.lot_no,defect_date=DAY.isoformat(),defect_qty=3,status=status,defect_reason_code='REPORT_TEST',remark='선별 후 폐기')
+            db.add(treatment);db.flush()
+            db.add(QualityProductionDefectDetail(defect_id=treatment.id,defect_type_code='REPORT_TEST',defect_qty=3))
+        db.commit()
+    response=setup.client.get('/api/production/daily-job-report',params={'day':DAY.isoformat()})
+    assert response.status_code==200,response.text
+    data=response.json()['items'][0]
+    assert data['defects']==[{'name':'치수 불량','qty':3,'result':'검사 불량 / 선별 후 폐기'}]
+    assert data['total_qty']==100 and data['defect_qty']==0
+    sheet=build_workbook([data]).active
+    assert cell(sheet,'AD15').value=='치수 불량'
+    assert cell(sheet,'AJ15').value=='검사 불량 / 선별 후 폐기'
+    assert cell(sheet,'AA15').value==3
+    assert '선별 후 폐기' in workbook_html(build_workbook([data]))

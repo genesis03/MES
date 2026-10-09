@@ -156,9 +156,10 @@ def build_workbook(rows):
                 defects=[(row,defect) for row in pair for defect in row.get('defects',[])]
                 for r,(source,defect) in enumerate(defects[:4],15):
                     put(sheet,'Y'+str(r),source['part_no']);put(sheet,'AA'+str(r),defect['qty']);put(sheet,'AD'+str(r),defect['name'])
+                    put(sheet,'AJ'+str(r),defect.get('result',''))
                 if section>0:put(sheet,'F1',f'작업일보 — 검사 계속 {section+1}/{inspection_pages}')
                 notes=[r['supplement']['notes'] for r in pair if r['supplement']['notes']]
-                if len(defects)>4:notes.append('추가 불량: '+' / '.join(f"{source['part_no']} {defect['name']} {defect['qty']:g}" for source,defect in defects[4:]))
+                if len(defects)>4:notes.append('추가 불량: '+' / '.join(f"{source['part_no']} {defect['name']} {defect['qty']:g} {defect.get('result','')}".strip() for source,defect in defects[4:]))
                 put(sheet,'AG26','\n'.join(notes))
                 for col,field in [('O','total_qty'),('Q','setup_qty'),('W','defect_qty')]:
                     vals=[r[field] for r in pair];put(sheet,col+'9',sum(vals) if all(v is not None for v in vals) else None)
