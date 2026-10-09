@@ -158,7 +158,7 @@ class ProductionClient:
                 if actual != day:
                     continue
                 for key in ('JOB_QTY', 'LOT_QTY', 'FAULT_QTY', 'F10'):
-                    label = {'JOB_QTY': '양품', 'LOT_QTY': 'LOT 수량', 'FAULT_QTY': '불량', 'F10': 'SET-UP'}[key]
+                    label = {'JOB_QTY': '양품', 'LOT_QTY': 'LOT 수량', 'FAULT_QTY': '불량', 'F10': '셋업'}[key]
                     try:
                         number = Decimal(row[key])
                     except InvalidOperation as exc:

@@ -15,10 +15,10 @@
         $('esRows').innerHTML=d.rows.length?d.rows.map((r,index)=>{
             const type={MACHINING:'가공',ASSEMBLY:'조립'}[r.performance_type]||'미지정';
             const machine=(r.lot_no||'').trim().slice(-2,-1);
-            const values=[(page-1)*50+index+1,r.work_date,type,'미확인',r.process_name||r.source_process,'미확인',/^[0-9]$/.test(machine)?machine:'미확인','미연결',r.mes_part_no||'미연결',r.part_name,integer(r.good_qty),integer(r.fault_qty),r.setup_qty===''?'미확인':r.setup_qty,'미확인','미확인',r.lot_no||'미확인','외부 연동',r.notes.join(' / ')];
-            const raw=[['원본 품번',r.part_no],['원본 공정',r.source_process],['원본 작업번호',r.job_no],['원본 LOT',r.lot_no],['시작시간',r.started_at],['종료시간',r.ended_at],['작업수량(양품)',integer(r.job_qty)],['LOT수량',integer(r.lot_qty)],['불량수량',integer(r.fault_qty)],['SET-UP(F10)',r.setup_qty],['변경 수신일',r.changed_at]];
-            return '<tr>'+values.map((v,i)=>`<td${i===17?' class="es-notes"':''}>${esc(v)}</td>`).join('')+`<td><details><summary>원본 보기</summary>${raw.map(([key,value])=>`<p>${esc(key)}: ${esc(value)}</p>`).join('')}</details></td></tr>`;
-        }).join(''):'<tr><td colspan="19">조회된 외부 실적이 없습니다.</td></tr>';
+            const values=[(page-1)*50+index+1,r.work_date,type,'미확인',r.process_name||r.source_process,'미확인',/^[0-9]$/.test(machine)?machine:'미확인','미연결',r.mes_part_no||'미연결',r.part_name,r.total_qty==null?'미확인':integer(r.total_qty),integer(r.good_qty),integer(r.fault_qty),r.setup_qty===''?'미확인':integer(r.setup_qty),r.lot_no||'미확인','외부 연동',r.notes.join(' / ')];
+            const raw=[['원본 품번',r.part_no],['원본 공정',r.source_process],['원본 작업번호',r.job_no],['원본 LOT',r.lot_no],['시작시간',r.started_at],['종료시간',r.ended_at],['총생산수량',r.total_qty==null?'미확인':integer(r.total_qty)],['양품수량',integer(r.job_qty)],['원본 LOT수량',integer(r.lot_qty)],['불량수량',integer(r.fault_qty)],['셋업(F10)',integer(r.setup_qty)],['변경 수신일',r.changed_at]];
+            return '<tr>'+values.map((v,i)=>`<td${i===16?' class="es-notes"':''}>${esc(v)}</td>`).join('')+`<td><details><summary>원본 보기</summary>${raw.map(([key,value])=>`<p>${esc(key)}: ${esc(value)}</p>`).join('')}</details></td></tr>`;
+        }).join(''):'<tr><td colspan="18">조회된 외부 실적이 없습니다.</td></tr>';
         $('esPage').textContent=`${page} / ${Math.max(1,Math.ceil(total/50))}`;$('esPrev').disabled=page===1;$('esNext').disabled=page*50>=total;
     }
     async function state(){

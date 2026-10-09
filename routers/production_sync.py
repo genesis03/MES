@@ -1,7 +1,6 @@
 import json
 from typing import Literal
 from datetime import date, timedelta, timezone
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -18,6 +17,7 @@ from services.production_sync_client import SyncError, ProductionClient
 from services.production_sync_credentials import CredentialError, credential_status, read_credentials, save_credentials
 from services.production_sync_service import credentials_ready, now, start_manual, state, today
 from services.production_sync_mapping import ItemConnections
+from services.production_sync_view import external_record_view
 
 router = APIRouter(tags=['Production synchronization'])
 templates = Jinja2Templates(directory='templates')
@@ -216,33 +216,7 @@ def records(start_date: date | None = None, end_date: date | None = None,
                                  ExternalProductionRecord.lot_no.ilike(pattern, escape='\\'), mapped_match))
     total = query.count()
     rows = query.order_by(ExternalProductionRecord.work_date.desc(), ExternalProductionRecord.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
-    processes = connections.processes
-    map_rows = connections.process_maps
-    output = []
-    for r in rows:
-        item, connection_type = connections.resolve(r.part_no, r.process_name)
-        raw = json.loads(r.raw_json)
-        code = connections.process_code(r.process_name)
-        notes = []
-        if not item or item.is_active != 'Y':
-            notes.append('품번 연결 확인')
-        if code not in processes:
-            notes.append('공정 연결 확인')
-        setup_qty = raw.get('F10', '')
-        if setup_qty == '':
-            notes.append('SET-UP 수량 누락')
-        elif Decimal(r.lot_qty) != Decimal(r.job_qty) + Decimal(r.fault_qty) + Decimal(setup_qty):
-            notes.append('전체수량과 양품·불량·SET-UP 합계 확인')
-        output.append({'id': r.id, 'work_date': r.work_date, 'part_no': r.part_no,
-                       'part_name': item.part_name if item else raw.get('PRODUCT_NM', ''),
-                       'item_id': item.id if item else None, 'mes_part_no': item.part_no if item else '',
-                       'connection_type': connection_type,
-                       'source_process': r.process_name, 'process_code': code,
-                       'performance_type': map_rows[r.process_name].performance_type if r.process_name in map_rows else '',
-                       'process_name': processes.get(code, ''), 'job_no': r.job_no, 'lot_no': r.lot_no,
-                       'started_at': r.started_at or '', 'ended_at': r.ended_at or '',
-                       'job_qty': r.job_qty, 'lot_qty': r.lot_qty, 'fault_qty': r.fault_qty,
-                       'good_qty': r.job_qty, 'setup_qty': setup_qty, 'notes': notes, 'changed_at': local_time(r.changed_at)})
+    output = [external_record_view(r, connections) for r in rows]
     return {'rows': output, 'total': total, 'page': page, 'page_size': page_size}
 
 
@@ -276,7 +250,7 @@ def item_candidates(source_process: str = Query('', max_length=200), source_part
     if suffix and suffix != '?':
         preferred = or_(preferred, ItemMasterModel.part_no.ilike('%' + suffix))
     elif suffix == '':
-        preferred = or_(preferred, ItemMasterModel.account_type == '완제품')
+        preferred = or_(preferred, ItemMasterModel.material_type.in_(['FINISHED', '완제품']), ItemMasterModel.account_type == '완제품')
     return {'rows': [{'id': r.id, 'part_no': r.part_no, 'part_name': r.part_name}
                      for r in query.order_by(case((ItemMasterModel.id.in_([item.id for item in bom_candidates]), 0),
                                                    (preferred, 1), else_=2), ItemMasterModel.part_no).offset((page - 1) * 50).limit(50)],

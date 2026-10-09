@@ -18,6 +18,11 @@ def stage_suffix(*names):
     return None
 
 
+def is_finished(item):
+    # Current DB stores product account PROD and material FINISHED separately.
+    return item.material_type in ('FINISHED', '완제품') or item.account_type == '완제품'
+
+
 class ItemConnections:
     def __init__(self, db):
         self.items = db.query(ItemMasterModel).all()
@@ -48,6 +53,14 @@ class ItemConnections:
         if mapping:
             return mapping.process_code
         candidates = self.by_name.get(source_process, [])
+        if len(candidates) == 1:
+            return candidates[0]
+        if source_process in self.processes:
+            return source_process
+        suffix = stage_suffix(source_process)
+        if suffix is None or suffix == '?':
+            return ''
+        candidates = [code for code, name in self.processes.items() if stage_suffix(name) == suffix]
         return candidates[0] if len(candidates) == 1 else ''
 
     def suffix(self, source_process):
@@ -83,7 +96,7 @@ class ItemConnections:
             if part in roots and part not in self.children and part not in self.parents:
                 continue
             for item in self.by_part.get(part, []):
-                matches = (item.account_type == '완제품' if suffix == ''
+                matches = (is_finished(item) if suffix == ''
                            else item.part_no.casefold().endswith(suffix.casefold()))
                 if matches:
                     candidates[item.id] = item
@@ -108,7 +121,7 @@ class ItemConnections:
             target = base + suffix
         candidates = self.by_part.get(target.casefold(), [])
         if suffix == '':
-            candidates = [item for item in candidates if item.account_type == '완제품']
+            candidates = [item for item in candidates if is_finished(item)]
         if len(candidates) != 1:
             return None, ''
         return candidates[0], 'AUTO_STAGE' if suffix is not None else 'AUTO_EXACT'

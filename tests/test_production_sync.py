@@ -21,6 +21,8 @@ from core.security import get_current_user
 from models.models import ItemBomModel, ItemMasterModel, ProcessModel
 from models.production_sync import ExternalProductionRecord, ProductionSyncRun, ProductionSyncState
 from routers.production_sync import router
+from routers.production_extra import router as performance_router
+from models.production import ProductionPerformance, ProductionWorkOrder
 from services import production_sync_client as source
 from services import production_sync_service as sync
 from services import production_sync_credentials as secrets
@@ -56,7 +58,7 @@ def setup(tmp_path, monkeypatch):
     monkeypatch.setattr(sync.config, 'PRODUCTION_SYNC_USER', 'test-user')
     monkeypatch.setattr(sync.config, 'PRODUCTION_SYNC_PASSWORD', 'test-password')
     monkeypatch.setattr(sync, 'today', lambda: DAY)
-    app = FastAPI(); app.include_router(router)
+    app = FastAPI(); app.include_router(router); app.include_router(performance_router)
     def db_override():
         with sessions() as db:
             yield db
@@ -366,7 +368,7 @@ def test_api_allows_manual_selection_with_different_process_and_flags_quantity_d
         item_id = add_item(db, code='TP')
     reply = setup.client.put('/api/production/external-sync/item-maps', json={'source_part_no':'EXTERNAL-A','source_process':'Test machining','item_id':item_id})
     assert reply.status_code == 200
-    assert '전체수량과 양품·불량·SET-UP 합계 확인' in setup.client.get('/api/production/external-sync/records').json()['rows'][0]['notes']
+    assert '전체수량과 양품·불량·셋업 합계 확인' in setup.client.get('/api/production/external-sync/records').json()['rows'][0]['notes']
 
 
 @pytest.mark.parametrize('process, source_part, target, account', [
@@ -708,3 +710,80 @@ def test_credentials_cannot_change_during_sync_and_test_does_not_save(setup,monk
     lease(setup)
     assert setup.client.put('/api/production/external-sync/credentials',json={'username':'u','password':'p'}).status_code==409
     with setup.sessions() as db:assert db.get(ProductionSyncCredential,1) is None
+
+
+def test_general_inquiry_includes_external_bom_mapping_total_and_generated_lot_for_regular_user(setup):
+    token, _ = lease(setup)
+    sync.save_day([row('LX20260325016', ITEM_NUM='310061', PROC_TYPE_NM='캡조립')], token)
+    with setup.sessions() as db:
+        db.add(ProcessModel(process_code='ASSY', process_name='조립', created_at='2026-01-01'))
+        parent = db.get(ItemMasterModel, add_item(db, part='310061'))
+        parent.account_type = 'PROD'; parent.material_type = 'FINISHED'; db.commit()
+        child = db.get(ItemMasterModel, add_item(db, part='310062-C', code='ASSY'))
+        add_bom(db, parent, child)
+    setup.app.dependency_overrides[get_current_user] = lambda: SimpleNamespace(username='reader', role='USER', permissions='{}')
+    reply = setup.client.get('/api/production/performance-status', params={'part_no':'310062-C','performance_type':'ASSEMBLY','process_code':'ASSY'}).json()
+    assert len(reply) == 1
+    record = reply[0]
+    assert record['part_no'] == '310062-C' and record['total_qty'] == 331
+    assert record['good_qty'] == 216 and record['defect_qty'] == 0 and record['setup_qty'] == 115
+    assert record['output_lot_no'] == 'LX20260325016' and record['equipment_name'] == '1호기'
+    assert record['can_delete'] is False and record['record_source'] == 'EXTERNAL'
+    assert record['id'].startswith('external:') and '외부 연동' in record['note']
+    assert setup.client.get('/api/production/performance-status',params={'part_no':'310061'}).json()[0]['id'] == record['id']
+    with setup.sessions() as db:
+        assert db.query(ProductionPerformance).count() == 0 and db.query(ProductionWorkOrder).count() == 0
+
+
+def test_combined_inquiry_filters_and_total_are_independent_of_material_consumption(setup):
+    from models.production_lot import ProductionLotModel
+    token, _ = lease(setup)
+    sync.save_day([row('LX20260325016', PROC_TYPE_NM='복합선반')], token)
+    with setup.sessions() as db:
+        db.add(ProcessModel(process_code='LT', process_name='복합선반', created_at='2026-01-01'))
+        item_id = add_item(db, part='EXTERNAL-A')
+        order = ProductionWorkOrder(work_order_no='TEST-WORK-001', order_date=DAY.isoformat(),item_id=item_id,part_no='EXTERNAL-A',order_qty=1000)
+        db.add(order); db.flush()
+        perf = ProductionPerformance(work_order_id=order.id,performance_type='MACHINING',performance_date=DAY.isoformat(),process_code='LT',operator_name='Alice',good_qty=656,defect_qty=2,setup_qty=10,consumed_qty=1312)
+        db.add(perf); db.flush()
+        db.add(ProductionLotModel(lot_no='LX-NATIVE-001', item_id=item_id,part_no='EXTERNAL-A',lot_qty=656,status='ACTIVE',note=f'PERF:{perf.id}|생산실적 자동생성'))
+        db.commit()
+    rows = setup.client.get('/api/production/performance-status').json()
+    assert len(rows) == 2
+    native = next(r for r in rows if r['record_source']=='MES')
+    assert native['total_qty'] == 668 and native['consumed_qty'] == 1312
+    assert native['output_lot_no'] == 'LX-NATIVE-001' and native['can_delete']
+    assert sum(r['total_qty'] for r in rows) == 999
+    for params in [{'work_order_no':'TEST-WORK'}, {'operator_name':'Alice'}]:
+        filtered = setup.client.get('/api/production/performance-status', params=params).json()
+        assert len(filtered)==1 and filtered[0]['record_source']=='MES'
+    assert len(setup.client.get('/api/production/performance-status',params={'process_code':'LT','performance_type':'MACHINING'}).json())==2
+    assert setup.client.get('/api/production/performance-status',params={'performance_type':'ASSEMBLY'}).json()==[]
+    assert setup.client.get('/api/production/performance-status',params={'start_date':(DAY+timedelta(days=1)).isoformat()}).json()==[]
+    assert setup.client.get('/api/production/performance-status',params={'part_no':'EXTERNAL_A'}).json()==[]
+    with setup.sessions() as db:
+        assert db.query(ProductionLotModel).count()==1 and db.query(ProductionPerformance).count()==1
+        assert db.get(ProductionWorkOrder,order.id).production_qty==0
+
+
+def test_unknown_setup_does_not_become_zero_total_and_source_lot_total_is_not_substituted(setup):
+    token, _ = lease(setup)
+    sync.save_day([row(LOT_QTY='999')], token)
+    assert setup.client.get('/api/production/performance-status').json()[0]['total_qty']==331
+    with setup.sessions() as db:
+        record=db.query(ExternalProductionRecord).one()
+        raw=json.loads(record.raw_json);raw.pop('F10');record.raw_json=json.dumps(raw);db.commit()
+    record=setup.client.get('/api/production/performance-status').json()[0]
+    assert record['total_qty'] is None and record['setup_qty'] is None
+    assert '셋업 수량 누락' in record['note']
+
+
+def test_packing_connection_uses_actual_finished_material_code(setup):
+    token, _ = lease(setup)
+    sync.save_day([row(ITEM_NUM='310062-C',PROC_TYPE_NM='포장')], token)
+    with setup.sessions() as db:
+        parent=db.get(ItemMasterModel,add_item(db,part='310061'))
+        parent.account_type='PROD';parent.material_type='FINISHED';db.commit()
+        child=db.get(ItemMasterModel,add_item(db,part='310062-C'))
+        add_bom(db,parent,child)
+    assert setup.client.get('/api/production/external-sync/item-maps').json()[0]['part_no']=='310061'

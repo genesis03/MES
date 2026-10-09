@@ -1,6 +1,8 @@
 from typing import Optional
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -11,9 +13,12 @@ from models.models import ItemMasterModel, ProcessModel
 from models.packing import PackingLotAllocation, PackingMaster
 from models.production import ProductionPerformance, ProductionWorkOrder
 from models.production_run import ProductionRun, ProductionRunLotAllocation, ProductionRunMaterial
+from models.production_sync import ExternalProductionRecord
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from models.subcontract_outbound import SubcontractOutboundItem, SubcontractOutboundLot, SubcontractOutboundMaster
 from services.production_lot_service import output_lots_for_performance
+from services.production_sync_mapping import ItemConnections
+from services.production_sync_view import external_record_view
 
 router = APIRouter(prefix="/api/production", tags=["Production Extra"])
 
@@ -183,7 +188,8 @@ def production_performance_status(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    query = db.query(ProductionPerformance)
+    query = db.query(ProductionPerformance).join(ProductionWorkOrder).outerjoin(
+        ItemMasterModel, ProductionWorkOrder.item_id == ItemMasterModel.id)
     if start_date:
         query = query.filter(ProductionPerformance.performance_date >= start_date)
     if end_date:
@@ -197,17 +203,14 @@ def production_performance_status(
         query = query.filter(ProductionPerformance.process_code == process_code.strip())
     if operator_name:
         query = query.filter(ProductionPerformance.operator_name.contains(operator_name.strip(), autoescape=True))
-    rows = query.order_by(ProductionPerformance.performance_date.desc(), ProductionPerformance.id.desc()).limit(2000).all()
-    if not rows:
-        return []
+    if work_order_no:
+        query = query.filter(ProductionWorkOrder.work_order_no.contains(work_order_no.strip(), autoescape=True))
+    if part_no:
+        query = query.filter(or_(ItemMasterModel.part_no.contains(part_no.strip(), autoescape=True),
+                                 ProductionWorkOrder.part_no.contains(part_no.strip(), autoescape=True)))
+    rows = query.order_by(ProductionPerformance.performance_date.desc(), ProductionPerformance.id.desc()).all()
     order_ids = {x.work_order_id for x in rows}
     order_map = {x.id: x for x in db.query(ProductionWorkOrder).filter(ProductionWorkOrder.id.in_(order_ids)).all()}
-    if work_order_no:
-        keyword = work_order_no.strip().lower()
-        rows = [x for x in rows if x.work_order_id in order_map and keyword in order_map[x.work_order_id].work_order_no.lower()]
-    if part_no:
-        keyword = part_no.strip().lower()
-        rows = [x for x in rows if x.work_order_id in order_map and keyword in order_map[x.work_order_id].part_no.lower()]
     item_ids = {order_map[x.work_order_id].item_id for x in rows if x.work_order_id in order_map and order_map[x.work_order_id].item_id}
     item_map = {x.id: x for x in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all()} if item_ids else {}
     process_codes = {x.process_code for x in rows}
@@ -240,14 +243,48 @@ def production_performance_status(
             "good_qty": float(perf.good_qty or 0),
             "defect_qty": float(perf.defect_qty or 0),
             "setup_qty": float(perf.setup_qty or 0),
+            "total_qty": float(sum(Decimal(str(qty or 0)) for qty in (perf.good_qty, perf.defect_qty, perf.setup_qty))),
             "consumed_qty": float(perf.consumed_qty or 0),
             "source_lot_no": perf.source_lot_no or "",
             "output_lot_no": ",".join(output_lot_nos),
             "downstream_used": downstream_used,
             "can_delete": can_delete,
             "note": perf.note or "",
+            "record_source": "MES", "source_record_id": perf.id,
         })
-    return result
+    # External imports are inquiry rows, not stock-changing MES performances.
+    # They have no verified MES worker/work order, so those filters exclude them.
+    if not (work_order_no and work_order_no.strip() or operator_name and operator_name.strip()):
+        external_query = db.query(ExternalProductionRecord)
+        if start_date:
+            external_query = external_query.filter(ExternalProductionRecord.work_date >= start_date)
+        if end_date:
+            external_query = external_query.filter(ExternalProductionRecord.work_date <= end_date)
+        connections = ItemConnections(db)
+        for record in external_query.order_by(ExternalProductionRecord.work_date.desc(), ExternalProductionRecord.id.desc()):
+            view = external_record_view(record, connections)
+            if performance_type and view['performance_type'] != performance_type.strip().upper():
+                continue
+            if process_code and view['process_code'] != process_code.strip():
+                continue
+            if part_no and part_no.strip().casefold() not in view['mes_part_no'].casefold() and part_no.strip().casefold() not in record.part_no.casefold():
+                continue
+            result.append({
+                'id': f'external:{record.id}', 'source_record_id': record.id, 'record_source': 'EXTERNAL',
+                'performance_date': record.work_date, 'performance_type': view['performance_type'],
+                'performance_type_name': {'ASSEMBLY': '조립', 'MACHINING': '가공'}.get(view['performance_type'], '미지정'),
+                'work_order_no': '', 'item_id': view['item_id'], 'part_no': view['mes_part_no'] or record.part_no,
+                'part_name': view['part_name'], 'process_code': view['process_code'],
+                'process_name': view['process_name'] or record.process_name, 'operator_name': '',
+                'equipment_name': view['machine_no'] + '호기' if view['machine_no'] else '', 'shift_name': '',
+                'good_qty': float(record.job_qty), 'defect_qty': float(record.fault_qty),
+                'setup_qty': float(view['setup_qty']) if view['setup_qty'] != '' else None,
+                'total_qty': float(view['total_qty']) if view['total_qty'] is not None else None,
+                'consumed_qty': None, 'source_lot_no': '', 'output_lot_no': record.lot_no,
+                'downstream_used': False, 'can_delete': False,
+                'note': ' / '.join(['외부 연동'] + view['notes']),
+            })
+    return sorted(result, key=lambda row: (row['performance_date'], row['source_record_id'], row['record_source']), reverse=True)
 
 
 @router.delete("/performances/{performance_id}")
