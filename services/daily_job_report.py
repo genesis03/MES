@@ -1,4 +1,4 @@
-import html,math
+import html,math,copy
 from collections import defaultdict
 from pathlib import Path
 from openpyxl import load_workbook
@@ -9,7 +9,9 @@ TEMPLATE=Path(__file__).resolve().parents[1]/'assets'/'DailyJobReport.xlsx'
 def put(sheet,cell,value):
     target=sheet[cell];target.value=value
     if isinstance(value,str):target.data_type='s'
-    target.alignment=Alignment(horizontal='center',vertical='center',wrap_text=True)
+    alignment=copy.copy(target.alignment)
+    alignment.wrap_text=True
+    target.alignment=alignment
 
 
 def time_text(value):
@@ -45,6 +47,7 @@ def build_workbook(rows):
                 right_width=sum(sheet.column_dimensions[col].width for col in ['L','M','N'])/3
                 for col in ['L','M','N']:sheet.column_dimensions[col].width=right_width
                 # Replace each merged measurement cell with three sample columns.
+                measurement_styles={r:copy.copy(sheet[f'D{r}']._style) for r in range(14,25)}
                 for merged in ['D14:G15','L14:N15']+[f'D{r}:G{r}' for r in range(16,25)]+[f'L{r}:N{r}' for r in range(16,25)]:
                     sheet.unmerge_cells(merged)
                 sheet.merge_cells('D14:E15');sheet.merge_cells('F14:F15');sheet.merge_cells('G14:G15')
@@ -56,7 +59,10 @@ def build_workbook(rows):
                     for col in ['D','F','G','L','M','N']:
                         cell=sheet[f'{col}{r}']
                         if cell.__class__.__name__!='MergedCell':
+                            cell._style=copy.copy(measurement_styles[r])
                             cell.border=Border(left=Side(style='thin'),right=Side(style='thin'),top=Side(style='thin'),bottom=Side(style='thin'))
+                for col in ['D','F','G','L','M','N']:
+                    sheet[col+'14'].font=Font(name='맑은 고딕',size=7,bold=True)
                 # Clear all template placeholder values in input areas.
                 for line in [7,8]:
                     for col in ['D','G','I','M','O','Q','S','U','V','W','Z','AH']:put(sheet,f'{col}{line}',None)
@@ -103,14 +109,27 @@ def build_workbook(rows):
     return workbook
 
 
+def _color(color,default='#000000'):
+    if color is not None and color.type=='rgb' and isinstance(color.rgb,str):
+        return '#'+color.rgb[-6:]
+    return default
+
+
+def _border(side):
+    if side is None or not side.style:return 'none'
+    widths={'hair':'.35pt','thin':'.5pt','medium':'1pt','thick':'1.5pt','double':'1.5pt'}
+    style='double' if side.style=='double' else ('dashed' if 'dash' in side.style.lower() else ('dotted' if side.style=='dotted' else 'solid'))
+    return widths.get(side.style,'.5pt')+' '+style+' '+_color(side.color)
+
+
 def workbook_html(workbook):
-    parts=['<!doctype html><html lang="ko"><meta charset="utf-8"><title>작업일보</title><style>@page{size:A4 landscape;margin:8mm}body{margin:0;font-family:Arial,sans-serif}table{width:100%;height:190mm;border-collapse:collapse;table-layout:fixed;font-size:8px}td{border:1px solid #333;text-align:center;vertical-align:middle;overflow-wrap:anywhere;white-space:pre-wrap;padding:1px}section{break-after:page}section:last-child{break-after:auto}.toolbar{padding:8px}@media print{.toolbar{display:none}}</style><div class="toolbar"><button onclick="window.print()">인쇄</button> 미입력 값은 공란입니다.</div>']
+    parts=['<!doctype html><html lang="ko"><meta charset="utf-8"><title>작업일보</title><style>@page{size:A4 landscape;margin:10mm}*{box-sizing:border-box}body{margin:0;background:#e8edf3;font-family:"Malgun Gothic","맑은 고딕","Noto Sans CJK KR",sans-serif}.paper{width:297mm;min-height:210mm;padding:10mm;margin:18px auto;background:white;box-shadow:0 2px 10px #0002;break-after:page}.paper:last-child{break-after:auto}table{width:277mm;border-collapse:collapse;table-layout:fixed}td{padding:0 1px;overflow-wrap:anywhere;white-space:pre-wrap;line-height:1.1}.toolbar{position:sticky;top:0;padding:12px 20px;background:#fff;border-bottom:1px solid #cbd5e1;font-size:13px;z-index:1}.toolbar button{padding:8px 20px;background:#2563eb;color:white;border:0;border-radius:4px;margin-right:14px;cursor:pointer}@media print{body{background:white}.toolbar{display:none}.paper{width:277mm;min-height:0;padding:0;margin:0;box-shadow:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}}</style><div class="toolbar"><button onclick="window.print()">인쇄</button> A4 가로 · 원본 양식 기준 · 미입력 값은 공란</div>']
     for sheet in workbook:
         merged={};skip=set()
         for area in sheet.merged_cells.ranges:
             merged[(area.min_row,area.min_col)]=(area.max_row-area.min_row+1,area.max_col-area.min_col+1)
             skip.update((r,c) for r in range(area.min_row,area.max_row+1) for c in range(area.min_col,area.max_col+1) if (r,c)!=(area.min_row,area.min_col))
-        parts.append('<section><table><colgroup>')
+        parts.append('<section class="paper"><table><colgroup>')
         widths=[]
         for c in range(1,38):
             dimension=next((d for d in sheet.column_dimensions.values() if (d.min or 0)<=c<=(d.max or 0)),None)
@@ -125,7 +144,31 @@ def workbook_html(workbook):
                 if isinstance(value,float):value=f'{value:g}'
                 rs,cs=merged.get((r,c),(1,1))
                 title=html.escape(cell.comment.text,quote=True) if cell.comment else ''
-                parts.append(f'<td title="{title}" rowspan="{rs}" colspan="{cs}">{html.escape(str(value))}</td>')
+                background=_color(cell.fill.fgColor,'white') if cell.fill.patternType=='solid' else 'white'
+                font_size=cell.font.sz or 8
+                # Blank spacer rows keep the template height without text line boxes.
+                if value=='':font_size=0
+                vertical={'center':'middle','top':'top','bottom':'bottom'}.get(cell.alignment.vertical,'middle')
+                align=cell.alignment.horizontal or ('right' if isinstance(value,(float,int)) else 'left')
+                styles=[f'font-size:{font_size}pt',f'font-weight:{"700" if cell.font.b else "400"}',
+                        f'font-style:{"italic" if cell.font.i else "normal"}',f'color:{_color(cell.font.color)}',
+                        f'background:{background}',f'text-align:{align}',f'vertical-align:{vertical}',
+                        'white-space:'+('pre-wrap' if r!=34 and (cell.alignment.wrap_text or '\n' in str(value)) else 'pre')]
+                for edge in ['left','right','top','bottom']:styles.append('border-'+edge+':'+_border(getattr(cell.border,edge)))
+                style=html.escape(';'.join(styles),quote=True)
+                parts.append(f'<td style="{style}" title="{title}" rowspan="{rs}" colspan="{cs}"><span class="cell-value">{html.escape(str(value))}</span></td>')
             parts.append('</tr>')
         parts.append('</table></section>')
-    parts.append('</html>');return ''.join(parts)
+    parts.append('''<script>
+    document.fonts.ready.then(()=>requestAnimationFrame(()=>{
+      document.querySelectorAll('.cell-value').forEach(span=>{
+        const cell=span.parentElement;
+        if(!span.textContent || getComputedStyle(cell).whiteSpace!=='pre')return;
+        let size=parseFloat(getComputedStyle(cell).fontSize);
+        const available=Math.max(1,cell.clientWidth-2);
+        while(span.getBoundingClientRect().width>available && size>6){
+          size-=.25;cell.style.fontSize=size+'px';
+        }
+      });
+    }));
+    </script></html>''');return ''.join(parts)

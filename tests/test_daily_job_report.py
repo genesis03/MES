@@ -77,3 +77,16 @@ def test_native_quantities_and_current_inspection_standard_match(setup):
     assert data['total_qty']==331 and data['setup_qty']==115 and data['operator_name']=='Worker'
     assert data['supplement']['measurements'][0]['label']=='외경'
     assert data['supplement']['measurements'][0]['values']==[None,None,None]
+
+
+def test_print_preserves_original_fonts_fills_borders_and_blank_spacers():
+    workbook=build_workbook([report_row('LOT1')])
+    output=workbook_html(workbook)
+    assert 'font-size:18.0pt' in output
+    assert 'font-weight:700' in output and 'background:#E0E0E0' in output
+    assert 'background:#FFFF00' in output
+    assert 'border-left:1pt solid' in output
+    assert 'font-size:0pt' in output
+    assert workbook.active['D7'].alignment.horizontal=='left'
+    assert workbook.active['F16'].fill.fgColor.rgb=='FFFFFF00'
+    assert workbook.active['G14'].font.sz==7
