@@ -272,6 +272,8 @@ app.include_router(production_run_delete.router)
 app.include_router(production_run_lot_fix.router)
 app.include_router(production_run.router)
 app.include_router(production_extra.router)
+from routers import daily_job_report
+app.include_router(daily_job_report.router)
 # LOT 재고 현황은 외주 출고/입고 이력까지 반영한 현재 저장위치 API를 우선 사용합니다.
 app.include_router(inventory_lot_location.router)
 app.include_router(inventory.router)

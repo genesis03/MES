@@ -47,6 +47,8 @@ from models.inspection_standard import InspectionStandard, InspectionStandardPre
 install_item_identity_events()
 
 # 테이블 일괄 자동 생성 트리거
+from models.daily_job_report import DailyJobReportSupplement
+
 Base.metadata.create_all(bind=engine)
 from models.plm_flow_migration import ensure_plm_flow_columns
 ensure_plm_flow_columns(engine)
