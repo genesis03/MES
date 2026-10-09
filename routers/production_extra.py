@@ -263,6 +263,8 @@ def production_performance_status(
         connections = ItemConnections(db)
         for record in external_query.order_by(ExternalProductionRecord.work_date.desc(), ExternalProductionRecord.id.desc()):
             view = external_record_view(record, connections)
+            if view['lot_conflict']:
+                continue
             if performance_type and view['performance_type'] != performance_type.strip().upper():
                 continue
             if process_code and view['process_code'] != process_code.strip():

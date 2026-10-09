@@ -13,6 +13,7 @@ from core.database import SessionLocal
 from models.production_sync import ExternalProductionRecord, ProductionSyncRun, ProductionSyncState
 from services.production_sync_credentials import CredentialError, read_credentials
 from services.production_sync_client import ProductionClient, SyncError
+from services.lot_uniqueness import prepare_import
 
 _LOG = logging.getLogger(__name__)
 _stop = threading.Event()
@@ -90,9 +91,8 @@ def claim(start, end, trigger, kind='production'):
 
 
 def key_for(row, kind='production'):
-    # Provisional identity: edits to quantities/times keep the same source key.
-    identity = ([row['ITEM_NUM'], row['LOT_NUM']] if kind == 'packing'
-                else [row['LOT_NUM'], row['JOB_NUM'], row['PROC_TYPE_NM']])
+    identity = ([row['ITEM_NUM'].strip().upper(), row['LOT_NUM'].strip().upper()] if kind == 'packing'
+                else [row['LOT_NUM'].strip().upper()])
     return hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
 
 
@@ -102,7 +102,7 @@ def save_day(rows, token, kind='production', queried_day=None):
     keys = [key_for(row, kind) for row in rows]
     if len(keys) != len(set(keys)):
         raise SyncError('같은 품번·LOT의 포장 내역이 여러 건 있어 저장을 중단했습니다.' if kind == 'packing'
-                        else '같은 LOT·작업번호·공정의 실적이 여러 건 있어 자동 저장을 중단했습니다.')
+                        else '품번·작업번호·공정과 관계없이 생산 LOT가 중복되어 저장을 중단했습니다.')
     with SessionLocal() as db:
         # Renew and lock the lease before touching records; late workers cannot write.
         instant = now()
@@ -111,14 +111,13 @@ def save_day(rows, token, kind='production', queried_day=None):
             State.lease_until > instant).values(lease_until=instant + timedelta(minutes=10)))
         if renewed.rowcount != 1:
             raise SyncError('동기화 작업의 실행 권한이 만료되었습니다. 다시 실행해 주세요.')
-        existing = {}
-        for offset in range(0, len(keys), 400):
-            for record in db.query(Record).filter(Record.source_key.in_(keys[offset:offset+400])):
-                existing[record.source_key] = record
+        existing = prepare_import(db, rows, kind, Record, key_for)
         for key, source in zip(keys, rows):
             raw = json.dumps(source, ensure_ascii=False, sort_keys=True)
             digest = hashlib.sha256(raw.encode()).hexdigest()
             record = existing.get(key)
+            if record is not None:
+                record.source_key = key
             if record is None:
                 record = Record(source_key=key, first_seen_at=instant)
                 db.add(record); counts['inserted'] += 1
@@ -128,14 +127,14 @@ def save_day(rows, token, kind='production', queried_day=None):
             else:
                 counts['updated'] += 1
             if kind == 'packing':
-                record.part_no = source['ITEM_NUM']; record.lot_no = source['LOT_NUM']
+                record.part_no = source['ITEM_NUM']; record.lot_no = source['LOT_NUM'].strip().upper()
                 record.packing_date = datetime.strptime(source['CREATE_DATE'], '%Y%m%d').date().isoformat()
                 record.packing_qty = source['LOT_QTY']; record.shipment_qty = source['JOB_QTY']
                 record.shipment_date = (datetime.strptime(source['CONFIRM_DATE'], '%Y%m%d').date().isoformat()
                                         if source['CONFIRM_DATE'] else '')
                 record.customer_name = source['APPLY_COMP_NM']
             else:
-                record.lot_no = source['LOT_NUM']; record.job_no = source['JOB_NUM']
+                record.lot_no = source['LOT_NUM'].strip().upper(); record.job_no = source['JOB_NUM']
                 record.part_no = source['ITEM_NUM']; record.process_name = source['PROC_TYPE_NM']
                 record.work_date = datetime.strptime(source['JOB_TIME'], '%Y%m%d').date().isoformat()
                 record.started_at = source['JOB_ST_TIME']; record.ended_at = source['JOB_END_TIME']

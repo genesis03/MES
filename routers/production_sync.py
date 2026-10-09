@@ -279,6 +279,15 @@ def save_item_map(payload: ItemMapping, db: Session = Depends(get_db), user=Depe
         item = db.get(ItemMasterModel, payload.item_id)
         if not item or item.is_active != 'Y':
             raise HTTPException(422, '사용 중인 MES 품목을 선택해 주세요.')
+        if payload.source_process == '포장':
+            from services.packing_inventory_service import packing_stock_snapshot
+            connections = ItemConnections(db)
+            connections.manual[payload.source_part_no, payload.source_process] = payload.item_id
+            _, stock_info = packing_stock_snapshot(db, connections)
+            source_ids = [r.id for r in db.query(ExternalPackingRecord).filter(
+                ExternalPackingRecord.part_no == payload.source_part_no)]
+            if any(stock_info[record_id]['stock_status'] == 'CONFLICT' for record_id in source_ids):
+                raise HTTPException(409, '같은 MES 품목·포장 LOT가 이미 있어 품번 연결을 저장하지 않았습니다.')
     row = db.query(ProductionSyncItemMap).filter(ProductionSyncItemMap.source_part_no == payload.source_part_no,
                                                ProductionSyncItemMap.source_process_name == payload.source_process).first()
     if payload.item_id is None:

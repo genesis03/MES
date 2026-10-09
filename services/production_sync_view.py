@@ -2,7 +2,7 @@
 import json
 from datetime import timedelta, timezone
 from decimal import Decimal
-from services.packing_inventory_service import native_lot_identities, identity
+from services.lot_uniqueness import production_conflicts, lot_identity
 
 def external_record_view(record, connections):
     item, connection_type = connections.resolve(record.part_no, record.process_name)
@@ -10,10 +10,11 @@ def external_record_view(record, connections):
     raw = json.loads(record.raw_json)
     setup = raw.get('F10', '')
     notes = []
-    if connections.native_lot_cache is None:
-        connections.native_lot_cache = native_lot_identities(connections.db)
-    if item and identity(item.id, record.lot_no) in connections.native_lot_cache:
-        notes.append('MES에서 이미 사용한 품목·LOT: 외부 생산 재고 미반영')
+    if connections.production_conflict_cache is None:
+        connections.production_conflict_cache = production_conflicts(connections.db)
+    conflict = connections.production_conflict_cache.get(lot_identity(record.lot_no), '')
+    if conflict:
+        notes.append(conflict)
     if not item:
         notes.append('품번 연결 확인')
     if code not in connections.processes:
@@ -42,6 +43,6 @@ def external_record_view(record, connections):
         'started_at': record.started_at or '', 'ended_at': record.ended_at or '',
         'job_qty': record.job_qty, 'lot_qty': record.lot_qty, 'fault_qty': record.fault_qty,
         'good_qty': record.job_qty, 'setup_qty': setup, 'total_qty': str(total) if total is not None else None,
-        'notes': notes, 'changed_at': record.changed_at.replace(tzinfo=timezone.utc).astimezone(
+        'lot_conflict': bool(conflict), 'notes': notes, 'changed_at': record.changed_at.replace(tzinfo=timezone.utc).astimezone(
             timezone(timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S'),
     }

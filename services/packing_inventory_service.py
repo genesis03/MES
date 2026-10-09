@@ -10,6 +10,7 @@ from models.models import PurchaseInboundItem, ItemMasterModel
 from models.production_lot import ProductionLotModel
 from models.packing import PackingBox, PackingMaster
 from models.packing_sync import ExternalPackingRecord, PackingSourcePresence
+from models.production_sync import ExternalProductionRecord
 from models.sales import ShipmentBox, ShipmentItem, ShipmentMaster, ShipmentDirectLot
 from models.shipping_lot import ShippingLotRegistry
 from services.production_sync_mapping import ItemConnections, is_finished
@@ -17,6 +18,11 @@ from services.production_sync_mapping import ItemConnections, is_finished
 
 def identity(item_id, lot_no):
     return int(item_id), str(lot_no or '').strip().casefold()
+
+
+def production_lot_numbers(db):
+    return {str(lot).strip().upper() for field in (ProductionLotModel.lot_no, ExternalProductionRecord.lot_no)
+            for (lot,) in db.query(field) if lot}
 
 
 def native_lot_identities(db):
@@ -44,6 +50,7 @@ def native_lot_identities(db):
 def packing_stock_snapshot(db, connections=None):
     connections = connections or ItemConnections(db)
     native = native_lot_identities(db)
+    production_numbers = production_lot_numbers(db)
     records = db.query(ExternalPackingRecord).all()
     missing = {r.record_id for r in db.query(PackingSourcePresence).filter(PackingSourcePresence.present.is_(False))}
     resolved = {r.id: connections.resolve(r.part_no, '포장')[0] for r in records}
@@ -59,6 +66,8 @@ def packing_stock_snapshot(db, connections=None):
             status, note = 'UNLINKED', '품번 미연결: 재고 제외'
         elif not is_finished(item):
             status, note = 'INVALID_ITEM', '완제품 품목 연결 필요: 재고 제외'
+        elif record.lot_no.strip().upper() in production_numbers:
+            status, note = 'CONFLICT', '품번과 관계없이 생산 LOT와 중복: 외부 재고 제외'
         elif identity(item.id, record.lot_no) in native:
             status, note = 'CONFLICT', 'MES에서 이미 사용한 품목·LOT: 외부 재고 제외'
         elif counts[identity(item.id, record.lot_no)] > 1:

@@ -224,10 +224,12 @@ def test_packing_inventory_partial_full_shipments_repeat_and_updates(setup):
 def test_native_lot_collision_blocks_external_stock_without_overwriting_native(setup):
     inventory_routes(setup);enable_routes(setup)
     with setup.sessions() as db:
-        item=add_finished(db);db.flush()
-        db.add(ProductionLotModel(item_id=item.id,part_no=item.part_no,lot_no='COLLISION',lot_qty=10,status='ACTIVE'))
-        db.commit()
+        item=add_finished(db);db.commit();item_id=item.id
     token,_=sync.claim(DAY,DAY,'MANUAL','packing');sync.save_day([row(lot='COLLISION')],token,'packing')
+    # Simulate a conflict already stored by older code. New imports must reject it.
+    with setup.sessions() as db:
+        db.add(ProductionLotModel(item_id=item_id,part_no='SOURCE',lot_no='COLLISION',lot_qty=10,status='ACTIVE'));db.commit()
+    with pytest.raises(SyncError,match='내부'):sync.save_day([row(lot='COLLISION')],token,'packing')
     assert setup.client.get('/api/inventory/status').json()['stock_qty']==10
     lots=setup.client.get('/api/inventory/lots?part_no=SOURCE').json()['items']
     assert len(lots)==1 and lots[0]['source']=='생산'
@@ -253,11 +255,14 @@ def test_duplicate_external_mapping_excludes_both_and_recovers_after_remapping(s
 def test_native_packing_collision_counts_native_box_only(setup):
     inventory_routes(setup);enable_routes(setup)
     with setup.sessions() as db:
-        item=add_finished(db)
+        item=add_finished(db);db.commit();item_id=item.id
+    token,_=sync.claim(DAY,DAY,'MANUAL','packing');sync.save_day([row(lot='COLLISION')],token,'packing')
+    with setup.sessions() as db:
+        item=db.get(ItemMasterModel,item_id)
         master=PackingMaster(packing_no='NATIVE',packing_date=DAY.isoformat(),item_id=item.id,part_no=item.part_no,
             box_count=1,box_qty=20,total_qty=20,status='PACKED')
         master.boxes.append(PackingBox(box_no=1,package_lot_no='COLLISION',box_qty=20));db.add(master);db.commit()
-    token,_=sync.claim(DAY,DAY,'MANUAL','packing');sync.save_day([row(lot='COLLISION')],token,'packing')
+    with pytest.raises(SyncError,match='내부'):sync.save_day([row(lot='COLLISION')],token,'packing')
     assert setup.client.get('/api/inventory/status').json()['stock_qty']==20
     lots=setup.client.get('/api/inventory/lots?part_no=SOURCE').json()['items']
     assert len(lots)==1 and lots[0]['source']=='MES 포장'
