@@ -82,6 +82,8 @@ from models.document_migration import ensure_document_codes
 ensure_document_codes(engine)
 from models.process_flow_symbol_migration import ensure_process_flow_symbol_codes
 ensure_process_flow_symbol_codes(engine)
+from models.production_change_type_migration import ensure_production_change_type_codes
+ensure_production_change_type_codes(engine)
 
 __all__ = [
     "AuthSession",
