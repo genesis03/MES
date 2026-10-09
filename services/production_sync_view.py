@@ -1,3 +1,4 @@
+from services.external_label_policy import label_metadata
 """Shared display values for external records and the production inquiry."""
 import json
 from datetime import timedelta, timezone
@@ -32,7 +33,7 @@ def external_record_view(record, connections):
         suffix = connections.suffix(record.process_name)
         performance_type = 'ASSEMBLY' if suffix == '-C' else 'MACHINING' if suffix in ('-A', '-B', '-D') else ''
     machine = record.lot_no.strip()[-2:-1]
-    return {
+    view = {
         'id': record.id, 'work_date': record.work_date, 'part_no': record.part_no,
         'part_name': item.part_name if item else raw.get('PRODUCT_NM', ''),
         'item_id': item.id if item else None, 'mes_part_no': item.part_no if item else '',
@@ -46,3 +47,5 @@ def external_record_view(record, connections):
         'lot_conflict': bool(conflict), 'notes': notes, 'changed_at': record.changed_at.replace(tzinfo=timezone.utc).astimezone(
             timezone(timedelta(hours=9))).strftime('%Y-%m-%d %H:%M:%S'),
     }
+
+    return view | label_metadata(view, 'production')

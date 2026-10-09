@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}외부 연동 포장현황{% endblock %}
 {% block extra_head %}
+<script src="/static/external_label_buttons.js?v=1"></script>
 <style>
 .es-card{background:white;border:1px solid #cbd5e1;border-radius:6px;padding:16px;margin:14px 0}.es-line{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.es-line label{font-size:12px;display:block}.es-line input,.es-line select,.es-btn{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 10px}.es-btn{background:#2563eb;color:white;cursor:pointer}.es-btn:disabled{opacity:.5;cursor:default}.es-muted{font-size:12px;color:#64748b}.es-error{color:#dc2626}.es-scroll{overflow-x:auto}.es-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}.es-table th,.es-table td{padding:8px;border:1px solid #e2e8f0;text-align:left}.es-table th{background:#f1f5f9}.es-table input,.es-table select{height:34px}.es-notes{color:#b45309}.es-result{white-space:pre-wrap;font-size:12px}
 </style>
@@ -24,8 +25,8 @@
 <button class="es-btn" type="button" id="pkRun">선택 기간 지금 가져오기</button></form>
 <p id="pkMessage" class="es-result" role="status" aria-live="polite"></p>
 <p class="es-muted">조회는 저장된 내역을 표시합니다. 같은 원본 품번·LOT를 다시 가져오면 기존 내역을 갱신합니다. 원본에서 사라진 내역은 자동 삭제하지 않습니다.</p>
-<p id="pkTotal"></p><div class="es-scroll"><table class="es-table"><thead><tr><th>품번</th><th>품명</th><th>LOT 번호</th><th>포장일자</th><th>포장수량</th><th>출고수량</th><th>출고일</th><th>거래처</th><th>재고수량</th><th>재고 반영</th><th>품번 연결</th><th>원본 품번</th></tr></thead><tbody id="pkRows"></tbody></table></div>
+<p id="pkTotal"></p><div class="es-scroll"><table class="es-table"><thead><tr><th>품번</th><th>품명</th><th>LOT 번호</th><th>포장일자</th><th>포장수량</th><th>출고수량</th><th>출고일</th><th>거래처</th><th>재고수량</th><th>재고 반영</th><th>품번 연결</th><th>원본 품번</th><th>라벨</th></tr></thead><tbody id="pkRows"></tbody></table></div>
 <p class="es-line"><button id="pkPrev" class="es-btn" type="button">이전</button><span id="pkPage"></span><button id="pkNext" class="es-btn" type="button">다음</button></p></div>
 <div class="es-card"><h3>동기화 이력</h3><p class="es-muted">일별 저장이 완료된 내역은 유지됩니다. 오류가 발생한 기간은 다시 가져올 수 있습니다.</p><div class="es-scroll"><table class="es-table"><thead><tr><th>시작</th><th>기간</th><th>실행</th><th>결과</th><th>수신 / 신규 / 수정 / 동일</th><th>확인사항</th></tr></thead><tbody id="pkRuns"></tbody></table></div></div>
-<script src="/static/packing_external.js?v=2" defer></script>
+<script src="/static/packing_external.js?v=3" defer></script>
 {% endblock %}

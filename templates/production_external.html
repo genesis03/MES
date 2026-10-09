@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}외부 연동 생산실적{% endblock %}
 {% block extra_head %}
+<script src="/static/external_label_buttons.js?v=1"></script>
 <style>
 .es-card{background:white;border:1px solid #cbd5e1;border-radius:6px;padding:16px;margin:14px 0}.es-line{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.es-line label{font-size:12px;display:block}.es-line input,.es-line select,.es-btn{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 10px}.es-btn{background:#2563eb;color:white;cursor:pointer}.es-btn:disabled{opacity:.5;cursor:default}.es-muted{font-size:12px;color:#64748b}.es-error{color:#dc2626}.es-scroll{overflow-x:auto}.es-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}.es-table th,.es-table td{padding:8px;border:1px solid #e2e8f0;text-align:left}.es-table th{background:#f1f5f9}.es-table input,.es-table select{height:34px}.es-notes{color:#b45309}.es-result{white-space:pre-wrap;font-size:12px}
 </style>
@@ -40,12 +41,12 @@
 <p class="es-muted">반복 조회는 같은 생산 LOT의 실적을 갱신합니다. 품번·작업번호·공정이 달라도 생산 LOT는 중복 저장하지 않습니다. 내부 LOT와 충돌하거나 같은 LOT에 다른 외부 품번이 수신되면 해당 날짜의 저장을 중단합니다. 기존 충돌 내역은 확인사항에 표시하며 일반 생산실적 현황에서는 제외합니다.</p>
 <p id="esTotal"></p>
 <p class="es-muted">일반 생산실적 현황에서도 함께 조회됩니다. 총생산수량 = 양품 + 불량 + 셋업입니다. 생성 LOT는 원본 LOT를 표시하며, 작업자·주야 등 확인되지 않은 정보는 미확인으로 표시합니다.</p>
-<div class="es-scroll"><table class="es-table"><thead><tr><th>No.</th><th>생산일자</th><th>구분</th><th>주/야</th><th>공정</th><th>작업자</th><th>생산호기</th><th>작업지시번호</th><th>품번</th><th>품명</th><th>총생산수량</th><th>양품</th><th>불량</th><th>셋업</th><th>생성 LOT</th><th>비고</th><th>확인사항</th><th>원본 보기</th></tr></thead><tbody id="esRows"></tbody></table></div>
+<div class="es-scroll"><table class="es-table"><thead><tr><th>No.</th><th>생산일자</th><th>구분</th><th>주/야</th><th>공정</th><th>작업자</th><th>생산호기</th><th>작업지시번호</th><th>품번</th><th>품명</th><th>총생산수량</th><th>양품</th><th>불량</th><th>셋업</th><th>생성 LOT</th><th>비고</th><th>확인사항</th><th>원본 보기</th><th>라벨</th></tr></thead><tbody id="esRows"></tbody></table></div>
 <p class="es-line"><button id="esPrev" type="button" class="es-btn">이전</button><span id="esPage"></span><button id="esNext" type="button" class="es-btn">다음</button></p>
 </div>
 <div class="es-card"><h3>공정 연결</h3><p class="es-muted">공정명이 다르면 아래에서 MES 공정을 선택해 주세요. 연결한 MES 공정을 품번 자동 연결에 우선 사용합니다.</p><div id="esMappings" class="es-scroll"></div></div>
 <div class="es-card"><h3>품번 연결</h3><p class="es-muted">BOM에서 해당 공정의 생산품목을 찾아 자동 연결합니다. 복합선반 -A · 탭핑 -B · 세레이션 -D · 은도금 -Ag · 조립 -C · 포장은 완제품입니다. BOM이 없는 경우 같은 기본품번의 공정 품목을 확인합니다. 해당 품목이 없거나 후보가 여러 개면 미연결로 표시합니다. 품번 조회에서 우리 MES 품목을 직접 선택할 수 있으며 수동 연결이 우선합니다. 나중에 품목이나 BOM을 등록하면 기존 실적에도 적용됩니다.</p><p><a href="/basic-info/items" target="_blank" rel="noopener">품목 등록 · 수정</a></p><div id="esItemMaps" class="es-scroll"></div></div>
 <dialog id="esItemDialog"><h3 id="esItemTitle">MES 품번 연결</h3><form id="esItemSearch" class="es-line"><label>품번 · 품명<br><input id="esItemKeyword"></label><button class="es-btn" type="submit">조회</button><button id="esItemReset" class="es-btn" type="button">초기화</button></form><p id="esItemHelp" class="es-muted"></p><div id="esItemCandidates"></div><p class="es-line"><button id="esItemPrev" class="es-btn" type="button">이전</button><span id="esItemPage"></span><button id="esItemNext" class="es-btn" type="button">다음</button><button id="esItemClose" class="es-btn" type="button">닫기</button></p></dialog>
 <div class="es-card"><h3>동기화 이력</h3><p class="es-muted">조회는 날짜별로 저장합니다. 일부 날짜에서 오류가 나면 완료된 날짜는 유지하며 같은 기간을 재실행할 수 있습니다.</p><div class="es-scroll"><table class="es-table"><thead><tr><th>시작</th><th>기간</th><th>실행</th><th>결과</th><th>수신 / 신규 / 수정 / 동일</th><th>확인사항</th></tr></thead><tbody id="esRuns"></tbody></table></div></div>
-<script src="/static/production_external.js?v=8" defer></script>
+<script src="/static/production_external.js?v=9" defer></script>
 {% endblock %}

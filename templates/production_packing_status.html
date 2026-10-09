@@ -2,6 +2,7 @@
 {% block title %}포장현황{% endblock %}
 
 {% block extra_head %}
+<script src="/static/external_label_buttons.js?v=1"></script>
 <style>
 .packing-status-page h1{font-size:20px;margin:0 0 14px}
 .ps-filter{display:grid;grid-template-columns:180px 180px 220px 220px auto;gap:12px;align-items:end;background:#fff;border:1px solid #dbe3ec;border-radius:6px;padding:14px;margin-bottom:14px}
@@ -62,11 +63,11 @@
           <th>출고수량</th>
           <th>출고일</th>
           <th>거래처</th>
-          <th>재고수량</th><th>구분 / 확인사항</th>
+          <th>재고수량</th><th>구분 / 확인사항</th><th>라벨</th>
         </tr>
       </thead>
       <tbody id="resultBody">
-        <tr><td colspan="10" class="ps-empty">조회해 주세요.</td></tr>
+        <tr><td colspan="11" class="ps-empty">조회해 주세요.</td></tr>
       </tbody>
     </table>
   </div>
@@ -90,7 +91,7 @@ async function loadRows(){
   if($('endDate').value) params.set('end_date',$('endDate').value);
   if($('partNo').value.trim()) params.set('part_no',$('partNo').value.trim());
   if($('lotNo').value.trim()) params.set('lot_no',$('lotNo').value.trim());
-  $('resultBody').innerHTML='<tr><td colspan="10" class="ps-empty">조회 중...</td></tr>';
+  $('resultBody').innerHTML='<tr><td colspan="11" class="ps-empty">조회 중...</td></tr>';
   try{
     const r=await fetch('/api/packing/status?'+params.toString());
     const d=await MesResponse.read(r);
@@ -108,10 +109,11 @@ async function loadRows(){
         <td class="left">${esc(x.customer_name||'')}</td>
         <td class="num">${x.record_source==='EXTERNAL'?(x.stock_qty==null?'미반영':fmt(x.stock_qty)):fmt(Math.max(Number(x.packing_qty)-Number(x.shipment_qty),0))}</td>
         <td>${x.record_source==='EXTERNAL'?'외부 연동'+(x.stock_note?' · '+esc(x.stock_note):''):'MES'}</td>
-      </tr>`).join(''):'<tr><td colspan="10" class="ps-empty">조회된 포장현황이 없습니다.</td></tr>';
+        <td>${ExternalLabels.button(x)}</td>
+      </tr>`).join(''):'<tr><td colspan="11" class="ps-empty">조회된 포장현황이 없습니다.</td></tr>';
   }catch(e){
     $('resultCount').textContent='0건';
-    $('resultBody').innerHTML=`<tr><td colspan="10" class="ps-empty">${esc(e.message)}</td></tr>`;
+    $('resultBody').innerHTML=`<tr><td colspan="11" class="ps-empty">${esc(e.message)}</td></tr>`;
   }
 }
 function resetFilters(){

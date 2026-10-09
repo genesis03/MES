@@ -236,6 +236,38 @@ def _direct_shipment_labels(db: Session, shipment_id: int) -> list[dict]:
     return result
 
 
+def _external_labels(db: Session, record_id: int, kind: str) -> list[dict]:
+    from models.production_sync import ExternalProductionRecord
+    from models.packing_sync import ExternalPackingRecord
+    from services.production_sync_mapping import ItemConnections
+    from services.production_sync_view import external_record_view
+    from services.packing_sync_view import packing_record_view
+
+    model = ExternalProductionRecord if kind == 'production' else ExternalPackingRecord
+    record = db.get(model, record_id)
+    if not record:
+        raise HTTPException(404, '외부 실적을 찾을 수 없습니다.')
+    connections = ItemConnections(db)
+    view = external_record_view(record, connections) if kind == 'production' else packing_record_view(record, connections)
+    if not view['can_print_label']:
+        raise HTTPException(409, view['label_error'])
+    item, _ = connections.resolve(record.part_no, record.process_name if kind == 'production' else '포장')
+    production = kind == 'production'
+    extras = [{'label': label, 'value': view[key]} for label, key in
+              [('양품', 'good_qty'), ('불량', 'fault_qty'), ('SET-UP', 'setup_qty'), ('총생산', 'total_qty')]] if production else []
+    return [_label(
+        title=('조립 LOT' if view['performance_type'] == 'ASSEMBLY' else '생산 LOT') if production else '출고 대기',
+        part_no=item.part_no, part_name=item.part_name, lot_no=record.lot_no.strip(),
+        qty=float(view['good_qty'] if production else record.packing_qty), unit=item.unit or 'EA',
+        date=record.work_date if production else record.packing_date,
+        date_label='생산일' if production else '포장일',
+        process=(view['process_name'] or record.process_name) if production else '포장',
+        storage=_storage_text(db, item.inbound_loc) or item.inbound_loc or '',
+        equipment=view['machine_no'] + '호기' if production and view['machine_no'] else '',
+        compact_production=production, extras=extras,
+    )]
+
+
 @router.get("/internal-labels/{source}/{record_id}", response_class=HTMLResponse)
 def print_internal_labels(
     source: str,
@@ -247,6 +279,8 @@ def print_internal_labels(
     current_user=Depends(get_current_user),
 ):
     builders = {
+        "external-production": lambda: _external_labels(db, record_id, "production"),
+        "external-packing": lambda: _external_labels(db, record_id, "packing"),
         "purchase": lambda: _purchase_labels(db, record_id),
         "production": lambda: _production_labels(db, record_id),
         "subcontract-outbound": lambda: _subcontract_outbound_labels(db, record_id),

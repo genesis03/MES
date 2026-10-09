@@ -284,6 +284,7 @@ def production_performance_status(
                 'total_qty': float(view['total_qty']) if view['total_qty'] is not None else None,
                 'consumed_qty': None, 'source_lot_no': '', 'output_lot_no': record.lot_no,
                 'downstream_used': False, 'can_delete': False,
+                **{key: view[key] for key in ('can_print_label', 'label_error', 'label_url')},
                 'note': ' / '.join(['외부 연동'] + view['notes']),
             })
     return sorted(result, key=lambda row: (row['performance_date'], row['source_record_id'], row['record_source']), reverse=True)
