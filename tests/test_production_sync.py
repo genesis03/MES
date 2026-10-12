@@ -585,7 +585,6 @@ def test_pagination_and_empty_day_preserve_previous_records(setup):
 
 
 def test_http_login_cookie_and_list_protocol(monkeypatch):
-    monkeypatch.setattr(source.config,'PRODUCTION_SYNC_COMP_NO','202002031618148870032513')
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import threading
     seen = []
@@ -600,8 +599,11 @@ def test_http_login_cookie_and_list_protocol(monkeypatch):
             action = payload['jump.form.code'][0]; seen.append(action)
             if action == 'Login':
                 assert payload['Common.Set.LoginShortSet.USER_ID'] == ['test-user']
-                assert payload['Common.Set.LoginShortSet.COMP_NO'] == ['202002031618148870032513']
-                assert payload['Common.Set.LoginShortSet.AGADOS_URL'] == [source.BASE]
+                # Match the successful October 9 request, rather than guessing login fields.
+                assert 'Common.Set.LoginShortSet.COMP_NO' not in payload
+                assert 'Common.Set.LoginShortSet.AGADOS_URL' not in payload
+                expected=source.common()|{'run.object.name':'Common.Login.LoginObj','jump.form.code':'Login','Common.BeforeService.CheckSet.IS_CHECK':'Y','Common.Set.LoginShortSet.USER_ID':'test-user','Common.Set.LoginShortSet.USER_PASS':'test-password','SO.NET.END':'SO.NET.END'}
+                assert payload=={key:[value] for key,value in expected.items()}
                 assert payload['run.object.name'] == ['Common.Login.LoginObj']
                 body = {'Common.Set.LoginUserSet.USER_ID':'test-user', 'Common.Set.LoginUserSet.COMP_NO':'company-id',
                         'Common.Set.LoginUserSet.USER_PASS':'', 'SO.NET.END':'SO.NET.END'}
@@ -864,3 +866,21 @@ def test_login_check_returns_safe_downloadable_diagnostic_without_saving(setup,m
     with setup.sessions() as db:
         from models.production_sync import ProductionSyncCredential
         assert db.get(ProductionSyncCredential,1) is None
+
+
+@pytest.mark.parametrize('server_type,expected',[
+    ('System.NullReferenceException','server_null_reference'),
+    ('System.ArgumentNullException','server_argument_missing'),
+    ('System.FormatException','server_format_error'),
+    ('System.Collections.Generic.KeyNotFoundException','server_key_not_found'),
+    ('System.UnauthorizedAccessException','server_access_denied'),
+    ('Unknown private-password','server_exception'),
+])
+def test_server_exception_category_is_whitelisted_without_raw_details(server_type,expected):
+    values={'THROW.TYPE':[server_type],'THROW.MESS':['private-password and SQL context'],'SO.NET.END':['SO.NET.END']}
+    payload={'run.object.name':'Common.Login.LoginObj'}
+    kind=source.server_error_kind(values)
+    assert kind==expected
+    diagnostic=source.response_diagnostic(values,payload,kind)
+    assert diagnostic['schema_version']==2 and diagnostic['client_revision']=='login-protocol-20261009'
+    assert 'private-password' not in json.dumps(diagnostic) and 'SQL context' not in json.dumps(diagnostic)

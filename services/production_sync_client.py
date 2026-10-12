@@ -1,7 +1,6 @@
 """Read-only adapter for the observed UNI_MES Login/List protocol."""
 import http.cookiejar
 import time
-from core import config
 from http.client import IncompleteRead, RemoteDisconnected
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -28,7 +27,7 @@ def response_diagnostic(values,payload,kind):
     # Fixed booleans/enums only: never copy response text, passwords, cookies or SQL.
     fields=('TYPE','MESS','CLASS','METHOD','STACK')
     ids=values.get('Common.Set.LoginUserSet.USER_ID',[''])[0].split(',')
-    return dict(schema_version=1,stage='login' if payload.get('run.object.name')=='Common.Login.LoginObj' else 'query',error_kind=kind,
+    return dict(schema_version=2,client_revision='login-protocol-20261009',stage='login' if payload.get('run.object.name')=='Common.Login.LoginObj' else 'query',error_kind=kind,
                 response_complete=values.get('SO.NET.END')==['SO.NET.END'],
                 throw_fields={f:bool(any(v.strip() for v in values.get('THROW.'+f,[]))) for f in fields},
                 login_user_returned=bool(any(ids)),requested_user_returned=payload.get('Common.Set.LoginShortSet.USER_ID') in ids,
@@ -40,6 +39,8 @@ def server_error_kind(values):
     if 'file_not_exist' in message or 'filenotfound' in message:return 'server_object_not_found'
     if 'sqlexception' in message:return 'server_database_error'
     if 'timeout' in message or 'timedout' in message:return 'server_timeout'
+    for marker,kind in [('nullreferenceexception','server_null_reference'),('argumentnullexception','server_argument_missing'),('formatexception','server_format_error'),('keynotfoundexception','server_key_not_found'),('unauthorizedaccessexception','server_access_denied'),('typeloadexception','server_object_not_found')]:
+        if marker in message:return kind
     return 'server_exception'
 
 
@@ -98,9 +99,7 @@ class ProductionClient:
             payload.update({'run.object.name': 'Common.Login.LoginObj', 'jump.form.code': 'Login',
                             'Common.BeforeService.CheckSet.IS_CHECK': 'Y',
                             'Common.Set.LoginShortSet.USER_ID': username,
-                            'Common.Set.LoginShortSet.USER_PASS': password,
-                            'Common.Set.LoginShortSet.AGADOS_URL': BASE,
-                            'Common.Set.LoginShortSet.COMP_NO': config.PRODUCTION_SYNC_COMP_NO})
+                            'Common.Set.LoginShortSet.USER_PASS': password})
             phase='login'
             login = post(self.opener, payload)
             ids = login.get('Common.Set.LoginUserSet.USER_ID', [''])[0].split(',')
@@ -118,7 +117,7 @@ class ProductionClient:
                     self.context[key] = pieces[row_index]
             self.context['Common.Set.LoginUserSet.USER_PASS'] = ''
         except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, ValueError) as exc:
-            raise SyncError('외부 생산 시스템에 접속하거나 로그인할 수 없습니다.',dict(schema_version=1,stage=phase,error_kind='http_error' if isinstance(exc,HTTPError) else 'transport_error',http_status=exc.code if isinstance(exc,HTTPError) else None)) from exc
+            raise SyncError('외부 생산 시스템에 접속하거나 로그인할 수 없습니다.',dict(schema_version=2,client_revision='login-protocol-20261009',stage=phase,error_kind='http_error' if isinstance(exc,HTTPError) else 'transport_error',http_status=exc.code if isinstance(exc,HTTPError) else None)) from exc
 
     def fetch_day(self, day):
         # The successful external probe used distinct date bounds. Same-day

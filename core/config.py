@@ -30,8 +30,5 @@ if SESSION_ADMIN_IDLE_MINUTES < 1 or SESSION_USER_IDLE_MINUTES < 1:
 # Environment credentials remain supported as a fallback for server-managed accounts.
 PRODUCTION_SYNC_USER = os.getenv("PRODUCTION_SYNC_USER", "")
 PRODUCTION_SYNC_PASSWORD = os.getenv("PRODUCTION_SYNC_PASSWORD", "")
-# LoginShortSet company ID observed in the browser login form.
-# It differs from the server-issued LoginUserSet.COMP_NO used for subsequent queries.
-PRODUCTION_SYNC_COMP_NO = os.getenv("PRODUCTION_SYNC_COMP_NO", "202002031618148870032513")
 
 PRODUCTION_SYNC_KEY_PATH = Path(os.getenv("PRODUCTION_SYNC_KEY_PATH", str(DOCUMENT_STORAGE_ROOT.parent / "production-sync.key"))).resolve()
