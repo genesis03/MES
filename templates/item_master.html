@@ -403,6 +403,11 @@
                         </select>
                     </div>
 
+                    <div class="form-field">
+                        <label class="field-label" for="detailCycleSeconds">표준 사이클타임 (초/개)</label>
+                        <input type="number" id="detailCycleSeconds" class="field-input" min="0.001" max="86400" step="any" placeholder="미등록 시 공란">
+                        <small style="color:#64748b">가공 공정 OEE 계산 기준 · 호기 공통</small>
+                    </div>
                     <!-- 사용 여부 -->
                     <div class="form-field">
                         <label class="field-label">사용 여부 <span class="required">*</span></label>
@@ -618,6 +623,7 @@
         document.getElementById('detailMoq').value = item.moq || 0;
         document.getElementById('detailSafetyStock').value = item.safety_stock || 0;
         document.getElementById('detailWeight').value = Number(item.weight || 0).toFixed(3);
+        document.getElementById('detailCycleSeconds').value = item.cycle_seconds ?? '';
         document.getElementById('detailIsActive').value = item.is_active || "Y";
         document.getElementById('detailNote').value = item.note || "";
 
@@ -640,6 +646,7 @@
 
         document.getElementById('detailId').value = "";
         document.getElementById('detailPartNo').value = "";
+        document.getElementById('detailCycleSeconds').value = '';
         document.getElementById('detailVehicleModel').value = "";
         document.getElementById('detailPartName').value = "";
         document.getElementById('detailAccountType').value = "";
@@ -707,6 +714,7 @@
             weight: parseFloat(document.getElementById('detailWeight').value) || 0.0,
             inbound_loc: document.getElementById('detailInboundLoc').value,
             production_loc: document.getElementById('detailProductionLoc').value,
+            cycle_seconds: document.getElementById('detailCycleSeconds').value === '' ? null : Number(document.getElementById('detailCycleSeconds').value),
             is_active: document.getElementById('detailIsActive').value,
             note: document.getElementById('detailNote').value.trim()
         };

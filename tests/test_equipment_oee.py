@@ -8,17 +8,20 @@ from models.production_cycle_time import ProductionCycleTime
 from models.equipment import EquipmentMaster
 from models.worker import WorkerMaster
 from routers.equipment_oee import router
-from services.equipment_oee import scheduled_intervals,calculate
+from services.equipment_oee import calculate
+from services.oee_schedule import workday_intervals
 
 
-def test_full_week_and_public_holiday_calendar():
+def test_full_week_and_public_holiday_calendar(setup):
+    def scheduled_intervals(start,end):
+        with setup.sessions() as db:return workday_intervals(db,'LT',start.date(),end.date(),end)
     intervals,excluded=scheduled_intervals(datetime(2026,10,12),datetime(2026,10,18))
     assert sum((b-a).total_seconds() for a,b in intervals)==117*3600
     assert excluded==[]
-    intervals,excluded=scheduled_intervals(datetime(2026,10,9),datetime(2026,10,10))
-    assert intervals==[] and excluded[0]['date']=='2026-10-09'
+    intervals,excluded=scheduled_intervals(datetime(2026,10,9,8),datetime(2026,10,10,8))
+    assert intervals==[] and excluded[0]['work_date']=='2026-10-09'
     intervals,excluded=scheduled_intervals(datetime(2026,10,5),datetime(2026,10,6))
-    assert intervals==[] and excluded[0]['date']=='2026-10-05'
+    assert intervals==[] and excluded[0]['work_date']=='2026-10-05'
     intervals,_=scheduled_intervals(datetime(2026,10,12),datetime(2026,10,12,10))
     assert sum((b-a).total_seconds() for a,b in intervals)==2*3600
 
@@ -81,11 +84,13 @@ def test_external_performance_uses_registered_machine_and_item(setup):
     token,_=sync.claim(DAY,DAY,'MANUAL')
     sync.save_day([row(lot='LX20260325011',PROC_TYPE_NM='복합선반')],token)
     with setup.sessions() as db:
-        result=calculate(db,DAY,DAY,now=datetime(2026,3,26))
+        result=calculate(db,DAY,DAY,now=datetime(2026,3,26,12))
         machine=next(r for r in result['items'] if r['key']==str(equipment))
         assert machine['total_qty']==331 and machine['good_qty']==216
         assert machine['parts'][0]['sources']==['외부']
         assert machine['oee']==pytest.approx(216*30/(24*3600))
+        partial=calculate(db,DAY,DAY,now=datetime(2026,3,26))
+        assert partial['planned_seconds']==16*3600
 
 
 def test_cycle_api_enforces_readonly_menu_permission(setup):
@@ -93,7 +98,7 @@ def test_cycle_api_enforces_readonly_menu_permission(setup):
     from types import SimpleNamespace
     from core.security import get_current_user
     prepare(setup);setup.app.include_router(router)
-    setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='readonly',role='USER',permissions=json.dumps({'menu_access':{'/basic-info/cycle-times':'READ'}}))
+    setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='readonly',role='USER',permissions=json.dumps({'menu_access':{'/basic-info/items':'READ'}}))
     assert setup.client.get('/api/production/cycle-times').status_code==200
     assert setup.client.put('/api/production/cycle-times/1',json={'seconds':60}).status_code==403
     assert setup.client.get('/api/production/equipment/oee',params={'start_date':'2026-10-12','end_date':'2026-10-12'}).status_code==403

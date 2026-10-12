@@ -1,8 +1,7 @@
-"""복합선반: 주간 달력 가동시간에서 등록 비가동을 차감하는 OEE."""
+"""선택한 가공 공정의 월별 가동 스케줄과 생산실적을 집계합니다."""
 import re
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
-import holidays
 from models.models import ProcessModel, ItemMasterModel
 from models.equipment import EquipmentMaster
 from models.production import ProductionPerformance, ProductionWorkOrder
@@ -12,6 +11,7 @@ from models.production_sync import ExternalProductionRecord
 from services.production_sync_mapping import ItemConnections, stage_suffix
 from services.production_sync_view import external_record_view
 from services.production_downtime import parse_time
+from services.oee_schedule import workday_intervals
 
 
 def lathe_codes(db):
@@ -27,27 +27,14 @@ def merge_intervals(intervals):
     return merged
 
 
-def scheduled_intervals(start,end):
-    calendar=holidays.KR(years=range(start.year,end.year+1),language='ko')
-    intervals=[];excluded=[];day=start.date()
-    while day<=end.date():
-        if day.weekday()<=5:
-            left=datetime.combine(day,time(8) if day.weekday()==0 else time())
-            right=datetime.combine(day,time(5)) if day.weekday()==5 else datetime.combine(day+timedelta(days=1),time())
-            left,right=max(left,start),min(right,end)
-            if right>left:
-                if day in calendar:excluded.append({'date':day.isoformat(),'name':calendar[day]})
-                else:intervals.append((left,right))
-        day+=timedelta(days=1)
-    return intervals,excluded
-
-
-def calculate(db,start_day,end_day,now=None):
+def calculate(db,start_day,end_day,now=None,process_code=None):
     now=now or datetime.now(ZoneInfo('Asia/Seoul')).replace(tzinfo=None)
     start=datetime.combine(start_day,time());end=min(datetime.combine(end_day+timedelta(days=1),time()),now)
-    intervals,excluded=scheduled_intervals(start,end) if end>start else ([],[])
+    codes=[process_code] if process_code else lathe_codes(db)
+    intervals,excluded=workday_intervals(db,codes[0],start_day,end_day,now) if codes else ([],[])
+    intervals=merge_intervals(intervals)
     planned=sum((b-a).total_seconds() for a,b in intervals)
-    codes=lathe_codes(db)
+    if intervals:start,end=intervals[0][0],intervals[-1][1]
     equipment={e.id:e for e in db.query(EquipmentMaster).filter(EquipmentMaster.process_code.in_(codes))}
     machines={}
     for e in equipment.values():machines.setdefault(e.machine_no,[]).append(e)
@@ -104,4 +91,4 @@ def calculate(db,start_day,end_day,now=None):
         g['parts']=list(g['parts'].values())
         for p in g['parts']:p['sources']=sorted(p['sources'])
         result.append(g)
-    return dict(items=sorted(result,key=lambda x:x['equipment_name']),holidays=excluded,as_of=now.isoformat(timespec='minutes'),planned_seconds=planned)
+    return dict(items=sorted(result,key=lambda x:x['equipment_name']),holidays=[dict(date=r['work_date'],name=r['holiday'],working=r['working']) for r in excluded],as_of=now.isoformat(timespec='minutes'),planned_seconds=planned,process_code=process_code or (codes[0] if codes else ''))

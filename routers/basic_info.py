@@ -7,6 +7,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from models.production_cycle_time import ProductionCycleTime
+from services.item_cycle_time import save_item_cycle
 from core.database import get_db
 from core.security import (
     get_current_user_optional,
@@ -121,6 +123,7 @@ async def get_items(
     ).filter(ItemRevision.status == "CURRENT", ItemDocument.document_type == DRAWING_TYPE,
              ItemDocument.retired_at.is_(None)).distinct().all()}
 
+    cycles = {c.item_id:c.seconds for c in db.query(ProductionCycleTime)}
     data = [
         {
             "id": it.id,
@@ -142,6 +145,7 @@ async def get_items(
             # DB에는 production_loc을 process_code로 저장합니다.
             "production_loc": process_name_by_code.get(it.production_loc, it.production_loc or ""),
             "production_loc_code": it.production_loc or "",
+            "cycle_seconds": cycles.get(it.id),
             "is_active": it.is_active,
             "note": it.note or "",
             "created_at": it.created_at,
@@ -197,6 +201,8 @@ async def create_item(request: Request, db: Session = Depends(get_db)):
     )
 
     db.add(new_item)
+    db.flush()
+    if 'cycle_seconds' in body:save_item_cycle(db,new_item.id,body['cycle_seconds'])
     db.commit()
     db.refresh(new_item)
 
@@ -255,6 +261,7 @@ async def update_item(request: Request, db: Session = Depends(get_db)):
     target.is_active = str(body.get("is_active", target.is_active)).upper()
     target.note = str(body.get("note", "")).strip() or None
     target.updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if 'cycle_seconds' in body:save_item_cycle(db,target.id,body['cycle_seconds'])
 
     db.commit()
 
@@ -319,6 +326,8 @@ async def delete_item(request: Request, db: Session = Depends(get_db)):
             ),
         )
 
+    save_item_cycle(db,target.id,None)
+    db.flush()
     db.delete(target)
     db.commit()
 
