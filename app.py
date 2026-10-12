@@ -305,3 +305,6 @@ if __name__ == "__main__":
 
 from routers import equipment_oee
 app.include_router(equipment_oee.router)
+
+from routers import production_month_plan
+app.include_router(production_month_plan.router)

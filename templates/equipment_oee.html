@@ -2,21 +2,16 @@
 {% block title %}설비 가동 현황 (OEE){% endblock %}
 {% block extra_head %}<style>
 .oee-panel{background:#fff;border:1px solid #cbd5e1;border-radius:6px;padding:16px;margin:14px 0}.oee-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.oee-toolbar input,.oee-panel input{padding:7px;border:1px solid #cbd5e1;border-radius:4px;box-sizing:border-box}.oee-btn{background:#2563eb;color:#fff;border:0;border-radius:4px;padding:8px 12px;cursor:pointer}.oee-delete{background:#b91c1c}.oee-help{color:#64748b;font-size:12px;line-height:1.6}.oee-scroll{overflow:auto}.oee-table{width:100%;border-collapse:collapse;font-size:12px}.oee-table th,.oee-table td{border:1px solid #dbe3ec;padding:9px;text-align:center}.oee-table th{background:#f1f5f9;white-space:nowrap}.oee-table td.left{text-align:left}.oee-table input{width:110px}.oee-alert{color:#b45309;font-size:12px;white-space:pre-wrap}#oeeMessage{white-space:pre-wrap;color:#1e40af}.oee-detail{margin:8px 0}.oee-detail summary{cursor:pointer;color:#2563eb}
-.schedule-grid{display:grid;grid-template-columns:repeat(7,minmax(140px,1fr));overflow:auto;gap:6px;margin-top:12px}.schedule-cell{border:1px solid #cbd5e1;border-radius:4px;padding:9px;min-width:0}.schedule-cell.off{background:#f1f5f9}.schedule-cell .date{font-weight:700;margin-bottom:5px}.schedule-cell label{display:block;font-size:12px;margin:5px 0}.schedule-cell input[type=time]{width:100%;min-width:0}.schedule-cell .times{display:grid;grid-template-columns:minmax(0,1fr);gap:0}.schedule-cell .holiday{font-size:11px;color:#b45309}.schedule-weekday{text-align:center;font-size:12px;font-weight:700;background:#e2e8f0;padding:6px}#scheduleMessage{white-space:pre-wrap;color:#1e40af;font-size:12px}@media(max-width:1000px){.schedule-cell .times{grid-template-columns:1fr}.schedule-cell{padding:5px}.schedule-cell input[type=time]{padding:3px;font-size:11px}}@media(max-width:650px){.schedule-grid{grid-template-columns:repeat(7,minmax(140px,1fr));overflow:auto}}
 </style>{% endblock %}
 {% block content %}
 <h1>설비 가동 현황 (OEE)</h1>
 
-<p class="oee-help">선택한 가공 공정의 월별 스케줄을 기준으로 집계합니다. 실제 가동시간은 스케줄 시간에서 등록된 비가동 시간을 차감합니다. 진행 중인 가동일은 현재 시각까지 계산합니다.</p>
-<div class="oee-panel oee-toolbar"><label>가공 공정 <select id="oeeProcess" style="padding:7px;border:1px solid #cbd5e1;border-radius:4px"></select></label><label>시작일 <input type="date" id="oeeStart"></label><label>종료일 <input type="date" id="oeeEnd"></label><button class="oee-btn" id="oeeLoad">조회</button><a href="/basic-info/items">품목 정보 · 사이클타임 입력</a></div>
+<p class="oee-help">선택한 공정의 생산계획에 저장된 호기별 스케줄과 날짜별 C/T로 계산합니다. 실제 가동시간은 스케줄 시간에서 등록된 비가동 시간을 차감합니다. 진행 중인 가동일은 현재 시각까지 계산합니다.</p>
+<div class="oee-panel oee-toolbar"><label>가공 공정 <select id="oeeProcess" style="padding:7px;border:1px solid #cbd5e1;border-radius:4px"></select></label><label>시작일 <input type="date" id="oeeStart"></label><label>종료일 <input type="date" id="oeeEnd"></label><button class="oee-btn" id="oeeLoad">조회</button><a href="/production/plans">생산계획 · 스케줄/C/T 입력</a></div>
 <p class="oee-help">가동률 = 실제 가동시간 ÷ 기본 시간 · 성능률 = 표준 생산시간 ÷ 실제 가동시간 · 양품률 = 양품 ÷ 총생산 · OEE = 가동률 × 성능률 × 양품률. 총생산은 양품·불량·셋업의 합계입니다.</p>
 <div id="oeeCalendar" class="oee-help"></div>
 <div id="oeeMessage" role="status"></div>
 <div class="oee-panel oee-scroll"><table class="oee-table"><thead><tr><th>생산호기</th><th>기본 시간(h)</th><th>비가동(h)</th><th>실제 가동(h)</th><th>총생산</th><th>양품</th><th>가동률</th><th>성능률</th><th>양품률</th><th>OEE</th><th>확인사항 / 품번별 내역</th></tr></thead><tbody id="oeeRows"></tbody></table></div>
-<details class="oee-panel" id="schedulePanel"><summary style="cursor:pointer;font-weight:700">월별 가동 스케줄 설정</summary>
-<p class="oee-help">선택한 공정의 모든 생산호기에 적용됩니다. 가동일은 시작일 기준입니다. 기본값: 월~목 08:00~익일 08:00, 금요일 08:00~익일 05:00. 토·일·공휴일은 처음에 비가동으로 표시되며 날짜별로 변경할 수 있습니다.</p>
-<div class="oee-toolbar"><label>설정 월 <input type="month" id="scheduleMonth"></label><button type="button" class="oee-btn" id="scheduleLoad">불러오기</button><button type="button" class="oee-btn" id="scheduleDefaults">기본값 채우기</button><button type="button" class="oee-btn" id="scheduleOff">모두 비가동</button><button type="button" class="oee-btn" id="scheduleSave">스케줄 저장</button></div>
-<p class="oee-help" id="scheduleContext"></p><div id="scheduleMessage" role="status"></div><div id="scheduleGrid" class="schedule-grid"></div>
-</details>
+
 {% endblock %}
-{% block extra_script %}<script src="/static/equipment_oee.js?v=20261012-2"></script>{% endblock %}
+{% block extra_script %}<script src="/static/equipment_oee.js?v=20261012-3"></script>{% endblock %}

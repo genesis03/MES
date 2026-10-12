@@ -12,6 +12,13 @@ from services.equipment_oee import calculate
 from services.oee_schedule import workday_intervals
 
 
+def plan_ct(db,equipment,item,day,seconds):
+    from models.production_month_plan import ProductionMonthPlanLine,ProductionMonthPlanDay
+    line=ProductionMonthPlanLine(month=day[:7],equipment_id=equipment,item_id=item,cycle_seconds=seconds,expected_oee=.95)
+    db.add(line);db.flush()
+    db.add(ProductionMonthPlanDay(line_id=line.id,work_date=day,quantity=0,cycle_seconds=seconds,expected_oee=.95))
+
+
 def test_full_week_and_public_holiday_calendar(setup):
     def scheduled_intervals(start,end):
         with setup.sessions() as db:return workday_intervals(db,'LT',start.date(),end.date(),end)
@@ -59,8 +66,8 @@ def test_native_oee_missing_cycle_and_overlapping_downtime_union(setup):
         row=next(r for r in result['items'] if r['key']==str(equipment))
         assert row['planned_seconds']==117*3600
         assert row['downtime_seconds']==45*60
-        assert row['oee'] is None and '사이클타임 미등록' in row['issues'][0]
-        db.add(ProductionCycleTime(item_id=item,seconds=60));db.commit()
+        assert row['oee'] is None and '생산계획 C/T 미등록' in row['issues'][0]
+        db.add(ProductionCycleTime(item_id=item,seconds=60));plan_ct(db,equipment,item,'2026-10-12',60);db.commit()
         result=calculate(db,date(2026,10,12),date(2026,10,17),now=datetime(2026,10,19))
         row=next(r for r in result['items'] if r['key']==str(equipment))
         assert row['total_qty']==1000 and row['good_qty']==900
@@ -78,6 +85,7 @@ def test_external_performance_uses_registered_machine_and_item(setup):
     with setup.sessions() as db:
         item=db.get(ProductionWorkOrder,order).item_id
         db.add(ProductionCycleTime(item_id=item,seconds=30))
+        plan_ct(db,equipment,item,DAY.isoformat(),30)
         db.add(ProductionSyncItemMap(source_part_no='EXTERNAL-A',source_process_name='복합선반',item_id=item))
         db.add(ProductionSyncProcessMap(source_name='복합선반',process_code='LT',performance_type='MACHINING'))
         db.commit()

@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user, check_admin_permission, parse_user_permissions, check_permission
 from models.models import ItemMasterModel, ItemBomModel, ProcessModel
+from services.production_sync_mapping import stage_suffix
+from models.equipment import EquipmentMaster
 from models.production_cycle_time import ProductionCycleTime
 from services.equipment_oee import lathe_codes, calculate
 from services.production_process_type import performance_type_for_process
@@ -83,11 +85,11 @@ def report(start_date:date,end_date:date,process_code:str|None=None,db:Session=D
 
 
 def machining_processes(db):
-    return [p for p in db.query(ProcessModel).filter(ProcessModel.is_active=='Y').order_by(ProcessModel.sort_order,ProcessModel.id) if performance_type_for_process(p)=='MACHINING']
+    return [p for p in db.query(ProcessModel).filter(ProcessModel.is_active=='Y').order_by(ProcessModel.sort_order,ProcessModel.id) if stage_suffix(p.process_name) in ('-A','-B')]
 
 
 def validate_process(db,code):
-    if code not in {p.process_code for p in machining_processes(db)}:raise HTTPException(422,'등록된 가공 공정을 선택하세요.')
+    if code not in {p.process_code for p in machining_processes(db)}:raise HTTPException(422,'복합선반 또는 탭핑 공정을 선택하세요.')
 
 
 @router.get('/api/production/equipment/oee/processes')
@@ -105,22 +107,31 @@ class ScheduleDayInput(BaseModel):
 
 
 class ScheduleMonthInput(BaseModel):
+    equipment_id:int|None=None
     month:str
     process_code:str
     items:list[ScheduleDayInput]=Field(min_length=28,max_length=31)
 
 
 @router.get('/api/production/equipment/schedule')
-def get_schedule(month:str,process_code:str,db:Session=Depends(get_db),user=Depends(get_current_user)):
-    require_access(user,'/production/equipment/status')
+def get_schedule(month:str,process_code:str,equipment_id:int|None=None,db:Session=Depends(get_db),user=Depends(get_current_user)):
+    require_access(user,'/production/plans')
     validate_process(db,process_code)
+    if equipment_id is not None:validate_equipment(db,process_code,equipment_id)
     dates=month_days(month)
-    return {'items':days(db,process_code,dates[0],dates[-1]),'month':month,'process_code':process_code}
+    return {'items':days(db,process_code,dates[0],dates[-1],equipment_id),'month':month,'process_code':process_code}
 
 
 @router.put('/api/production/equipment/schedule')
 def update_schedule(payload:ScheduleMonthInput,db:Session=Depends(get_db),user=Depends(get_current_user)):
-    require_access(user,'/production/equipment/status','WRITE')
+    require_access(user,'/production/plans','WRITE')
     validate_process(db,payload.process_code)
-    save_month(db,payload.process_code,payload.month,[r.model_dump() for r in payload.items])
+    if payload.equipment_id is not None:validate_equipment(db,payload.process_code,payload.equipment_id)
+    save_month(db,payload.process_code,payload.month,[r.model_dump() for r in payload.items],payload.equipment_id)
     return {'message':'월별 가동 스케줄을 저장했습니다.'}
+
+
+def validate_equipment(db,process_code,equipment_id):
+    equipment=db.get(EquipmentMaster,equipment_id)
+    if equipment is None or equipment.process_code!=process_code or equipment.is_active!='Y':raise HTTPException(422,'선택한 공정의 생산호기를 선택하세요.')
+    return equipment

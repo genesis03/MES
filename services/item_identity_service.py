@@ -19,7 +19,7 @@ def item_usage_summary(db: Session, item_id: int) -> list[dict]:
     seen: set[tuple[str, str]] = set()
     result: list[dict] = []
 
-    for table_name, id_column, _ in IDENTITY_COLUMNS:
+    for table_name, id_column, _ in (*IDENTITY_COLUMNS, ("production_month_plan_lines", "item_id", None)):
         key = (table_name, id_column)
         if key in seen:
             continue

@@ -50,6 +50,7 @@ install_item_identity_events()
 from models.daily_job_report import DailyJobReportSupplement
 from models.production_cycle_time import ProductionCycleTime
 from models.oee_schedule import OeeScheduleDay
+from models.production_month_plan import ProductionEquipmentSchedule, ProductionMonthPlanLine, ProductionMonthPlanDay
 
 Base.metadata.create_all(bind=engine)
 from models.plm_flow_migration import ensure_plm_flow_columns

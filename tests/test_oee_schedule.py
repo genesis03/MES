@@ -51,7 +51,7 @@ def test_overlap_missing_dates_and_nonmachining_process_rejected(setup):
     assert setup.client.put('/api/production/equipment/schedule',json=payload(september,'2026-09')).status_code==422
     assert setup.client.get('/api/production/equipment/schedule',params={'month':'2026-13','process_code':'LT'}).status_code==422
     assert setup.client.get('/api/production/equipment/schedule',params={'month':'2026-10','process_code':'ASSY'}).status_code==422
-    assert {p['process_code'] for p in setup.client.get('/api/production/equipment/oee/processes').json()['items']}=={'LT','TP','DOT'}
+    assert {p['process_code'] for p in setup.client.get('/api/production/equipment/oee/processes').json()['items']}=={'LT','TP'}
     with setup.sessions() as db:assert db.query(OeeScheduleDay).count()==0
 
 
@@ -70,6 +70,8 @@ def test_tapping_scope_and_full_shift_dates_affect_oee(setup):
         order=ProductionWorkOrder(work_order_no='WTAP',order_date='2026-10-12',item_id=item.id,part_no=item.part_no,order_qty=1000)
         equipment=EquipmentMaster(equipment_code='TP1',equipment_name='탭핑 1호기',process_code='TP',machine_no='1')
         db.add_all([order,equipment]);db.flush()
+        from test_equipment_oee import plan_ct
+        plan_ct(db,equipment.id,item.id,'2026-10-12',30)
         db.add(ProductionPerformance(work_order_id=order.id,performance_date='2026-10-12',process_code='TP',shift_type='DAY',equipment_id=equipment.id,good_qty=900,defect_qty=100,setup_qty=0));db.commit()
         result=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20),process_code='TP')
         assert len(result['items'])==1
@@ -116,6 +118,6 @@ def test_schedule_readonly_permission(setup):
     import json
     from core.security import get_current_user
     setup_oee(setup)
-    setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='readonly',role='USER',permissions=json.dumps({'menu_access':{'/production/equipment/status':'READ'}}))
+    setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='readonly',role='USER',permissions=json.dumps({'menu_access':{'/production/plans':'READ'}}))
     rows=monthly(setup)
     assert setup.client.put('/api/production/equipment/schedule',json=payload(rows)).status_code==403
