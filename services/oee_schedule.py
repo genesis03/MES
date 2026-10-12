@@ -1,5 +1,6 @@
 from datetime import date,datetime,time,timedelta
 import calendar
+from collections import Counter,defaultdict
 import holidays
 from fastapi import HTTPException
 from models.production_month_plan import ProductionMonthPlanLine, ProductionMonthPlanDay, ProductionPlanWorkTime
@@ -15,10 +16,14 @@ def month_days(month):
     return [first+timedelta(days=i) for i in range(calendar.monthrange(first.year,first.month)[1])]
 
 
+def default_excluded_minutes(process_code):
+    return 190 if process_code=='TP' else 0
+
+
 def default_day(day,public_days):
     return dict(work_date=day.isoformat(),working=day.weekday()<5 and day not in public_days,
                 start_time='08:00',end_time='08:00',next_day=True,
-                holiday=public_days.get(day,''),custom=False)
+                holiday=public_days.get(day,''),custom=False,excluded_minutes=0)
 
 
 def days(db,process_code,first,last,equipment_id=None):
@@ -32,9 +37,9 @@ def days(db,process_code,first,last,equipment_id=None):
     result=[]
     while first<=last:
         value=default_day(first,public_days)
-        value.update(working=float(quantities.get(first.isoformat(),0) or 0)>0,custom=True,plan_managed=True)
+        value.update(working=float(quantities.get(first.isoformat(),0) or 0)>0,custom=True,plan_managed=True,excluded_minutes=default_excluded_minutes(process_code))
         saved=saved_times.get(first.isoformat())
-        if saved:value.update(start_time=saved.start_time,end_time=saved.end_time,next_day=saved.next_day)
+        if saved:value.update(start_time=saved.start_time,end_time=saved.end_time,next_day=saved.next_day,excluded_minutes=saved.excluded_minutes)
         result.append(value);first+=timedelta(days=1)
     return result
 
@@ -50,13 +55,40 @@ def bounds(value):
     return start,end
 
 
-def workday_intervals(db,process_code,first,last,now,equipment_id=None):
-    # The production date and schedule date both identify the shift's start day.
+def net_hours(value):
+    period=bounds(value | {'working':True})
+    duration=(period[1]-period[0]).total_seconds()/3600
+    return max(0,duration-float(value.get('excluded_minutes',0))/60)
+
+
+def workday_segments(db,process_code,first,last,now,equipment_id=None):
+    # Shift boundaries remain physical; planned exclusions are spread over elapsed time.
     rows=days(db,process_code,first,last,equipment_id)
     result=[]
     for value in rows:
         period=bounds(value)
         if period:
             a,b=period[0],min(period[1],now)
-            if b>a:result.append((a,b))
+            duration=(period[1]-period[0]).total_seconds()
+            weight=max(0,1-float(value.get('excluded_minutes',0))*60/duration)
+            if b>a:result.append((a,b,weight))
     return result,[r for r in rows if r['holiday']]
+
+
+def weighted_seconds(segments):
+    """Union of overlapping shifts, counting each instant once at its highest available weight."""
+    events=defaultdict(list)
+    for a,b,weight in segments:events[a].append((weight,1));events[b].append((weight,-1))
+    active=Counter();previous=None;total=0
+    for instant in sorted(events):
+        if previous is not None and active:total+=(instant-previous).total_seconds()*max(active)
+        for weight,delta in events[instant]:
+            active[weight]+=delta
+            if active[weight]<=0:del active[weight]
+        previous=instant
+    return total
+
+
+def workday_intervals(db,process_code,first,last,now,equipment_id=None):
+    segments,holidays=workday_segments(db,process_code,first,last,now,equipment_id)
+    return [(a,b) for a,b,_ in segments],holidays

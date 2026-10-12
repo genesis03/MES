@@ -11,7 +11,7 @@ from models.equipment import EquipmentMaster
 from models.production_cycle_time import ProductionCycleTime
 from models.production_month_plan import ProductionMonthPlanLine,ProductionMonthPlanDay,ProductionPlanWorkTime
 from routers.equipment_oee import require_access,machining_processes,validate_process,validate_equipment
-from services.oee_schedule import month_days,days,bounds
+from services.oee_schedule import month_days,days,bounds,default_excluded_minutes,net_hours
 from services.production_sync_mapping import stage_suffix
 
 router=APIRouter(prefix='/api/production/month-plan',tags=['Monthly Production Plans'])
@@ -74,6 +74,7 @@ class WorkTimeInput(BaseModel):
     start_time:str=Field(pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
     end_time:str=Field(pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
     next_day:bool=True
+    excluded_minutes:int|None=Field(default=None,ge=0,le=1439)
 
 
 class MonthInput(BaseModel):
@@ -109,25 +110,29 @@ def save(payload:MonthInput,db:Session=Depends(get_db),user=Depends(get_current_
         if row and (row.cycle_seconds!=value.cycle_seconds or row.expected_oee!=value.expected_oee):
             if not dates[0]<=payload.ct_effective_date<=dates[-1] or payload.ct_effective_date<today:raise HTTPException(422,'기존 C/T·계획 OEE 변경은 해당 월의 오늘 이후 적용일을 선택하세요. 이전 날짜의 값은 보존합니다.')
     equipment_ids={r.equipment_id for r in existing.values()}|{v.equipment_id for v in payload.lines}
+    saved_times={(r.equipment_id,r.work_date):r for r in db.query(ProductionPlanWorkTime).filter(ProductionPlanWorkTime.equipment_id.in_(equipment_ids),ProductionPlanWorkTime.work_date.in_(date_keys))}
     overrides={}
     for value in payload.work_times:
         validate_equipment(db,payload.process_code,value.equipment_id)
         key=(value.equipment_id,value.work_date.isoformat())
         if value.equipment_id not in equipment_ids or key[1] not in date_keys:raise HTTPException(422,'가동시간의 호기·날짜가 생산계획과 일치하지 않습니다.')
         if key in overrides:raise HTTPException(422,'같은 호기·날짜의 가동시간이 중복되었습니다.')
-        bounds(dict(work_date=key[1],working=True,start_time=value.start_time,end_time=value.end_time,next_day=value.next_day))
-        overrides[key]=value
+        period=bounds(dict(work_date=key[1],working=True,start_time=value.start_time,end_time=value.end_time,next_day=value.next_day))
+        previous=saved_times.get(key)
+        excluded=value.excluded_minutes if value.excluded_minutes is not None else previous.excluded_minutes if previous else default_excluded_minutes(payload.process_code)
+        if excluded*60>=(period[1]-period[0]).total_seconds():raise HTTPException(422,'계획 차감시간은 시작·종료시간 사이보다 짧아야 합니다.')
+        overrides[key]=(value,excluded)
     for row in deleted_rows:db.delete(row)
     db.flush()
     # Snapshot every day, including zero-quantity dates. Subsequent default changes cannot rewrite saved hours.
-    saved_times={(r.equipment_id,r.work_date):r for r in db.query(ProductionPlanWorkTime).filter(ProductionPlanWorkTime.equipment_id.in_(equipment_ids),ProductionPlanWorkTime.work_date.in_(date_keys))}
     for equipment_id in equipment_ids:
         for day in date_keys:
             key=(equipment_id,day);saved=saved_times.get(key);override=overrides.get(key)
             if saved is None:
-                saved=ProductionPlanWorkTime(equipment_id=equipment_id,work_date=day,start_time='08:00',end_time='08:00',next_day=True);db.add(saved)
+                saved=ProductionPlanWorkTime(equipment_id=equipment_id,work_date=day,start_time='08:00',end_time='08:00',next_day=True,excluded_minutes=default_excluded_minutes(payload.process_code));db.add(saved)
             if override:
-                saved.start_time=override.start_time;saved.end_time=override.end_time;saved.next_day=override.next_day
+                value,excluded=override
+                saved.start_time=value.start_time;saved.end_time=value.end_time;saved.next_day=value.next_day;saved.excluded_minutes=excluded
     for value in payload.lines:
         row=existing.get((value.equipment_id,value.item_id));new=row is None
         changed=new or row.cycle_seconds!=value.cycle_seconds or row.expected_oee!=value.expected_oee
@@ -167,6 +172,8 @@ def status(start_date:date,end_date:date,process_code:str|None=None,db:Session=D
     for row in rows:
         uph=math.floor(3600/(row['cycle_seconds']*(2-row['expected_oee'])))
         schedule=days(db,row['process_code'],start_date,end_date,row['equipment_id'])
-        hours=[(p[1]-p[0]).total_seconds()/3600 for d in schedule if row['quantities'].get(d['work_date'],0)>0 and (p:=bounds(d))]
-        row.update(uph=uph,upd=uph*12,upm_day=math.floor(uph*sum(min(h,12) for h in hours)),upm_full=math.floor(uph*sum(hours)))
+        active=[d for d in schedule if row['quantities'].get(d['work_date'],0)>0]
+        hours=[net_hours(d) for d in active]
+        daytime=[min(12,(p[1]-p[0]).total_seconds()/3600)*net_hours(d)/((p[1]-p[0]).total_seconds()/3600) for d in active if (p:=bounds(d))]
+        row.update(uph=uph,upd=math.floor(uph*(12-default_excluded_minutes(row['process_code'])/120)),upm_day=math.floor(round(uph*sum(daytime),8)),upm_full=math.floor(round(uph*sum(hours),8)))
     return dict(dates=[(start_date+timedelta(days=i)).isoformat() for i in range((end_date-start_date).days+1)],rows=rows,summary=sorted(summary.values(),key=lambda r:(r['vehicle_model'],r['part_no'])),processes=[dict(code=k,name=v) for k,v in supported.items() if not process_code or k==process_code],total=sum(s['total'] for s in summary.values()))

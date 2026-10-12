@@ -48,3 +48,4 @@ class ProductionPlanWorkTime(Base):
     start_time=Column(String(5),nullable=False,default='08:00')
     end_time=Column(String(5),nullable=False,default='08:00')
     next_day=Column(Boolean,nullable=False,default=True)
+    excluded_minutes=Column(Integer,nullable=False,default=0)

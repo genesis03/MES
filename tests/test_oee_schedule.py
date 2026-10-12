@@ -64,8 +64,8 @@ def test_tapping_scope_and_full_detail_shift_affect_oee(setup):
         plan_ct(db,equipment.id,item.id,'2026-10-12',30)
         db.add(ProductionPerformance(work_order_id=order.id,performance_date='2026-10-12',process_code='TP',shift_type='DAY',equipment_id=equipment.id,good_qty=900,defect_qty=100,setup_qty=0));db.commit()
         result=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20),process_code='TP')
-        assert len(result['items'])==1 and result['planned_seconds']==24*3600
-        assert result['items'][0]['oee']==pytest.approx(900*30/(24*3600))
+        assert len(result['items'])==1 and result['planned_seconds']==pytest.approx(24*3600-190*60)
+        assert result['items'][0]['oee']==pytest.approx(900*30/(24*3600-190*60))
         assert calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20),process_code='LT')['planned_seconds']==0
 
 

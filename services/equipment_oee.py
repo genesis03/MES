@@ -11,7 +11,7 @@ from models.production_sync import ExternalProductionRecord
 from services.production_sync_mapping import ItemConnections, stage_suffix
 from services.production_sync_view import external_record_view
 from services.production_downtime import parse_time
-from services.oee_schedule import workday_intervals
+from services.oee_schedule import workday_intervals,workday_segments,weighted_seconds
 
 
 def lathe_codes(db):
@@ -47,8 +47,9 @@ def calculate(db,start_day,end_day,now=None,process_code=None):
     def group(key):
         if key not in groups:
             e=equipment.get(int(key)) if key.isdigit() else None
-            periods=merge_intervals(workday_intervals(db,e.process_code,start_day,end_day,now,e.id)[0]) if e else intervals
-            groups[key]=dict(intervals=periods,key=key,equipment_name=e.equipment_name if e else key.split(':',1)[1]+' (호기 연결 미확인)',planned_seconds=sum((b-a).total_seconds() for a,b in periods),good_qty=0,total_qty=0,ideal_seconds=0,downtime_intervals=[],issues=[],parts={},missing=set())
+            segments=workday_segments(db,e.process_code,start_day,end_day,now,e.id)[0] if e else workday_segments(db,codes[0],start_day,end_day,now)[0] if codes else []
+            periods=merge_intervals([(a,b) for a,b,_ in segments])
+            groups[key]=dict(segments=segments,intervals=periods,key=key,equipment_name=e.equipment_name if e else key.split(':',1)[1]+' (호기 연결 미확인)',planned_seconds=weighted_seconds(segments),good_qty=0,total_qty=0,ideal_seconds=0,downtime_intervals=[],issues=[],parts={},missing=set())
         return groups[key]
     for e in equipment.values():
         if e.is_active=='Y':group(str(e.id))
@@ -77,12 +78,13 @@ def calculate(db,start_day,end_day,now=None,process_code=None):
         if view['lot_conflict'] or view['process_code'] not in codes:continue
         add(key_for(machine_no=view['machine_no']),view['item_id'],view['mes_part_no'] or record.part_no,view['total_qty'],record.job_qty,'외부',record.work_date)
     all_periods=[p for g in groups.values() for p in g['intervals']]
+    all_segments=[p for g in groups.values() for p in g['segments']]
     if all_periods:start,end=min(p[0] for p in all_periods),max(p[1] for p in all_periods)
     for downtime,run in db.query(ProductionRunDowntime,ProductionRun).join(ProductionRun,ProductionRun.id==ProductionRunDowntime.run_id).filter(ProductionRun.process_code.in_(codes),ProductionRun.status!='CANCELLED',ProductionRunDowntime.ended_at>start.strftime('%Y-%m-%d %H:%M'),ProductionRunDowntime.started_at<end.strftime('%Y-%m-%d %H:%M')):
         group(key_for(run.equipment_id,name=run.equipment_name))['downtime_intervals'].append((parse_time(downtime.started_at),parse_time(downtime.ended_at)))
     result=[]
     for key,g in groups.items():
-        intervals=g.pop('intervals');planned=g['planned_seconds']
+        intervals=g.pop('intervals');g.pop('segments');planned=g['planned_seconds']
         downtime=sum(max(0,(min(b,d)-max(a,c)).total_seconds()) for a,b in merge_intervals(g.pop('downtime_intervals')) for c,d in intervals)
         runtime=max(0,planned-downtime);missing=sorted(g.pop('missing'))
         g['issues'].extend('생산계획 C/T 미등록: '+part for part in missing)
@@ -97,4 +99,4 @@ def calculate(db,start_day,end_day,now=None,process_code=None):
         g['parts']=list(g['parts'].values())
         for p in g['parts']:p['sources']=sorted(p['sources'])
         result.append(g)
-    return dict(items=sorted(result,key=lambda x:x['equipment_name']),holidays=[dict(date=r['work_date'],name=r['holiday'],working=r['working']) for r in excluded],as_of=now.isoformat(timespec='minutes'),planned_seconds=sum((b-a).total_seconds() for a,b in merge_intervals(all_periods)),process_code=process_code or (codes[0] if codes else ''))
+    return dict(items=sorted(result,key=lambda x:x['equipment_name']),holidays=[dict(date=r['work_date'],name=r['holiday'],working=r['working']) for r in excluded],as_of=now.isoformat(timespec='minutes'),planned_seconds=weighted_seconds(all_segments),process_code=process_code or (codes[0] if codes else ''))

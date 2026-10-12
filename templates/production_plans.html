@@ -9,7 +9,7 @@
 <p class="pp-help">세부내용 표에 호기·품번별 월 C/T·목표 OEE·일별 계획수량을 입력하면 종합현황과 가동일이 자동 계산됩니다. 호기별로 수량이 있는 날만 가동일입니다.</p>
 <div class="pp-panel"><div class="pp-section">세부내용 입력</div>
 <div class="pp-tools"><label>입력 월 <input type="month" id="ppMonth"></label><label>공정 <select id="ppProcess"></select></label><button class="pp-btn" id="ppLoad">불러오기</button><button class="pp-btn" id="ppSave">생산계획 저장</button></div>
-<p class="pp-help">C/T는 호기·품번 행마다 월 1회 입력합니다. 기본 가동시간은 매일 08:00~익일 08:00입니다. 호기 옆 가동시간 버튼에서 날짜별로 수정하고 생산계획을 저장하세요. 같은 호기의 모든 품번 수량이 0이면 비가동입니다. 주말·공휴일도 수량을 입력하면 가동일이 됩니다.</p><details class="pp-help"><summary>월중 C/T 변경 시 적용일 설정</summary><label>C/T 변경 적용일 <input type="date" id="ppCtDate"></label><span>기존 값은 적용일 이전에 보존됩니다.</span></details>
+<p class="pp-help">C/T는 호기·품번 행마다 월 1회 입력합니다. 기본 일정은 매일 08:00~익일 08:00입니다. 복합선반은 24시간, 탭핑은 계획 차감시간 190분을 제외한 20시간 50분으로 계산합니다. 호기 옆 가동시간 버튼에서 날짜별로 수정하고 생산계획을 저장하세요. 같은 호기의 모든 품번 수량이 0이면 비가동입니다. 주말·공휴일도 수량을 입력하면 가동일이 됩니다.</p><details class="pp-help"><summary>월중 C/T 변경 시 적용일 설정</summary><label>C/T 변경 적용일 <input type="date" id="ppCtDate"></label><span>기존 값은 적용일 이전에 보존됩니다.</span></details>
 <div class="pp-tools"><label>생산호기 <select id="ppAddEquipment"></select></label><label>MES 품번 <input id="ppAddItem" placeholder="품번 입력 후 Enter" list="ppItemSuggestions"><datalist id="ppItemSuggestions"></datalist></label><button class="pp-btn" id="ppItemSearch">품번 조회</button><select id="ppItemMatches" hidden aria-label="품번 검색 결과"></select><button class="pp-btn" id="ppAdd">품번 행 추가</button></div>
 <div id="ppMessage" class="pp-message" role="status"></div>
 <div class="pp-scroll" style="margin-top:12px"><table class="pp-table"><thead id="ppEditHead"></thead><tbody id="ppEditRows"></tbody></table></div>
@@ -17,12 +17,12 @@
 <div class="pp-panel"><div class="pp-tools"><span class="pp-toolbar-title">기간별 생산계획 현황</span><label>시작일 <input type="date" id="ppStart"></label><label>종료일 <input type="date" id="ppEnd"></label><label>공정 <select id="ppStatusProcess"><option value="">전체</option></select></label><button class="pp-btn" id="ppQuery">조회</button></div>
 <div id="ppStatusMessage" class="pp-message" role="status"></div>
 <div class="pp-section">1. 종합현황</div><div class="pp-scroll"><table class="pp-table" id="ppSummary"></table></div>
-<div class="pp-section">2. 세부내용</div><p class="pp-help">UPH = 내림[3,600 ÷ (C/T × (2 − 목표 OEE))], UPD는 12시간 기준이며 월 생산성은 호기별 가동시간 기준입니다. 같은 기간에 C/T가 바뀌면 적용값별로 행을 나눠 표시합니다.</p><div class="pp-scroll"><table class="pp-table" id="ppStatus"></table></div>
+<div class="pp-section">2. 세부내용</div><p class="pp-help">UPH = 내림[3,600 ÷ (C/T × (2 − 목표 OEE))], UPD는 12시간 일정 기준이며, UPD·월 생산성에는 계획 차감시간을 제외합니다. 탭핑 기본 차감은 하루 190분입니다. 같은 기간에 C/T가 바뀌면 적용값별로 행을 나눠 표시합니다.</p><div class="pp-scroll"><table class="pp-table" id="ppStatus"></table></div>
 </div>
 <dialog id="ppTimeDialog" style="width:min(760px,90vw);border:1px solid #cbd5e1;border-radius:8px;padding:20px">
-<h2 id="ppTimeTitle">호기별 가동시간</h2><p class="pp-help">선택한 날짜에 시간을 일괄 적용합니다. 계획수량이 없는 날은 시간 설정과 관계없이 비가동입니다. 변경 후 생산계획을 저장하세요.</p>
-<div class="pp-tools"><label>시작 <input type="time" id="ppTimeStart" value="08:00"></label><label>종료 <input type="time" id="ppTimeEnd" value="08:00"></label><label><input type="checkbox" id="ppTimeNext" checked> 다음 날 종료</label><button class="pp-btn" id="ppTimeApply">선택 날짜 적용</button><button class="pp-btn" id="ppTimeClose">닫기</button></div>
-<div id="ppTimeMessage" class="pp-message" role="status"></div><div class="pp-scroll" style="max-height:400px;margin-top:12px"><table class="pp-table"><thead><tr><th><input type="checkbox" id="ppTimeAll" aria-label="전체 날짜 선택"></th><th>날짜</th><th>가동 여부</th><th>시작</th><th>종료</th><th>가동시간</th></tr></thead><tbody id="ppTimeRows"></tbody></table></div>
+<h2 id="ppTimeTitle">호기별 가동시간</h2><p class="pp-help">선택한 날짜에 시간을 일괄 적용합니다. 계획수량이 없는 날은 시간 설정과 관계없이 비가동입니다. 탭핑 기본 계획 차감은 하루 190분이며 날짜별 수정이 가능합니다. 변경 후 생산계획을 저장하세요.</p>
+<div class="pp-tools"><label>시작 <input type="time" id="ppTimeStart" value="08:00"></label><label>종료 <input type="time" id="ppTimeEnd" value="08:00"></label><label><input type="checkbox" id="ppTimeNext" checked> 다음 날 종료</label><label>계획 차감(분) <input type="number" min="0" max="1439" step="1" id="ppTimeExcluded" value="0" style="width:85px"></label><button class="pp-btn" id="ppTimeApply">선택 날짜 적용</button><button class="pp-btn" id="ppTimeClose">닫기</button></div>
+<div id="ppTimeMessage" class="pp-message" role="status"></div><div class="pp-scroll" style="max-height:400px;margin-top:12px"><table class="pp-table"><thead><tr><th><input type="checkbox" id="ppTimeAll" aria-label="전체 날짜 선택"></th><th>날짜</th><th>가동 여부</th><th>시작</th><th>종료</th><th>계획 차감</th><th>계산 가동시간</th></tr></thead><tbody id="ppTimeRows"></tbody></table></div>
 </dialog>
 {% endblock %}
-{% block extra_script %}<script src="/static/production_month_plan.js?v=20261012-4"></script>{% endblock %}
+{% block extra_script %}<script src="/static/production_month_plan.js?v=20261013-1"></script>{% endblock %}
