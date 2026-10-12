@@ -12,6 +12,7 @@ from models.lot_relation import LotRelationModel
 from models.models import ItemMasterModel, ProcessModel
 from models.packing import PackingLotAllocation, PackingMaster
 from models.production import ProductionPerformance, ProductionWorkOrder
+from models.production_defect import QualityProductionDefect
 from models.production_run import ProductionRun, ProductionRunLotAllocation, ProductionRunMaterial
 from models.production_sync import ExternalProductionRecord
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
@@ -138,9 +139,22 @@ def _downstream_used_lots(db: Session, lot_nos: list[str]) -> list[str]:
     return sorted(value for value in used if value)
 
 
+def _post_defect_lots(db: Session, output_lots) -> list[str]:
+    if not output_lots:
+        return []
+    # Cancelled quality records also reference the original LOT and must remain traceable.
+    return sorted({lot_no for (lot_no,) in db.query(QualityProductionDefect.lot_no).filter(or_(
+        QualityProductionDefect.production_lot_id.in_([lot.id for lot in output_lots]),
+        QualityProductionDefect.lot_no.in_([lot.lot_no for lot in output_lots]),
+    )).distinct().all()})
+
+
 def _assert_performance_deletable(db: Session, performance: ProductionPerformance):
     output_lots = _performance_output_lots(db, performance.id)
     output_lot_nos = [row.lot_no for row in output_lots]
+    defect_lots = _post_defect_lots(db, output_lots)
+    if defect_lots:
+        raise HTTPException(409, "사후 불량 등록 이력이 있는 생산 LOT의 실적은 삭제할 수 없습니다. 취소된 불량 이력도 보존합니다: " + ", ".join(defect_lots))
     used_lots = _downstream_used_lots(db, output_lot_nos)
     if used_lots:
         raise HTTPException(409, "다음 공정/외주/포장에서 이미 사용된 생산 LOT가 있어 실적을 삭제할 수 없습니다: " + ", ".join(used_lots))
@@ -226,6 +240,8 @@ def production_performance_status(
         output_lots = _performance_output_lots(db, perf.id)
         output_lot_nos = [lot.lot_no for lot in output_lots]
         downstream_used = bool(_downstream_used_lots(db, output_lot_nos))
+        post_defect_registered = bool(_post_defect_lots(db, output_lots))
+        delete_block_reason = '사후 불량 등록 이력(취소 이력 포함)' if post_defect_registered else '다음 공정/외주/포장 사용 LOT' if downstream_used else ''
         result.append({
             "id": perf.id,
             "performance_date": perf.performance_date,
@@ -249,6 +265,8 @@ def production_performance_status(
             "output_lot_no": ",".join(output_lot_nos),
             "downstream_used": downstream_used,
             "can_delete": can_delete,
+            "post_defect_registered": post_defect_registered,
+            "delete_block_reason": delete_block_reason,
             "note": perf.note or "",
             "record_source": "MES", "source_record_id": perf.id,
         })

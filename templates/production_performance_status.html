@@ -15,7 +15,7 @@ table{width:100%;border-collapse:collapse;font-size:12px;min-width:1420px}th,td{
 {% endblock %}
 
 {% block content %}
-<div class="page-head"><h1>생산 실적 현황</h1><p>내부 등록·외부 연동 생산실적을 통합 조회합니다. 총생산수량은 양품 + 불량 + 셋업입니다. 최고관리자는 다음 공정에서 사용되지 않은 내부 실적만 삭제할 수 있습니다.</p></div>
+<div class="page-head"><h1>생산 실적 현황</h1><p>내부 등록·외부 연동 생산실적을 통합 조회합니다. 총생산수량은 양품 + 불량 + 셋업입니다. 최고관리자는 다음 공정 사용 및 사후 불량 등록 이력이 없는 내부 실적만 삭제할 수 있습니다.</p></div>
 <div class="card">
   <div class="filters">
     <div><label>시작일</label><input type="date" id="startDate"></div>
@@ -63,7 +63,7 @@ async function loadRows(){
     const unknown=rows.filter(x=>x.total_qty==null).length;
     sumTotal.textContent=qty(rows.reduce((s,x)=>s+n(x.total_qty),0))+(unknown?` (미확인 ${unknown}건)`:'');
     body.innerHTML=rows.length?rows.map((x,i)=>{
-      const action=x.can_delete?`<button class="btn danger" ${x.downstream_used?'disabled title="다음 공정/외주 사용 LOT"':''} data-performance-id="${esc(x.id)}" data-output-lot="${esc(x.output_lot_no)}" data-used="${x.downstream_used?'true':'false'}">실적 삭제</button>`:'';
+      const action=x.can_delete?`<button class="btn danger" ${x.delete_block_reason?`disabled title="${esc(x.delete_block_reason)}"`:x.downstream_used?'disabled title="다음 공정/외주 사용 LOT"':''} data-performance-id="${esc(x.id)}" data-output-lot="${esc(x.output_lot_no)}" data-used="${x.downstream_used?'true':'false'}">실적 삭제</button>`:'';
       const values=[i+1,x.performance_date,x.performance_type_name,x.shift_name,x.process_name,x.operator_name,x.equipment_name,x.work_order_no,x.part_no,x.part_name];
       return '<tr>'+values.map(v=>`<td>${esc(v)}</td>`).join('')+[x.total_qty,x.good_qty,x.defect_qty,x.setup_qty].map(v=>`<td class="num">${qty(v)}</td>`).join('')+`<td>${esc(x.output_lot_no)}</td><td>${esc(x.note)}</td><td>${action}${ExternalLabels.button(x)}</td></tr>`;
     }).join(''):'<tr><td colspan="17" class="empty">조회된 생산실적이 없습니다.</td></tr>';
