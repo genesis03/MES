@@ -127,4 +127,6 @@ def production_status_page(request: Request, current_user=Depends(get_current_us
 
 @router.get("/production/equipment/status", response_class=HTMLResponse)
 def production_equipment_status_page(request: Request, current_user=Depends(get_current_user)):
-    return _render_production_ready(request, current_user, "/production/equipment/status")
+    from routers.equipment_oee import require_access
+    require_access(current_user,'/production/equipment/status')
+    return templates.TemplateResponse(request=request,name="equipment_oee.html",context={"request":request,"user":current_user,"cycle_mode":False})
