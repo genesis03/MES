@@ -1,6 +1,7 @@
 """Read-only adapter for the observed UNI_MES Login/List protocol."""
 import http.cookiejar
 import time
+from core import config
 from http.client import IncompleteRead, RemoteDisconnected
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -41,6 +42,8 @@ def post(opener, values):
         raise SyncError('예상한 생산 시스템 응답이 아닙니다.')
     if any(key.startswith('THROW.') for key in values):
         # Server exception text may contain credentials or SQL. Never persist it.
+        if ordered.get('run.object.name') == 'Common.Login.LoginObj':
+            raise SyncError('외부 생산 시스템이 로그인 요청에서 오류를 반환했습니다. 외부 사이트의 로그인 가능 여부와 연동 회사 설정을 확인해 주세요.')
         raise SyncError('생산 시스템에서 조회 오류를 반환했습니다. 연동 계정과 조회 설정을 확인해 주세요.')
     return values
 
@@ -73,7 +76,9 @@ class ProductionClient:
             payload.update({'run.object.name': 'Common.Login.LoginObj', 'jump.form.code': 'Login',
                             'Common.BeforeService.CheckSet.IS_CHECK': 'Y',
                             'Common.Set.LoginShortSet.USER_ID': username,
-                            'Common.Set.LoginShortSet.USER_PASS': password})
+                            'Common.Set.LoginShortSet.USER_PASS': password,
+                            'Common.Set.LoginShortSet.AGADOS_URL': BASE,
+                            'Common.Set.LoginShortSet.COMP_NO': config.PRODUCTION_SYNC_COMP_NO})
             login = post(self.opener, payload)
             ids = login.get('Common.Set.LoginUserSet.USER_ID', [''])[0].split(',')
             if username not in ids:

@@ -585,6 +585,7 @@ def test_pagination_and_empty_day_preserve_previous_records(setup):
 
 
 def test_http_login_cookie_and_list_protocol(monkeypatch):
+    monkeypatch.setattr(source.config,'PRODUCTION_SYNC_COMP_NO','login-company')
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import threading
     seen = []
@@ -599,6 +600,8 @@ def test_http_login_cookie_and_list_protocol(monkeypatch):
             action = payload['jump.form.code'][0]; seen.append(action)
             if action == 'Login':
                 assert payload['Common.Set.LoginShortSet.USER_ID'] == ['test-user']
+                assert payload['Common.Set.LoginShortSet.COMP_NO'] == ['login-company']
+                assert payload['Common.Set.LoginShortSet.AGADOS_URL'] == [source.BASE]
                 assert payload['run.object.name'] == ['Common.Login.LoginObj']
                 body = {'Common.Set.LoginUserSet.USER_ID':'test-user', 'Common.Set.LoginUserSet.COMP_NO':'company-id',
                         'Common.Set.LoginUserSet.USER_PASS':'', 'SO.NET.END':'SO.NET.END'}
@@ -799,3 +802,30 @@ def test_packing_connection_uses_actual_finished_material_code(setup):
 def test_external_lx_machine_is_fixed_position_with_variable_sequence(lot,expected):
     from services.production_sync_view import external_machine_no
     assert external_machine_no(lot)==expected
+
+
+def test_login_server_exception_is_not_reported_as_production_query_error():
+    class Reply:
+        headers=SimpleNamespace(get_content_charset=lambda:'utf-8')
+        def __enter__(self):return self
+        def __exit__(self,*_):pass
+        def read(self,*_):return urlencode({'SO.NET.END':'SO.NET.END','THROW.MESS':'sensitive-password-and-sql'}).encode()
+    class Opener:
+        def open(self,*_,**kwargs):return Reply()
+    with pytest.raises(source.SyncError) as error:
+        source.post(Opener(),{'run.object.name':'Common.Login.LoginObj'})
+    assert '로그인 요청' in str(error.value)
+    assert '조회 오류' not in str(error.value)
+    assert 'sensitive-password' not in str(error.value)
+
+
+def test_failed_login_does_not_overwrite_saved_credentials(setup,monkeypatch):
+    monkeypatch.setattr(api_module,'ProductionClient',lambda *_:None)
+    assert setup.client.put('/api/production/external-sync/credentials',json={'username':'old-user','password':'old-secret'}).status_code==200
+    def reject(*_):raise source.SyncError('외부 생산 시스템이 로그인 요청에서 오류를 반환했습니다.')
+    monkeypatch.setattr(api_module,'ProductionClient',reject)
+    for method,path in [('post','/api/production/external-sync/credentials/test'),('put','/api/production/external-sync/credentials')]:
+        result=getattr(setup.client,method)(path,json={'username':'new-user','password':'new-secret'})
+        assert result.status_code==422 and '로그인 요청' in result.json()['detail']
+        assert 'new-secret' not in result.text
+    with setup.sessions() as db:assert secrets.read_credentials(db)==('old-user','old-secret')
