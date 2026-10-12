@@ -585,7 +585,7 @@ def test_pagination_and_empty_day_preserve_previous_records(setup):
 
 
 def test_http_login_cookie_and_list_protocol(monkeypatch):
-    monkeypatch.setattr(source.config,'PRODUCTION_SYNC_COMP_NO','login-company')
+    monkeypatch.setattr(source.config,'PRODUCTION_SYNC_COMP_NO','202002031618148870032513')
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import threading
     seen = []
@@ -600,7 +600,7 @@ def test_http_login_cookie_and_list_protocol(monkeypatch):
             action = payload['jump.form.code'][0]; seen.append(action)
             if action == 'Login':
                 assert payload['Common.Set.LoginShortSet.USER_ID'] == ['test-user']
-                assert payload['Common.Set.LoginShortSet.COMP_NO'] == ['login-company']
+                assert payload['Common.Set.LoginShortSet.COMP_NO'] == ['202002031618148870032513']
                 assert payload['Common.Set.LoginShortSet.AGADOS_URL'] == [source.BASE]
                 assert payload['run.object.name'] == ['Common.Login.LoginObj']
                 body = {'Common.Set.LoginUserSet.USER_ID':'test-user', 'Common.Set.LoginUserSet.COMP_NO':'company-id',
