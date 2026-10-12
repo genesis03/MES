@@ -13,7 +13,7 @@ from models.equipment import EquipmentMaster
 from models.production_cycle_time import ProductionCycleTime
 from services.equipment_oee import lathe_codes, calculate
 from services.production_process_type import performance_type_for_process
-from services.oee_schedule import month_days, days, save_month
+from services.oee_schedule import month_days, days
 
 router=APIRouter(tags=['Equipment OEE'])
 
@@ -125,10 +125,7 @@ def get_schedule(month:str,process_code:str,equipment_id:int|None=None,db:Sessio
 @router.put('/api/production/equipment/schedule')
 def update_schedule(payload:ScheduleMonthInput,db:Session=Depends(get_db),user=Depends(get_current_user)):
     require_access(user,'/production/plans','WRITE')
-    validate_process(db,payload.process_code)
-    if payload.equipment_id is not None:validate_equipment(db,payload.process_code,payload.equipment_id)
-    save_month(db,payload.process_code,payload.month,[r.model_dump() for r in payload.items],payload.equipment_id)
-    return {'message':'월별 가동 스케줄을 저장했습니다.'}
+    raise HTTPException(409,'가동일은 생산계획 세부내용의 일별 수량으로 자동 계산됩니다. 생산계획에서 입력하세요.')
 
 
 def validate_equipment(db,process_code,equipment_id):

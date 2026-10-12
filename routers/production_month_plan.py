@@ -132,6 +132,6 @@ def status(start_date:date,end_date:date,process_code:str|None=None,db:Session=D
     for row in rows:
         uph=math.floor(3600/(row['cycle_seconds']*(2-row['expected_oee'])))
         schedule=days(db,row['process_code'],start_date,end_date,row['equipment_id'])
-        hours=[(p[1]-p[0]).total_seconds()/3600 for d in schedule if d['work_date'] in row['quantities'] and (p:=bounds(d))]
+        hours=[(p[1]-p[0]).total_seconds()/3600 for d in schedule if row['quantities'].get(d['work_date'],0)>0 and (p:=bounds(d))]
         row.update(uph=uph,upd=uph*12,upm_day=math.floor(uph*sum(min(h,12) for h in hours)),upm_full=math.floor(uph*sum(hours)))
     return dict(dates=[(start_date+timedelta(days=i)).isoformat() for i in range((end_date-start_date).days+1)],rows=rows,summary=sorted(summary.values(),key=lambda r:(r['vehicle_model'],r['part_no'])),processes=[dict(code=k,name=v) for k,v in supported.items() if not process_code or k==process_code],total=sum(s['total'] for s in summary.values()))

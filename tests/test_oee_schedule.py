@@ -23,50 +23,40 @@ def payload(rows,month='2026-10',process='LT'):
     return dict(month=month,process_code=process,items=[{key:r[key] for key in ['work_date','working','start_time','end_time','next_day']} for r in rows])
 
 
-def test_month_defaults_and_save_manual_holiday_operation(setup):
-    setup_oee(setup);rows=monthly(setup)
-    assert len(rows)==31
-    by_day={r['work_date']:r for r in rows}
-    assert by_day['2026-10-12']['start_time']=='08:00'
-    assert by_day['2026-10-12']['end_time']=='08:00' and by_day['2026-10-12']['next_day']
-    assert by_day['2026-10-16']['end_time']=='05:00'
-    assert not by_day['2026-10-09']['working'] and not by_day['2026-10-17']['working']
-    for row in rows:row['working']=row['work_date']=='2026-10-09'
-    result=setup.client.put('/api/production/equipment/schedule',json=payload(rows));assert result.status_code==200,result.text
-    assert next(r for r in monthly(setup) if r['work_date']=='2026-10-09')['working']
-    # Explicit holiday operation overrides the initial public-holiday default.
+def test_calendar_is_readonly_and_plan_quantities_enable_holiday_work(setup):
+    from routers.production_month_plan import router as plans
+    from models.production import ProductionWorkOrder
+    setup_oee(setup);setup.app.include_router(plans)
+    with setup.sessions() as db:
+        order=db.query(ProductionWorkOrder).first();item=order.item_id
+        from models.equipment import EquipmentMaster
+        equipment=db.query(EquipmentMaster).filter_by(process_code='LT',machine_no='1').one().id
+    rows=monthly(setup)
+    assert len(rows)==31 and not any(r['working'] for r in rows)
+    assert setup.client.put('/api/production/equipment/schedule',json=payload(rows)).status_code==409
+    plan={'month':'2026-10','process_code':'LT','ct_effective_date':'2026-10-12','lines':[{'equipment_id':equipment,'item_id':item,'cycle_seconds':30,'expected_oee':.95,'quantities':{f'2026-10-{i:02d}':100 if i in (9,10) else 0 for i in range(1,32)}}]}
+    assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    by_date={r['work_date']:r for r in monthly(setup)}
+    assert by_date['2026-10-09']['working'] and by_date['2026-10-10']['working']
     with setup.sessions() as db:
         report=calculate(db,date(2026,10,9),date(2026,10,10),now=datetime(2026,10,20),process_code='LT')
-        assert report['planned_seconds']==21*3600
-        assert db.query(OeeScheduleDay).filter_by(process_code='TP').count()==0
+        assert report['planned_seconds']==(21+24)*3600
 
 
-def test_overlap_missing_dates_and_nonmachining_process_rejected(setup):
-    setup_oee(setup);rows=monthly(setup)
-    next(r for r in rows if r['work_date']=='2026-10-12')['end_time']='10:00'
-    assert setup.client.put('/api/production/equipment/schedule',json=payload(rows)).status_code==422
-    assert setup.client.put('/api/production/equipment/schedule',json=payload(rows[:-1])).status_code==422
-    september=monthly(setup,'2026-09')
-    next(r for r in september if r['work_date']=='2026-09-30')['end_time']='10:00'
-    assert setup.client.put('/api/production/equipment/schedule',json=payload(september,'2026-09')).status_code==422
+def test_invalid_month_and_nonmanaged_process_rejected(setup):
+    setup_oee(setup)
     assert setup.client.get('/api/production/equipment/schedule',params={'month':'2026-13','process_code':'LT'}).status_code==422
     assert setup.client.get('/api/production/equipment/schedule',params={'month':'2026-10','process_code':'ASSY'}).status_code==422
     assert {p['process_code'] for p in setup.client.get('/api/production/equipment/oee/processes').json()['items']}=={'LT','TP'}
-    with setup.sessions() as db:assert db.query(OeeScheduleDay).count()==0
 
 
-def test_tapping_scope_and_full_shift_dates_affect_oee(setup):
+def test_tapping_scope_and_full_detail_shift_affect_oee(setup):
     from models.equipment import EquipmentMaster
     from models.production import ProductionPerformance,ProductionWorkOrder
-    setup_oee(setup);rows=monthly(setup,process='TP')
-    for row in rows:
-        row['working']=row['work_date']=='2026-10-12'
-        if row['working']:row.update(end_time='20:00',next_day=False)
-    assert setup.client.put('/api/production/equipment/schedule',json=payload(rows,process='TP')).status_code==200
+    setup_oee(setup)
     with setup.sessions() as db:
         item=ItemMasterModel(part_no='TAP-B',part_name='Tap item',account_type='SEMI',material_type='SEMI',production_loc='TP',created_at='2026-01-01')
         db.add(item);db.flush()
-        db.add(ProductionCycleTime(item_id=item.id,seconds=30))
         order=ProductionWorkOrder(work_order_no='WTAP',order_date='2026-10-12',item_id=item.id,part_no=item.part_no,order_qty=1000)
         equipment=EquipmentMaster(equipment_code='TP1',equipment_name='탭핑 1호기',process_code='TP',machine_no='1')
         db.add_all([order,equipment]);db.flush()
@@ -74,16 +64,9 @@ def test_tapping_scope_and_full_shift_dates_affect_oee(setup):
         plan_ct(db,equipment.id,item.id,'2026-10-12',30)
         db.add(ProductionPerformance(work_order_id=order.id,performance_date='2026-10-12',process_code='TP',shift_type='DAY',equipment_id=equipment.id,good_qty=900,defect_qty=100,setup_qty=0));db.commit()
         result=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20),process_code='TP')
-        assert len(result['items'])==1
-        assert result['planned_seconds']==12*3600
-        assert result['items'][0]['oee']==pytest.approx(900*30/(12*3600))
-        # A production date counts its full shift, including next day's end time.
-        result=calculate(db,date(2026,10,1),date(2026,10,1),now=datetime(2026,10,20),process_code='LT')
-        assert result['planned_seconds']==24*3600
-        monday=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20),process_code='LT')
-        assert monday['planned_seconds']==24*3600
-        friday=calculate(db,date(2026,10,16),date(2026,10,16),now=datetime(2026,10,20),process_code='LT')
-        assert friday['planned_seconds']==21*3600
+        assert len(result['items'])==1 and result['planned_seconds']==24*3600
+        assert result['items'][0]['oee']==pytest.approx(900*30/(24*3600))
+        assert calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20),process_code='LT')['planned_seconds']==0
 
 
 def test_item_master_cycle_roundtrip_clear_and_transaction_rollback(setup,monkeypatch):

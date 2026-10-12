@@ -54,19 +54,21 @@ def test_plan_ct_is_date_scoped_and_master_changes_do_not_rewrite_oee(setup,monk
     assert sum(r['total'] for r in report['rows'])==200
 
 
-def test_equipment_schedules_are_independent_and_reflected_in_oee(setup,monkeypatch):
+def test_detail_quantities_determine_each_equipment_workdays(setup,monkeypatch):
     _,item,equipment,other=initialize(setup,monkeypatch)
-    query={'month':'2026-10','process_code':'LT','equipment_id':equipment}
-    rows=setup.client.get('/api/production/equipment/schedule',params=query).json()['items']
-    for row in rows:row['working']=False
-    response=setup.client.put('/api/production/equipment/schedule',json=query|{'items':rows});assert response.status_code==200,response.text
+    assert setup.client.put('/api/production/month-plan',json=value(item,equipment)).status_code==200
     with setup.sessions() as db:
         result=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20))
-        assert next(r for r in result['items'] if r['key']==str(equipment))['planned_seconds']==0
-        assert next(r for r in result['items'] if r['key']==str(other))['planned_seconds']==24*3600
-        assert db.query(ProductionEquipmentSchedule).count()==31
-    wrong=setup.client.get('/api/production/equipment/schedule',params=query|{'process_code':'TP'})
-    assert wrong.status_code==422
+        assert next(r for r in result['items'] if r['key']==str(equipment))['planned_seconds']==24*3600
+        assert next(r for r in result['items'] if r['key']==str(other))['planned_seconds']==0
+        assert db.query(ProductionEquipmentSchedule).count()==0
+    empty=value(item,equipment)
+    empty['lines'][0]['quantities']['2026-10-12']=0
+    assert setup.client.put('/api/production/month-plan',json=empty).status_code==200
+    with setup.sessions() as db:
+        result=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20))
+        assert all(r['planned_seconds']==0 for r in result['items'])
+
 
 
 def test_duplicate_plan_rows_and_invalid_quantities_are_atomic(setup,monkeypatch):
@@ -90,3 +92,30 @@ def test_plan_references_are_reported_in_item_usage_and_block_equipment_deletion
     setup.app.include_router(basic_info_equipment.router)
     monkeypatch.setattr(basic_info_equipment,'get_current_user_optional',lambda request,db:ADMIN)
     assert setup.client.delete('/api/basic-info/equipment/'+str(equipment)).status_code==409
+
+
+def test_multiple_detail_rows_share_one_equipment_day_and_ignore_old_calendar(setup,monkeypatch):
+    from test_production_sync import add_item
+    from models.oee_schedule import OeeScheduleDay
+    _,item,equipment,other=initialize(setup,monkeypatch)
+    with setup.sessions() as db:
+        second=add_item(db,part='SECOND-A',code='LT')
+        db.add(ProductionEquipmentSchedule(equipment_id=other,work_date='2026-10-12',working=True,start_time='08:00',end_time='08:00',next_day=True))
+        db.add(OeeScheduleDay(process_code='LT',work_date='2026-10-13',working=False,start_time='08:00',end_time='08:00',next_day=True))
+        db.commit()
+    plan=value(item,equipment)
+    quantities={f'2026-10-{i:02d}':0 for i in range(1,32)}
+    plan['lines'][0]['quantities']=quantities|{'2026-10-12':100}
+    plan['lines'].append(dict(item_id=second,equipment_id=equipment,cycle_seconds=45,expected_oee=.95,quantities=quantities|{'2026-10-13':50}))
+    assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    with setup.sessions() as db:
+        result=calculate(db,date(2026,10,12),date(2026,10,13),now=datetime(2026,10,20))
+        assert next(r for r in result['items'] if r['key']==str(equipment))['planned_seconds']==48*3600
+        assert next(r for r in result['items'] if r['key']==str(other))['planned_seconds']==0
+    summary=setup.client.get('/api/production/month-plan/status',params={'start_date':'2026-10-12','end_date':'2026-10-13'}).json()
+    assert summary['total']==150 and len(summary['rows'])==2
+    plan['lines'][0]['quantities']['2026-10-12']=0
+    assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    with setup.sessions() as db:
+        result=calculate(db,date(2026,10,12),date(2026,10,13),now=datetime(2026,10,20))
+        assert next(r for r in result['items'] if r['key']==str(equipment))['planned_seconds']==24*3600

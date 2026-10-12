@@ -14,23 +14,24 @@ from services.oee_schedule import workday_intervals
 
 def plan_ct(db,equipment,item,day,seconds):
     from models.production_month_plan import ProductionMonthPlanLine,ProductionMonthPlanDay
-    line=ProductionMonthPlanLine(month=day[:7],equipment_id=equipment,item_id=item,cycle_seconds=seconds,expected_oee=.95)
-    db.add(line);db.flush()
-    db.add(ProductionMonthPlanDay(line_id=line.id,work_date=day,quantity=0,cycle_seconds=seconds,expected_oee=.95))
+    line=db.query(ProductionMonthPlanLine).filter_by(month=day[:7],equipment_id=equipment,item_id=item).first()
+    if line is None:
+        line=ProductionMonthPlanLine(month=day[:7],equipment_id=equipment,item_id=item,cycle_seconds=seconds,expected_oee=.95)
+        db.add(line);db.flush()
+    db.add(ProductionMonthPlanDay(line_id=line.id,work_date=day,quantity=1000,cycle_seconds=seconds,expected_oee=.95))
 
 
-def test_full_week_and_public_holiday_calendar(setup):
-    def scheduled_intervals(start,end):
-        with setup.sessions() as db:return workday_intervals(db,'LT',start.date(),end.date(),end)
-    intervals,excluded=scheduled_intervals(datetime(2026,10,12),datetime(2026,10,18))
-    assert sum((b-a).total_seconds() for a,b in intervals)==117*3600
-    assert excluded==[]
-    intervals,excluded=scheduled_intervals(datetime(2026,10,9,8),datetime(2026,10,10,8))
-    assert intervals==[] and excluded[0]['work_date']=='2026-10-09'
-    intervals,excluded=scheduled_intervals(datetime(2026,10,5),datetime(2026,10,6))
-    assert intervals==[] and excluded[0]['work_date']=='2026-10-05'
-    intervals,_=scheduled_intervals(datetime(2026,10,12),datetime(2026,10,12,10))
-    assert sum((b-a).total_seconds() for a,b in intervals)==2*3600
+def test_week_hours_come_from_entered_detail_days(setup):
+    order,_,_,equipment,_=prepare(setup)
+    from models.production import ProductionWorkOrder
+    with setup.sessions() as db:
+        item=db.get(ProductionWorkOrder,order).item_id
+        for day in range(12,17):plan_ct(db,equipment,item,f'2026-10-{day:02d}',30)
+        db.commit()
+        intervals,_=workday_intervals(db,'LT',date(2026,10,12),date(2026,10,18),datetime(2026,10,20),equipment)
+        assert sum((b-a).total_seconds() for a,b in intervals)==117*3600
+        intervals,_=workday_intervals(db,'LT',date(2026,10,12),date(2026,10,12),datetime(2026,10,12,10),equipment)
+        assert sum((b-a).total_seconds() for a,b in intervals)==2*3600
 
 
 def test_cycle_registration_lookup_validation_and_delete(setup):
@@ -64,16 +65,18 @@ def test_native_oee_missing_cycle_and_overlapping_downtime_union(setup):
         db.commit()
         result=calculate(db,date(2026,10,12),date(2026,10,17),now=datetime(2026,10,19))
         row=next(r for r in result['items'] if r['key']==str(equipment))
-        assert row['planned_seconds']==117*3600
-        assert row['downtime_seconds']==45*60
+        assert row['planned_seconds']==0
+        assert row['downtime_seconds']==0
         assert row['oee'] is None and '생산계획 C/T 미등록' in row['issues'][0]
         db.add(ProductionCycleTime(item_id=item,seconds=60));plan_ct(db,equipment,item,'2026-10-12',60);db.commit()
         result=calculate(db,date(2026,10,12),date(2026,10,17),now=datetime(2026,10,19))
         row=next(r for r in result['items'] if r['key']==str(equipment))
         assert row['total_qty']==1000 and row['good_qty']==900
         assert row['quality']==.9
-        assert row['oee']==pytest.approx(900*60/(117*3600))
-        assert row['runtime_seconds']==117*3600-45*60
+        assert row['oee']==pytest.approx(900*60/(24*3600))
+        assert row['planned_seconds']==24*3600
+        assert row['downtime_seconds']==45*60
+        assert row['runtime_seconds']==24*3600-45*60
 
 
 def test_external_performance_uses_registered_machine_and_item(setup):
