@@ -6,7 +6,7 @@
     const integer=value=>value==null||value===''?'':Number.isFinite(Number(value))?Number(value).toFixed(0):value;
     const date=days=>{const d=new Date();d.setDate(d.getDate()+days);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
     const message=(text,error=false)=>{$('esMessage').textContent=text;$('esMessage').classList.toggle('es-error',error);};
-    async function api(path,method='GET',data){return MesResponse.read(await fetch(base+path,{method,headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined}));}
+    async function api(path,method='GET',data){const response=await fetch(base+path,{method,headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined});const extra=!response.ok&&path.startsWith('/credentials')?await response.clone().json().catch(()=>null):null;try{return await MesResponse.read(response);}catch(e){if(extra?.diagnostic)e.diagnostic=extra.diagnostic;throw e;}}
     async function rows(){
         const id=++request,q=new URLSearchParams({start_date:$('esStart').value,end_date:$('esEnd').value,keyword:$('esKeyword').value.trim(),page,page_size:50});
         const d=await api('/records?'+q);if(id!==request)return;
@@ -14,7 +14,7 @@
         $('esTotal').textContent=`총 ${total.toLocaleString()}건`;
         $('esRows').innerHTML=d.rows.length?d.rows.map((r,index)=>{
             const type={MACHINING:'가공',ASSEMBLY:'조립'}[r.performance_type]||'미지정';
-            const machine=(r.lot_no||'').trim().slice(-2,-1);
+            const machine=r.machine_no||'';
             const values=[(page-1)*50+index+1,r.work_date,type,'미확인',r.process_name||r.source_process,'미확인',/^[0-9]$/.test(machine)?machine:'미확인','미연결',r.mes_part_no||'미연결',r.part_name,r.total_qty==null?'미확인':integer(r.total_qty),integer(r.good_qty),integer(r.fault_qty),r.setup_qty===''?'미확인':integer(r.setup_qty),r.lot_no||'미확인','외부 연동',r.notes.join(' / ')];
             const raw=[['원본 품번',r.part_no],['원본 공정',r.source_process],['원본 작업번호',r.job_no],['원본 LOT',r.lot_no],['시작시간',r.started_at],['종료시간',r.ended_at],['총생산수량',r.total_qty==null?'미확인':integer(r.total_qty)],['양품수량',integer(r.job_qty)],['원본 LOT수량',integer(r.lot_qty)],['불량수량',integer(r.fault_qty)],['셋업(F10)',integer(r.setup_qty)],['변경 수신일',r.changed_at]];
             return '<tr>'+values.map((v,i)=>`<td${i===16?' class="es-notes"':''}>${esc(v)}</td>`).join('')+`<td><details><summary>원본 보기</summary>${raw.map(([key,value])=>`<p>${esc(key)}: ${esc(value)}</p>`).join('')}</details></td><td>${ExternalLabels.button(r)}</td></tr>`;
@@ -74,10 +74,11 @@
         $('esUsername').value=c.username||'';
         $('esCredentialMessage').textContent=c.error||(c.configured?'연동 계정이 설정되어 있습니다. 비밀번호 공란으로 저장하면 기존 값을 유지합니다.':'아이디와 비밀번호를 입력하고 계정을 저장해 주세요.');
     }
-    let credentialBusy=false;
+    let credentialBusy=false,loginDiagnostic=null;
+    $('esLoginDiagnostic').onclick=()=>{if(!loginDiagnostic)return;const url=URL.createObjectURL(new Blob([JSON.stringify(loginDiagnostic,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='production_login_diagnostic.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
     async function credentialAction(save){
         if(credentialBusy||!$('esCredentials').reportValidity())return;
-        credentialBusy=true;
+        credentialBusy=true;loginDiagnostic=null;$('esLoginDiagnostic').hidden=true;
         const payload={username:$('esUsername').value.trim(),password:$('esPassword').value};
         const controls=$('esCredentials').querySelectorAll('input,button');controls.forEach(e=>e.disabled=true);
         $('esCredentialMessage').textContent='외부 생산 시스템의 로그인을 확인 중입니다…';
@@ -85,7 +86,7 @@
             const d=await api(save?'/credentials':'/credentials/test',save?'PUT':'POST',payload);
             $('esCredentialMessage').textContent=d.message;
             if(save){$('esPassword').value='';await state();}
-        }catch(e){$('esCredentialMessage').textContent=e.message;}
+        }catch(e){$('esCredentialMessage').textContent=e.message;if(e.diagnostic){loginDiagnostic=e.diagnostic;$('esLoginDiagnostic').hidden=false;const names={server_object_not_found:'외부 서버 파일·객체 없음',server_database_error:'외부 서버 DB 오류',server_timeout:'외부 서버 처리시간 초과',server_exception:'외부 서버 예외',unexpected_response:'예상한 응답 형식과 다름',login_user_not_returned:'로그인 사용자 정보가 반환되지 않음',login_context_format:'로그인 사용자 정보 형식 오류',http_error:'외부 HTTP 오류',transport_error:'접속·통신 오류'};$('esCredentialMessage').textContent+='\n진단: '+(names[e.diagnostic.error_kind]||'서버 응답 확인 필요');}}
         finally{credentialBusy=false;controls.forEach(e=>e.disabled=false);}
     }
     $('esCredentials').onsubmit=e=>{e.preventDefault();credentialAction(true);};

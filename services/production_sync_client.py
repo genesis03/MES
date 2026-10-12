@@ -19,7 +19,28 @@ FIELDS = ('ITEM_NUM PROC_TYPE_NM JOB_TIME JOB_ST_TIME JOB_END_TIME JOB_NUM LOT_N
 
 
 class SyncError(Exception):
-    pass
+    def __init__(self,message,diagnostic=None):
+        super().__init__(message)
+        self.diagnostic=diagnostic
+
+
+def response_diagnostic(values,payload,kind):
+    # Fixed booleans/enums only: never copy response text, passwords, cookies or SQL.
+    fields=('TYPE','MESS','CLASS','METHOD','STACK')
+    ids=values.get('Common.Set.LoginUserSet.USER_ID',[''])[0].split(',')
+    return dict(schema_version=1,stage='login' if payload.get('run.object.name')=='Common.Login.LoginObj' else 'query',error_kind=kind,
+                response_complete=values.get('SO.NET.END')==['SO.NET.END'],
+                throw_fields={f:bool(any(v.strip() for v in values.get('THROW.'+f,[]))) for f in fields},
+                login_user_returned=bool(any(ids)),requested_user_returned=payload.get('Common.Set.LoginShortSet.USER_ID') in ids,
+                company_returned=bool(values.get('Common.Set.LoginUserSet.COMP_NO',[''])[0]))
+
+
+def server_error_kind(values):
+    message=' '.join(v for k,items in values.items() if k.startswith('THROW.') for v in items).lower()
+    if 'file_not_exist' in message or 'filenotfound' in message:return 'server_object_not_found'
+    if 'sqlexception' in message:return 'server_database_error'
+    if 'timeout' in message or 'timedout' in message:return 'server_timeout'
+    return 'server_exception'
 
 
 def common():
@@ -39,12 +60,12 @@ def post(opener, values):
             raise SyncError('일별 응답이 16MB를 초과했습니다. 연동 범위를 확인해 주세요.')
         values = parse_qs(raw.decode(response.headers.get_content_charset() or 'utf-8'), keep_blank_values=True)
     if values.get('SO.NET.END') != ['SO.NET.END']:
-        raise SyncError('예상한 생산 시스템 응답이 아닙니다.')
-    if any(key.startswith('THROW.') for key in values):
+        raise SyncError('예상한 생산 시스템 응답이 아닙니다.',response_diagnostic(values,ordered,'unexpected_response'))
+    if any(key.startswith('THROW.') and any(value.strip() for value in items) for key,items in values.items()):
         # Server exception text may contain credentials or SQL. Never persist it.
         if ordered.get('run.object.name') == 'Common.Login.LoginObj':
-            raise SyncError('외부 생산 시스템이 로그인 요청에서 오류를 반환했습니다. 외부 사이트의 로그인 가능 여부와 연동 회사 설정을 확인해 주세요.')
-        raise SyncError('생산 시스템에서 조회 오류를 반환했습니다. 연동 계정과 조회 설정을 확인해 주세요.')
+            raise SyncError('외부 생산 시스템이 로그인 요청에서 오류를 반환했습니다. 진단정보를 다운로드해 확인할 수 있습니다.',response_diagnostic(values,ordered,server_error_kind(values)))
+        raise SyncError('생산 시스템에서 조회 오류를 반환했습니다. 연동 계정과 조회 설정을 확인해 주세요.',response_diagnostic(values,ordered,server_error_kind(values)))
     return values
 
 
@@ -68,6 +89,7 @@ def query_with_retry(opener, payload):
 
 class ProductionClient:
     def __init__(self, username, password):
+        phase='landing'
         try:
             self.opener = build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
             with self.opener.open(BASE + '/', timeout=30) as response:
@@ -79,10 +101,11 @@ class ProductionClient:
                             'Common.Set.LoginShortSet.USER_PASS': password,
                             'Common.Set.LoginShortSet.AGADOS_URL': BASE,
                             'Common.Set.LoginShortSet.COMP_NO': config.PRODUCTION_SYNC_COMP_NO})
+            phase='login'
             login = post(self.opener, payload)
             ids = login.get('Common.Set.LoginUserSet.USER_ID', [''])[0].split(',')
             if username not in ids:
-                raise SyncError('외부 시스템 로그인을 확인할 수 없습니다. 계정 정보를 확인해 주세요.')
+                raise SyncError('외부 시스템 로그인을 확인할 수 없습니다. 계정 정보를 확인해 주세요.',response_diagnostic(login,payload,'login_user_not_returned'))
             row_index = ids.index(username)
             self.context = {}
             for key, values in login.items():
@@ -91,11 +114,11 @@ class ProductionClient:
                     if key.endswith('USER_STRING'):
                         continue  # Display text, contains unescaped commas; not an auth field.
                     if row_index >= len(pieces):
-                        raise SyncError('로그인 사용자 정보 형식을 확인할 수 없습니다.')
+                        raise SyncError('로그인 사용자 정보 형식을 확인할 수 없습니다.',response_diagnostic(login,payload,'login_context_format'))
                     self.context[key] = pieces[row_index]
             self.context['Common.Set.LoginUserSet.USER_PASS'] = ''
         except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, ValueError) as exc:
-            raise SyncError('외부 생산 시스템에 접속하거나 로그인할 수 없습니다.') from exc
+            raise SyncError('외부 생산 시스템에 접속하거나 로그인할 수 없습니다.',dict(schema_version=1,stage=phase,error_kind='http_error' if isinstance(exc,HTTPError) else 'transport_error',http_status=exc.code if isinstance(exc,HTTPError) else None)) from exc
 
     def fetch_day(self, day):
         # The successful external probe used distinct date bounds. Same-day

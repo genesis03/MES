@@ -3,7 +3,7 @@ from typing import Literal
 from datetime import date, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from sqlalchemy import case, or_, tuple_, update
@@ -74,14 +74,24 @@ def credentials(db: Session = Depends(get_db), user=Depends(get_current_user)):
 @router.post('/api/production/external-sync/credentials/test')
 def test_credentials(payload: Credentials, db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
-    validate_login(payload, db)
+    try:
+        validate_login(payload, db)
+    except HTTPException as exc:
+        diagnostic=getattr(exc.__cause__,'diagnostic',None)
+        if diagnostic:return JSONResponse(status_code=exc.status_code,content={'detail':exc.detail,'diagnostic':diagnostic})
+        raise
     return {'message': '외부 생산 시스템 로그인에 성공했습니다.'}
 
 
 @router.put('/api/production/external-sync/credentials')
 def update_credentials(payload: Credentials, db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
-    username, password = validate_login(payload, db)
+    try:
+        username, password = validate_login(payload, db)
+    except HTTPException as exc:
+        diagnostic=getattr(exc.__cause__,'diagnostic',None)
+        if diagnostic:return JSONResponse(status_code=exc.status_code,content={'detail':exc.detail,'diagnostic':diagnostic})
+        raise
     state(db)
     state(db, 'packing')
     instant = now()

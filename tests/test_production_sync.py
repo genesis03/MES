@@ -829,3 +829,38 @@ def test_failed_login_does_not_overwrite_saved_credentials(setup,monkeypatch):
         assert result.status_code==422 and '로그인 요청' in result.json()['detail']
         assert 'new-secret' not in result.text
     with setup.sessions() as db:assert secrets.read_credentials(db)==('old-user','old-secret')
+
+
+def test_blank_throw_fields_are_not_errors_and_login_diagnostic_has_no_response_text():
+    class Reply:
+        headers=SimpleNamespace(get_content_charset=lambda:'utf-8')
+        def __enter__(self):return self
+        def __exit__(self,*_):pass
+        def read(self,*_):return urlencode(self.body).encode()
+    class Opener:
+        def __init__(self,body):self.body=body
+        def open(self,*_,**kwargs):result=Reply();result.body=self.body;return result
+    payload={'run.object.name':'Common.Login.LoginObj','Common.Set.LoginShortSet.USER_ID':'private-user','Common.Set.LoginShortSet.USER_PASS':'private-password'}
+    normal={'SO.NET.END':'SO.NET.END','Common.Set.LoginUserSet.USER_ID':'private-user','THROW.TYPE':'','THROW.MESS':' '}
+    assert source.post(Opener(normal),payload)['Common.Set.LoginUserSet.USER_ID']==['private-user']
+    failure=normal|{'THROW.TYPE':'Exception','THROW.MESS':'File_Not_Exist private-password private-user D:/private-db/secret.sql'}
+    with pytest.raises(source.SyncError) as error:source.post(Opener(failure),payload)
+    info=error.value.diagnostic
+    assert info['stage']=='login' and info['error_kind']=='server_object_not_found'
+    assert info['requested_user_returned'] and info['throw_fields']['MESS']
+    serialized=json.dumps(info)+str(error.value)
+    assert all(secret not in serialized for secret in ['private-password','private-user','private-db','secret.sql'])
+
+
+def test_login_check_returns_safe_downloadable_diagnostic_without_saving(setup,monkeypatch):
+    diagnostic=dict(schema_version=1,stage='login',error_kind='server_object_not_found',throw_fields={'MESS':True})
+    def reject(*_):raise source.SyncError('로그인 응답 오류',diagnostic)
+    monkeypatch.setattr(api_module,'ProductionClient',reject)
+    for method,path in [('post','/api/production/external-sync/credentials/test'),('put','/api/production/external-sync/credentials')]:
+        response=getattr(setup.client,method)(path,json={'username':'secret-user','password':'secret-password'})
+        assert response.status_code==422
+        assert response.json()['diagnostic']==diagnostic
+        assert 'secret-user' not in response.text and 'secret-password' not in response.text
+    with setup.sessions() as db:
+        from models.production_sync import ProductionSyncCredential
+        assert db.get(ProductionSyncCredential,1) is None
