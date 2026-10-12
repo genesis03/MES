@@ -7,11 +7,11 @@
 <h1>설비 가동 현황 (OEE)</h1>
 
 <p class="oee-help">선택한 공정의 생산계획에 저장된 호기별 스케줄과 날짜별 C/T로 계산합니다. 실제 가동시간은 스케줄 시간에서 등록된 비가동 시간을 차감합니다. 진행 중인 가동일은 현재 시각까지 계산합니다. 탭핑의 24시간 기본 일정은 계획 차감 190분을 제외한 20시간 50분으로 계산하며, 진행 중인 날은 경과시간에 비례해 차감합니다. 정기 휴게는 계획 차감, 고장 등은 비가동 등록으로 관리합니다.</p>
-<div class="oee-panel oee-toolbar"><label>가공 공정 <select id="oeeProcess" style="padding:7px;border:1px solid #cbd5e1;border-radius:4px"></select></label><label>시작일 <input type="date" id="oeeStart"></label><label>종료일 <input type="date" id="oeeEnd"></label><button class="oee-btn" id="oeeLoad">조회</button><a href="/production/plans">생산계획 · 스케줄/C/T 입력</a></div>
+<div class="oee-panel oee-toolbar"><label>가공 공정 <select id="oeeProcess" style="padding:7px;border:1px solid #cbd5e1;border-radius:4px"></select></label><label>조회 월 <input type="month" id="oeeQueryMonth"></label><label>시작일 <input type="date" id="oeeStart"></label><label>종료일 <input type="date" id="oeeEnd"></label><button class="oee-btn" id="oeeLoad">조회</button><a href="/production/plans">생산계획 · 스케줄/C/T 입력</a></div>
 <p class="oee-help">가동률 = 실제 가동시간 ÷ 기본 시간 · 성능률 = 표준 생산시간 ÷ 실제 가동시간 · 양품률 = 양품 ÷ 총생산 · OEE = 가동률 × 성능률 × 양품률. 총생산은 양품·불량·셋업의 합계입니다.</p>
 <div id="oeeCalendar" class="oee-help"></div>
 <div id="oeeMessage" role="status"></div>
 <div class="oee-panel oee-scroll"><table class="oee-table"><thead><tr><th>생산호기</th><th>기본 시간(h)</th><th>비가동(h)</th><th>실제 가동(h)</th><th>총생산</th><th>양품</th><th>가동률</th><th>성능률</th><th>양품률</th><th>OEE</th><th>확인사항 / 품번별 내역</th></tr></thead><tbody id="oeeRows"></tbody></table></div>
 
 {% endblock %}
-{% block extra_script %}<script src="/static/equipment_oee.js?v=20261012-3"></script>{% endblock %}
+{% block extra_script %}<script src="/static/equipment_oee.js?v=20261013-2"></script>{% endblock %}
