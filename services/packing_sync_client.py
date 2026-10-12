@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
-from services.production_sync_client import ProductionClient, SyncError, CONDITIONS, common, query_with_retry
+from services.production_sync_client import ProductionClient, SyncError, CONDITIONS, client_common, query_with_retry
 
 PREFIX = 'Common.Set.LotSet.'
 
@@ -66,7 +66,7 @@ def parse_response(result, start, end):
 class PackingClient(ProductionClient):
     def fetch_day(self, day):
         start, end = day - timedelta(days=1), day + timedelta(days=1)
-        payload = common()
+        payload = client_common(self)
         payload.update({'MES.Product.Set.JobCondSet.' + key: '' for key in CONDITIONS})
         payload.update(self.context)
         payload.update({'run.object.name': 'MES.Stock.PackList.PackListObj', 'jump.form.code': 'List',

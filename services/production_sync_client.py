@@ -1,6 +1,10 @@
 """Read-only adapter for the observed UNI_MES Login/List protocol."""
 import http.cookiejar
 import time
+import re
+from html import unescape
+from html.parser import HTMLParser
+from core import config
 from http.client import IncompleteRead, RemoteDisconnected
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -24,11 +28,12 @@ class SyncError(Exception):
 
 
 def response_diagnostic(values,payload,kind):
-    # Fixed booleans/enums only: never copy response text, passwords, cookies or SQL.
+    # Allowlisted protocol metadata only; never copy response text, passwords, cookies or SQL.
     fields=('TYPE','MESS','CLASS','METHOD','STACK')
     ids=values.get('Common.Set.LoginUserSet.USER_ID',[''])[0].split(',')
-    return dict(schema_version=2,client_revision='login-protocol-20261009',stage='login' if payload.get('run.object.name')=='Common.Login.LoginObj' else 'query',error_kind=kind,
+    return dict(schema_version=3,client_revision='protocol-key-20261012',stage='login' if payload.get('run.object.name')=='Common.Login.LoginObj' else 'query',error_kind=kind,
                 response_complete=values.get('SO.NET.END')==['SO.NET.END'],
+                protocol_key=payload.get('ENCRYPT.KEY') if re.fullmatch(r'[0-9]{1,8}',str(payload.get('ENCRYPT.KEY',''))) else None,
                 throw_fields={f:bool(any(v.strip() for v in values.get('THROW.'+f,[]))) for f in fields},
                 login_user_returned=bool(any(ids)),requested_user_returned=payload.get('Common.Set.LoginShortSet.USER_ID') in ids,
                 company_returned=bool(values.get('Common.Set.LoginUserSet.COMP_NO',[''])[0]))
@@ -44,9 +49,38 @@ def server_error_kind(values):
     return 'server_exception'
 
 
-def common():
-    return {'SO.NET.START': 'SO.NET.START', 'SO.NET.SOLUTION': 'UNI_MES', 'ENCRYPT.KEY': '1631',
+def protocol_key(value):
+    value=str(value or '').strip()
+    if not re.fullmatch(r'[0-9]{1,8}',value):
+        raise SyncError('외부 연동 접속키(ENCRYPT.KEY)는 숫자 1~8자리로 설정하세요.')
+    return value
+
+
+def bootstrap_protocol_key(page):
+    """Read explicit protocol fields, without saving bootstrap HTML or scanning unrelated numbers."""
+    found=set()
+    class Inputs(HTMLParser):
+        def handle_starttag(self,tag,attrs):
+            values=dict(attrs)
+            if tag.lower()=='input' and str(values.get('name','')).upper()=='ENCRYPT.KEY':
+                value=values.get('value','')
+                if re.fullmatch(r'[0-9]{1,8}',value):found.add(value)
+    Inputs().feed(page)
+    text=unescape(page)
+    for pattern in (r"[\"']ENCRYPT\.KEY[\"']\s*[:=,]\s*[\"']?([0-9]{1,8})(?![0-9])",r'(?:^|[?&\s])ENCRYPT\.KEY\s*=\s*([0-9]{1,8})(?![0-9])'):
+        found.update(re.findall(pattern,text,re.IGNORECASE))
+    if len(found)>1:
+        raise SyncError('외부 초기 화면의 접속키가 여러 개라 확인할 수 없습니다.',dict(schema_version=3,client_revision='protocol-key-20261012',stage='landing',error_kind='protocol_key_ambiguous'))
+    return next(iter(found),None)
+
+
+def common(encrypt_key=None):
+    return {'SO.NET.START': 'SO.NET.START', 'SO.NET.SOLUTION': 'UNI_MES', 'ENCRYPT.KEY': protocol_key(config.PRODUCTION_SYNC_ENCRYPT_KEY if encrypt_key is None else encrypt_key),
             'SO.NET.MODULE': 'MES', 'SO.NET.USERIP': '', 'user.lang.code': 'ko', 'client.web.mode': 'Web'}
+
+
+def client_common(client):
+    return common(getattr(client,'encrypt_key',None))
 
 
 def post(opener, values):
@@ -94,8 +128,14 @@ class ProductionClient:
         try:
             self.opener = build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
             with self.opener.open(BASE + '/', timeout=30) as response:
-                response.read(1024)
-            payload = common()
+                raw=response.read(2*1024*1024+1)
+                if len(raw)>2*1024*1024:raise SyncError('외부 초기 화면이 너무 커 접속키를 확인할 수 없습니다.')
+                headers=getattr(response,'headers',None)
+                charset=headers.get_content_charset() if headers is not None else None
+                detected=bootstrap_protocol_key(raw.decode(charset or 'utf-8',errors='replace'))
+            self.encrypt_key=protocol_key(detected or config.PRODUCTION_SYNC_ENCRYPT_KEY)
+            self.encrypt_key_source='landing' if detected else 'configured'
+            payload = client_common(self)
             payload.update({'run.object.name': 'Common.Login.LoginObj', 'jump.form.code': 'Login',
                             'Common.BeforeService.CheckSet.IS_CHECK': 'Y',
                             'Common.Set.LoginShortSet.USER_ID': username,
@@ -116,15 +156,18 @@ class ProductionClient:
                         raise SyncError('로그인 사용자 정보 형식을 확인할 수 없습니다.',response_diagnostic(login,payload,'login_context_format'))
                     self.context[key] = pieces[row_index]
             self.context['Common.Set.LoginUserSet.USER_PASS'] = ''
+        except SyncError as exc:
+            if exc.diagnostic is not None:exc.diagnostic['protocol_key_source']=getattr(self,'encrypt_key_source',None)
+            raise
         except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, ValueError) as exc:
-            raise SyncError('외부 생산 시스템에 접속하거나 로그인할 수 없습니다.',dict(schema_version=2,client_revision='login-protocol-20261009',stage=phase,error_kind='http_error' if isinstance(exc,HTTPError) else 'transport_error',http_status=exc.code if isinstance(exc,HTTPError) else None)) from exc
+            raise SyncError('외부 생산 시스템에 접속하거나 로그인할 수 없습니다.',dict(schema_version=3,client_revision='protocol-key-20261012',stage=phase,error_kind='http_error' if isinstance(exc,HTTPError) else 'transport_error',http_status=exc.code if isinstance(exc,HTTPError) else None)) from exc
 
     def fetch_day(self, day):
         # The successful external probe used distinct date bounds. Same-day
         # bounds can describe an empty interval on this server. Pad both ends
         # to cover inclusive/exclusive boundaries, then retain only this day.
         query_start, query_end = day - timedelta(days=1), day + timedelta(days=1)
-        payload = common()
+        payload = client_common(self)
         payload.update({'MES.Product.Set.JobCondSet.' + key: '' for key in CONDITIONS})
         payload.update(self.context)
         payload.update({'run.object.name': 'MES.Product.ProcLotList.ProcLotListObj', 'jump.form.code': 'List',

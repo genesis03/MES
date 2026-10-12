@@ -584,25 +584,32 @@ def test_pagination_and_empty_day_preserve_previous_records(setup):
     assert setup.client.get('/production/performance/external').status_code == 200
 
 
-def test_http_login_cookie_and_list_protocol(monkeypatch):
+@pytest.mark.parametrize('bootstrap_key',[None,'4321'])
+@pytest.mark.parametrize('kind',['production','packing'])
+def test_http_login_cookie_and_list_protocol(monkeypatch,bootstrap_key,kind):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import threading
+    expected_key=bootstrap_key or '2308'
+    monkeypatch.setattr(source.config,'PRODUCTION_SYNC_ENCRYPT_KEY','2308')
+    from services.packing_sync_client import PackingClient
+    from test_packing_sync import row as pack_row,response as pack_response
     seen = []
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_): pass
         def do_GET(self):
-            self.send_response(200); self.end_headers(); self.wfile.write(b'login page')
+            self.send_response(200); self.end_headers(); self.wfile.write((' '*2048+('<script>window.protocol={"ENCRYPT.KEY":"'+bootstrap_key+'"}</script>' if bootstrap_key else 'login page')).encode())
         def do_POST(self):
             raw = self.rfile.read(int(self.headers['Content-Length'])).decode()
             assert raw.endswith('SO.NET.END=SO.NET.END')
             payload = parse_qs(raw, keep_blank_values=True)
+            assert payload['ENCRYPT.KEY']==[expected_key]
             action = payload['jump.form.code'][0]; seen.append(action)
             if action == 'Login':
                 assert payload['Common.Set.LoginShortSet.USER_ID'] == ['test-user']
                 # Match the successful October 9 request, rather than guessing login fields.
                 assert 'Common.Set.LoginShortSet.COMP_NO' not in payload
                 assert 'Common.Set.LoginShortSet.AGADOS_URL' not in payload
-                expected=source.common()|{'run.object.name':'Common.Login.LoginObj','jump.form.code':'Login','Common.BeforeService.CheckSet.IS_CHECK':'Y','Common.Set.LoginShortSet.USER_ID':'test-user','Common.Set.LoginShortSet.USER_PASS':'test-password','SO.NET.END':'SO.NET.END'}
+                expected=source.common(expected_key)|{'run.object.name':'Common.Login.LoginObj','jump.form.code':'Login','Common.BeforeService.CheckSet.IS_CHECK':'Y','Common.Set.LoginShortSet.USER_ID':'test-user','Common.Set.LoginShortSet.USER_PASS':'test-password','SO.NET.END':'SO.NET.END'}
                 assert payload=={key:[value] for key,value in expected.items()}
                 assert payload['run.object.name'] == ['Common.Login.LoginObj']
                 body = {'Common.Set.LoginUserSet.USER_ID':'test-user', 'Common.Set.LoginUserSet.COMP_NO':'company-id',
@@ -611,8 +618,9 @@ def test_http_login_cookie_and_list_protocol(monkeypatch):
             else:
                 assert 'ASP.NET_SessionId=synthetic-session' in self.headers.get('Cookie', '')
                 assert payload['Common.Set.LoginUserSet.COMP_NO'] == ['company-id']
-                assert payload['run.object.name'] == ['MES.Product.ProcLotList.ProcLotListObj']
-                body = {key: values[0] for key, values in response([row()]).items()}
+                assert payload['run.object.name'] == ['MES.Product.ProcLotList.ProcLotListObj' if kind=='production' else 'MES.Stock.PackList.PackListObj']
+                result=response([row()]) if kind=='production' else pack_response([pack_row()])
+                body = {key: values[0] for key, values in result.items()}
                 self.send_response(200)
             self.send_header('Content-Type','application/x-www-form-urlencoded; charset=utf-8'); self.end_headers()
             self.wfile.write(urlencode(body).encode())
@@ -621,9 +629,13 @@ def test_http_login_cookie_and_list_protocol(monkeypatch):
     base = f'http://127.0.0.1:{server.server_port}'
     monkeypatch.setattr(source,'BASE',base); monkeypatch.setattr(source,'ENDPOINT',base+'/HttpPort.aspx')
     try:
-        client = source.ProductionClient('test-user','test-password')
+        client = (source.ProductionClient if kind=='production' else PackingClient)('test-user','test-password')
+        assert client.encrypt_key==expected_key
+        assert client.encrypt_key_source==('landing' if bootstrap_key else 'configured')
+        # A configuration change after login cannot switch keys halfway through a session.
+        monkeypatch.setattr(source.config,'PRODUCTION_SYNC_ENCRYPT_KEY','9999')
         rows, warnings = client.fetch_day(DAY)
-        assert rows == [row()] and not warnings and seen == ['Login','List']
+        assert rows == ([row()] if kind=='production' else [pack_row()]) and not warnings and seen == ['Login','List']
     finally:
         server.shutdown(); server.server_close(); thread.join(timeout=2)
 
@@ -882,5 +894,25 @@ def test_server_exception_category_is_whitelisted_without_raw_details(server_typ
     kind=source.server_error_kind(values)
     assert kind==expected
     diagnostic=source.response_diagnostic(values,payload,kind)
-    assert diagnostic['schema_version']==2 and diagnostic['client_revision']=='login-protocol-20261009'
+    assert diagnostic['schema_version']==3 and diagnostic['client_revision']=='protocol-key-20261012'
     assert 'private-password' not in json.dumps(diagnostic) and 'SQL context' not in json.dumps(diagnostic)
+
+
+@pytest.mark.parametrize('page,expected',[
+    ('<input name="ENCRYPT.KEY" value="2308">','2308'),
+    ("<input value='4321' name='ENCRYPT.KEY'>",'4321'),
+    ('<script>config={"ENCRYPT.KEY":"9876"}</script>','9876'),
+    ("<script>request.set('ENCRYPT.KEY','4321')</script>",'4321'),
+    ('SO.NET.START=SO.NET.START&ENCRYPT.KEY=2308&SO.NET.END=SO.NET.END','2308'),
+    ('<div>date=20261012; quantity=1631</div>',None),
+    ('<input name="ENCRYPT.KEY" value="2308"><script>x={"ENCRYPT.KEY":"2308"}</script>','2308'),
+])
+def test_bootstrap_explicit_protocol_key_formats(page,expected):
+    assert source.bootstrap_protocol_key(page)==expected
+
+
+def test_bootstrap_conflicting_keys_are_rejected_without_exposing_page():
+    with pytest.raises(source.SyncError) as error:
+        source.bootstrap_protocol_key('<input name="ENCRYPT.KEY" value="2308"><script>x={"ENCRYPT.KEY":"4321",password:"never-save-this"}</script>')
+    assert error.value.diagnostic['error_kind']=='protocol_key_ambiguous'
+    assert 'never-save-this' not in str(error.value)+json.dumps(error.value.diagnostic)
