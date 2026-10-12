@@ -180,3 +180,52 @@ def test_existing_plan_time_migration_preserves_past_friday_and_is_idempotent(se
         assert db.query(ProductionPlanWorkTime).count()==31
         assert db.query(ProductionPlanWorkTime).filter_by(work_date='2026-10-09').one().end_time=='06:00'
         assert db.query(ProductionPlanWorkTime).filter_by(work_date='2026-10-16').one().end_time=='08:00'
+
+
+def test_explicit_row_delete_removes_plan_days_but_keeps_performance_and_other_rows(setup,monkeypatch):
+    from models.production_month_plan import ProductionMonthPlanLine,ProductionPlanWorkTime
+    order,item,equipment,other=initialize(setup,monkeypatch)
+    plan=value(item,equipment)
+    plan['lines'].append(plan['lines'][0]|{'equipment_id':other})
+    assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    with setup.sessions() as db:
+        doomed=db.query(ProductionMonthPlanLine).filter_by(equipment_id=equipment).one().id
+        remaining=db.query(ProductionMonthPlanLine).filter_by(equipment_id=other).one().id
+        db.add(ProductionPerformance(work_order_id=order,performance_date='2026-10-06',process_code='LT',shift_type='DAY',equipment_id=equipment,good_qty=100,defect_qty=0,setup_qty=0));db.commit()
+    # Omitted rows alone are never deleted (older clients retain their behavior).
+    partial=plan|{'lines':[plan['lines'][1]]}
+    assert setup.client.put('/api/production/month-plan',json=partial).status_code==200
+    with setup.sessions() as db:assert db.query(ProductionMonthPlanLine).count()==2
+    deletion=partial|{'deleted_line_ids':[doomed]}
+    assert setup.client.put('/api/production/month-plan',json=deletion).status_code==200
+    with setup.sessions() as db:
+        assert db.get(ProductionMonthPlanLine,doomed) is None
+        assert db.get(ProductionMonthPlanLine,remaining) is not None
+        assert db.query(ProductionMonthPlanDay).count()==31
+        assert db.query(ProductionPerformance).count()==1
+        assert db.query(ProductionPlanWorkTime).count()==62
+    loaded=setup.client.get('/api/production/month-plan',params={'month':'2026-10','process_code':'LT'}).json()
+    assert [r['id'] for r in loaded['lines']]==[remaining]
+    report=setup.client.get('/api/production/month-plan/status',params={'start_date':'2026-10-01','end_date':'2026-10-31'}).json()
+    assert report['total']==200 and len(report['rows'])==1
+    assert setup.client.put('/api/production/month-plan',json=partial|{'lines':[],'deleted_line_ids':[remaining]}).status_code==200
+    with setup.sessions() as db:assert db.query(ProductionMonthPlanDay).count()==0
+
+
+def test_delete_scope_validation_and_invalid_save_are_atomic(setup,monkeypatch):
+    from models.production_month_plan import ProductionMonthPlanLine
+    _,item,equipment,_=initialize(setup,monkeypatch)
+    plan=value(item,equipment)
+    assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    with setup.sessions() as db:line_id=db.query(ProductionMonthPlanLine).one().id
+    for bad in [plan|{'month':'2026-11','lines':[],'deleted_line_ids':[line_id]},plan|{'process_code':'TP','lines':[],'deleted_line_ids':[line_id]},plan|{'lines':[],'deleted_line_ids':[line_id+100]}]:
+        assert setup.client.put('/api/production/month-plan',json=bad).status_code==422
+    bad=plan|{'lines':[],'deleted_line_ids':[line_id],'work_times':[dict(equipment_id=equipment,work_date='2026-10-12',start_time='08:00',end_time='05:00',next_day=False)]}
+    assert setup.client.put('/api/production/month-plan',json=bad).status_code==422
+    with setup.sessions() as db:
+        assert db.query(ProductionMonthPlanLine).count()==1 and db.query(ProductionMonthPlanDay).count()==31
+    from types import SimpleNamespace
+    from core.security import get_current_user
+    import json
+    setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='reader',role='USER',permissions=json.dumps({'menu_access':{'/production/plans':'READ'}}))
+    assert setup.client.put('/api/production/month-plan',json=plan|{'lines':[],'deleted_line_ids':[line_id]}).status_code==403

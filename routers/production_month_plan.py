@@ -82,6 +82,7 @@ class MonthInput(BaseModel):
     ct_effective_date:date
     lines:list[LineInput]=Field(max_length=200)
     work_times:list[WorkTimeInput]=Field(default_factory=list,max_length=6200)
+    deleted_line_ids:list[int]=Field(default_factory=list,max_length=200)
 
 
 @router.put('')
@@ -91,6 +92,11 @@ def save(payload:MonthInput,db:Session=Depends(get_db),user=Depends(get_current_
     seen=set();allowed={i['id'] for i in options_data(db)['items'] if payload.process_code in i['process_codes']}
     today=datetime.now(ZoneInfo('Asia/Seoul')).date()
     existing={ (r.equipment_id,r.item_id):r for r in db.query(ProductionMonthPlanLine).join(EquipmentMaster,EquipmentMaster.id==ProductionMonthPlanLine.equipment_id).filter(ProductionMonthPlanLine.month==payload.month,EquipmentMaster.process_code==payload.process_code)}
+    deleted_ids=set(payload.deleted_line_ids)
+    scoped_ids={r.id for r in existing.values()}
+    if not deleted_ids<=scoped_ids:raise HTTPException(422,'삭제할 행이 선택한 월·공정의 생산계획에 없습니다. 다시 불러오세요.')
+    deleted_rows=[r for r in existing.values() if r.id in deleted_ids]
+    existing={key:r for key,r in existing.items() if r.id not in deleted_ids}
     # Validate the entire request before editing any saved records.
     for value in payload.lines:
         validate_equipment(db,payload.process_code,value.equipment_id)
@@ -111,6 +117,8 @@ def save(payload:MonthInput,db:Session=Depends(get_db),user=Depends(get_current_
         if key in overrides:raise HTTPException(422,'같은 호기·날짜의 가동시간이 중복되었습니다.')
         bounds(dict(work_date=key[1],working=True,start_time=value.start_time,end_time=value.end_time,next_day=value.next_day))
         overrides[key]=value
+    for row in deleted_rows:db.delete(row)
+    db.flush()
     # Snapshot every day, including zero-quantity dates. Subsequent default changes cannot rewrite saved hours.
     saved_times={(r.equipment_id,r.work_date):r for r in db.query(ProductionPlanWorkTime).filter(ProductionPlanWorkTime.equipment_id.in_(equipment_ids),ProductionPlanWorkTime.work_date.in_(date_keys))}
     for equipment_id in equipment_ids:
@@ -134,7 +142,7 @@ def save(payload:MonthInput,db:Session=Depends(get_db),user=Depends(get_current_
                 saved.cycle_seconds=value.cycle_seconds;saved.expected_oee=value.expected_oee
             saved.quantity=value.quantities[day]
         row.cycle_seconds=value.cycle_seconds;row.expected_oee=value.expected_oee
-    db.commit();return {'message':'생산계획을 저장했습니다. 이전 적용일의 C/T는 보존했습니다.'}
+    db.commit();return {'message':f'생산계획을 저장했습니다. 삭제 {len(deleted_rows)}행. 유지된 행의 이전 적용일 C/T는 보존했습니다.'}
 
 
 @router.get('/status')
