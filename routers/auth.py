@@ -37,8 +37,7 @@ async def process_login(request: Request, db: Session = Depends(get_db)):
 
     if hasattr(user, "is_active") and not user.is_active:
         raise HTTPException(status_code=400, detail="아이디 또는 비밀번호가 일치하지 않습니다.")
-    revoke_session(db, request.cookies.get("session_token"))
-    token = create_session_token(user.username, db)
+    token = create_session_token(user.username, db, existing_token=request.cookies.get("session_token"))
     db.commit()
     response = JSONResponse(content={"status": "success", "username": user.username, "role": user.role})
     response.set_cookie(key="session_token", value=token, httponly=True, samesite="lax", max_age=SESSION_COOKIE_MAX_AGE_SECONDS, secure=SESSION_COOKIE_SECURE)

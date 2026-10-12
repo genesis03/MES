@@ -74,10 +74,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return hmac.compare_digest(hash_password(plain_password), hashed_password)
 
 
-def create_session_token(username: str, db: Optional[Session] = None) -> str:
-    """랜덤 로그인 세션을 서버 DB에 등록합니다. 과거 만료 없는 토큰은 재사용하지 않습니다."""
+def create_session_token(username: str, db: Optional[Session] = None, existing_token: Optional[str] = None) -> str:
+    """같은 브라우저의 유효 세션을 유지하거나 새 세션을 발급하고 다른 세션을 종료합니다."""
     from services.auth_session_service import issue_token
-    return issue_token(username, db)
+    return issue_token(username, db, existing_token=existing_token)
 
 
 generate_session_token = create_session_token

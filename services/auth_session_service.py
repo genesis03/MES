@@ -41,13 +41,29 @@ def session_user(db, token):
     return user
 
 
-def issue_token(username, db=None):
+def issue_token(username, db=None, existing_token=None):
     own = db is None
     db = db or SessionLocal()
     try:
         user = db.scalar(select(UserModel).where(UserModel.username == username))
         if not user or (hasattr(user, "is_active") and not user.is_active):
             raise HTTPException(401, "로그인이 필요합니다.")
+        # Serialize logins for one account, including concurrent requests from different browsers.
+        db.execute(update(UserModel).where(UserModel.id == user.id).values(username=UserModel.username))
+        current = active_session(db, existing_token)
+        reuse = current is not None and current.user_id == user.id
+        if not reuse:
+            revoke_session(db, existing_token)
+        others = update(AuthSession).where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+        if reuse:
+            others = others.where(AuthSession.token_digest != current.token_digest)
+        db.execute(others.values(revoked_at=utc_now()))
+        if reuse:
+            if own:
+                db.commit()
+            else:
+                db.flush()
+            return existing_token
         from core.security import check_admin_permission
         minutes = SESSION_ADMIN_IDLE_MINUTES if check_admin_permission(user) else SESSION_USER_IDLE_MINUTES
         now = utc_now()
