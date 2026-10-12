@@ -97,4 +97,4 @@ def calculate(db,start_day,end_day,now=None,process_code=None):
         g['parts']=list(g['parts'].values())
         for p in g['parts']:p['sources']=sorted(p['sources'])
         result.append(g)
-    return dict(items=sorted(result,key=lambda x:x['equipment_name']),holidays=[dict(date=r['work_date'],name=r['holiday'],working=r['working']) for r in excluded],as_of=now.isoformat(timespec='minutes'),planned_seconds=sum((b-a).total_seconds() for a,b in workday_intervals(db,codes[0],start_day,end_day,now)[0]) if codes else 0,process_code=process_code or (codes[0] if codes else ''))
+    return dict(items=sorted(result,key=lambda x:x['equipment_name']),holidays=[dict(date=r['work_date'],name=r['holiday'],working=r['working']) for r in excluded],as_of=now.isoformat(timespec='minutes'),planned_seconds=sum((b-a).total_seconds() for a,b in merge_intervals(all_periods)),process_code=process_code or (codes[0] if codes else ''))

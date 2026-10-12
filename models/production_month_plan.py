@@ -37,3 +37,14 @@ class ProductionMonthPlanDay(Base):
     cycle_seconds=Column(Float,nullable=False)
     expected_oee=Column(Float,nullable=False)
     line=relationship('ProductionMonthPlanLine',back_populates='days')
+
+class ProductionPlanWorkTime(Base):
+    """Saved shift hours, shared by all item lines on one equipment/date."""
+    __tablename__='production_plan_work_times'
+    __table_args__=(UniqueConstraint('equipment_id','work_date',name='uq_plan_work_time_day'),)
+    id=Column(Integer,primary_key=True)
+    equipment_id=Column(Integer,ForeignKey('equipment_masters.id'),nullable=False,index=True)
+    work_date=Column(String(10),nullable=False,index=True)
+    start_time=Column(String(5),nullable=False,default='08:00')
+    end_time=Column(String(5),nullable=False,default='08:00')
+    next_day=Column(Boolean,nullable=False,default=True)

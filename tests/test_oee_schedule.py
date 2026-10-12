@@ -40,7 +40,7 @@ def test_calendar_is_readonly_and_plan_quantities_enable_holiday_work(setup):
     assert by_date['2026-10-09']['working'] and by_date['2026-10-10']['working']
     with setup.sessions() as db:
         report=calculate(db,date(2026,10,9),date(2026,10,10),now=datetime(2026,10,20),process_code='LT')
-        assert report['planned_seconds']==(21+24)*3600
+        assert report['planned_seconds']==48*3600
 
 
 def test_invalid_month_and_nonmanaged_process_rejected(setup):

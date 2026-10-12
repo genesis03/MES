@@ -29,7 +29,7 @@ def test_week_hours_come_from_entered_detail_days(setup):
         for day in range(12,17):plan_ct(db,equipment,item,f'2026-10-{day:02d}',30)
         db.commit()
         intervals,_=workday_intervals(db,'LT',date(2026,10,12),date(2026,10,18),datetime(2026,10,20),equipment)
-        assert sum((b-a).total_seconds() for a,b in intervals)==117*3600
+        assert sum((b-a).total_seconds() for a,b in intervals)==120*3600
         intervals,_=workday_intervals(db,'LT',date(2026,10,12),date(2026,10,12),datetime(2026,10,12,10),equipment)
         assert sum((b-a).total_seconds() for a,b in intervals)==2*3600
 

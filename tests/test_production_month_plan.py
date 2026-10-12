@@ -119,3 +119,64 @@ def test_multiple_detail_rows_share_one_equipment_day_and_ignore_old_calendar(se
     with setup.sessions() as db:
         result=calculate(db,date(2026,10,12),date(2026,10,13),now=datetime(2026,10,20))
         assert next(r for r in result['items'] if r['key']==str(equipment))['planned_seconds']==24*3600
+
+
+def test_work_time_bulk_save_shared_hours_snapshot_and_atomic_validation(setup,monkeypatch):
+    from models.production_month_plan import ProductionPlanWorkTime
+    from services import oee_schedule
+    _,item,equipment,other=initialize(setup,monkeypatch)
+    plan=value(item,equipment)
+    plan['lines'][0]['quantities']['2026-10-16']=100
+    assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    with setup.sessions() as db:
+        assert db.query(ProductionPlanWorkTime).count()==31
+        rows=oee_schedule.days(db,'LT',date(2026,10,16),date(2026,10,16),equipment)
+        assert rows[0]['end_time']=='08:00'  # Friday also defaults to 24 hours.
+    overrides=[dict(equipment_id=equipment,work_date=d,start_time='08:00',end_time='05:00',next_day=True) for d in ['2026-10-12','2026-10-16']]
+    plan['work_times']=overrides
+    assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    report=setup.client.get('/api/production/month-plan/status',params={'start_date':'2026-10-16','end_date':'2026-10-16'}).json()
+    assert report['rows'][0]['upm_full']==report['rows'][0]['uph']*21
+    with setup.sessions() as db:
+        result=calculate(db,date(2026,10,16),date(2026,10,16),now=datetime(2026,10,20))
+        assert next(r for r in result['items'] if r['key']==str(equipment))['planned_seconds']==21*3600
+        assert next(r for r in result['items'] if r['key']==str(other))['planned_seconds']==0
+    # A later default change or a quantity-only save cannot change saved shifts.
+    original=oee_schedule.default_day
+    monkeypatch.setattr(oee_schedule,'default_day',lambda d,h:original(d,h)|{'end_time':'04:00'})
+    plan.pop('work_times')
+    assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    loaded=setup.client.get('/api/production/month-plan',params={'month':'2026-10','process_code':'LT'}).json()
+    rows={r['work_date']:r for r in loaded['schedules'][str(equipment)]}
+    assert rows['2026-10-16']['end_time']=='05:00' and rows['2026-10-13']['end_time']=='08:00'
+    # Invalid second override rolls back the valid first and quantity changes too.
+    plan['lines'][0]['quantities']['2026-10-12']=999
+    plan['work_times']=[overrides[0]|{'end_time':'06:00'},overrides[1]|{'next_day':False,'end_time':'07:00'}]
+    assert setup.client.put('/api/production/month-plan',json=plan).status_code==422
+    with setup.sessions() as db:
+        assert db.query(ProductionPlanWorkTime).filter_by(equipment_id=equipment,work_date='2026-10-12').one().end_time=='05:00'
+        assert db.query(ProductionMonthPlanDay).filter_by(work_date='2026-10-12').one().quantity==100
+    for bad in [overrides[0]|{'work_date':'2026-11-01'},overrides[0]|{'start_time':'24:00'},overrides[0]|{'equipment_id':other}]:
+        plan['work_times']=[bad]
+        assert setup.client.put('/api/production/month-plan',json=plan).status_code==422
+
+
+def test_existing_plan_time_migration_preserves_past_friday_and_is_idempotent(setup,monkeypatch):
+    from models.production_month_plan import ProductionPlanWorkTime
+    from models.production_plan_time_migration import ensure_production_plan_work_times
+    _,item,equipment,_=initialize(setup,monkeypatch)
+    assert setup.client.put('/api/production/month-plan',json=value(item,equipment)).status_code==200
+    with setup.sessions() as db:
+        db.query(ProductionPlanWorkTime).delete();db.commit()
+        engine=db.get_bind()
+    ensure_production_plan_work_times(engine,today=date(2026,10,12))
+    with setup.sessions() as db:
+        past=db.query(ProductionPlanWorkTime).filter_by(work_date='2026-10-09').one()
+        assert past.end_time=='05:00'
+        assert db.query(ProductionPlanWorkTime).filter_by(work_date='2026-10-16').one().end_time=='08:00'
+        past.end_time='06:00';db.commit()
+    ensure_production_plan_work_times(engine,today=date(2026,11,1))
+    with setup.sessions() as db:
+        assert db.query(ProductionPlanWorkTime).count()==31
+        assert db.query(ProductionPlanWorkTime).filter_by(work_date='2026-10-09').one().end_time=='06:00'
+        assert db.query(ProductionPlanWorkTime).filter_by(work_date='2026-10-16').one().end_time=='08:00'

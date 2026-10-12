@@ -229,8 +229,8 @@ def delete_equipment(
     row = db.get(EquipmentMaster, equipment_id)
     if not row:
         raise HTTPException(status_code=404, detail="설비를 찾을 수 없습니다.")
-    from models.production_month_plan import ProductionEquipmentSchedule, ProductionMonthPlanLine
-    if db.query(ProductionMonthPlanLine.id).filter_by(equipment_id=equipment_id).first() or db.query(ProductionEquipmentSchedule.id).filter_by(equipment_id=equipment_id).first():
+    from models.production_month_plan import ProductionEquipmentSchedule, ProductionMonthPlanLine, ProductionPlanWorkTime
+    if db.query(ProductionPlanWorkTime.id).filter_by(equipment_id=equipment_id).first() or db.query(ProductionMonthPlanLine.id).filter_by(equipment_id=equipment_id).first() or db.query(ProductionEquipmentSchedule.id).filter_by(equipment_id=equipment_id).first():
         raise HTTPException(409, '생산계획·가동 스케줄에서 사용한 설비는 삭제할 수 없습니다. 사용중지로 처리하세요.')
     db.delete(row)
     db.commit()

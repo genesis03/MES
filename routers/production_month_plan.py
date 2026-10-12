@@ -9,7 +9,7 @@ from core.security import get_current_user
 from models.models import ItemMasterModel,ProcessModel,ItemBomModel
 from models.equipment import EquipmentMaster
 from models.production_cycle_time import ProductionCycleTime
-from models.production_month_plan import ProductionMonthPlanLine,ProductionMonthPlanDay
+from models.production_month_plan import ProductionMonthPlanLine,ProductionMonthPlanDay,ProductionPlanWorkTime
 from routers.equipment_oee import require_access,machining_processes,validate_process,validate_equipment
 from services.oee_schedule import month_days,days,bounds
 from services.production_sync_mapping import stage_suffix
@@ -68,11 +68,20 @@ class LineInput(BaseModel):
         return value
 
 
+class WorkTimeInput(BaseModel):
+    equipment_id:int=Field(gt=0)
+    work_date:date
+    start_time:str=Field(pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
+    end_time:str=Field(pattern=r'^([01]\d|2[0-3]):[0-5]\d$')
+    next_day:bool=True
+
+
 class MonthInput(BaseModel):
     month:str
     process_code:str
     ct_effective_date:date
     lines:list[LineInput]=Field(max_length=200)
+    work_times:list[WorkTimeInput]=Field(default_factory=list,max_length=6200)
 
 
 @router.put('')
@@ -93,6 +102,24 @@ def save(payload:MonthInput,db:Session=Depends(get_db),user=Depends(get_current_
         row=existing.get(key)
         if row and (row.cycle_seconds!=value.cycle_seconds or row.expected_oee!=value.expected_oee):
             if not dates[0]<=payload.ct_effective_date<=dates[-1] or payload.ct_effective_date<today:raise HTTPException(422,'기존 C/T·계획 OEE 변경은 해당 월의 오늘 이후 적용일을 선택하세요. 이전 날짜의 값은 보존합니다.')
+    equipment_ids={r.equipment_id for r in existing.values()}|{v.equipment_id for v in payload.lines}
+    overrides={}
+    for value in payload.work_times:
+        validate_equipment(db,payload.process_code,value.equipment_id)
+        key=(value.equipment_id,value.work_date.isoformat())
+        if value.equipment_id not in equipment_ids or key[1] not in date_keys:raise HTTPException(422,'가동시간의 호기·날짜가 생산계획과 일치하지 않습니다.')
+        if key in overrides:raise HTTPException(422,'같은 호기·날짜의 가동시간이 중복되었습니다.')
+        bounds(dict(work_date=key[1],working=True,start_time=value.start_time,end_time=value.end_time,next_day=value.next_day))
+        overrides[key]=value
+    # Snapshot every day, including zero-quantity dates. Subsequent default changes cannot rewrite saved hours.
+    saved_times={(r.equipment_id,r.work_date):r for r in db.query(ProductionPlanWorkTime).filter(ProductionPlanWorkTime.equipment_id.in_(equipment_ids),ProductionPlanWorkTime.work_date.in_(date_keys))}
+    for equipment_id in equipment_ids:
+        for day in date_keys:
+            key=(equipment_id,day);saved=saved_times.get(key);override=overrides.get(key)
+            if saved is None:
+                saved=ProductionPlanWorkTime(equipment_id=equipment_id,work_date=day,start_time='08:00',end_time='08:00',next_day=True);db.add(saved)
+            if override:
+                saved.start_time=override.start_time;saved.end_time=override.end_time;saved.next_day=override.next_day
     for value in payload.lines:
         row=existing.get((value.equipment_id,value.item_id));new=row is None
         changed=new or row.cycle_seconds!=value.cycle_seconds or row.expected_oee!=value.expected_oee
