@@ -1,9 +1,20 @@
 from services.external_label_policy import label_metadata
 """Shared display values for external records and the production inquiry."""
 import json
+import re
 from datetime import timedelta, timezone
 from decimal import Decimal
 from services.lot_uniqueness import production_conflicts, lot_identity
+
+def external_machine_no(lot_no):
+    lot=str(lot_no or '').strip()
+    if lot.upper().startswith('LX'):
+        # External LX: prefix + date(8) + literal 0 + machine(1) + variable-length sequence.
+        match=re.fullmatch(r'LX[0-9]{8}0([0-9])[0-9]+',lot,re.IGNORECASE)
+        return match.group(1) if match else ''
+    machine=lot[-2:-1]
+    return machine if machine.isascii() and machine.isdigit() else ''
+
 
 def external_record_view(record, connections):
     item, connection_type = connections.resolve(record.part_no, record.process_name)
@@ -32,7 +43,7 @@ def external_record_view(record, connections):
     if not performance_type:
         suffix = connections.suffix(record.process_name)
         performance_type = 'ASSEMBLY' if suffix == '-C' else 'MACHINING' if suffix in ('-A', '-B', '-D') else ''
-    machine = record.lot_no.strip()[-2:-1]
+    machine = external_machine_no(record.lot_no)
     view = {
         'id': record.id, 'work_date': record.work_date, 'part_no': record.part_no,
         'part_name': item.part_name if item else raw.get('PRODUCT_NM', ''),
@@ -40,7 +51,7 @@ def external_record_view(record, connections):
         'connection_type': connection_type, 'source_process': record.process_name,
         'process_code': code, 'process_name': connections.processes.get(code, ''),
         'performance_type': performance_type, 'job_no': record.job_no, 'lot_no': record.lot_no,
-        'machine_no': machine if machine.isascii() and machine.isdigit() else '',
+        'machine_no': machine,
         'started_at': record.started_at or '', 'ended_at': record.ended_at or '',
         'job_qty': record.job_qty, 'lot_qty': record.lot_qty, 'fault_qty': record.fault_qty,
         'good_qty': record.job_qty, 'setup_qty': setup, 'total_qty': str(total) if total is not None else None,

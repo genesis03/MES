@@ -79,7 +79,8 @@ def test_native_oee_missing_cycle_and_overlapping_downtime_union(setup):
         assert row['runtime_seconds']==24*3600-45*60
 
 
-def test_external_performance_uses_registered_machine_and_item(setup):
+@pytest.mark.parametrize('lot,machine_no',[('LX20260325011','1'),('LX202603250612','6'),('LX2026032506123','6')])
+def test_external_performance_uses_registered_machine_and_item(setup,lot,machine_no):
     from test_production_sync import row, DAY
     from services import production_sync_service as sync
     from models.production_sync import ProductionSyncItemMap, ProductionSyncProcessMap
@@ -87,13 +88,14 @@ def test_external_performance_uses_registered_machine_and_item(setup):
     order,_,_,equipment,_=prepare(setup)
     with setup.sessions() as db:
         item=db.get(ProductionWorkOrder,order).item_id
+        db.get(EquipmentMaster,equipment).machine_no=machine_no
         db.add(ProductionCycleTime(item_id=item,seconds=30))
         plan_ct(db,equipment,item,DAY.isoformat(),30)
         db.add(ProductionSyncItemMap(source_part_no='EXTERNAL-A',source_process_name='복합선반',item_id=item))
         db.add(ProductionSyncProcessMap(source_name='복합선반',process_code='LT',performance_type='MACHINING'))
         db.commit()
     token,_=sync.claim(DAY,DAY,'MANUAL')
-    sync.save_day([row(lot='LX20260325011',PROC_TYPE_NM='복합선반')],token)
+    sync.save_day([row(lot=lot,PROC_TYPE_NM='복합선반')],token)
     with setup.sessions() as db:
         result=calculate(db,DAY,DAY,now=datetime(2026,3,26,12))
         machine=next(r for r in result['items'] if r['key']==str(equipment))

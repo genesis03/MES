@@ -17,10 +17,11 @@ def labels(response):
     return json.loads(re.search(r'const INTERNAL_LABELS\s*=\s*(.*);', response.text)[1])
 
 
-def test_production_label_mapping_reprint_and_fresh_validation(setup):
+@pytest.mark.parametrize('lot,machine',[('LX20260325016','1'),('LX202609300612','6'),('LX2026093006123','6')])
+def test_production_label_mapping_reprint_and_fresh_validation(setup,lot,machine):
     setup.app.include_router(router)
     token, _ = sync.claim(DAY, DAY, 'MANUAL')
-    sync.save_day([row(lot='LX20260325016')], token)
+    sync.save_day([row(lot=lot)], token)
     with setup.sessions() as db:
         item_id = add_item(db)
         db.add(ProductionSyncItemMap(source_part_no='EXTERNAL-A', source_process_name='Test machining', item_id=item_id))
@@ -28,8 +29,8 @@ def test_production_label_mapping_reprint_and_fresh_validation(setup):
         rid = db.query(ExternalProductionRecord).one().id
     url = f'/internal-labels/external-production/{rid}?auto=0'
     first = labels(setup.client.get(url))[0]
-    assert first['part_no'] == 'LOCAL-B' and first['lot_no'] == 'LX20260325016'
-    assert first['qty'] == 216 and first['equipment'] == '1호기'
+    assert first['part_no'] == 'LOCAL-B' and first['lot_no'] == lot
+    assert first['qty'] == 216 and first['equipment'] == machine+'호기'
     assert [float(x['value']) for x in first['extras']] == [216, 0, 115, 331]
     assert labels(setup.client.get(url))[0] == first
     with setup.sessions() as db:

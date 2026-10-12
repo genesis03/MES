@@ -712,9 +712,10 @@ def test_credentials_cannot_change_during_sync_and_test_does_not_save(setup,monk
     with setup.sessions() as db:assert db.get(ProductionSyncCredential,1) is None
 
 
-def test_general_inquiry_includes_external_bom_mapping_total_and_generated_lot_for_regular_user(setup):
+@pytest.mark.parametrize('lot,machine',[('LX20260325016','1'),('LX202609300612','6'),('LX2026093006123','6')])
+def test_general_inquiry_includes_external_bom_mapping_total_and_generated_lot_for_regular_user(setup,lot,machine):
     token, _ = lease(setup)
-    sync.save_day([row('LX20260325016', ITEM_NUM='310061', PROC_TYPE_NM='캡조립')], token)
+    sync.save_day([row(lot, ITEM_NUM='310061', PROC_TYPE_NM='캡조립')], token)
     with setup.sessions() as db:
         db.add(ProcessModel(process_code='ASSY', process_name='조립', created_at='2026-01-01'))
         parent = db.get(ItemMasterModel, add_item(db, part='310061'))
@@ -727,7 +728,7 @@ def test_general_inquiry_includes_external_bom_mapping_total_and_generated_lot_f
     record = reply[0]
     assert record['part_no'] == '310062-C' and record['total_qty'] == 331
     assert record['good_qty'] == 216 and record['defect_qty'] == 0 and record['setup_qty'] == 115
-    assert record['output_lot_no'] == 'LX20260325016' and record['equipment_name'] == '1호기'
+    assert record['output_lot_no'] == lot and record['equipment_name'] == machine+'호기'
     assert record['can_delete'] is False and record['record_source'] == 'EXTERNAL'
     assert record['id'].startswith('external:') and '외부 연동' in record['note']
     assert setup.client.get('/api/production/performance-status',params={'part_no':'310061'}).json()[0]['id'] == record['id']
@@ -787,3 +788,14 @@ def test_packing_connection_uses_actual_finished_material_code(setup):
         child=db.get(ItemMasterModel,add_item(db,part='310062-C'))
         add_bom(db,parent,child)
     assert setup.client.get('/api/production/external-sync/item-maps').json()[0]['part_no']=='310061'
+
+
+@pytest.mark.parametrize('lot,expected',[
+    ('LX202609300612','6'),('LX20260930066','6'),('LX2026093006123','6'),
+    ('LX20260325016','1'),(' lx202609300612 ','6'),
+    ('LX202609301612',''),('LX2026093006',''),('LX-NATIVE-001',''),
+    ('',''),('LB202609300612','1'),
+])
+def test_external_lx_machine_is_fixed_position_with_variable_sequence(lot,expected):
+    from services.production_sync_view import external_machine_no
+    assert external_machine_no(lot)==expected
