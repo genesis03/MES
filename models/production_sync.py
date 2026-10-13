@@ -81,3 +81,9 @@ class ProductionSyncProtocol(Base):
     __tablename__ = 'production_sync_protocol'
     id = Column(Integer, primary_key=True)
     encrypt_key = Column(String(8), nullable=False)
+
+
+class ProductionSyncFailureData(Base):
+    __tablename__ = 'production_sync_failure_data'
+    run_id = Column(Integer, ForeignKey('production_sync_runs.id'), primary_key=True)
+    data_json = Column(Text, nullable=False)

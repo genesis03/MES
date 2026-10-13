@@ -10,7 +10,7 @@ from sqlalchemy import or_, update
 from sqlalchemy.exc import IntegrityError
 from core import config
 from core.database import SessionLocal
-from models.production_sync import ExternalProductionRecord, ProductionSyncRun, ProductionSyncState
+from models.production_sync import ExternalProductionRecord, ProductionSyncRun, ProductionSyncState, ProductionSyncFailureData
 from services.production_sync_credentials import CredentialError, read_credentials
 from services.production_sync_client import ProductionClient, SyncError
 from services.lot_uniqueness import prepare_import
@@ -169,6 +169,7 @@ def execute(start, end, token, run_id, kind='production'):
     counts = {'received': 0, 'inserted': 0, 'updated': 0, 'unchanged': 0, 'completed_days': 0, 'warnings': []}
     querying_day = None
     error = None
+    failure_data = None
     try:
         username, password = read_credentials()
         client = Client(username, password)
@@ -197,6 +198,7 @@ def execute(start, end, token, run_id, kind='production'):
             querying_day = None
             raise SyncError('전체 기간에서 수신한 실적이 0건입니다. 조회 조건과 계정 권한을 확인해야 하므로 가져오기 완료로 확정하지 않습니다.')
     except (SyncError, CredentialError) as exc:
+        if kind=='production':failure_data=getattr(exc,'failure_data',None)
         error = f'{querying_day.isoformat()} 조회: {exc}' if querying_day else str(exc)
     except Exception:
         # Do not log raw responses or authentication payloads.
@@ -218,6 +220,9 @@ def execute(start, end, token, run_id, kind='production'):
             if run and run.status == 'RUNNING':
                 run.finished_at = instant; run.status = 'FAILED' if error else 'SUCCESS'
                 run.error = error; run.counts_json = json.dumps(counts, ensure_ascii=False)
+                if failure_data:
+                    saved=db.get(ProductionSyncFailureData,run_id)
+                    if saved is None:db.add(ProductionSyncFailureData(run_id=run_id,data_json=json.dumps(failure_data,ensure_ascii=False)))
             db.commit()
 
 

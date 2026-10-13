@@ -3,7 +3,7 @@ from typing import Literal
 from datetime import date, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from sqlalchemy import case, or_, tuple_, update
@@ -13,7 +13,7 @@ from core.database import get_db
 from core.security import check_admin_permission, get_current_user
 from models.models import ItemMasterModel, ProcessModel
 from models.packing_sync import ExternalPackingRecord, PackingSyncState
-from models.production_sync import ExternalProductionRecord, ProductionSyncProcessMap, ProductionSyncRun, ProductionSyncItemMap, ProductionSyncState
+from models.production_sync import ExternalProductionRecord, ProductionSyncProcessMap, ProductionSyncRun, ProductionSyncItemMap, ProductionSyncState, ProductionSyncFailureData
 from services.production_sync_client import SyncError, ProductionClient
 from services.production_sync_credentials import CredentialError, credential_status, read_credentials, save_credentials, read_protocol_key, save_protocol_key
 from services.production_sync_service import credentials_ready, now, start_manual, state, today
@@ -183,10 +183,22 @@ def run(payload: Run, user=Depends(get_current_user)):
 @router.get('/api/production/external-sync/runs')
 def runs(db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
-    return [{'id': row.id, 'started_at': local_time(row.started_at), 'finished_at': local_time(row.finished_at),
+    available={r[0] for r in db.query(ProductionSyncFailureData.run_id)}
+    return [{'has_error_data':row.id in available,'id': row.id, 'started_at': local_time(row.started_at), 'finished_at': local_time(row.finished_at),
              'start_date': row.start_date, 'end_date': row.end_date, 'trigger': row.trigger, 'status': row.status,
              'counts': json.loads(row.counts_json), 'error': row.error or ''}
             for row in db.query(ProductionSyncRun).order_by(ProductionSyncRun.id.desc()).limit(30)]
+
+
+@router.get('/api/production/external-sync/runs/{run_id}/error-excel')
+def error_excel(run_id:int,db:Session=Depends(get_db),user=Depends(get_current_user)):
+    access(user)
+    saved=db.get(ProductionSyncFailureData,run_id)
+    if saved is None:raise HTTPException(404,'보관된 오류 원본이 없습니다. 업데이트 후 오류가 난 날짜를 다시 가져오면 원본이 저장됩니다.')
+    from services.production_sync_error_excel import build_error_excel
+    data=json.loads(saved.data_json)
+    content=build_error_excel(data)
+    return Response(content,media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename="ProductionSyncError_{data["work_date"]}_{run_id}.xlsx"'})
 
 
 @router.get('/api/production/external-sync/process-maps')

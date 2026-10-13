@@ -65,7 +65,7 @@ def time_range(value,day,night=False):
     return start,end
 
 
-def parse_daily(values,day,machine,shift,allow_aggregate=False):
+def _parse_daily(values,day,machine,shift,allow_aggregate=False):
     name,machine_id,process,process_name=machine
     shift_code,shift_name,shift_type=shift
     for key,expected in [('JOB_DATE',day.isoformat()),('MACH_NO',machine_id),('PROC_TYPE',process),('SHIFT_TYPE',shift_code)]:
@@ -118,6 +118,17 @@ def parse_daily(values,day,machine,shift,allow_aggregate=False):
             materials.append(dict(lot_no=lot.strip(),qty=str(quantity(qty.strip(),'투입 LOT'))))
         rows.append(dict(ITEM_NUM=arrays['ITEM_NUM'][i],PRODUCT_NM=arrays['PRODUCT_NM'][i],PROC_TYPE_NM=process_name,JOB_TIME=day.strftime('%Y%m%d'),JOB_ST_TIME=a.strftime('%Y%m%d%H%M%S'),JOB_END_TIME=b.strftime('%Y%m%d%H%M%S'),JOB_NUM=rel,LOT_NUM=arrays['LOT_NUM'][i],JOB_QTY=str(good),LOT_QTY=str(good+combined),FAULT_QTY=str(defect),F10=str(setup),DAILY_SOURCE=True,SHIFT_TYPE=shift_type,SHIFT_NAME=shift_name,OPERATOR_NAME=arrays['JOB_USER_NM'][i],MACHINE_NAME=name,MACHINE_NO=str(int(name.split('-')[1])),MATERIAL_LOTS=materials,DOWNTIMES=stops,UNASSIGNED_DOWNTIME_NOTE=unassigned_note,DEFECTS=details,SOURCE_FAULT_WITH_SETUP=str(combined),DAILY_REL_IDS=[r for r in related_ids if r],AGGREGATE_ONLY=aggregate))
     return rows,warnings
+
+
+def parse_daily(values,day,machine,shift,allow_aggregate=False):
+    try:
+        return _parse_daily(values,day,machine,shift,allow_aggregate)
+    except protocol.SyncError as exc:
+        # Retain only the observed production datasets, never login context, cookies or server diagnostics.
+        prefixes=(COND,DATA,STOP,FAULT,'MES.Product.RunDailyList.RunRelSet.')
+        exc.failure_data=dict(work_date=day.isoformat(),equipment=machine[0],process=machine[3],shift=shift[1],
+            error=str(exc),assembly=allow_aggregate,fields={k:v for k,v in values.items() if k.startswith(prefixes) and not any(part in k.upper() for part in ('PASSWORD','USER_PASS','COOKIE','TOKEN','SECRET'))})
+        raise
 
 
 def fetch_day(client,day):
