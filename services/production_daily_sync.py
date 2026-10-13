@@ -82,7 +82,7 @@ def _parse_daily(values,day,machine,shift,allow_aggregate=False):
         return [],[]
     count=len((scalar(values,DATA+'ITEM_NUM') if aggregate or not lot_value else lot_value).split(','))
     keys='ITEM_NUM LOT_NUM RULE_NO JOB_PROD_QTY JOB_FAULT_QTY SET_UP_QTY JOB_TIME_STRING JOB_USER_NM PRODUCT_NM PREV_LOT_STR'.split()
-    arrays=columns(values,DATA,keys,count,required=[k for k in keys[:7] if k!='LOT_NUM'],free_text=['PRODUCT_NM'])
+    arrays=columns(values,DATA,keys,count,required=[k for k in keys[:7] if k!='LOT_NUM' and not (allow_aggregate and k=='JOB_TIME_STRING')],free_text=['PRODUCT_NM'])
     raw_product=scalar(values,DATA+'PRODUCT_NM')
     unassigned_product=raw_product if count>1 and raw_product and len(raw_product.split(','))!=count else ''
     related_ids=scalar(values,'MES.Product.RunDailyList.RunRelSet.REL_NO').split(',')
@@ -112,6 +112,9 @@ def _parse_daily(values,day,machine,shift,allow_aggregate=False):
         defect=combined-setup;rel=arrays['RULE_NO'][i]
         details=[{k:v for k,v in d.items() if k!='rel_no'} for d in defects if d['rel_no']==rel or aggregate and count==1]
         if details and sum(Decimal(str(d['qty'])) for d in details)!=defect:warnings.append('불량 합계와 유형별 상세 합계가 다른 작업이 있습니다.')
+        if allow_aggregate and not arrays['JOB_TIME_STRING'][i].strip():
+            warnings.append(name+' 조립 작업일보의 작업시간이 없어 해당 품번의 기존 실적을 유지했습니다: '+arrays['ITEM_NUM'][i])
+            continue
         a,b=time_range(arrays['JOB_TIME_STRING'][i],day,shift_type=='NIGHT')
         if not arrays['LOT_NUM'][i].strip():
             empty=good==combined==setup==0 and a==b and not arrays['PREV_LOT_STR'][i].strip() and not any(d['qty'] for d in details)

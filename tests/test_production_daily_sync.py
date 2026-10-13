@@ -322,3 +322,29 @@ def test_assembly_product_name_comma_does_not_block_three_valid_records():
     values[DATA+'JOB_PROD_QTY']=['100,200']
     with pytest.raises(source.SyncError,match='JOB_PROD_QTY'):
         parse_daily(values,DAY,ASSEMBLY_MACHINES[0],SHIFTS[0],allow_aggregate=True)
+
+
+def test_assembly_missing_work_time_keeps_other_rows_and_existing_lots(monkeypatch):
+    values=daily_response(machine=ASSEMBLY_MACHINES[0],empty=True)
+    fields=dict(ITEM_NUM='310189-1,310186-1,310061',LOT_NUM='',RULE_NO='job1,job2,job3',JOB_PROD_QTY='1443,1433,100',JOB_FAULT_QTY='0,0,0',SET_UP_QTY='0,0,0',JOB_TIME_STRING=' , ,08:00 ~ 18:00',JOB_USER_NM='Worker,Worker,Worker',PRODUCT_NM='Right,Left,Terminal',PREV_LOT_STR='')
+    values.update({DATA+k:[v] for k,v in fields.items()})
+    rows,warnings=parse_daily(values,DAY,ASSEMBLY_MACHINES[0],SHIFTS[0],allow_aggregate=True)
+    assert [r['ITEM_NUM'] for r in rows]==['310061']
+    assert len(warnings)==2 and all('작업시간이 없어' in w for w in warnings)
+    client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
+    legacy=[row(lot='LA'+DAY.strftime('%Y%m%d')+'011',ITEM_NUM='310189-1',PROC_TYPE_NM='캡조립')]
+    original=[dict(r) for r in legacy]
+    # Missing times must not rewrite the existing LOT quantity or metadata.
+    values[DATA+'JOB_TIME_STRING']=[' , , ']
+    monkeypatch.setattr(source,'query_with_retry',lambda _,payload: values if payload[COND+'MACH_NM']=='AS-01' else daily_response(machine=ASSEMBLY_MACHINES[1],empty=True))
+    from services.production_daily_sync import supplement_assembly
+    notes=supplement_assembly(client,DAY,legacy)
+    assert legacy==original
+    assert len(notes)==3
+
+
+def test_machining_missing_work_time_still_blocks_invalid_production():
+    values=daily_response()
+    values[DATA+'JOB_TIME_STRING']=[' ']
+    with pytest.raises(source.SyncError,match='JOB_TIME_STRING'):
+        parse_daily(values,DAY,MACHINES[0],SHIFTS[0])
