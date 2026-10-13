@@ -105,6 +105,13 @@ def test_external_performance_uses_registered_machine_and_item(setup,lot,machine
         assert machine['oee']==pytest.approx(216*30/(24*3600))
         partial=calculate(db,DAY,DAY,now=datetime(2026,3,26))
         assert partial['planned_seconds']==16*3600
+        from models.production_month_plan import ProductionMonthPlanDay
+        db.query(ProductionMonthPlanDay).filter_by(work_date=DAY.isoformat()).delete();db.commit()
+        filtered=calculate(db,DAY,DAY,now=datetime(2026,3,26,12),exclude_unplanned=True)
+        assert filtered['summary']['excluded_records']==1
+        assert filtered['summary']['excluded_total_qty']==331
+        assert filtered['summary']['total_qty']==0 and filtered['summary']['runtime_seconds']==0
+        assert calculate(db,DAY,DAY,now=datetime(2026,3,26,12))['summary']['total_qty']==331
 
 
 def test_cycle_api_enforces_readonly_menu_permission(setup):
@@ -176,3 +183,61 @@ def test_all_only_managed_processes_and_same_machine_number_separated(setup):
     assert response.status_code==200
     assert {r['process_code'] for r in response.json()['items']}=={'LT','TP'}
     assert setup.client.get('/api/production/equipment/oee',params={'start_date':DAY.isoformat(),'end_date':DAY.isoformat(),'process_code':'SER'}).status_code==422
+
+
+def test_optional_exclusion_uses_equipment_item_and_day_and_preserves_original(setup):
+    from models.production import ProductionWorkOrder
+    order,_,_,equipment,_=prepare(setup)
+    setup.app.include_router(router)
+    with setup.sessions() as db:
+        item=db.get(ProductionWorkOrder,order).item_id
+        other=add_item(db,part='NO-PLAN-A',code='LT')
+        unknown_order=ProductionWorkOrder(work_order_no='UNPLANNED',order_date='2026-10-12',item_id=other,part_no='NO-PLAN-A',order_qty=100)
+        db.add(unknown_order);db.flush()
+        plan_ct(db,equipment,item,'2026-10-12',30)
+        for order_id,day,shift in [(order,'2026-10-12','DAY'),(unknown_order.id,'2026-10-12','NIGHT'),(order,'2026-10-13','DAY')]:
+            db.add(ProductionPerformance(work_order_id=order_id,performance_date=day,process_code='LT',equipment_id=equipment,shift_type=shift,good_qty=100))
+        db.commit()
+        original=calculate(db,date(2026,10,12),date(2026,10,13),now=datetime(2026,10,15))
+        filtered=calculate(db,date(2026,10,12),date(2026,10,13),now=datetime(2026,10,15),exclude_unplanned=True)
+        row=next(r for r in filtered['items'] if r['key']==str(equipment))
+        assert original['summary']['total_qty']==300
+        assert original['summary']['performance'] is None and original['summary']['oee'] is None
+        assert original['summary']['runtime_seconds']==36*3600
+        assert row['total_qty']==100 and row['runtime_seconds']==12*3600
+        assert row['planned_seconds']==24*3600 and row['downtime_seconds']==12*3600
+        assert row['excluded_records']==2 and row['excluded_total_qty']==200
+        from models.models import ItemMasterModel
+        assert set(row['excluded_parts'])=={'NO-PLAN-A',db.get(ItemMasterModel,item).part_no}
+        assert filtered['summary']['performance']==pytest.approx(3000/(12*3600))
+        assert filtered['summary']['oee']==pytest.approx(3000/(24*3600))
+        assert db.query(ProductionPerformance).count()==3
+    params={'start_date':'2026-10-12','end_date':'2026-10-13'}
+    default=setup.client.get('/api/production/equipment/oee',params=params).json()
+    assert default['exclude_unplanned'] is False and default['summary']['total_qty']==300
+    selected=setup.client.get('/api/production/equipment/oee',params=params|{'exclude_unplanned':'true'}).json()
+    assert selected['exclude_unplanned'] is True and selected['summary']['excluded_records']==2
+
+
+def test_summary_aggregates_selected_process_with_weighted_ratios(setup):
+    from models.production import ProductionWorkOrder
+    order,_,_,equipment,_=prepare(setup)
+    with setup.sessions() as db:
+        item=db.get(ProductionWorkOrder,order).item_id
+        tap=EquipmentMaster(equipment_code='SUMMARY-TP',equipment_name='탭핑 1호기',process_code='TP',machine_no='1');db.add(tap);db.flush()
+        for equip,process,good,defect in [(equipment,'LT',100,0),(tap.id,'TP',100,100)]:
+            plan_ct(db,equip,item,'2026-10-12',30)
+            db.add(ProductionPerformance(work_order_id=order,performance_date='2026-10-12',process_code=process,equipment_id=equip,shift_type='DAY',good_qty=good,defect_qty=defect))
+        db.commit()
+        report=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,15))
+        summary=report['summary'];base=(24+20.5)*3600;runtime=12*3600+620*60
+        assert summary['name']=='전체 종합 (복합선반·탭핑)'
+        assert summary['total_qty']==300 and summary['good_qty']==200
+        assert summary['planned_seconds']==base and summary['runtime_seconds']==runtime
+        assert summary['availability']==pytest.approx(runtime/base)
+        assert summary['performance']==pytest.approx(300*30/runtime)
+        assert summary['quality']==pytest.approx(2/3)
+        assert summary['oee']==pytest.approx(200*30/base)
+        lathe=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,15),process_code='LT')['summary']
+        assert lathe['name']=='복합선반 종합' and lathe['total_qty']==100
+        assert lathe['planned_seconds']==24*3600

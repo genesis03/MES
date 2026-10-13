@@ -77,11 +77,11 @@ def remove(item_id:int,db:Session=Depends(get_db),user=Depends(get_current_user)
 
 
 @router.get('/api/production/equipment/oee')
-def report(start_date:date,end_date:date,process_code:str|None=None,db:Session=Depends(get_db),user=Depends(get_current_user)):
+def report(start_date:date,end_date:date,process_code:str|None=None,exclude_unplanned:bool=False,db:Session=Depends(get_db),user=Depends(get_current_user)):
     require_access(user,'/production/equipment/status')
     if end_date<start_date or (end_date-start_date).days>366:raise HTTPException(422,'조회기간은 시작일부터 최대 367일까지 선택하세요.')
     if process_code:validate_process(db,process_code)
-    return calculate(db,start_date,end_date,process_code=process_code)
+    return calculate(db,start_date,end_date,process_code=process_code,exclude_unplanned=exclude_unplanned)
 
 
 def machining_processes(db):

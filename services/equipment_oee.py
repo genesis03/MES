@@ -34,7 +34,7 @@ def merge_intervals(intervals):
     return merged
 
 
-def calculate(db,start_day,end_day,now=None,process_code=None):
+def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=False):
     now=now or datetime.now(ZoneInfo('Asia/Seoul')).replace(tzinfo=None)
     start=datetime.combine(start_day,time());end=min(datetime.combine(end_day+timedelta(days=1),time()),now)
     processes={p.process_code:p for p in db.query(ProcessModel)}
@@ -56,18 +56,25 @@ def calculate(db,start_day,end_day,now=None,process_code=None):
             segments,holidays=workday_segments(db,e.process_code,start_day,end_day,now,e.id) if e else ([],[])
             excluded.update({r['work_date']:r for r in holidays})
             periods=merge_intervals([(a,b) for a,b,_ in segments])
-            groups[key]=dict(segments=segments,intervals=periods,shift_days={},process_code=e.process_code if e else key.split(':')[1],planned_stop_seconds=weighted_seconds([(a,b,1-weight) for a,b,weight in segments]),key=key,equipment_name=e.equipment_name if e else key.split(':',1)[1]+' (호기 연결 미확인)',planned_seconds=weighted_seconds(segments),good_qty=0,total_qty=0,ideal_seconds=0,downtime_intervals=[],issues=[],parts={},missing=set())
+            groups[key]=dict(segments=segments,intervals=periods,shift_days={},process_code=e.process_code if e else key.split(':')[1],planned_stop_seconds=weighted_seconds([(a,b,1-weight) for a,b,weight in segments]),key=key,equipment_name=e.equipment_name if e else key.split(':',1)[1]+' (호기 연결 미확인)',planned_seconds=weighted_seconds(segments),good_qty=0,total_qty=0,ideal_seconds=0,downtime_intervals=[],issues=[],parts={},missing=set(),excluded_records=0,excluded_total_qty=0,excluded_good_qty=0,excluded_parts=set())
         return groups[key]
     for e in equipment.values():
         if e.is_active=='Y':group(str(e.id))
     cycles={(line.equipment_id,line.item_id,day.work_date):day.cycle_seconds for day,line in db.query(ProductionMonthPlanDay,ProductionMonthPlanLine).join(ProductionMonthPlanLine,ProductionMonthPlanLine.id==ProductionMonthPlanDay.line_id).filter(ProductionMonthPlanDay.work_date>=start_day.isoformat(),ProductionMonthPlanDay.work_date<=end_day.isoformat())}
     items={i.id:i for i in db.query(ItemMasterModel)}
     def add(key,item_id,part_no,total,good,source,work_date,shift=None):
-        g=group(key);g['good_qty']+=float(good or 0)
+        g=group(key)
+        cycle=cycles.get((int(key),item_id,work_date)) if key.isdigit() else None
+        if exclude_unplanned and cycle is None:
+            g['excluded_records']+=1
+            g['excluded_total_qty']+=float(total or 0)
+            g['excluded_good_qty']+=float(good or 0)
+            g['excluded_parts'].add(part_no)
+            return
+        g['good_qty']+=float(good or 0)
         day=g['shift_days'].setdefault(work_date,dict(shifts=set(),unknown=0))
         if shift in ('DAY','NIGHT'):day['shifts'].add(shift)
         else:day['unknown']+=1
-        cycle=cycles.get((int(key),item_id,work_date)) if key.isdigit() else None
         p=g['parts'].setdefault((part_no,cycle),dict(part_no=part_no,total_qty=0,good_qty=0,cycle_seconds=cycle,sources=set()))
         p['good_qty']+=float(good or 0);p['sources'].add(source)
         if total is None:g['issues'].append(part_no+': 총생산수량 미확인');return
@@ -109,7 +116,20 @@ def calculate(db,start_day,end_day,now=None,process_code=None):
         oee=availability*performance*quality if None not in (availability,performance,quality) else (0 if planned and not g['total_qty'] else None)
         g.update(registered_downtime_seconds=registered_downtime,downtime_seconds=downtime,runtime_seconds=runtime,availability=availability,performance=performance,quality=quality,oee=oee)
         if performance is not None and performance>1:g['issues'].append('성능률 100% 초과: 사이클타임·실적·비가동 기록 확인')
+        g['excluded_parts']=sorted(g['excluded_parts'])
+        if g['excluded_records']:g['issues'].append(f"생산계획 C/T 미등록 실적 제외: {g['excluded_records']}건 · "+', '.join(g['excluded_parts']))
         g['parts']=list(g['parts'].values())
         for p in g['parts']:p['sources']=sorted(p['sources'])
         result.append(g)
-    return dict(items=sorted(result,key=lambda x:x['equipment_name']),holidays=[dict(date=r['work_date'],name=r['holiday'],working=r['working']) for r in sorted(excluded.values(),key=lambda r:r['work_date'])],as_of=now.isoformat(timespec='minutes'),planned_seconds=sum(g['planned_seconds'] for g in result),process_code=process_code or '')
+    summary={field:sum(row[field] for row in result) for field in (
+        'planned_seconds','planned_stop_seconds','downtime_seconds','runtime_seconds',
+        'total_qty','good_qty','ideal_seconds','excluded_records','excluded_total_qty','excluded_good_qty')}
+    planned,runtime,total=summary['planned_seconds'],summary['runtime_seconds'],summary['total_qty']
+    incomplete=any(row['performance'] is None and row['parts'] for row in result)
+    unconfirmed=any('총생산수량' in issue for row in result for issue in row['issues'])
+    availability=runtime/planned if planned else None
+    performance=summary['ideal_seconds']/runtime if runtime and not incomplete else (0 if planned and not total else None)
+    quality=summary['good_qty']/total if total and not unconfirmed else None
+    oee=availability*performance*quality if None not in (availability,performance,quality) else (0 if planned and not total and not unconfirmed else None)
+    summary.update(name=processes[process_code].process_name+' 종합' if process_code in processes else '전체 종합 (복합선반·탭핑)',availability=availability,performance=performance,quality=quality,oee=oee)
+    return dict(summary=summary,exclude_unplanned=exclude_unplanned,items=sorted(result,key=lambda x:x['equipment_name']),holidays=[dict(date=r['work_date'],name=r['holiday'],working=r['working']) for r in sorted(excluded.values(),key=lambda r:r['work_date'])],as_of=now.isoformat(timespec='minutes'),planned_seconds=sum(g['planned_seconds'] for g in result),process_code=process_code or '')
