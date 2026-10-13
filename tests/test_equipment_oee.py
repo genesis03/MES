@@ -67,7 +67,7 @@ def test_native_oee_missing_cycle_and_overlapping_downtime_union(setup):
         row=next(r for r in result['items'] if r['key']==str(equipment))
         assert row['planned_seconds']==0
         assert row['downtime_seconds']==0
-        assert row['oee'] is None and '생산계획 C/T 미등록' in row['issues'][0]
+        assert row['oee'] is None and any('생산계획 C/T 미등록' in issue for issue in row['issues'])
         db.add(ProductionCycleTime(item_id=item,seconds=60));plan_ct(db,equipment,item,'2026-10-12',60);db.commit()
         result=calculate(db,date(2026,10,12),date(2026,10,17),now=datetime(2026,10,19))
         row=next(r for r in result['items'] if r['key']==str(equipment))
@@ -75,8 +75,9 @@ def test_native_oee_missing_cycle_and_overlapping_downtime_union(setup):
         assert row['quality']==.9
         assert row['oee']==pytest.approx(900*60/(24*3600))
         assert row['planned_seconds']==24*3600
-        assert row['downtime_seconds']==45*60
-        assert row['runtime_seconds']==24*3600-45*60
+        assert row['registered_downtime_seconds']==45*60
+        assert row['downtime_seconds']==12*3600
+        assert row['runtime_seconds']==12*3600
 
 
 @pytest.mark.parametrize('lot,machine_no',[('LX20260325011','1'),('LX202603250612','6'),('LX2026032506123','6')])
@@ -115,3 +116,63 @@ def test_cycle_api_enforces_readonly_menu_permission(setup):
     assert setup.client.get('/api/production/cycle-times').status_code==200
     assert setup.client.put('/api/production/cycle-times/1',json={'seconds':60}).status_code==403
     assert setup.client.get('/api/production/equipment/oee',params={'start_date':'2026-10-12','end_date':'2026-10-12'}).status_code==403
+
+
+@pytest.mark.parametrize('process,shifts,minutes',[
+    ('LT',['DAY'],720),('LT',['DAY','NIGHT'],1440),
+    ('LT',['DAY','DAY','NIGHT'],1440),('LT',[None,None,None],1440),
+    ('TP',['DAY'],620),('TP',['NIGHT'],610),('TP',['DAY','NIGHT'],1230),
+    ('TP',[None],620),('TP',[None,None,None],1230),('TP',[],0),
+])
+def test_equipment_shift_runtime_and_remaining_downtime(setup,process,shifts,minutes):
+    from models.production import ProductionWorkOrder
+    order,_,_,equipment,_=prepare(setup)
+    with setup.sessions() as db:
+        db.get(EquipmentMaster,equipment).process_code=process
+        item=db.get(ProductionWorkOrder,order).item_id
+        plan_ct(db,equipment,item,'2026-10-12',30)
+        for shift in shifts:
+            db.add(ProductionPerformance(work_order_id=order,performance_date='2026-10-12',process_code=process,shift_type=shift,equipment_id=equipment,good_qty=100))
+        db.commit()
+        row=next(r for r in calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20))['items'] if r['key']==str(equipment))
+        base=24*3600-(190*60 if process=='TP' else 0)
+        assert row['runtime_seconds']==minutes*60
+        assert row['planned_seconds']==pytest.approx(base)
+        assert row['planned_stop_seconds']==pytest.approx(190*60 if process=='TP' else 0)
+        assert row['downtime_seconds']==pytest.approx(base-minutes*60)
+
+
+def test_all_only_managed_processes_and_same_machine_number_separated(setup):
+    from models.models import ProcessModel
+    from models.production import ProductionWorkOrder
+    from test_production_sync import row,DAY
+    from services import production_sync_service as sync
+    from models.production_sync import ProductionSyncItemMap,ProductionSyncProcessMap
+    order,_,_,equipment,_=prepare(setup)
+    setup.app.include_router(router)
+    with setup.sessions() as db:
+        item=db.get(ProductionWorkOrder,order).item_id
+        tap=EquipmentMaster(equipment_code='TP1',equipment_name='탭핑 1호기',process_code='TP',machine_no='1')
+        db.add(ProcessModel(process_code='SER',process_name='세레이션',is_active='Y',created_at='2026-01-01'))
+        db.add(tap);db.flush()
+        db.add(EquipmentMaster(equipment_code='SER1',equipment_name='세레이션 1호기',process_code='SER',machine_no='1'))
+        for e in [equipment,tap.id]:plan_ct(db,e,item,DAY.isoformat(),30)
+        db.add(ProductionSyncItemMap(source_part_no='EXTERNAL-A',source_process_name='복합선반',item_id=item))
+        db.add(ProductionSyncItemMap(source_part_no='EXTERNAL-A',source_process_name='탭핑',item_id=item))
+        db.add(ProductionSyncProcessMap(source_name='복합선반',process_code='LT'))
+        db.add(ProductionSyncProcessMap(source_name='탭핑',process_code='TP'))
+        db.commit();tap_id=tap.id
+    token,_=sync.claim(DAY,DAY,'MANUAL')
+    sync.save_day([row(lot='LX20260325011',PROC_TYPE_NM='복합선반'),row(lot='LB20260325011',PROC_TYPE_NM='탭핑')],token)
+    with setup.sessions() as db:
+        rows=calculate(db,DAY,DAY,now=datetime(2026,3,27))['items']
+        assert {r['process_code'] for r in rows}=={'LT','TP'}
+        by_id={r['key']:r for r in rows}
+        assert by_id[str(equipment)]['total_qty']==331
+        assert by_id[str(tap_id)]['total_qty']==331
+        assert by_id[str(equipment)]['runtime_seconds']==12*3600
+        assert by_id[str(tap_id)]['runtime_seconds']==620*60
+    response=setup.client.get('/api/production/equipment/oee',params={'start_date':DAY.isoformat(),'end_date':DAY.isoformat()})
+    assert response.status_code==200
+    assert {r['process_code'] for r in response.json()['items']}=={'LT','TP'}
+    assert setup.client.get('/api/production/equipment/oee',params={'start_date':DAY.isoformat(),'end_date':DAY.isoformat(),'process_code':'SER'}).status_code==422

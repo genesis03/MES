@@ -11,7 +11,7 @@ from models.models import ItemMasterModel, ItemBomModel, ProcessModel
 from services.production_sync_mapping import stage_suffix
 from models.equipment import EquipmentMaster
 from models.production_cycle_time import ProductionCycleTime
-from services.equipment_oee import lathe_codes, calculate
+from services.equipment_oee import calculate
 from services.production_process_type import performance_type_for_process
 from services.oee_schedule import month_days, days
 
