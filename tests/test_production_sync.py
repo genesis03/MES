@@ -75,7 +75,7 @@ def lease(setup, trigger='MANUAL'):
 
 def test_adapter_uses_exact_command_dates_and_preserves_setup(monkeypatch):
     client = source.ProductionClient.__new__(source.ProductionClient)
-    client.opener = object(); client.context = {'Common.Set.LoginUserSet.USER_ID': 'test-user'}
+    client.opener = object(); client.context = {'Common.Set.LoginUserSet.USER_ID': 'test-user'}; client.fetch_day=client.fetch_lot_day
     captured = []
     def post(opener, payload):
         captured.append(payload)
@@ -91,7 +91,7 @@ def test_adapter_uses_exact_command_dates_and_preserves_setup(monkeypatch):
 
 
 def test_padded_query_recovers_rows_from_exclusive_bounds_and_filters_neighbors(monkeypatch):
-    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
+    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}; client.fetch_day=client.fetch_lot_day
     def reply(_, payload):
         start = date.fromisoformat(payload['MES.Product.Set.JobCondSet.JOB_DATE1'])
         end = date.fromisoformat(payload['MES.Product.Set.JobCondSet.JOB_DATE2'])
@@ -121,7 +121,7 @@ def test_zero_year_import_does_not_complete_initial_sync(setup, monkeypatch):
 
 @pytest.mark.parametrize('change', [{'F10': ''}, {'F10': '-1'}, {'JOB_QTY': 'NaN'}, {'JOB_TIME': '20260322'}, {'JOB_ST_TIME': 'invalid'}, {'LOT_NUM': ''}])
 def test_adapter_rejects_invalid_rows(monkeypatch, change):
-    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
+    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}; client.fetch_day=client.fetch_lot_day
     monkeypatch.setattr(source, 'post', lambda *_: response([row(**change)]))
     with pytest.raises(source.SyncError):
         client.fetch_day(DAY)
@@ -131,7 +131,7 @@ def test_adapter_rejects_invalid_rows(monkeypatch, change):
     ({'F10': ''}, 'F10'), ({'JOB_TIME': 'invalid'}, 'JOB_TIME'),
     ({'JOB_END_TIME': '20260325250000'}, 'JOB_END_TIME')])
 def test_format_error_identifies_row_and_field_without_retry(monkeypatch, change, field):
-    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
+    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}; client.fetch_day=client.fetch_lot_day
     calls = []
     def reply(*_):
         calls.append(1)
@@ -144,7 +144,7 @@ def test_format_error_identifies_row_and_field_without_retry(monkeypatch, change
 
 
 def test_transient_timeout_retries_same_day_without_duplicate_save(setup, monkeypatch):
-    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
+    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}; client.fetch_day=client.fetch_lot_day
     calls = []
     def reply(_, payload):
         calls.append(payload['MES.Product.Set.JobCondSet.JOB_DATE1'])
@@ -184,7 +184,7 @@ def test_http_auth_failure_is_not_retried(monkeypatch):
 
 
 def test_ambiguous_product_name_does_not_shift_quantities(monkeypatch):
-    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
+    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}; client.fetch_day=client.fetch_lot_day
     monkeypatch.setattr(source, 'post', lambda *_: response([row(PRODUCT_NM='A,B')]))
     rows, warnings = client.fetch_day(DAY)
     assert rows[0]['PRODUCT_NM'] == '' and rows[0]['F10'] == '115' and warnings
@@ -199,7 +199,7 @@ def empty_query_response():
 
 def test_empty_day_without_dataset_continues_to_next_day(setup, monkeypatch):
     client = source.ProductionClient.__new__(source.ProductionClient)
-    client.opener = object(); client.context = {}
+    client.opener = object(); client.context = {}; client.fetch_day=client.fetch_lot_day
     requested = []
     def post(_, payload):
         requested.append(payload['MES.Product.Set.JobCondSet.JOB_DATE1'])
@@ -231,7 +231,7 @@ def test_empty_day_without_dataset_continues_to_next_day(setup, monkeypatch):
 ])
 def test_missing_dataset_is_not_treated_as_empty_when_response_is_uncertain(monkeypatch, change):
     client = source.ProductionClient.__new__(source.ProductionClient)
-    client.opener = object(); client.context = {}
+    client.opener = object(); client.context = {}; client.fetch_day=client.fetch_lot_day
     monkeypatch.setattr(source, 'post', lambda *_: empty_query_response() | change)
     with pytest.raises(source.SyncError):
         client.fetch_day(DAY)
@@ -239,7 +239,7 @@ def test_missing_dataset_is_not_treated_as_empty_when_response_is_uncertain(monk
 
 @pytest.mark.parametrize('change', [{'Common.Set.LotSet.ROW_COUNT': ['2']}, {'Common.Set.LotSet.F10': ['115,3']}])
 def test_adapter_rejects_count_mismatch(monkeypatch, change):
-    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}
+    client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}; client.fetch_day=client.fetch_lot_day
     monkeypatch.setattr(source, 'post', lambda *_: response([row()]) | change)
     with pytest.raises(source.SyncError):
         client.fetch_day(DAY)
@@ -618,8 +618,14 @@ def test_http_login_cookie_and_list_protocol(monkeypatch,bootstrap_key,kind):
             else:
                 assert 'ASP.NET_SessionId=synthetic-session' in self.headers.get('Cookie', '')
                 assert payload['Common.Set.LoginUserSet.COMP_NO'] == ['company-id']
-                assert payload['run.object.name'] == ['MES.Product.ProcLotList.ProcLotListObj' if kind=='production' else 'MES.Stock.PackList.PackListObj']
-                result=response([row()]) if kind=='production' else pack_response([pack_row()])
+                if payload['run.object.name']==['MES.Product.RunDailyList.RunDailyListObj']:
+                    from test_production_daily_sync import daily_response,MACHINES,SHIFTS,COND
+                    machine=next(m for m in MACHINES if m[1]==payload[COND+'MACH_NO'][0])
+                    shift=next(s for s in SHIFTS if s[0]==payload[COND+'SHIFT_TYPE'][0])
+                    result=daily_response(machine=machine,shift=shift)
+                else:
+                    assert payload['run.object.name'] == ['MES.Product.ProcLotList.ProcLotListObj' if kind=='production' else 'MES.Stock.PackList.PackListObj']
+                    result=response([row()]) if kind=='production' else pack_response([pack_row()])
                 body = {key: values[0] for key, values in result.items()}
                 self.send_response(200)
             self.send_header('Content-Type','application/x-www-form-urlencoded; charset=utf-8'); self.end_headers()
@@ -635,7 +641,11 @@ def test_http_login_cookie_and_list_protocol(monkeypatch,bootstrap_key,kind):
         # A configuration change after login cannot switch keys halfway through a session.
         monkeypatch.setattr(source.config,'PRODUCTION_SYNC_ENCRYPT_KEY','9999')
         rows, warnings = client.fetch_day(DAY)
-        assert rows == ([row()] if kind=='production' else [pack_row()]) and not warnings and seen == ['Login','List']
+        assert not warnings
+        if kind=='production':
+            assert len(rows)==17 and sum(bool(r.get('DAILY_SOURCE')) for r in rows)==16
+            assert seen==['Login']+['']*16+['List']
+        else:assert rows==[pack_row()] and seen==['Login','List']
     finally:
         server.shutdown(); server.server_close(); thread.join(timeout=2)
 

@@ -156,6 +156,14 @@ def save_day(rows, token, kind='production', queried_day=None):
     return counts
 
 
+def renew_query_lease(State,token):
+    with SessionLocal() as db:
+        instant=now()
+        changed=db.execute(update(State).where(State.id==1,State.lease_token==token,State.lease_until>instant).values(lease_until=instant+timedelta(minutes=10)))
+        if changed.rowcount!=1:raise SyncError('동기화 작업의 실행 권한이 만료되었습니다. 다시 실행해 주세요.')
+        db.commit()
+
+
 def execute(start, end, token, run_id, kind='production'):
     State, Run, Record, Client = backend(kind)
     counts = {'received': 0, 'inserted': 0, 'updated': 0, 'unchanged': 0, 'completed_days': 0, 'warnings': []}
@@ -165,6 +173,7 @@ def execute(start, end, token, run_id, kind='production'):
         username, password = read_credentials()
         client = Client(username, password)
         password = ''
+        client.on_query_progress=lambda:renew_query_lease(State,token)
         days = {start + timedelta(days=offset) for offset in range((end - start).days + 1)}
         if kind == 'packing':
             with SessionLocal() as db:

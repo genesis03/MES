@@ -93,7 +93,7 @@ def build_workbook(rows):
     for key,items in sorted(groups.items()):
         for offset in range(0,len(items),2):
             pair=items[offset:offset+2]
-            changes=sorted([d for row in pair for d in row.get('downtimes',[])],key=lambda d:d['started_at'])
+            changes=sorted({(d.get('id'),d['started_at'],d['ended_at'],d['type_code']):d for row in pair for d in row.get('downtimes',[])}.values(),key=lambda d:d['started_at'])
             inspection_pages=max(1,max(math.ceil(len(row['supplement']['measurements'])/8) for row in pair),math.ceil(len(changes)/5))
             for section in range(inspection_pages):
                 sheet=workbook.copy_worksheet(template);page_no+=1;sheet.title=f'Job{page_no}'
@@ -164,7 +164,7 @@ def build_workbook(rows):
                 for line in range(27,32):
                     for col in ['C','E','J','P']:put(sheet,f'{col}{line}',None)
                 for line,change in enumerate(changes[section*5:(section+1)*5],27):
-                    put(sheet,f'C{line}',change['type_code'])
+                    put(sheet,f'C{line}',change['type_code'] if change['type_code'].isdigit() else change.get('type_name') or change['type_code'])
                     put(sheet,f'E{line}',f"{time_text(change['started_at'])}~{time_text(change['ended_at'])} ({change['minutes']}분)")
                     put(sheet,f'J{line}',change['action'])
                     put(sheet,f'P{line}','☑' if change['quality_confirmed'] else '□')

@@ -43,7 +43,7 @@ def external_record_view(record, connections):
     if not performance_type:
         suffix = connections.suffix(record.process_name)
         performance_type = 'ASSEMBLY' if suffix == '-C' else 'MACHINING' if suffix in ('-A', '-B', '-D') else ''
-    machine = external_machine_no(record.lot_no)
+    machine = raw.get('MACHINE_NO') or external_machine_no(record.lot_no)
     view = {
         'id': record.id, 'work_date': record.work_date, 'part_no': record.part_no,
         'part_name': item.part_name if item else raw.get('PRODUCT_NM', ''),
@@ -51,7 +51,10 @@ def external_record_view(record, connections):
         'connection_type': connection_type, 'source_process': record.process_name,
         'process_code': code, 'process_name': connections.processes.get(code, ''),
         'performance_type': performance_type, 'job_no': record.job_no, 'lot_no': record.lot_no,
-        'machine_no': machine,
+        'machine_no': machine, 'equipment_name':raw.get('MACHINE_NAME',''),
+        'shift_type':raw.get('SHIFT_TYPE',''),'shift_name':raw.get('SHIFT_NAME',''),
+        'operator_name':raw.get('OPERATOR_NAME',''),'material_lots':raw.get('MATERIAL_LOTS',[]),
+        'downtimes':raw.get('DOWNTIMES',[]),'defects':raw.get('DEFECTS',[]),
         'started_at': record.started_at or '', 'ended_at': record.ended_at or '',
         'job_qty': record.job_qty, 'lot_qty': record.lot_qty, 'fault_qty': record.fault_qty,
         'good_qty': record.job_qty, 'setup_qty': setup, 'total_qty': str(total) if total is not None else None,

@@ -271,8 +271,8 @@ def production_performance_status(
             "record_source": "MES", "source_record_id": perf.id,
         })
     # External imports are inquiry rows, not stock-changing MES performances.
-    # They have no verified MES worker/work order, so those filters exclude them.
-    if not (work_order_no and work_order_no.strip() or operator_name and operator_name.strip()):
+    # Work-order links are not imported; worker names can be supplied by RunDaily.
+    if not (work_order_no and work_order_no.strip()):
         external_query = db.query(ExternalProductionRecord)
         if start_date:
             external_query = external_query.filter(ExternalProductionRecord.work_date >= start_date)
@@ -282,6 +282,8 @@ def production_performance_status(
         for record in external_query.order_by(ExternalProductionRecord.work_date.desc(), ExternalProductionRecord.id.desc()):
             view = external_record_view(record, connections)
             if view['lot_conflict']:
+                continue
+            if operator_name and operator_name.strip() not in view['operator_name']:
                 continue
             if performance_type and view['performance_type'] != performance_type.strip().upper():
                 continue
@@ -295,12 +297,13 @@ def production_performance_status(
                 'performance_type_name': {'ASSEMBLY': '조립', 'MACHINING': '가공'}.get(view['performance_type'], '미지정'),
                 'work_order_no': '', 'item_id': view['item_id'], 'part_no': view['mes_part_no'] or record.part_no,
                 'part_name': view['part_name'], 'process_code': view['process_code'],
-                'process_name': view['process_name'] or record.process_name, 'operator_name': '',
-                'equipment_name': view['machine_no'] + '호기' if view['machine_no'] else '', 'shift_name': '',
+                'process_name': view['process_name'] or record.process_name, 'operator_name': view['operator_name'],
+                'equipment_name': view['equipment_name'] or (view['machine_no'] + '호기' if view['machine_no'] else ''), 'shift_name': view['shift_name'],
                 'good_qty': float(record.job_qty), 'defect_qty': float(record.fault_qty),
                 'setup_qty': float(view['setup_qty']) if view['setup_qty'] != '' else None,
                 'total_qty': float(view['total_qty']) if view['total_qty'] is not None else None,
-                'consumed_qty': None, 'source_lot_no': '', 'output_lot_no': record.lot_no,
+                'consumed_qty': None, 'source_lot_no': ','.join(m['lot_no'] for m in view['material_lots']), 'output_lot_no': record.lot_no,
+                'defects':view['defects'],'downtimes':view['downtimes'],'material_lots_data':view['material_lots'],
                 'downstream_used': False, 'can_delete': False,
                 **{key: view[key] for key in ('can_print_label', 'label_error', 'label_url')},
                 'note': ' / '.join(['외부 연동'] + view['notes']),

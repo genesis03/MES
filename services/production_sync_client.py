@@ -163,6 +163,16 @@ class ProductionClient:
             raise SyncError('외부 생산 시스템에 접속하거나 로그인할 수 없습니다.',dict(schema_version=3,client_revision='protocol-key-20261012',stage=phase,error_kind='http_error' if isinstance(exc,HTTPError) else 'transport_error',http_status=exc.code if isinstance(exc,HTTPError) else None)) from exc
 
     def fetch_day(self, day):
+        from services.production_daily_sync import fetch_day
+        from services.production_sync_mapping import stage_suffix
+        rows,warnings=fetch_day(self,day)
+        callback=getattr(self,'on_query_progress',None)
+        if callback:callback()
+        other,notes=self.fetch_lot_day(day)
+        rows.extend(row for row in other if stage_suffix(row['PROC_TYPE_NM']) not in ('-A','-B'))
+        return rows,sorted(set(warnings+notes))
+
+    def fetch_lot_day(self, day):
         # The successful external probe used distinct date bounds. Same-day
         # bounds can describe an empty interval on this server. Pad both ends
         # to cover inclusive/exclusive boundaries, then retain only this day.

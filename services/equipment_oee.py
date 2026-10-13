@@ -94,6 +94,8 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
         view=external_record_view(record,connections)
         if view['lot_conflict'] or view['process_code'] not in codes:continue
         add(key_for(machine_no=view['machine_no'],code=view['process_code']),view['item_id'],view['mes_part_no'] or record.part_no,view['total_qty'],record.job_qty,'외부',record.work_date)
+        for stop in view['downtimes']:
+            group(key_for(machine_no=view['machine_no'],code=view['process_code']))['downtime_intervals'].append((parse_time(stop['started_at']),parse_time(stop['ended_at'])))
     all_periods=[p for g in groups.values() for p in g['intervals']]
     if all_periods:start,end=min(p[0] for p in all_periods),max(p[1] for p in all_periods)
     for downtime,run in db.query(ProductionRunDowntime,ProductionRun).join(ProductionRun,ProductionRun.id==ProductionRunDowntime.run_id).filter(ProductionRun.process_code.in_(codes),ProductionRun.status!='CANCELLED',ProductionRunDowntime.ended_at>start.strftime('%Y-%m-%d %H:%M'),ProductionRunDowntime.started_at<end.strftime('%Y-%m-%d %H:%M')):

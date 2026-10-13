@@ -264,7 +264,7 @@ def _external_labels(db: Session, record_id: int, kind: str, connections=None) -
         process=(view['process_name'] or record.process_name) if production else '포장',
         storage=_storage_text(db, item.inbound_loc) or item.inbound_loc or '',
         equipment=view['machine_no'] + '호기' if production and view['machine_no'] else '',
-        compact_production=production, extras=extras,
+        compact_production=production, extras=extras,operator=view.get('operator_name',''),shift=view.get('shift_name',''),
     )]
 
 

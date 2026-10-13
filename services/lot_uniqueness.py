@@ -66,7 +66,11 @@ def prepare_import(db, rows, kind, record_model, key_for):
             record = existing.get(lot_identity(row['LOT_NUM']))
             if record:
                 if record.part_no.strip().casefold() != row['ITEM_NUM'].strip().casefold():
-                    raise SyncError('같은 생산 LOT에 다른 외부 품번이 수신되어 기존 실적을 덮어쓰지 않았습니다.')
+                    connections=ItemConnections(db)
+                    old,_=connections.resolve(record.part_no,record.process_name)
+                    new,_=connections.resolve(row['ITEM_NUM'],row['PROC_TYPE_NM'])
+                    if not row.get('DAILY_SOURCE') or old is None or new is None or old.id!=new.id:
+                        raise SyncError('같은 생산 LOT에 다른 외부 품번이 수신되어 기존 실적을 덮어쓰지 않았습니다.')
                 result[key_for(row, kind)] = record
         return result
 

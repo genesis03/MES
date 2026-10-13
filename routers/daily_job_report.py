@@ -80,8 +80,8 @@ def records(db,day,user):
         saved=supplements.get((row['record_source'],row['source_record_id']))
         supplement=Supplement.model_validate_json(saved.data_json) if saved else Supplement()
         run=runs.get(row['source_record_id']) if row['record_source']=='MES' else None
-        row['defects']=[{'name':d.defect_type_name,'qty':d.defect_qty} for d in run.defects] if run else []
-        row['downtimes']=[serialize_downtime(d) for d in run.downtimes] if run and run.performance_type=='MACHINING' else []
+        row['defects']=[{'name':d.defect_type_name,'qty':d.defect_qty} for d in run.defects] if run else row.get('defects',[])
+        row['downtimes']=[serialize_downtime(d) for d in run.downtimes] if run and run.performance_type=='MACHINING' else row.get('downtimes',[])
         if row['record_source']=='MES':
             row['defects'].extend(processed_defects.get(row['source_record_id'],[]))
         row['work_time']='';row['material_lots']=row['source_lot_no']
@@ -89,8 +89,13 @@ def records(db,day,user):
             row['work_time']=run.start_time+' ~ '+(run.end_time or '')
             row['material_lots']=' / '.join(f'{a.lot_no}: {a.allocated_qty:g} {m.unit}' for m in run.materials for a in m.allocations)
         elif row['record_source']=='EXTERNAL':
+            available_codes={}
+            for c in db.query(CommonCodeModel).filter(CommonCodeModel.group_code=='PRODUCTION_CHANGE_TYPE',CommonCodeModel.is_active=='Y'):
+                available_codes.setdefault(c.code_name,[]).append(c.code)
+            row['downtimes']=[dict(d,type_code=available_codes[d['type_name']][0]) if len(available_codes.get(d['type_name'],[]))==1 else d for d in row['downtimes']]
             external=db.get(ExternalProductionRecord,row['source_record_id'])
             row['work_time']=' ~ '.join(str(x or '') for x in [external.started_at,external.ended_at])
+            row['material_lots']=' / '.join(m['lot_no']+': '+str(m['qty']) for m in row.get('material_lots_data',[])) or row['material_lots']
         if not saved and row.get('item_id'):
             standards=db.query(InspectionStandard).filter(InspectionStandard.item_id==row['item_id'],InspectionStandard.document_type=='PROCESS',InspectionStandard.status=='CURRENT',InspectionStandard.inspection_process_code==row['process_code']).all()
             # Only a unique applicable current standard can supply inspection labels.
