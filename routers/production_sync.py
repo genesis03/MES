@@ -15,7 +15,7 @@ from models.models import ItemMasterModel, ProcessModel
 from models.packing_sync import ExternalPackingRecord, PackingSyncState
 from models.production_sync import ExternalProductionRecord, ProductionSyncProcessMap, ProductionSyncRun, ProductionSyncItemMap, ProductionSyncState
 from services.production_sync_client import SyncError, ProductionClient
-from services.production_sync_credentials import CredentialError, credential_status, read_credentials, save_credentials
+from services.production_sync_credentials import CredentialError, credential_status, read_credentials, save_credentials, read_protocol_key, save_protocol_key
 from services.production_sync_service import credentials_ready, now, start_manual, state, today
 from services.production_sync_mapping import ItemConnections
 from services.production_sync_view import external_record_view
@@ -68,7 +68,25 @@ def validate_login(payload, db):
 @router.get('/api/production/external-sync/credentials')
 def credentials(db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
-    return credential_status(db)
+    return credential_status(db) | {'encrypt_key':read_protocol_key(db)[0]}
+
+
+class ProtocolKeyInput(BaseModel):
+    encrypt_key:str=Field(pattern=r'^[0-9]{1,8}$')
+
+
+@router.put('/api/production/external-sync/protocol-key')
+def update_protocol_key(payload:ProtocolKeyInput,db:Session=Depends(get_db),user=Depends(get_current_user)):
+    access(user)
+    state(db);state(db,'packing')
+    instant=now()
+    for model in (ProductionSyncState,PackingSyncState):
+        changed=db.execute(update(model).where(model.id==1,or_(model.lease_until.is_(None),model.lease_until<instant)).values(last_error=None))
+        if changed.rowcount!=1:
+            db.rollback()
+            raise HTTPException(409,'동기화 실행 중에는 접속키를 변경할 수 없습니다.')
+    save_protocol_key(db,payload.encrypt_key)
+    return {'message':'접속키를 저장했습니다. 로그인 확인을 눌러 주세요.','encrypt_key':payload.encrypt_key}
 
 
 @router.post('/api/production/external-sync/credentials/test')

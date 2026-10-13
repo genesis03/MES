@@ -133,8 +133,14 @@ class ProductionClient:
                 headers=getattr(response,'headers',None)
                 charset=headers.get_content_charset() if headers is not None else None
                 detected=bootstrap_protocol_key(raw.decode(charset or 'utf-8',errors='replace'))
-            self.encrypt_key=protocol_key(detected or config.PRODUCTION_SYNC_ENCRYPT_KEY)
-            self.encrypt_key_source='landing' if detected else 'configured'
+            if detected:
+                self.encrypt_key=protocol_key(detected)
+                self.encrypt_key_source='landing'
+            else:
+                from services.production_sync_credentials import read_protocol_key
+                fallback,fallback_source=read_protocol_key()
+                self.encrypt_key=protocol_key(fallback)
+                self.encrypt_key_source=fallback_source
             payload = client_common(self)
             payload.update({'run.object.name': 'Common.Login.LoginObj', 'jump.form.code': 'Login',
                             'Common.BeforeService.CheckSet.IS_CHECK': 'Y',

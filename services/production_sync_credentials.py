@@ -64,3 +64,20 @@ def save_credentials(db, username, password):
     else:
         db.add(ProductionSyncCredential(id=1, username=username, encrypted_password=encrypted))
     db.commit()
+
+
+def read_protocol_key(db=None):
+    from models.production_sync import ProductionSyncProtocol
+    if db is None:
+        with SessionLocal() as session:
+            return read_protocol_key(session)
+    row=db.get(ProductionSyncProtocol,1)
+    return (row.encrypt_key,'saved') if row else (config.PRODUCTION_SYNC_ENCRYPT_KEY,'configured')
+
+
+def save_protocol_key(db,value):
+    from models.production_sync import ProductionSyncProtocol
+    row=db.get(ProductionSyncProtocol,1)
+    if row is None:db.add(ProductionSyncProtocol(id=1,encrypt_key=value))
+    else:row.encrypt_key=value
+    db.commit()

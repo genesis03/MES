@@ -72,8 +72,10 @@
     async function credentials(){
         const c=await api('/credentials');
         $('esUsername').value=c.username||'';
+        $('esProtocolKey').value=c.encrypt_key||'';
         $('esCredentialMessage').textContent=c.error||(c.configured?'연동 계정이 설정되어 있습니다. 비밀번호 공란으로 저장하면 기존 값을 유지합니다.':'아이디와 비밀번호를 입력하고 계정을 저장해 주세요.');
     }
+    $('esProtocolForm').onsubmit=async e=>{e.preventDefault();if(!$('esProtocolForm').reportValidity())return;const b=e.target.querySelector('button');b.disabled=true;try{const result=await api('/protocol-key','PUT',{encrypt_key:$('esProtocolKey').value.trim()});$('esProtocolMessage').textContent=result.message;}catch(error){$('esProtocolMessage').textContent=error.message;}finally{b.disabled=false;}};
     let credentialBusy=false,loginDiagnostic=null;
     $('esLoginDiagnostic').onclick=()=>{if(!loginDiagnostic)return;const url=URL.createObjectURL(new Blob([JSON.stringify(loginDiagnostic,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='production_login_diagnostic.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
     async function credentialAction(save){

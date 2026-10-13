@@ -75,3 +75,9 @@ class ProductionSyncCredential(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(200), nullable=False)
     encrypted_password = Column(Text, nullable=False)
+
+
+class ProductionSyncProtocol(Base):
+    __tablename__ = 'production_sync_protocol'
+    id = Column(Integer, primary_key=True)
+    encrypt_key = Column(String(8), nullable=False)

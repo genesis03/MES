@@ -926,3 +926,50 @@ def test_bootstrap_conflicting_keys_are_rejected_without_exposing_page():
         source.bootstrap_protocol_key('<input name="ENCRYPT.KEY" value="2308"><script>x={"ENCRYPT.KEY":"4321",password:"never-save-this"}</script>')
     assert error.value.diagnostic['error_kind']=='protocol_key_ambiguous'
     assert 'never-save-this' not in str(error.value)+json.dumps(error.value.diagnostic)
+
+
+def test_protocol_key_save_without_password_or_restart_and_sync_lock(setup):
+    from models.production_sync import ProductionSyncProtocol
+    url='/api/production/external-sync/protocol-key'
+    response=setup.client.put(url,json={'encrypt_key':'1837'})
+    assert response.status_code==200
+    with setup.sessions() as db:
+        assert db.get(ProductionSyncProtocol,1).encrypt_key=='1837'
+        assert secrets.read_credentials(db)==('test-user','test-password')
+    assert secrets.read_protocol_key()==('1837','saved')
+    assert setup.client.get('/api/production/external-sync/credentials').json()['encrypt_key']=='1837'
+    for key in ['', '123456789', 'not-a-key']:
+        assert setup.client.put(url,json={'encrypt_key':key}).status_code==422
+    lease(setup)
+    assert setup.client.put(url,json={'encrypt_key':'4321'}).status_code==409
+    assert secrets.read_protocol_key()==('1837','saved')
+
+
+@pytest.mark.parametrize('landing',[None,'4321'])
+@pytest.mark.parametrize('kind',['production','packing'])
+def test_saved_key_used_for_both_clients_unless_landing_provides_one(setup,monkeypatch,landing,kind):
+    from services.packing_sync_client import PackingClient
+    assert setup.client.put('/api/production/external-sync/protocol-key',json={'encrypt_key':'6789'}).status_code==200
+    class Page:
+        def __enter__(self):return self
+        def __exit__(self,*_):pass
+        def read(self,*_):return ('<input name="ENCRYPT.KEY" value="'+landing+'">' if landing else 'login page').encode()
+    class Opener:
+        def open(self,*args,**kwargs):return Page()
+    monkeypatch.setattr(source,'build_opener',lambda *_:Opener())
+    seen=[]
+    def post(_,payload):
+        seen.append(payload)
+        return {'SO.NET.END':['SO.NET.END'],'Common.Set.LoginUserSet.USER_ID':['test-user']}
+    monkeypatch.setattr(source,'post',post)
+    client=(source.ProductionClient if kind=='production' else PackingClient)('test-user','test-password')
+    expected=landing or '6789'
+    assert client.encrypt_key==expected and seen[0]['ENCRYPT.KEY']==expected
+    assert client.encrypt_key_source==('landing' if landing else 'saved')
+    assert setup.client.put('/api/production/external-sync/protocol-key',json={'encrypt_key':'9999'}).status_code==200
+    assert source.client_common(client)['ENCRYPT.KEY']==expected
+
+
+def test_protocol_key_admin_permission_required(setup):
+    setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='reader',role='USER',permissions='{}')
+    assert setup.client.put('/api/production/external-sync/protocol-key',json={'encrypt_key':'1837'}).status_code==403
