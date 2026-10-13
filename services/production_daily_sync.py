@@ -1,5 +1,6 @@
 """Observed read-only RunDaily protocol, normalized into existing external LOT records."""
 import re
+from itertools import combinations
 from datetime import datetime,timedelta
 from decimal import Decimal,InvalidOperation
 from services import production_sync_client as protocol
@@ -164,7 +165,6 @@ def fetch_day(client,day):
 
 def supplement_assembly(client,day,legacy):
     """Enrich matching existing assembly lots; never store a LOT-less aggregate as production."""
-    from services.production_sync_view import external_machine_no
     from services.production_sync_mapping import stage_suffix
     warnings=[]
     for machine in ASSEMBLY_MACHINES:
@@ -182,27 +182,32 @@ def supplement_assembly(client,day,legacy):
         warnings.extend(notes)
         used=set()
         for aggregate in aggregates:
-            quantities=('JOB_QTY','FAULT_QTY','F10')
+            quantities=('JOB_QTY','FAULT_QTY')
             part=aggregate['ITEM_NUM'].strip().casefold()
             matches=[row for row in legacy if stage_suffix(row['PROC_TYPE_NM'])=='-C'
                      and row['ITEM_NUM'].strip().casefold()==part
                      and row['JOB_TIME']==aggregate['JOB_TIME']
-                     and external_machine_no(row['LOT_NUM'])==aggregate['MACHINE_NO']
                      and (not aggregate['LOT_NUM'] or row['LOT_NUM'].strip().upper()==aggregate['LOT_NUM'].strip().upper())
-                     and (not row.get('SHIFT_TYPE') or row['SHIFT_TYPE']==aggregate['SHIFT_TYPE'])]
+                     and row['LOT_NUM'] not in used]
             def same_quantities(rows):
                 return bool(rows) and all(sum(Decimal(row[key]) for row in rows)==Decimal(aggregate[key]) for key in quantities)
-            # Prefer explicit LOT/job identities, then actual work periods.
+            # A LOT-less assembly daily report is joined by production date,
+            # item number, production quantity and defect quantity. Setup is
+            # deliberately not part of this identity because the source's
+            # reported fault total already includes setup before normalization.
             candidates=[r for r in matches if aggregate['LOT_NUM'] and r['LOT_NUM'].strip().upper()==aggregate['LOT_NUM'].strip().upper()
                         or r['JOB_NUM'] in aggregate['DAILY_REL_IDS']]
             if not same_quantities(candidates):
-                candidates=[r for r in matches if aggregate['JOB_ST_TIME'] and r['JOB_ST_TIME'] and r['JOB_END_TIME']
-                            and aggregate['JOB_ST_TIME']<=r['JOB_ST_TIME']<=r['JOB_END_TIME']<=aggregate['JOB_END_TIME']]
-            # Legacy timestamps may be registration times. A single item aggregate can instead match its exact LOT totals.
-            if not same_quantities(candidates) and sum(a['ITEM_NUM'].strip().casefold()==part for a in aggregates)==1:
-                candidates=matches
-            if not same_quantities(candidates) or any(r['LOT_NUM'] in used for r in candidates):
-                reason='같은 날짜·호기·품번의 LOT 없음' if not matches else '중복 연결' if any(r['LOT_NUM'] in used for r in candidates) else '수량 합계 또는 작업별 연결 불일치'
+                possible=[]
+                # A daily report can represent one or several production LOTs.
+                # Accept it only when one unique LOT combination has both totals.
+                if len(matches)<=16:
+                    for size in range(1,len(matches)+1):
+                        possible.extend(list(rows) for rows in combinations(matches,size) if same_quantities(rows))
+                        if len(possible)>1:break
+                candidates=possible[0] if len(possible)==1 else []
+            if not same_quantities(candidates):
+                reason='같은 생산일·품번의 LOT 없음' if not matches else '생산수량·불량수량 불일치 또는 중복 후보'
                 if not hasattr(client,'review_items'):client.review_items=[]
                 client.review_items.append(dict(work_date=day.isoformat(),equipment=name,shift=shift[1],part_no=aggregate['ITEM_NUM'],reason=reason,
                     daily={k:aggregate[k] for k in ('JOB_QTY','FAULT_QTY','F10','JOB_ST_TIME','JOB_END_TIME','OPERATOR_NAME','JOB_NUM')},

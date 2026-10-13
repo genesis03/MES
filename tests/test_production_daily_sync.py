@@ -201,7 +201,32 @@ def test_assembly_aggregate_supplements_original_lots_without_duplicating_quanti
     assert all(p[COND+'JOB_TYPE']=='JOB_ORDER' and p[COND+'SHIFT_TYPE']=='DAY_SHIFT' for p in requested)
 
 
-@pytest.mark.parametrize('change',[{'JOB_QTY':'3119'},{'ITEM_NUM':'different'},{'LOT_NUM':'LA20260325021'}])
+def test_lotless_assembly_matches_by_date_part_production_and_defect_quantities(monkeypatch):
+    from services.production_daily_sync import supplement_assembly
+    client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
+    values=assembly_response()
+    values[DATA+'JOB_FAULT_QTY']=['10'];values[DATA+'SET_UP_QTY']=['5']
+    monkeypatch.setattr(source,'post',lambda _,payload:values if payload[COND+'MACH_NM']=='AS-01' else daily_response(machine=ASSEMBLY_MACHINES[1],empty=True))
+    legacy=assembly_lots()
+    legacy[0].update(JOB_QTY='3120',FAULT_QTY='3',F10='99',LOT_QTY='3222')
+    legacy[1].update(JOB_QTY='1440',FAULT_QTY='2',F10='0',LOT_QTY='1442')
+    assert not supplement_assembly(client,DAY,legacy)
+    assert all(r['OPERATOR_NAME']=='Assembly worker' and r['SHIFT_TYPE']=='DAY' for r in legacy)
+
+
+def test_lotless_assembly_does_not_join_when_production_or_defect_total_differs(monkeypatch):
+    from services.production_daily_sync import supplement_assembly
+    client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
+    values=assembly_response()
+    values[DATA+'JOB_FAULT_QTY']=['10'];values[DATA+'SET_UP_QTY']=['5']
+    monkeypatch.setattr(source,'post',lambda _,payload:values if payload[COND+'MACH_NM']=='AS-01' else daily_response(machine=ASSEMBLY_MACHINES[1],empty=True))
+    for field in ('JOB_QTY','FAULT_QTY'):
+        legacy=assembly_lots();legacy[0][field]='1';before=[dict(r) for r in legacy]
+        warnings=supplement_assembly(client,DAY,legacy)
+        assert warnings and legacy==before
+
+
+@pytest.mark.parametrize('change',[{'JOB_QTY':'3119'},{'ITEM_NUM':'different'}])
 def test_assembly_mismatch_preserves_original_lots(monkeypatch,change):
     from services.production_daily_sync import supplement_assembly
     client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
