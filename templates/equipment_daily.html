@@ -1,0 +1,27 @@
+{% extends "equipment_reports_base.html" %}
+{% block title %}일일 가동 현황{% endblock %}
+{% block report_view %}daily{% endblock %}
+{% block report_content %}
+<h1>일일 가동 현황</h1>
+<p class="eq-help">호기별 효율·가동시간·생산수량을 날짜별로 조회합니다. 시간은 분, 수량은 EA, C/T는 초/개입니다.</p>
+<form id="eqFilters" class="eq-toolbar">
+ <label>조회 월 <input type="month" id="eqMonthDate" required></label>
+ <label>가공 공정 <select id="eqProcess"></select></label>
+ <label>생산호기 <select id="eqEquipment" required></select></label>
+ <label><input type="checkbox" id="eqExclude"> 미등록 실적 제외</label>
+ <button class="eq-button" id="eqLoad" type="submit">조회</button>
+ <button class="eq-button secondary" id="eqPrint" type="button">인쇄</button>
+ <a id="eqEfficiencyLink" class="eq-report-link" href="/production/equipment/efficiency">설비 종합 효율</a>
+</form>
+<p id="eqMessage" class="eq-message" role="status"></p>
+<h2 id="eqDailyTitle">호기별 일일 현황</h2>
+<section class="eq-panel">
+ <h3>효율 <span class="eq-unit">단위: %</span></h3>
+ <div class="eq-scroll"><table class="eq-table eq-daily"><caption class="eq-sr-only">일별 OEE와 가동률·성능률·양품률</caption><thead id="eqDailyHead"></thead><tbody id="eqDailyRates"></tbody></table></div>
+</section>
+<section class="eq-panel">
+ <h3>시간·생산 <span class="eq-unit">단위: 분, EA, 초/개</span></h3>
+ <div class="eq-scroll"><table class="eq-table eq-daily"><caption class="eq-sr-only">일별 가동시간·생산계획·실적·C/T</caption><thead id="eqDailyValuesHead"></thead><tbody id="eqDailyValues"></tbody></table></div>
+</section>
+<p class="eq-help">기본시간은 생산계획시간에서 계획정지를 제외한 값입니다. 실제 가동시간과 비가동시간은 설비 가동 현황(OEE)과 같은 기준을 사용합니다. 표준생산시간은 총생산 × 품번별 C/T, 양품 표준시간은 양품 × 품번별 C/T입니다. 품질손실 표준시간은 불량·셋업을 C/T로 환산한 값이며 등록된 비가동시간에는 합산하지 않습니다.</p>
+{% endblock %}

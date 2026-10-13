@@ -1,6 +1,6 @@
 import math
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, field_validator
@@ -96,6 +96,55 @@ def validate_process(db,code):
 def processes(db:Session=Depends(get_db),user=Depends(get_current_user)):
     require_access(user,'/production/equipment/status')
     return {'items':[dict(process_code=p.process_code,process_name=p.process_name) for p in machining_processes(db)]}
+
+
+@router.get('/production/equipment/efficiency',response_class=HTMLResponse)
+def efficiency_page(request:Request,user=Depends(get_current_user)):
+    require_access(user,'/production/equipment/efficiency')
+    return Jinja2Templates(directory='templates').TemplateResponse(request=request,name='equipment_efficiency.html',context={'request':request,'user':user})
+
+
+@router.get('/production/equipment/daily',response_class=HTMLResponse)
+def daily_page(request:Request,user=Depends(get_current_user)):
+    require_access(user,'/production/equipment/daily')
+    return Jinja2Templates(directory='templates').TemplateResponse(request=request,name='equipment_daily.html',context={'request':request,'user':user})
+
+
+@router.get('/api/production/equipment/report-options')
+def report_options(view:str=Query(default='efficiency',pattern=r'^(efficiency|daily)$'),db:Session=Depends(get_db),user=Depends(get_current_user)):
+    from sqlalchemy import func
+    from models.production import ProductionPerformance
+    from models.production_month_plan import ProductionMonthPlanLine
+    from models.production_sync import ExternalProductionRecord
+    from services.equipment_reports import report_now
+    require_access(user,'/production/equipment/'+view)
+    processes=machining_processes(db);codes=[p.process_code for p in processes]
+    years={report_now().year}
+    for model,column in ((ProductionMonthPlanLine,ProductionMonthPlanLine.month),(ProductionPerformance,ProductionPerformance.performance_date),(ExternalProductionRecord,ExternalProductionRecord.work_date)):
+        for (value,) in db.query(func.substr(column,1,4)).distinct():
+            if value and value.isdigit() and 2000<=int(value)<=2100:years.add(int(value))
+    return dict(years=sorted(years,reverse=True),processes=[dict(process_code=p.process_code,process_name=p.process_name) for p in processes],
+                equipments=[dict(id=e.id,name=e.equipment_name,code=e.equipment_code,process_code=e.process_code,active=e.is_active=='Y')
+                            for e in db.query(EquipmentMaster).filter(EquipmentMaster.process_code.in_(codes)).order_by(EquipmentMaster.process_code,EquipmentMaster.sort_order,EquipmentMaster.id)])
+
+
+@router.get('/api/production/equipment/efficiency')
+def efficiency(year:int=Query(ge=2000,le=2100),month:int=Query(ge=1,le=12),process_code:str|None=None,exclude_unplanned:bool=False,db:Session=Depends(get_db),user=Depends(get_current_user)):
+    from services.equipment_reports import efficiency_report
+    require_access(user,'/production/equipment/efficiency')
+    if process_code:validate_process(db,process_code)
+    return efficiency_report(db,year,month,process_code,exclude_unplanned)
+
+
+@router.get('/api/production/equipment/daily')
+def daily(month:str=Query(pattern=r'^\d{4}-\d{2}$'),equipment_id:int=Query(gt=0),exclude_unplanned:bool=False,db:Session=Depends(get_db),user=Depends(get_current_user)):
+    from services.equipment_reports import daily_report
+    require_access(user,'/production/equipment/daily')
+    dates=month_days(month)
+    if not 2000<=dates[0].year<=2100:raise HTTPException(422,'조회 연도는 2000~2100년 중 선택하세요.')
+    e=db.get(EquipmentMaster,equipment_id)
+    if e is None or e.process_code not in {p.process_code for p in machining_processes(db)}:raise HTTPException(422,'복합선반 또는 탭핑 호기를 선택하세요.')
+    return daily_report(db,month,equipment_id,exclude_unplanned)
 
 
 class ScheduleDayInput(BaseModel):

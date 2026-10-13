@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block extra_head %}<link rel="stylesheet" href="/static/css/equipment_reports.css?v=20261013-1">{% endblock %}
+{% block content %}
+<div class="eq-report" id="eqReport" data-view="{% block report_view %}{% endblock %}">
+{% block report_content %}{% endblock %}
+</div>
+{% endblock %}
+{% block extra_script %}<script src="/static/equipment_reports.js?v=20261013-1" defer></script>{% endblock %}

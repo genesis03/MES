@@ -1,0 +1,32 @@
+{% extends "equipment_reports_base.html" %}
+{% block title %}설비 종합 효율{% endblock %}
+{% block report_view %}efficiency{% endblock %}
+{% block report_content %}
+<h1>설비 종합 효율</h1>
+<p class="eq-help">생산계획과 생산실적으로 월별 효율 및 당월 호기별 생산 현황을 조회합니다. 종합·소계는 시간과 수량을 합산해 계산합니다.</p>
+<form id="eqFilters" class="eq-toolbar">
+ <label>조회 연도 <select id="eqYear" required></select></label>
+ <label>조회 월 <select id="eqMonth" required>{% for m in range(1,13) %}<option value="{{ m }}">{{ m }}월</option>{% endfor %}</select></label>
+ <label>가공 공정 <select id="eqProcess"></select></label>
+ <label><input type="checkbox" id="eqExclude"> 미등록 실적 제외</label>
+ <button class="eq-button" id="eqLoad" type="submit">조회</button>
+ <button class="eq-button secondary" id="eqPrint" type="button">인쇄</button>
+</form>
+<p id="eqMessage" class="eq-message" role="status"></p>
+<h2 id="eqMonthTitle">당월 종합현황</h2>
+<section class="eq-cards" id="eqCards" aria-label="당월 핵심 지표"></section>
+<section class="eq-panel">
+ <h2 id="eqAnnualTitle">월별 추이</h2>
+ <div class="eq-scroll"><div id="eqChart" class="eq-chart" aria-label="월별 OEE 추이"></div></div>
+ <div class="eq-scroll"><table class="eq-table eq-annual"><caption class="eq-sr-only">월별 설비 종합 효율</caption><thead><tr><th scope="col">구분</th><th scope="col">기간 종합</th>{% for m in range(1,13) %}<th scope="col">{{ m }}월</th>{% endfor %}</tr></thead><tbody id="eqAnnualRows"></tbody></table></div>
+</section>
+<section class="eq-panel">
+ <h2>당월 호기별 현황</h2>
+ <p class="eq-help">호기를 누르면 해당 월의 일일 가동 현황으로 이동합니다. 달성률은 양품 ÷ 계획수량, 불량률은 불량 ÷ 총생산입니다.</p>
+ <div class="eq-scroll"><table class="eq-table"><caption class="eq-sr-only">당월 호기별 효율과 생산 현황</caption><thead>
+ <tr><th rowspan="2" scope="col">공정</th><th rowspan="2" scope="col">생산호기</th><th colspan="4" scope="colgroup">효율 (%)</th><th colspan="7" scope="colgroup">생산 (EA)</th><th rowspan="2" scope="col">확인사항</th></tr>
+ <tr><th scope="col">OEE</th><th scope="col">가동률</th><th scope="col">성능률</th><th scope="col">양품률</th><th scope="col">계획</th><th scope="col">총생산</th><th scope="col">양품</th><th scope="col">달성률</th><th scope="col">불량</th><th scope="col">셋업</th><th scope="col">불량률</th></tr>
+ </thead><tbody id="eqEquipmentRows"></tbody></table></div>
+</section>
+<p class="eq-help">OEE = 가동률 × 성능률 × 양품률. 현재 월의 시간은 조회 시점까지, 계획수량은 선택한 월 전체를 기준으로 표시합니다. 이후 월은 등록된 계획수량만 표시되며 실적이 없으면 효율은 —로 표시됩니다.</p>
+{% endblock %}
