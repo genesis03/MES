@@ -79,7 +79,6 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
     processes={p.process_code:p for p in db.query(ProcessModel)}
     allowed=managed_codes(db)
     codes=[process_code] if process_code in allowed else allowed if not process_code else []
-    excluded={}
     equipment={e.id:e for e in db.query(EquipmentMaster).filter(EquipmentMaster.process_code.in_(codes))}
     machines={}
     for e in equipment.values():machines.setdefault((e.process_code,e.machine_no),[]).append(e)
@@ -92,8 +91,7 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
     def group(key):
         if key not in groups:
             e=equipment.get(int(key)) if key.isdigit() else None
-            segments,holidays=workday_segments(db,e.process_code,start_day,end_day,now,e.id) if e else ([],[])
-            excluded.update({r['work_date']:r for r in holidays})
+            segments,_=workday_segments(db,e.process_code,start_day,end_day,now,e.id) if e else ([],[])
             periods=merge_intervals([(a,b) for a,b,_ in segments])
             groups[key]=dict(segments=segments,intervals=periods,shift_days={},process_code=e.process_code if e else key.split(':')[1],planned_stop_seconds=0,planned_break_seconds=weighted_seconds([(a,b,1-weight) for a,b,weight in segments]),key=key,equipment_name=e.equipment_name if e else key.split(':',1)[1]+' (호기 연결 미확인)',planned_seconds=weighted_seconds(segments),good_qty=0,total_qty=0,ideal_seconds=0,downtime_intervals=[],planned_stop_intervals=[],observed_intervals=[],issues=[],parts={},missing=set(),excluded_records=0,excluded_total_qty=0,excluded_good_qty=0,excluded_parts=set())
         return groups[key]
@@ -195,4 +193,4 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
     quality=summary['good_qty']/total if total and not unconfirmed else None
     oee=availability*performance*quality if None not in (availability,performance,quality) else (0 if planned and not total and not unconfirmed else None)
     summary.update(name=processes[process_code].process_name+' 종합' if process_code in processes else '전체 종합 (복합선반·탭핑)',availability=availability,performance=performance,quality=quality,oee=oee)
-    return dict(summary=summary,exclude_unplanned=exclude_unplanned,items=sorted(result,key=lambda x:x['equipment_name']),holidays=[dict(date=r['work_date'],name=r['holiday'],working=r['working']) for r in sorted(excluded.values(),key=lambda r:r['work_date'])],as_of=now.isoformat(timespec='minutes'),planned_seconds=sum(g['planned_seconds'] for g in result),process_code=process_code or '')
+    return dict(summary=summary,exclude_unplanned=exclude_unplanned,items=sorted(result,key=lambda x:x['equipment_name']),planned_seconds=sum(g['planned_seconds'] for g in result),process_code=process_code or '')
