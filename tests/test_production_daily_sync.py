@@ -7,12 +7,12 @@ from test_production_run_registration import prepare
 from models.production_sync import ExternalProductionRecord
 from models.production import ProductionWorkOrder
 from services import production_sync_client as source,production_sync_service as sync
-from services.production_daily_sync import MACHINES,SHIFTS,COND,DATA,STOP,FAULT,parse_daily
+from services.production_daily_sync import MACHINES,ASSEMBLY_MACHINES,SHIFTS,COND,DATA,STOP,FAULT,parse_daily
 
 
 def daily_response(day=DAY,machine=MACHINES[0],shift=SHIFTS[0],empty=False):
     name,identity,process,_=machine
-    result={COND+'JOB_DATE':[day.isoformat()],COND+'MACH_NO':[identity],COND+'PROC_TYPE':[process],COND+'SHIFT_TYPE':[shift[0]],'SO.NET.END':['SO.NET.END'],'log.invoke.object':['MES.Product.RunDaily_123'],'MONITOR.QUERY.START':['start'],'MONITOR.QUERY.END':['end']}
+    result={COND+'JOB_DATE':[day.isoformat()],COND+'MACH_NO':[identity],COND+'PROC_TYPE':[process],COND+'SHIFT_TYPE':[shift[0]],COND+'JOB_TYPE':['JOB_ORDER' if process=='PROC_CAP' else 'JOB_PLAN'],'SO.NET.END':['SO.NET.END'],'log.invoke.object':['MES.Product.RunDaily_123'],'MONITOR.QUERY.START':['start'],'MONITOR.QUERY.END':['end']}
     if empty:return result
     night=shift[2]=='NIGHT'
     prefix='LX' if name.startswith('LT') else 'LB'
@@ -63,17 +63,17 @@ def test_period_client_queries_all_shifts_and_preserves_other_processes(monkeypa
         calls.append(payload)
         if payload['run.object.name'].endswith('ProcLotListObj'):
             return response([row(lot='ASSEMBLY-LOT',PROC_TYPE_NM='조립'),row(lot='OLD-LATHE',PROC_TYPE_NM='복합선반')])
-        machine=next(m for m in MACHINES if m[1]==payload[COND+'MACH_NO'])
+        machine=next(m for m in MACHINES+ASSEMBLY_MACHINES if m[1]==payload[COND+'MACH_NO'])
         shift=next(s for s in SHIFTS if s[0]==payload[COND+'SHIFT_TYPE'])
-        return daily_response(machine=machine,shift=shift)
+        return daily_response(machine=machine,shift=shift,empty=machine[2]=='PROC_CAP')
     monkeypatch.setattr(source,'post',post)
     rows,warnings=client.fetch_day(DAY)
-    assert len(calls)==17 and len(renewals)==17 and len(rows)==17 and not warnings
+    assert len(calls)==19 and len(renewals)==19 and len(rows)==17 and not warnings
     assert len({r['LOT_NUM'] for r in rows})==17 and all(r['LOT_NUM']!='OLD-LATHE' for r in rows)
     assert {r['SHIFT_TYPE'] for r in rows if r.get('DAILY_SOURCE')}=={'DAY','NIGHT'}
     night=next(r for r in rows if r.get('SHIFT_TYPE')=='NIGHT')
     assert night['JOB_END_TIME'].startswith((DAY+timedelta(days=1)).strftime('%Y%m%d'))
-    assert all(c[COND+'JOB_DATE']==DAY.isoformat() for c in calls[:-1])
+    assert all(c[COND+'JOB_DATE']==DAY.isoformat() for c in calls if COND+'JOB_DATE' in c)
 
 
 def test_daily_import_updates_existing_lot_without_duplicates_and_exports_report(setup):
@@ -169,3 +169,72 @@ def test_night_times_follow_shift_and_midnight_without_id_timestamp(text,start_o
     assert stop['started_at']==DAY.isoformat()+' 23:50'
     assert stop['ended_at']==(DAY+timedelta(days=1)).isoformat()+' 00:10'
     assert stop['minutes']==20
+
+
+def assembly_response():
+    values=daily_response(machine=ASSEMBLY_MACHINES[0])
+    values={k:v for k,v in values.items() if not k.startswith((STOP,FAULT))}
+    values.update({DATA+k:[v] for k,v in dict(ITEM_NUM='310061',LOT_NUM='',RULE_NO='assembly-first',JOB_PROD_QTY='4560',JOB_FAULT_QTY='0',SET_UP_QTY='0',JOB_TIME_STRING='08:00 ~ 18:00',PREV_LOT_STR='',JOB_USER_NM='Assembly worker').items()})
+    values['MES.Product.RunDailyList.RunRelSet.REL_NO']=['assembly-first,assembly-second']
+    return values
+
+
+def assembly_lots():
+    return [row(lot='LA'+DAY.strftime('%Y%m%d')+'01'+str(i),ITEM_NUM='310061',PROC_TYPE_NM='캡조립',JOB_QTY=str(qty),LOT_QTY=str(qty),FAULT_QTY='0',F10='0',JOB_ST_TIME=DAY.strftime('%Y%m%d')+start,JOB_END_TIME=DAY.strftime('%Y%m%d')+end) for i,qty,start,end in [(1,3120,'080000','173000'),(2,1440,'173000','180000')]]
+
+
+def test_assembly_aggregate_supplements_original_lots_without_duplicating_quantities(monkeypatch):
+    from services.production_daily_sync import supplement_assembly
+    client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
+    requested=[]
+    def post(_,payload):
+        requested.append(payload)
+        return assembly_response() if payload[COND+'MACH_NM']=='AS-01' else daily_response(machine=ASSEMBLY_MACHINES[1],empty=True)
+    monkeypatch.setattr(source,'post',post)
+    legacy=assembly_lots();original=[dict(r) for r in legacy]
+    assert not supplement_assembly(client,DAY,legacy)
+    assert len(legacy)==2 and sum(int(r['JOB_QTY']) for r in legacy)==4560
+    for before,after in zip(original,legacy):
+        assert all(after[k]==before[k] for k in ('JOB_QTY','FAULT_QTY','F10','LOT_QTY','LOT_NUM','JOB_NUM','JOB_ST_TIME','JOB_END_TIME'))
+        assert after['OPERATOR_NAME']=='Assembly worker' and after['SHIFT_TYPE']=='DAY'
+        assert after['MACHINE_NAME']=='AS-01' and len(after['DAILY_REL_IDS'])==2
+    assert all(p[COND+'JOB_TYPE']=='JOB_ORDER' and p[COND+'SHIFT_TYPE']=='DAY_SHIFT' for p in requested)
+
+
+@pytest.mark.parametrize('change',[{'JOB_QTY':'3119'},{'JOB_ST_TIME':'20260325060000'},{'ITEM_NUM':'different'},{'LOT_NUM':'LA20260325021'}])
+def test_assembly_mismatch_preserves_original_lots(monkeypatch,change):
+    from services.production_daily_sync import supplement_assembly
+    client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
+    monkeypatch.setattr(source,'post',lambda _,payload:assembly_response() if payload[COND+'MACH_NM']=='AS-01' else daily_response(machine=ASSEMBLY_MACHINES[1],empty=True))
+    legacy=assembly_lots();legacy[0].update(change);before=[dict(r) for r in legacy]
+    warnings=supplement_assembly(client,DAY,legacy)
+    assert len(warnings)==1 and legacy==before
+
+
+def test_lotless_assembly_aggregate_is_not_accepted_as_machining():
+    data,_=parse_daily(assembly_response(),DAY,ASSEMBLY_MACHINES[0],SHIFTS[0],allow_aggregate=True)
+    assert data[0]['AGGREGATE_ONLY'] and data[0]['LOT_NUM']=='' and data[0]['JOB_QTY']=='4560'
+    with pytest.raises(source.SyncError):parse_daily(assembly_response(),DAY,ASSEMBLY_MACHINES[0],SHIFTS[0])
+
+
+def test_assembly_supplement_updates_two_existing_record_ids_without_new_lots(setup,monkeypatch):
+    from services.production_daily_sync import supplement_assembly
+    from models.production_sync import ProductionSyncItemMap
+    prepare(setup)
+    with setup.sessions() as db:
+        item=add_item(db,part='310062-C',code='ASSY')
+        db.add(ProductionSyncItemMap(source_part_no='310061',source_process_name='캡조립',item_id=item));db.commit()
+    token,_=sync.claim(DAY,DAY,'MANUAL')
+    legacy=assembly_lots();sync.save_day(legacy,token)
+    with setup.sessions() as db:identities={r.lot_no:r.id for r in db.query(ExternalProductionRecord)}
+    client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
+    monkeypatch.setattr(source,'post',lambda _,payload:assembly_response() if payload[COND+'MACH_NM']=='AS-01' else daily_response(machine=ASSEMBLY_MACHINES[1],empty=True))
+    assert not supplement_assembly(client,DAY,legacy)
+    assert sync.save_day(legacy,token)['updated']==2
+    assert sync.save_day(legacy,token)['unchanged']==2
+    with setup.sessions() as db:
+        records=db.query(ExternalProductionRecord).all()
+        assert {r.lot_no:r.id for r in records}==identities
+        assert sum(int(r.job_qty) for r in records)==4560
+        assert all(json.loads(r.raw_json)['OPERATOR_NAME']=='Assembly worker' for r in records)
+        assert all(r.lot_no and r.part_no=='310061' for r in records)

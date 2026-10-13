@@ -619,10 +619,10 @@ def test_http_login_cookie_and_list_protocol(monkeypatch,bootstrap_key,kind):
                 assert 'ASP.NET_SessionId=synthetic-session' in self.headers.get('Cookie', '')
                 assert payload['Common.Set.LoginUserSet.COMP_NO'] == ['company-id']
                 if payload['run.object.name']==['MES.Product.RunDailyList.RunDailyListObj']:
-                    from test_production_daily_sync import daily_response,MACHINES,SHIFTS,COND
-                    machine=next(m for m in MACHINES if m[1]==payload[COND+'MACH_NO'][0])
+                    from test_production_daily_sync import daily_response,MACHINES,ASSEMBLY_MACHINES,SHIFTS,COND
+                    machine=next(m for m in MACHINES+ASSEMBLY_MACHINES if m[1]==payload[COND+'MACH_NO'][0])
                     shift=next(s for s in SHIFTS if s[0]==payload[COND+'SHIFT_TYPE'][0])
-                    result=daily_response(machine=machine,shift=shift)
+                    result=daily_response(machine=machine,shift=shift,empty=machine[2]=='PROC_CAP')
                 else:
                     assert payload['run.object.name'] == ['MES.Product.ProcLotList.ProcLotListObj' if kind=='production' else 'MES.Stock.PackList.PackListObj']
                     result=response([row()]) if kind=='production' else pack_response([pack_row()])
@@ -644,7 +644,7 @@ def test_http_login_cookie_and_list_protocol(monkeypatch,bootstrap_key,kind):
         assert not warnings
         if kind=='production':
             assert len(rows)==17 and sum(bool(r.get('DAILY_SOURCE')) for r in rows)==16
-            assert seen==['Login']+['']*16+['List']
+            assert seen==['Login']+['']*16+['List']+['']*2
         else:assert rows==[pack_row()] and seen==['Login','List']
     finally:
         server.shutdown(); server.server_close(); thread.join(timeout=2)

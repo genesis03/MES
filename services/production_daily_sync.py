@@ -14,6 +14,10 @@ MACHINES=(
     ('TP-01','2020031014335540200010964464978','PROC_TAB','탭핑가공'),
     ('TP-02','2020031014335541700011791136815','PROC_TAB','탭핑가공'),
 )
+ASSEMBLY_MACHINES=(
+    ('AS-01','2021120908460199500011225493216','PROC_CAP','캡조립'),
+    ('AS-02','2021120908460199500011374320574','PROC_CAP','캡조립'),
+)
 SHIFTS=(('DAY_SHIFT','주간','DAY'),('NIGHT_SHIFT','야간','NIGHT'))
 COND='MES.Product.Set.RunDailyCondSet.'
 DATA='MES.Product.Set.RunDailySet.'
@@ -61,7 +65,7 @@ def time_range(value,day,night=False):
     return start,end
 
 
-def parse_daily(values,day,machine,shift):
+def parse_daily(values,day,machine,shift,allow_aggregate=False):
     name,machine_id,process,process_name=machine
     shift_code,shift_name,shift_type=shift
     for key,expected in [('JOB_DATE',day.isoformat()),('MACH_NO',machine_id),('PROC_TYPE',process),('SHIFT_TYPE',shift_code)]:
@@ -69,14 +73,18 @@ def parse_daily(values,day,machine,shift):
     if any(scalar(values,k) for k in ('jump.url','jump.object.name','jump.form.message')) or scalar(values,'jump.form.code') not in ('','List'):
         raise protocol.SyncError('작업일보 대신 화면 전환 응답을 받았습니다.')
     lot_value=scalar(values,DATA+'LOT_NUM')
-    if not lot_value:
+    aggregate=allow_aggregate and process=='PROC_CAP' and not lot_value and bool(scalar(values,DATA+'ITEM_NUM'))
+    if allow_aggregate and scalar(values,COND+'JOB_TYPE')!='JOB_ORDER':raise protocol.SyncError('조립 작업일보 조회 유형이 일치하지 않습니다.')
+    if not lot_value and not aggregate:
         complete=scalar(values,'log.invoke.object').startswith('MES.Product.RunDaily_') and scalar(values,'MONITOR.QUERY.START') and scalar(values,'MONITOR.QUERY.END')
         if not complete or any(scalar(values,DATA+k) for k in ['ITEM_NUM','JOB_PROD_QTY','RULE_NO']):
             raise protocol.SyncError('작업일보 응답이 정상적인 빈 조회인지 확인할 수 없습니다.')
         return [],[]
-    count=len(lot_value.split(','))
+    count=len((scalar(values,DATA+'ITEM_NUM') if aggregate else lot_value).split(','))
     keys='ITEM_NUM LOT_NUM RULE_NO JOB_PROD_QTY JOB_FAULT_QTY SET_UP_QTY JOB_TIME_STRING JOB_USER_NM PRODUCT_NM PREV_LOT_STR'.split()
-    arrays=columns(values,DATA,keys,count,required=keys[:7])
+    arrays=columns(values,DATA,keys,count,required=[k for k in keys[:7] if k!='LOT_NUM' or not aggregate])
+    related_ids=scalar(values,'MES.Product.RunDailyList.RunRelSet.REL_NO').split(',')
+    allowed_relations=set(arrays['RULE_NO'])|({r for r in related_ids if r} if aggregate and count==1 else set())
     # Stops belong to this machine/day/shift, rather than an arbitrary item row.
     stop_ids=scalar(values,STOP+'RULE_NO');stops=[];warnings=[]
     stop_count=len(stop_ids.split(',')) if stop_ids else 0
@@ -92,14 +100,14 @@ def parse_daily(values,day,machine,shift):
     if fault_ids:
         fields=columns(values,FAULT,['REL_NO','FAULT_TYPE','FAULT_TYPE_NM','FAULT_QTY'],len(fault_ids.split(',')),required=['REL_NO','FAULT_TYPE','FAULT_QTY'])
         for i,rel in enumerate(fields['REL_NO']):
-            if rel not in arrays['RULE_NO']:raise protocol.SyncError('불량 상세를 해당 작업에 연결할 수 없습니다.')
+            if rel not in allowed_relations:raise protocol.SyncError('불량 상세를 해당 작업에 연결할 수 없습니다.')
             defects.append(dict(rel_no=rel,code=fields['FAULT_TYPE'][i],name=fields['FAULT_TYPE_NM'][i],qty=float(quantity(fields['FAULT_QTY'][i],'불량 상세'))))
     rows=[]
     for i in range(count):
         good=quantity(arrays['JOB_PROD_QTY'][i],'양품');combined=quantity(arrays['JOB_FAULT_QTY'][i],'불량·셋업');setup=quantity(arrays['SET_UP_QTY'][i],'셋업')
         if combined<setup:raise protocol.SyncError('불량·셋업 합계가 셋업 수량보다 작아 저장하지 않습니다.')
         defect=combined-setup;rel=arrays['RULE_NO'][i]
-        details=[{k:v for k,v in d.items() if k!='rel_no'} for d in defects if d['rel_no']==rel]
+        details=[{k:v for k,v in d.items() if k!='rel_no'} for d in defects if d['rel_no']==rel or aggregate and count==1]
         if details and sum(Decimal(str(d['qty'])) for d in details)!=defect:warnings.append('불량 합계와 유형별 상세 합계가 다른 작업이 있습니다.')
         a,b=time_range(arrays['JOB_TIME_STRING'][i],day,shift_type=='NIGHT')
         materials=[]
@@ -108,7 +116,7 @@ def parse_daily(values,day,machine,shift):
             lot,sep,qty=line.rpartition(':')
             if not sep or not lot.strip():raise protocol.SyncError('투입 LOT·수량 형식을 확인할 수 없습니다.')
             materials.append(dict(lot_no=lot.strip(),qty=str(quantity(qty.strip(),'투입 LOT'))))
-        rows.append(dict(ITEM_NUM=arrays['ITEM_NUM'][i],PRODUCT_NM=arrays['PRODUCT_NM'][i],PROC_TYPE_NM=process_name,JOB_TIME=day.strftime('%Y%m%d'),JOB_ST_TIME=a.strftime('%Y%m%d%H%M%S'),JOB_END_TIME=b.strftime('%Y%m%d%H%M%S'),JOB_NUM=rel,LOT_NUM=arrays['LOT_NUM'][i],JOB_QTY=str(good),LOT_QTY=str(good+combined),FAULT_QTY=str(defect),F10=str(setup),DAILY_SOURCE=True,SHIFT_TYPE=shift_type,SHIFT_NAME=shift_name,OPERATOR_NAME=arrays['JOB_USER_NM'][i],MACHINE_NAME=name,MACHINE_NO=str(int(name.split('-')[1])),MATERIAL_LOTS=materials,DOWNTIMES=stops,UNASSIGNED_DOWNTIME_NOTE=unassigned_note,DEFECTS=details,SOURCE_FAULT_WITH_SETUP=str(combined)))
+        rows.append(dict(ITEM_NUM=arrays['ITEM_NUM'][i],PRODUCT_NM=arrays['PRODUCT_NM'][i],PROC_TYPE_NM=process_name,JOB_TIME=day.strftime('%Y%m%d'),JOB_ST_TIME=a.strftime('%Y%m%d%H%M%S'),JOB_END_TIME=b.strftime('%Y%m%d%H%M%S'),JOB_NUM=rel,LOT_NUM=arrays['LOT_NUM'][i],JOB_QTY=str(good),LOT_QTY=str(good+combined),FAULT_QTY=str(defect),F10=str(setup),DAILY_SOURCE=True,SHIFT_TYPE=shift_type,SHIFT_NAME=shift_name,OPERATOR_NAME=arrays['JOB_USER_NM'][i],MACHINE_NAME=name,MACHINE_NO=str(int(name.split('-')[1])),MATERIAL_LOTS=materials,DOWNTIMES=stops,UNASSIGNED_DOWNTIME_NOTE=unassigned_note,DEFECTS=details,SOURCE_FAULT_WITH_SETUP=str(combined),DAILY_REL_IDS=[r for r in related_ids if r],AGGREGATE_ONLY=aggregate))
     return rows,warnings
 
 
@@ -124,3 +132,45 @@ def fetch_day(client,day):
             data,notes=parse_daily(protocol.query_with_retry(client.opener,payload),day,machine,shift)
             rows.extend(data);warnings.extend(notes)
     return rows,sorted(set(warnings))
+
+
+def supplement_assembly(client,day,legacy):
+    """Enrich matching existing assembly lots; never store a LOT-less aggregate as production."""
+    from services.production_sync_view import external_machine_no
+    from services.production_sync_mapping import stage_suffix
+    warnings=[]
+    for machine in ASSEMBLY_MACHINES:
+        shift=SHIFTS[0]  # Only assembly day-shift requests have been observed.
+        callback=getattr(client,'on_query_progress',None)
+        if callback:callback()
+        name,identity,process,_=machine
+        payload=protocol.client_common(client);payload.update(client.context)
+        payload.update({'run.object.name':'MES.Product.RunDailyList.RunDailyListObj','jump.form.code':'',COND+'JOB_DATE':day.isoformat(),COND+'JOB_TYPE':'JOB_ORDER',COND+'MACH_NM':name,COND+'MACH_NO':identity,COND+'PROC_TYPE':process,COND+'SHIFT_TYPE':shift[0],COND+'SHIFT_TYPE_NM':shift[1]})
+        aggregates,notes=parse_daily(protocol.query_with_retry(client.opener,payload),day,machine,shift,allow_aggregate=True)
+        warnings.extend(notes)
+        used=set()
+        for aggregate in aggregates:
+            candidates=[]
+            for row in legacy:
+                if stage_suffix(row['PROC_TYPE_NM'])!='-C' or row['ITEM_NUM'].strip().casefold()!=aggregate['ITEM_NUM'].strip().casefold() or external_machine_no(row['LOT_NUM'])!=aggregate['MACHINE_NO']:
+                    continue
+                if aggregate['LOT_NUM'] and row['LOT_NUM'].strip().upper()!=aggregate['LOT_NUM'].strip().upper():continue
+                # The old LOT timestamps must be contained in the observed assembly work period.
+                if not row['JOB_ST_TIME'] or not row['JOB_END_TIME'] or not (aggregate['JOB_ST_TIME']<=row['JOB_ST_TIME']<=row['JOB_END_TIME']<=aggregate['JOB_END_TIME']):continue
+                candidates.append(row)
+            quantities=('JOB_QTY','FAULT_QTY','F10')
+            if not candidates or any(sum(Decimal(row[key]) for row in candidates)!=Decimal(aggregate[key]) for key in quantities) or any(row['LOT_NUM'] in used for row in candidates):
+                warnings.append(name+' 조립 작업일보와 LOT별 수량·시간을 연결할 수 없어 기존 실적을 유지했습니다.')
+                continue
+            for row in candidates:
+                used.add(row['LOT_NUM'])
+                for key in ('DAILY_SOURCE','SHIFT_TYPE','SHIFT_NAME','OPERATOR_NAME','MACHINE_NAME','MACHINE_NO','DOWNTIMES','UNASSIGNED_DOWNTIME_NOTE','DAILY_REL_IDS'):
+                    row[key]=aggregate[key]
+                row['ASSEMBLY_DAILY_SUPPLEMENT']=True
+                # Aggregated material usage and defects cannot be allocated to individual production lots.
+                row['ASSEMBLY_GROUP_LOTS']=[r['LOT_NUM'] for r in candidates]
+                if len(candidates)==1:
+                    row['MATERIAL_LOTS']=aggregate['MATERIAL_LOTS'];row['DEFECTS']=aggregate['DEFECTS']
+                else:
+                    row['ASSEMBLY_GROUP_MATERIALS']=aggregate['MATERIAL_LOTS'];row['ASSEMBLY_GROUP_DEFECTS']=aggregate['DEFECTS']
+    return sorted(set(warnings))
