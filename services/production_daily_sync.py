@@ -113,9 +113,9 @@ def _parse_daily(values,day,machine,shift,allow_aggregate=False):
         details=[{k:v for k,v in d.items() if k!='rel_no'} for d in defects if d['rel_no']==rel or aggregate and count==1]
         if details and sum(Decimal(str(d['qty'])) for d in details)!=defect:warnings.append('불량 합계와 유형별 상세 합계가 다른 작업이 있습니다.')
         if allow_aggregate and not arrays['JOB_TIME_STRING'][i].strip():
-            warnings.append(name+' 조립 작업일보의 작업시간이 없어 해당 품번의 기존 실적을 유지했습니다: '+arrays['ITEM_NUM'][i])
-            continue
-        a,b=time_range(arrays['JOB_TIME_STRING'][i],day,shift_type=='NIGHT')
+            a=b=None
+        else:
+            a,b=time_range(arrays['JOB_TIME_STRING'][i],day,shift_type=='NIGHT')
         if not arrays['LOT_NUM'][i].strip():
             empty=good==combined==setup==0 and a==b and not arrays['PREV_LOT_STR'][i].strip() and not any(d['qty'] for d in details)
             if empty:
@@ -128,7 +128,7 @@ def _parse_daily(values,day,machine,shift,allow_aggregate=False):
             lot,sep,qty=line.rpartition(':')
             if not sep or not lot.strip():raise protocol.SyncError('투입 LOT·수량 형식을 확인할 수 없습니다.')
             materials.append(dict(lot_no=lot.strip(),qty=str(quantity(qty.strip(),'투입 LOT'))))
-        rows.append(dict(ITEM_NUM=arrays['ITEM_NUM'][i],PRODUCT_NM=arrays['PRODUCT_NM'][i],PROC_TYPE_NM=process_name,JOB_TIME=day.strftime('%Y%m%d'),JOB_ST_TIME=a.strftime('%Y%m%d%H%M%S'),JOB_END_TIME=b.strftime('%Y%m%d%H%M%S'),JOB_NUM=rel,LOT_NUM=arrays['LOT_NUM'][i],JOB_QTY=str(good),LOT_QTY=str(good+combined),FAULT_QTY=str(defect),F10=str(setup),DAILY_SOURCE=True,SHIFT_TYPE=shift_type,SHIFT_NAME=shift_name,OPERATOR_NAME=arrays['JOB_USER_NM'][i],MACHINE_NAME=name,MACHINE_NO=str(int(name.split('-')[1])),MATERIAL_LOTS=materials,DOWNTIMES=stops,UNASSIGNED_DOWNTIME_NOTE=unassigned_note,UNASSIGNED_PRODUCT_NAME=unassigned_product,DEFECTS=details,SOURCE_FAULT_WITH_SETUP=str(combined),DAILY_REL_IDS=[r for r in related_ids if r],AGGREGATE_ONLY=aggregate))
+        rows.append(dict(ITEM_NUM=arrays['ITEM_NUM'][i],PRODUCT_NM=arrays['PRODUCT_NM'][i],PROC_TYPE_NM=process_name,JOB_TIME=day.strftime('%Y%m%d'),JOB_ST_TIME=a.strftime('%Y%m%d%H%M%S') if a else '',JOB_END_TIME=b.strftime('%Y%m%d%H%M%S') if b else '',JOB_NUM=rel,LOT_NUM=arrays['LOT_NUM'][i],JOB_QTY=str(good),LOT_QTY=str(good+combined),FAULT_QTY=str(defect),F10=str(setup),DAILY_SOURCE=True,SHIFT_TYPE=shift_type,SHIFT_NAME=shift_name,OPERATOR_NAME=arrays['JOB_USER_NM'][i],MACHINE_NAME=name,MACHINE_NO=str(int(name.split('-')[1])),MATERIAL_LOTS=materials,DOWNTIMES=stops,UNASSIGNED_DOWNTIME_NOTE=unassigned_note,UNASSIGNED_PRODUCT_NAME=unassigned_product,DEFECTS=details,SOURCE_FAULT_WITH_SETUP=str(combined),DAILY_REL_IDS=[r for r in related_ids if r],AGGREGATE_ONLY=aggregate))
     return rows,warnings
 
 
@@ -143,6 +143,11 @@ def parse_daily(values,day,machine,shift,allow_aggregate=False):
         raise
 
 
+def record_query_error(client,day,label,exc):
+    if not hasattr(client,'query_errors'):client.query_errors=[]
+    client.query_errors.append(dict(error=day.isoformat()+' 조회: '+label+': '+str(exc),failure_data=getattr(exc,'failure_data',None)))
+
+
 def fetch_day(client,day):
     rows=[];warnings=[]
     for machine in MACHINES:
@@ -152,7 +157,11 @@ def fetch_day(client,day):
             name,identity,process,_=machine
             payload=protocol.client_common(client);payload.update(client.context)
             payload.update({'run.object.name':'MES.Product.RunDailyList.RunDailyListObj','jump.form.code':'',COND+'JOB_DATE':day.isoformat(),COND+'JOB_TYPE':'JOB_PLAN',COND+'MACH_NM':name,COND+'MACH_NO':identity,COND+'PROC_TYPE':process,COND+'SHIFT_TYPE':shift[0],COND+'SHIFT_TYPE_NM':shift[1]})
-            data,notes=parse_daily(protocol.query_with_retry(client.opener,payload),day,machine,shift)
+            try:
+                data,notes=parse_daily(protocol.query_with_retry(client.opener,payload),day,machine,shift)
+            except protocol.SyncError as exc:
+                record_query_error(client,day,name+' '+shift[1],exc)
+                continue
             rows.extend(data);warnings.extend(notes)
     return rows,sorted(set(warnings))
 
@@ -169,7 +178,11 @@ def supplement_assembly(client,day,legacy):
         name,identity,process,_=machine
         payload=protocol.client_common(client);payload.update(client.context)
         payload.update({'run.object.name':'MES.Product.RunDailyList.RunDailyListObj','jump.form.code':'',COND+'JOB_DATE':day.isoformat(),COND+'JOB_TYPE':'JOB_ORDER',COND+'MACH_NM':name,COND+'MACH_NO':identity,COND+'PROC_TYPE':process,COND+'SHIFT_TYPE':shift[0],COND+'SHIFT_TYPE_NM':shift[1]})
-        aggregates,notes=parse_daily(protocol.query_with_retry(client.opener,payload),day,machine,shift,allow_aggregate=True)
+        try:
+            aggregates,notes=parse_daily(protocol.query_with_retry(client.opener,payload),day,machine,shift,allow_aggregate=True)
+        except protocol.SyncError as exc:
+            record_query_error(client,day,name+' '+shift[1],exc)
+            continue
         warnings.extend(notes)
         used=set()
         for aggregate in aggregates:
@@ -179,7 +192,12 @@ def supplement_assembly(client,day,legacy):
                     continue
                 if aggregate['LOT_NUM'] and row['LOT_NUM'].strip().upper()!=aggregate['LOT_NUM'].strip().upper():continue
                 # The old LOT timestamps must be contained in the observed assembly work period.
-                if not row['JOB_ST_TIME'] or not row['JOB_END_TIME'] or not (aggregate['JOB_ST_TIME']<=row['JOB_ST_TIME']<=row['JOB_END_TIME']<=aggregate['JOB_END_TIME']):continue
+                if aggregate['JOB_ST_TIME']:
+                    if not row['JOB_ST_TIME'] or not row['JOB_END_TIME'] or not (aggregate['JOB_ST_TIME']<=row['JOB_ST_TIME']<=row['JOB_END_TIME']<=aggregate['JOB_END_TIME']):continue
+                else:
+                    # Without times, only an unambiguous item aggregate with matching quantities can enrich LOTs.
+                    if sum(a['ITEM_NUM'].strip().casefold()==aggregate['ITEM_NUM'].strip().casefold() for a in aggregates)!=1:continue
+                    if row.get('SHIFT_TYPE') and row['SHIFT_TYPE']!=aggregate['SHIFT_TYPE']:continue
                 candidates.append(row)
             quantities=('JOB_QTY','FAULT_QTY','F10')
             if not candidates or any(sum(Decimal(row[key]) for row in candidates)!=Decimal(aggregate[key]) for key in quantities) or any(row['LOT_NUM'] in used for row in candidates):

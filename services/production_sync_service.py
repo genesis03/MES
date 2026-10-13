@@ -170,6 +170,7 @@ def execute(start, end, token, run_id, kind='production'):
     querying_day = None
     error = None
     failure_data = None
+    partial_errors = []
     try:
         username, password = read_credentials()
         client = Client(username, password)
@@ -188,13 +189,28 @@ def execute(start, end, token, run_id, kind='production'):
                         days.add(datetime.strptime(packing_date, '%Y-%m-%d').date())
         for day in sorted(days):
             querying_day = day
-            rows, warnings = client.fetch_day(day)
-            result = save_day(rows, token) if kind == 'production' else save_day(rows, token, kind, queried_day=day)
+            if kind=='production':client.query_errors=[]
+            try:
+                rows, warnings = client.fetch_day(day)
+                result = save_day(rows, token) if kind == 'production' else save_day(rows, token, kind, queried_day=day)
+            except SyncError as exc:
+                if kind!='production':raise
+                renew_query_lease(State,token)
+                partial_errors.append(f'{day.isoformat()} 조회: {exc}')
+                failure_data=failure_data or getattr(exc,'failure_data',None)
+                continue
             for key in result:
                 counts[key] += result[key]
-            counts['completed_days'] += 1
+            query_errors=getattr(client,'query_errors',[]) if kind=='production' else []
+            for failed in query_errors:
+                partial_errors.append(failed['error'])
+                failure_data=failure_data or failed.get('failure_data')
+            if not query_errors:counts['completed_days'] += 1
             counts['warnings'] = sorted(set(counts['warnings'] + warnings))
-        if not counts['received'] and ((end - start).days >= 30 or (start.month, start.day) == (1, 1)):
+        if partial_errors:
+            counts['failed_queries']=len(partial_errors)
+            error=' / '.join(partial_errors)
+        if not partial_errors and not counts['received'] and ((end - start).days >= 30 or (start.month, start.day) == (1, 1)):
             querying_day = None
             raise SyncError('전체 기간에서 수신한 실적이 0건입니다. 조회 조건과 계정 권한을 확인해야 하므로 가져오기 완료로 확정하지 않습니다.')
     except (SyncError, CredentialError) as exc:

@@ -324,23 +324,23 @@ def test_assembly_product_name_comma_does_not_block_three_valid_records():
         parse_daily(values,DAY,ASSEMBLY_MACHINES[0],SHIFTS[0],allow_aggregate=True)
 
 
-def test_assembly_missing_work_time_keeps_other_rows_and_existing_lots(monkeypatch):
-    values=daily_response(machine=ASSEMBLY_MACHINES[0],empty=True)
-    fields=dict(ITEM_NUM='310189-1,310186-1,310061',LOT_NUM='',RULE_NO='job1,job2,job3',JOB_PROD_QTY='1443,1433,100',JOB_FAULT_QTY='0,0,0',SET_UP_QTY='0,0,0',JOB_TIME_STRING=' , ,08:00 ~ 18:00',JOB_USER_NM='Worker,Worker,Worker',PRODUCT_NM='Right,Left,Terminal',PREV_LOT_STR='')
-    values.update({DATA+k:[v] for k,v in fields.items()})
-    rows,warnings=parse_daily(values,DAY,ASSEMBLY_MACHINES[0],SHIFTS[0],allow_aggregate=True)
-    assert [r['ITEM_NUM'] for r in rows]==['310061']
-    assert len(warnings)==2 and all('작업시간이 없어' in w for w in warnings)
-    client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
-    legacy=[row(lot='LA'+DAY.strftime('%Y%m%d')+'011',ITEM_NUM='310189-1',PROC_TYPE_NM='캡조립')]
-    original=[dict(r) for r in legacy]
-    # Missing times must not rewrite the existing LOT quantity or metadata.
-    values[DATA+'JOB_TIME_STRING']=[' , , ']
-    monkeypatch.setattr(source,'query_with_retry',lambda _,payload: values if payload[COND+'MACH_NM']=='AS-01' else daily_response(machine=ASSEMBLY_MACHINES[1],empty=True))
+def test_assembly_without_work_times_enriches_matching_lots_without_changing_times(monkeypatch):
     from services.production_daily_sync import supplement_assembly
-    notes=supplement_assembly(client,DAY,legacy)
+    values=assembly_response()
+    values[DATA+'JOB_TIME_STRING']=[' ']
+    rows,warnings=parse_daily(values,DAY,ASSEMBLY_MACHINES[0],SHIFTS[0],allow_aggregate=True)
+    assert len(rows)==1 and rows[0]['JOB_ST_TIME']==rows[0]['JOB_END_TIME']==''
+    assert not warnings
+    client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
+    monkeypatch.setattr(source,'query_with_retry',lambda _,payload: values if payload[COND+'MACH_NM']=='AS-01' else daily_response(machine=ASSEMBLY_MACHINES[1],empty=True))
+    legacy=assembly_lots();original=[dict(r) for r in legacy]
+    assert not supplement_assembly(client,DAY,legacy)
+    for before,after in zip(original,legacy):
+        assert all(after[k]==before[k] for k in ('JOB_QTY','FAULT_QTY','F10','LOT_QTY','LOT_NUM','JOB_ST_TIME','JOB_END_TIME'))
+        assert after['OPERATOR_NAME']=='Assembly worker' and after['SHIFT_TYPE']=='DAY'
+    legacy=assembly_lots();legacy[0]['JOB_QTY']='1';original=[dict(r) for r in legacy]
+    assert supplement_assembly(client,DAY,legacy)
     assert legacy==original
-    assert len(notes)==3
 
 
 def test_machining_missing_work_time_still_blocks_invalid_production():
@@ -348,3 +348,20 @@ def test_machining_missing_work_time_still_blocks_invalid_production():
     values[DATA+'JOB_TIME_STRING']=[' ']
     with pytest.raises(source.SyncError,match='JOB_TIME_STRING'):
         parse_daily(values,DAY,MACHINES[0],SHIFTS[0])
+
+
+def test_failed_machine_query_does_not_block_other_machines_and_shifts(monkeypatch):
+    from services.production_daily_sync import fetch_day
+    client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
+    def query(_,payload):
+        machine=next(m for m in MACHINES if m[0]==payload[COND+'MACH_NM'])
+        shift=next(s for s in SHIFTS if s[0]==payload[COND+'SHIFT_TYPE'])
+        values=daily_response(machine=machine,shift=shift)
+        if machine==MACHINES[0] and shift==SHIFTS[0]:values[DATA+'JOB_PROD_QTY']=['NaN']
+        return values
+    monkeypatch.setattr(source,'query_with_retry',query)
+    rows,warnings=fetch_day(client,DAY)
+    assert len(rows)==15 and len(client.query_errors)==1
+    assert 'LT-01 주간' in client.query_errors[0]['error']
+    assert client.query_errors[0]['failure_data']['equipment']=='LT-01'
+    assert any(r['MACHINE_NAME']=='TP-02' and r['SHIFT_TYPE']=='NIGHT' for r in rows)

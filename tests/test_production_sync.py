@@ -973,3 +973,36 @@ def test_saved_key_used_for_both_clients_unless_landing_provides_one(setup,monke
 def test_protocol_key_admin_permission_required(setup):
     setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='reader',role='USER',permissions='{}')
     assert setup.client.put('/api/production/external-sync/protocol-key',json={'encrypt_key':'1837'}).status_code==403
+
+
+def test_failed_middle_date_does_not_stop_later_dates(setup,monkeypatch):
+    start=DAY-timedelta(days=2)
+    class Client:
+        def __init__(self,*_):pass
+        def fetch_day(self,day):
+            if day==DAY-timedelta(days=1):raise source.SyncError('middle date error')
+            return [row(day=day,lot='LOT-'+day.isoformat())],[]
+    monkeypatch.setattr(sync,'ProductionClient',Client)
+    token,run_id=sync.claim(start,DAY,'MANUAL')
+    sync.execute(start,DAY,token,run_id)
+    with setup.sessions() as db:
+        run=db.get(ProductionSyncRun,run_id);counts=json.loads(run.counts_json)
+        assert run.status=='FAILED' and counts['received']==2 and counts['completed_days']==2
+        assert counts['failed_queries']==1
+        assert {r.work_date for r in db.query(ExternalProductionRecord)}=={start.isoformat(),DAY.isoformat()}
+
+
+def test_partial_query_errors_save_successful_rows_and_keep_error_excel(setup,monkeypatch):
+    from models.production_sync import ProductionSyncFailureData
+    class Client:
+        def __init__(self,*_):pass
+        def fetch_day(self,day):
+            self.query_errors=[dict(error='LT-01 error',failure_data={'work_date':day.isoformat(),'fields':{}})]
+            return [row()],[]
+    monkeypatch.setattr(sync,'ProductionClient',Client)
+    token,run_id=sync.claim(DAY,DAY,'MANUAL');sync.execute(DAY,DAY,token,run_id)
+    with setup.sessions() as db:
+        run=db.get(ProductionSyncRun,run_id);counts=json.loads(run.counts_json)
+        assert run.status=='FAILED' and counts['received']==1 and counts['completed_days']==0
+        assert db.query(ExternalProductionRecord).count()==1
+        assert db.get(ProductionSyncFailureData,run_id) is not None
