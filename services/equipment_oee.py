@@ -167,9 +167,9 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
         g['performance_shift_seconds']=baseline
         reported_after_planned_stop=max(0,baseline-seconds(intersect_intervals(plan_stops,observed)))
         unreported=max(0,planned-reported_after_planned_stop)
-        if unreported:g['issues'].append(f'생산계획 시간 중 실적 기준 교대시간 미확인: {unreported/3600:.2f}시간 (비가동에 합산하지 않음)')
-        if actual_stops>baseline:g['issues'].append('등록된 정지시간이 실적 기준 교대시간을 초과합니다. 정지 내역을 확인하세요.')
-        if runtime>planned:g['issues'].append('실적 기준 가동시간이 기본시간을 초과합니다. 생산계획·실적 교대를 확인하세요.')
+        if unreported:g['issues'].append(f'계획시간과 실적 기준 시간 차이: {unreported/3600:.2f}시간 (비가동에 합산하지 않음)')
+        if actual_stops>baseline:g['issues'].append('등록된 정지시간이 실적 건수로 계산한 시간을 초과합니다. 정지 내역을 확인하세요.')
+        if runtime>planned:g['issues'].append('실적 기준 가동시간이 기본시간을 초과합니다. 생산계획과 실적의 일자·주야 구분을 확인하세요.')
         if planned and not baseline:g['issues'].append('생산실적 없음: 가동 여부를 확인하세요. 비가동은 등록된 내역만 계산합니다.')
         g['issues'].extend('생산계획 C/T 미등록: '+part for part in missing)
         if not planned and g['total_qty']:g['issues'].append('가동 스케줄에 경과 시간이 없는데 생산실적이 있습니다. 가동일·시간을 확인하세요.')

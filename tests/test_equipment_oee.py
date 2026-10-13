@@ -310,7 +310,7 @@ def test_plan_without_performance_is_not_registered_downtime(setup):
         machine=next(r for r in calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,14))['items'] if r['key']==str(equipment))
         assert machine['planned_seconds']==24*3600
         assert machine['downtime_seconds']==machine['planned_stop_seconds']==machine['runtime_seconds']==0
-        assert any('실적 기준 교대시간 미확인: 24.00시간' in issue for issue in machine['issues'])
+        assert any('계획시간과 실적 기준 시간 차이: 24.00시간' in issue for issue in machine['issues'])
         assert all('전체를 비가동' not in issue for issue in machine['issues'])
 
 
@@ -352,4 +352,4 @@ def test_full_planned_stop_without_production_does_not_show_unreported_plan_time
         machine=next(r for r in calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,14))['items'] if r['key']==str(equipment))
         assert machine['planned_stop_seconds']==24*3600
         assert machine['planned_seconds']==machine['downtime_seconds']==machine['runtime_seconds']==0
-        assert not any('교대시간 미확인' in issue for issue in machine['issues'])
+        assert not any('계획시간과 실적 기준 시간 차이:' in issue for issue in machine['issues'])
