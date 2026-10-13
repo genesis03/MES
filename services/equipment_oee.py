@@ -117,7 +117,6 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
         g.update(registered_downtime_seconds=registered_downtime,downtime_seconds=downtime,runtime_seconds=runtime,availability=availability,performance=performance,quality=quality,oee=oee)
         if performance is not None and performance>1:g['issues'].append('성능률 100% 초과: 사이클타임·실적·비가동 기록 확인')
         g['excluded_parts']=sorted(g['excluded_parts'])
-        if g['excluded_records']:g['issues'].append(f"생산계획 C/T 미등록 실적 제외: {g['excluded_records']}건 · "+', '.join(g['excluded_parts']))
         g['parts']=list(g['parts'].values())
         for p in g['parts']:p['sources']=sorted(p['sources'])
         result.append(g)
