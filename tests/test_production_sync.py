@@ -589,8 +589,8 @@ def test_pagination_and_empty_day_preserve_previous_records(setup):
 def test_http_login_cookie_and_list_protocol(monkeypatch,bootstrap_key,kind):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import threading
-    expected_key=bootstrap_key or '2308'
-    monkeypatch.setattr(source.config,'PRODUCTION_SYNC_ENCRYPT_KEY','2308')
+    expected_key=bootstrap_key or '1837'
+    monkeypatch.setattr(source.config,'PRODUCTION_SYNC_ENCRYPT_KEY','1837')
     from services.packing_sync_client import PackingClient
     from test_packing_sync import row as pack_row,response as pack_response
     seen = []
