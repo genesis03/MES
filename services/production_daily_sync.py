@@ -49,6 +49,7 @@ def columns(values,prefix,keys,count,required=(),free_text=()):
 
 
 def time_range(value,day,night=False):
+    # Only the echoed work date and shift anchor times; RULE_NO is an opaque identifier.
     match=re.fullmatch(r'\s*(\d{2}:\d{2})\s*~\s*(\d{2}:\d{2})\s*',value)
     if not match:raise protocol.SyncError('작업일보 시작·종료시간 형식이 잘못되었습니다.')
     try:
@@ -58,17 +59,6 @@ def time_range(value,day,night=False):
     if night and start.hour<12:start+=timedelta(days=1);end+=timedelta(days=1)
     if end<start:end+=timedelta(days=1)
     return start,end
-
-
-def dated_range(value,day,night,identity,end_identity=False):
-    # Source IDs contain actual timestamps, including early-morning work on the same calendar day.
-    try:
-        explicit=datetime.strptime(identity[:14],'%Y%m%d%H%M%S').date() if re.match(r'^\d{14}',identity) else None
-    except ValueError:explicit=None
-    if explicit and abs((explicit-day).days)>1:raise protocol.SyncError('작업일보 시간의 날짜가 조회일과 일치하지 않습니다.')
-    a,b=time_range(value,explicit or day,night if explicit is None else False)
-    if explicit and end_identity and b.date()>explicit:a-=timedelta(days=1);b-=timedelta(days=1)
-    return a,b
 
 
 def parse_daily(values,day,machine,shift):
@@ -96,7 +86,7 @@ def parse_daily(values,day,machine,shift):
     if stop_ids:
         fields=columns(values,STOP,['RULE_NO','JOB_TIME_STRING','NON_OPER_TYPE','NON_OPER_TYPE_NM','JOB_PROD_NOTE','Q_CHECK'],len(stop_ids.split(',')),required=['RULE_NO','JOB_TIME_STRING','NON_OPER_TYPE'],free_text=['JOB_PROD_NOTE'])
         for i,identity in enumerate(fields['RULE_NO']):
-            a,b=dated_range(fields['JOB_TIME_STRING'][i],day,shift_type=='NIGHT',identity,end_identity=True)
+            a,b=time_range(fields['JOB_TIME_STRING'][i],day,shift_type=='NIGHT')
             stops.append(dict(id=identity,type_code=fields['NON_OPER_TYPE'][i],type_name=fields['NON_OPER_TYPE_NM'][i],started_at=a.strftime('%Y-%m-%d %H:%M'),ended_at=b.strftime('%Y-%m-%d %H:%M'),minutes=(b-a).total_seconds()/60,action=fields['JOB_PROD_NOTE'][i],quality_confirmed=fields['Q_CHECK'][i] in ('☑','Y','1')))
     defects=[];fault_ids=scalar(values,FAULT+'REL_NO')
     if fault_ids:
@@ -111,7 +101,7 @@ def parse_daily(values,day,machine,shift):
         defect=combined-setup;rel=arrays['RULE_NO'][i]
         details=[{k:v for k,v in d.items() if k!='rel_no'} for d in defects if d['rel_no']==rel]
         if details and sum(Decimal(str(d['qty'])) for d in details)!=defect:warnings.append('불량 합계와 유형별 상세 합계가 다른 작업이 있습니다.')
-        a,b=dated_range(arrays['JOB_TIME_STRING'][i],day,shift_type=='NIGHT',rel)
+        a,b=time_range(arrays['JOB_TIME_STRING'][i],day,shift_type=='NIGHT')
         materials=[]
         for line in arrays['PREV_LOT_STR'][i].splitlines():
             if not line.strip():continue

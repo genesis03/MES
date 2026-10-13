@@ -132,3 +132,40 @@ def test_multiple_downtime_notes_with_ambiguous_commas_preserve_source_without_m
     assert len(warnings)==1 and '원문' in warnings[0]
     with pytest.raises(source.SyncError):
         parse_daily(values|{STOP+'JOB_TIME_STRING':['09:49 ~ 09:59']},DAY,MACHINES[0],SHIFTS[0])
+
+
+@pytest.mark.parametrize('identity',['20260101080000000000001','20261231180000000000002'])
+def test_work_and_downtime_identifiers_do_not_override_verified_query_date(identity):
+    values=daily_response()
+    values[DATA+'RULE_NO']=[identity]
+    values[FAULT+'REL_NO']=[identity+','+identity]
+    values[STOP+'RULE_NO']=[identity]
+    rows,_=parse_daily(values,DAY,MACHINES[0],SHIFTS[0])
+    data=rows[0]
+    assert data['JOB_NUM']==identity
+    assert data['JOB_ST_TIME']==DAY.strftime('%Y%m%d')+'073000'
+    assert data['JOB_END_TIME']==DAY.strftime('%Y%m%d')+'192000'
+    assert data['DOWNTIMES'][0]['started_at']==DAY.isoformat()+' 09:49'
+    assert data['DOWNTIMES'][0]['minutes']==10
+    assert data['LOT_QTY']=='314' and sum(d['qty'] for d in data['DEFECTS'])==5
+    with pytest.raises(source.SyncError):
+        parse_daily(values|{COND+'JOB_DATE':[(DAY-timedelta(days=1)).isoformat()]},DAY,MACHINES[0],SHIFTS[0])
+
+
+@pytest.mark.parametrize('text,start_offset,end_offset,start_clock,end_clock',[
+    ('19:30 ~ 07:30',0,1,'193000','073000'),
+    ('03:30 ~ 07:30',1,1,'033000','073000'),
+    ('23:50 ~ 00:10',0,1,'235000','001000'),
+])
+def test_night_times_follow_shift_and_midnight_without_id_timestamp(text,start_offset,end_offset,start_clock,end_clock):
+    values=daily_response(shift=SHIFTS[1]);identity='20260101080000000000001'
+    values[DATA+'RULE_NO']=[identity];values[FAULT+'REL_NO']=[identity+','+identity]
+    values[DATA+'JOB_TIME_STRING']=[text]
+    values[STOP+'RULE_NO']=[identity];values[STOP+'JOB_TIME_STRING']=['23:50 ~ 00:10']
+    data=parse_daily(values,DAY,MACHINES[0],SHIFTS[1])[0][0]
+    assert data['JOB_ST_TIME']==(DAY+timedelta(days=start_offset)).strftime('%Y%m%d')+start_clock
+    assert data['JOB_END_TIME']==(DAY+timedelta(days=end_offset)).strftime('%Y%m%d')+end_clock
+    stop=data['DOWNTIMES'][0]
+    assert stop['started_at']==DAY.isoformat()+' 23:50'
+    assert stop['ended_at']==(DAY+timedelta(days=1)).isoformat()+' 00:10'
+    assert stop['minutes']==20
