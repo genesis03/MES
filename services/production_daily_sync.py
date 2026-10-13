@@ -34,11 +34,14 @@ def quantity(value,label):
     return number
 
 
-def columns(values,prefix,keys,count,required=()):
+def columns(values,prefix,keys,count,required=(),free_text=()):
     result={}
     for key in keys:
         value=scalar(values,prefix+key)
         pieces=value.split(',') if value else ['']*count
+        if key in free_text:
+            if count==1:pieces=[value]
+            elif len(pieces)!=count:pieces=['']*count
         if len(pieces)!=count:raise protocol.SyncError('작업일보 '+key+' 항목별 건수가 일치하지 않습니다. 해당 날짜는 저장하지 않습니다.')
         if key in required and not all(p.strip() for p in pieces):raise protocol.SyncError('작업일보 '+key+' 필수 항목이 없습니다.')
         result[key]=pieces
@@ -85,9 +88,13 @@ def parse_daily(values,day,machine,shift):
     keys='ITEM_NUM LOT_NUM RULE_NO JOB_PROD_QTY JOB_FAULT_QTY SET_UP_QTY JOB_TIME_STRING JOB_USER_NM PRODUCT_NM PREV_LOT_STR'.split()
     arrays=columns(values,DATA,keys,count,required=keys[:7])
     # Stops belong to this machine/day/shift, rather than an arbitrary item row.
-    stop_ids=scalar(values,STOP+'RULE_NO');stops=[]
+    stop_ids=scalar(values,STOP+'RULE_NO');stops=[];warnings=[]
+    stop_count=len(stop_ids.split(',')) if stop_ids else 0
+    raw_note=scalar(values,STOP+'JOB_PROD_NOTE')
+    unassigned_note=raw_note if raw_note and (not stop_count or stop_count>1 and len(raw_note.split(','))!=stop_count) else ''
+    if unassigned_note:warnings.append('일부 비가동 비고는 구분자가 모호하여 개별 연결 없이 원문으로 보관했습니다.')
     if stop_ids:
-        fields=columns(values,STOP,['RULE_NO','JOB_TIME_STRING','NON_OPER_TYPE','NON_OPER_TYPE_NM','JOB_PROD_NOTE','Q_CHECK'],len(stop_ids.split(',')),required=['RULE_NO','JOB_TIME_STRING','NON_OPER_TYPE'])
+        fields=columns(values,STOP,['RULE_NO','JOB_TIME_STRING','NON_OPER_TYPE','NON_OPER_TYPE_NM','JOB_PROD_NOTE','Q_CHECK'],len(stop_ids.split(',')),required=['RULE_NO','JOB_TIME_STRING','NON_OPER_TYPE'],free_text=['JOB_PROD_NOTE'])
         for i,identity in enumerate(fields['RULE_NO']):
             a,b=dated_range(fields['JOB_TIME_STRING'][i],day,shift_type=='NIGHT',identity,end_identity=True)
             stops.append(dict(id=identity,type_code=fields['NON_OPER_TYPE'][i],type_name=fields['NON_OPER_TYPE_NM'][i],started_at=a.strftime('%Y-%m-%d %H:%M'),ended_at=b.strftime('%Y-%m-%d %H:%M'),minutes=(b-a).total_seconds()/60,action=fields['JOB_PROD_NOTE'][i],quality_confirmed=fields['Q_CHECK'][i] in ('☑','Y','1')))
@@ -97,7 +104,7 @@ def parse_daily(values,day,machine,shift):
         for i,rel in enumerate(fields['REL_NO']):
             if rel not in arrays['RULE_NO']:raise protocol.SyncError('불량 상세를 해당 작업에 연결할 수 없습니다.')
             defects.append(dict(rel_no=rel,code=fields['FAULT_TYPE'][i],name=fields['FAULT_TYPE_NM'][i],qty=float(quantity(fields['FAULT_QTY'][i],'불량 상세'))))
-    rows=[];warnings=[]
+    rows=[]
     for i in range(count):
         good=quantity(arrays['JOB_PROD_QTY'][i],'양품');combined=quantity(arrays['JOB_FAULT_QTY'][i],'불량·셋업');setup=quantity(arrays['SET_UP_QTY'][i],'셋업')
         if combined<setup:raise protocol.SyncError('불량·셋업 합계가 셋업 수량보다 작아 저장하지 않습니다.')
@@ -111,7 +118,7 @@ def parse_daily(values,day,machine,shift):
             lot,sep,qty=line.rpartition(':')
             if not sep or not lot.strip():raise protocol.SyncError('투입 LOT·수량 형식을 확인할 수 없습니다.')
             materials.append(dict(lot_no=lot.strip(),qty=str(quantity(qty.strip(),'투입 LOT'))))
-        rows.append(dict(ITEM_NUM=arrays['ITEM_NUM'][i],PRODUCT_NM=arrays['PRODUCT_NM'][i],PROC_TYPE_NM=process_name,JOB_TIME=day.strftime('%Y%m%d'),JOB_ST_TIME=a.strftime('%Y%m%d%H%M%S'),JOB_END_TIME=b.strftime('%Y%m%d%H%M%S'),JOB_NUM=rel,LOT_NUM=arrays['LOT_NUM'][i],JOB_QTY=str(good),LOT_QTY=str(good+combined),FAULT_QTY=str(defect),F10=str(setup),DAILY_SOURCE=True,SHIFT_TYPE=shift_type,SHIFT_NAME=shift_name,OPERATOR_NAME=arrays['JOB_USER_NM'][i],MACHINE_NAME=name,MACHINE_NO=str(int(name.split('-')[1])),MATERIAL_LOTS=materials,DOWNTIMES=stops,DEFECTS=details,SOURCE_FAULT_WITH_SETUP=str(combined)))
+        rows.append(dict(ITEM_NUM=arrays['ITEM_NUM'][i],PRODUCT_NM=arrays['PRODUCT_NM'][i],PROC_TYPE_NM=process_name,JOB_TIME=day.strftime('%Y%m%d'),JOB_ST_TIME=a.strftime('%Y%m%d%H%M%S'),JOB_END_TIME=b.strftime('%Y%m%d%H%M%S'),JOB_NUM=rel,LOT_NUM=arrays['LOT_NUM'][i],JOB_QTY=str(good),LOT_QTY=str(good+combined),FAULT_QTY=str(defect),F10=str(setup),DAILY_SOURCE=True,SHIFT_TYPE=shift_type,SHIFT_NAME=shift_name,OPERATOR_NAME=arrays['JOB_USER_NM'][i],MACHINE_NAME=name,MACHINE_NO=str(int(name.split('-')[1])),MATERIAL_LOTS=materials,DOWNTIMES=stops,UNASSIGNED_DOWNTIME_NOTE=unassigned_note,DEFECTS=details,SOURCE_FAULT_WITH_SETUP=str(combined)))
     return rows,warnings
 
 

@@ -303,6 +303,7 @@ def production_performance_status(
                 'setup_qty': float(view['setup_qty']) if view['setup_qty'] != '' else None,
                 'total_qty': float(view['total_qty']) if view['total_qty'] is not None else None,
                 'consumed_qty': None, 'source_lot_no': ','.join(m['lot_no'] for m in view['material_lots']), 'output_lot_no': record.lot_no,
+                'unassigned_downtime_note':view['unassigned_downtime_note'],
                 'defects':view['defects'],'downtimes':view['downtimes'],'material_lots_data':view['material_lots'],
                 'downstream_used': False, 'can_delete': False,
                 **{key: view[key] for key in ('can_print_label', 'label_error', 'label_url')},

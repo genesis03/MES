@@ -87,7 +87,9 @@ def test_daily_import_updates_existing_lot_without_duplicates_and_exports_report
         item=db.get(ProductionWorkOrder,order).item_id
         db.add(ProductionSyncItemMap(source_part_no='EXTERNAL-A',source_process_name='복합선반',item_id=item))
         db.add(ProductionSyncItemMap(source_part_no='LEGACY-FINISHED',source_process_name='복합선반',item_id=item));db.commit()
-    rows,_=parse_daily(daily_response(),DAY,MACHINES[0],SHIFTS[0]);lot=rows[0]['LOT_NUM']
+    values=daily_response()
+    values.update({STOP+k:[v] for k,v in dict(RULE_NO='s1,s2',JOB_TIME_STRING='09:49 ~ 09:59,10:00 ~ 10:05',NON_OPER_TYPE='CLEANING,TOOL_CHANGE',NON_OPER_TYPE_NM='청소,툴교환',Q_CHECK='□,□',JOB_PROD_NOTE='Clean, floor, replace insert').items()})
+    rows,_=parse_daily(values,DAY,MACHINES[0],SHIFTS[0]);lot=rows[0]['LOT_NUM']
     token,_=sync.claim(DAY,DAY,'MANUAL')
     sync.save_day([row(lot=lot,ITEM_NUM='LEGACY-FINISHED',PROC_TYPE_NM='복합선반')],token)
     with setup.sessions() as db:record_id=db.query(ExternalProductionRecord).one().id
@@ -98,10 +100,35 @@ def test_daily_import_updates_existing_lot_without_duplicates_and_exports_report
         record=db.query(ExternalProductionRecord).one();assert record.id==record_id and record.fault_qty=='5'
         status=production_performance_status(start_date=DAY.isoformat(),end_date=DAY.isoformat(),performance_type=None,process_code=None,work_order_no=None,part_no=None,operator_name='Worker',db=db,current_user=ADMIN)
         assert status[0]['shift_name']=='주간' and status[0]['operator_name']=='Worker'
-        assert status[0]['total_qty']==314 and len(status[0]['downtimes'])==1
+        assert status[0]['total_qty']==314 and len(status[0]['downtimes'])==2
     fetched=setup.client.get('/api/production/daily-job-report',params={'day':DAY.isoformat()}).json()['items'][0]
     assert fetched['defects'][0]['name']=='긁힘' and 'RAW-2' in fetched['material_lots']
+    assert fetched['unassigned_downtime_note']=='Clean, floor, replace insert'
     export=setup.client.post('/api/production/daily-job-report/excel',json={'day':DAY.isoformat(),'keys':[fetched['key']]})
     assert export.status_code==200 and export.content.startswith(b'PK')
+    from openpyxl import load_workbook
+    workbook=load_workbook(io.BytesIO(export.content))
+    assert any('Clean, floor, replace insert' in str(c.value) for sheet in workbook for cells in sheet for c in cells)
     printed=setup.client.get(f'/internal-labels/external-production/{record_id}')
     assert printed.status_code==200 and 'Worker' in printed.text and '主' not in printed.text
+
+
+def test_single_downtime_note_with_commas_is_kept_whole():
+    values=daily_response();note='인서트, 홀더, 체결상태 확인'
+    values[STOP+'JOB_PROD_NOTE']=[note]
+    rows,warnings=parse_daily(values,DAY,MACHINES[0],SHIFTS[0])
+    assert rows[0]['DOWNTIMES'][0]['action']==note
+    assert rows[0]['UNASSIGNED_DOWNTIME_NOTE']=='' and not warnings
+
+
+def test_multiple_downtime_notes_with_ambiguous_commas_preserve_source_without_misassignment():
+    values=daily_response();note='청소, 바닥 및 설비, 인서트 교체'
+    values.update({STOP+k:[v] for k,v in dict(RULE_NO='stop-1,stop-2',JOB_TIME_STRING='09:49 ~ 09:59,10:00 ~ 10:05',NON_OPER_TYPE='CLEANING,TOOL_CHANGE',NON_OPER_TYPE_NM='청소,툴교환',Q_CHECK='□,□',JOB_PROD_NOTE=note).items()})
+    rows,warnings=parse_daily(values,DAY,MACHINES[0],SHIFTS[0]);record=rows[0]
+    assert record['UNASSIGNED_DOWNTIME_NOTE']==note
+    assert [d['action'] for d in record['DOWNTIMES']]==['','']
+    assert [d['minutes'] for d in record['DOWNTIMES']]==[10,5]
+    assert record['FAULT_QTY']=='5' and record['LOT_QTY']=='314'
+    assert len(warnings)==1 and '원문' in warnings[0]
+    with pytest.raises(source.SyncError):
+        parse_daily(values|{STOP+'JOB_TIME_STRING':['09:49 ~ 09:59']},DAY,MACHINES[0],SHIFTS[0])

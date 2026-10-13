@@ -174,6 +174,7 @@ def build_workbook(rows):
                         number=int(code)
                         put(sheet,('T' if number%2 else 'X')+str(27+(number-1)//2),f"{code}. {change['type_name']}")
                 notes=[r['supplement']['notes'] for r in pair if r['supplement']['notes']]
+                notes.extend('비가동 비고 원문 (개별 연결 미확인): '+note for note in dict.fromkeys(r.get('unassigned_downtime_note','') for r in pair) if note)
                 if len(defects)>4:notes.append('추가 불량: '+' / '.join(f"{source['part_no']} {defect['name']} {defect['qty']:g}" for source,defect in defects[4:]))
                 put(sheet,'AG26','\n'.join(notes))
                 for col,field in [('O','total_qty'),('Q','setup_qty'),('W','defect_qty')]:

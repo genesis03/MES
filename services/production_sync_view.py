@@ -54,6 +54,7 @@ def external_record_view(record, connections):
         'machine_no': machine, 'equipment_name':raw.get('MACHINE_NAME',''),
         'shift_type':raw.get('SHIFT_TYPE',''),'shift_name':raw.get('SHIFT_NAME',''),
         'operator_name':raw.get('OPERATOR_NAME',''),'material_lots':raw.get('MATERIAL_LOTS',[]),
+        'unassigned_downtime_note':raw.get('UNASSIGNED_DOWNTIME_NOTE',''),
         'downtimes':raw.get('DOWNTIMES',[]),'defects':raw.get('DEFECTS',[]),
         'started_at': record.started_at or '', 'ended_at': record.ended_at or '',
         'job_qty': record.job_qty, 'lot_qty': record.lot_qty, 'fault_qty': record.fault_qty,
