@@ -75,14 +75,14 @@ def _parse_daily(values,day,machine,shift,allow_aggregate=False):
     lot_value=scalar(values,DATA+'LOT_NUM')
     aggregate=allow_aggregate and process=='PROC_CAP' and not lot_value and bool(scalar(values,DATA+'ITEM_NUM'))
     if allow_aggregate and scalar(values,COND+'JOB_TYPE')!='JOB_ORDER':raise protocol.SyncError('조립 작업일보 조회 유형이 일치하지 않습니다.')
-    if not lot_value and not aggregate:
+    if not lot_value and not scalar(values,DATA+'ITEM_NUM') and not aggregate:
         complete=scalar(values,'log.invoke.object').startswith('MES.Product.RunDaily_') and scalar(values,'MONITOR.QUERY.START') and scalar(values,'MONITOR.QUERY.END')
         if not complete or any(scalar(values,DATA+k) for k in ['ITEM_NUM','JOB_PROD_QTY','RULE_NO']):
             raise protocol.SyncError('작업일보 응답이 정상적인 빈 조회인지 확인할 수 없습니다.')
         return [],[]
-    count=len((scalar(values,DATA+'ITEM_NUM') if aggregate else lot_value).split(','))
+    count=len((scalar(values,DATA+'ITEM_NUM') if aggregate or not lot_value else lot_value).split(','))
     keys='ITEM_NUM LOT_NUM RULE_NO JOB_PROD_QTY JOB_FAULT_QTY SET_UP_QTY JOB_TIME_STRING JOB_USER_NM PRODUCT_NM PREV_LOT_STR'.split()
-    arrays=columns(values,DATA,keys,count,required=[k for k in keys[:7] if k!='LOT_NUM' or not aggregate])
+    arrays=columns(values,DATA,keys,count,required=[k for k in keys[:7] if k!='LOT_NUM'])
     related_ids=scalar(values,'MES.Product.RunDailyList.RunRelSet.REL_NO').split(',')
     allowed_relations=set(arrays['RULE_NO'])|({r for r in related_ids if r} if aggregate and count==1 else set())
     # Stops belong to this machine/day/shift, rather than an arbitrary item row.
@@ -110,6 +110,12 @@ def _parse_daily(values,day,machine,shift,allow_aggregate=False):
         details=[{k:v for k,v in d.items() if k!='rel_no'} for d in defects if d['rel_no']==rel or aggregate and count==1]
         if details and sum(Decimal(str(d['qty'])) for d in details)!=defect:warnings.append('불량 합계와 유형별 상세 합계가 다른 작업이 있습니다.')
         a,b=time_range(arrays['JOB_TIME_STRING'][i],day,shift_type=='NIGHT')
+        if not arrays['LOT_NUM'][i].strip():
+            empty=good==combined==setup==0 and a==b and not arrays['PREV_LOT_STR'][i].strip() and not any(d['qty'] for d in details)
+            if empty:
+                warnings.append('LOT 없는 0수량·0분 기록은 생산실적에서 제외했습니다.')
+                continue
+            if not aggregate:raise protocol.SyncError('작업일보 LOT_NUM 필수 항목이 없습니다. 수량·시간이 있는 기록이라 저장하지 않습니다.')
         materials=[]
         for line in arrays['PREV_LOT_STR'][i].splitlines():
             if not line.strip():continue

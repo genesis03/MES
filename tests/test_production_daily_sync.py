@@ -238,3 +238,62 @@ def test_assembly_supplement_updates_two_existing_record_ids_without_new_lots(se
         assert sum(int(r.job_qty) for r in records)==4560
         assert all(json.loads(r.raw_json)['OPERATOR_NAME']=='Assembly worker' for r in records)
         assert all(r.lot_no and r.part_no=='310061' for r in records)
+
+
+def zero_entry_response():
+    day=__import__('datetime').date(2026,4,13)
+    values=daily_response(day=day,machine=MACHINES[5],shift=SHIFTS[1])
+    values={k:v for k,v in values.items() if not k.startswith(STOP)}
+    fields=dict(ITEM_NUM='310201-A,310201-A',LOT_NUM=',LX20260414065',RULE_NO='2026041319284393600011884309384,2026041319291631200011994118210',JOB_PROD_QTY='0,127',JOB_FAULT_QTY='0,2',SET_UP_QTY='0,1',JOB_TIME_STRING='19:28 ~ 19:28,19:29 ~ 07:26',JOB_USER_NM='배기선,배기선',PRODUCT_NM='AX1-EV terminal,AX1-EV terminal',PREV_LOT_STR=',LR20260317992 : 31.1406')
+    values.update({DATA+k:[v] for k,v in fields.items()})
+    relation='2026041319291631200011994118210'
+    values.update({FAULT+'REL_NO':[relation],FAULT+'FAULT_TYPE':['F4'],FAULT+'FAULT_TYPE_NM':['칩 엉김'],FAULT+'FAULT_QTY':['1']})
+    values['MES.Product.RunDailyList.RunRelSet.REL_NO']=[fields['RULE_NO']]
+    return values,day
+
+
+def test_observed_zero_lot_row_is_skipped_and_real_night_performance_retained():
+    values,day=zero_entry_response()
+    rows,warnings=parse_daily(values,day,MACHINES[5],SHIFTS[1])
+    assert len(rows)==1 and len(warnings)==1
+    data=rows[0]
+    assert data['LOT_NUM']=='LX20260414065'
+    assert (data['JOB_QTY'],data['FAULT_QTY'],data['F10'],data['LOT_QTY'])==('127','1','1','129')
+    assert data['JOB_NUM']=='2026041319291631200011994118210'
+    assert data['JOB_TIME']=='20260413' and data['JOB_ST_TIME']=='20260413192900' and data['JOB_END_TIME']=='20260414072600'
+    assert data['MACHINE_NO']=='6' and data['SHIFT_TYPE']=='NIGHT'
+    assert data['MATERIAL_LOTS']==[{'lot_no':'LR20260317992','qty':'31.1406'}]
+    assert data['DEFECTS']==[{'code':'F4','name':'칩 엉김','qty':1.0}]
+
+
+@pytest.mark.parametrize('field,value',[
+    ('JOB_PROD_QTY','1,127'),('JOB_FAULT_QTY','1,2'),
+    ('JOB_TIME_STRING','19:28 ~ 19:29,19:29 ~ 07:26'),
+    ('PREV_LOT_STR','RAW-USED : 1,LR20260317992 : 31.1406'),
+])
+def test_missing_lot_record_with_production_or_activity_still_blocks_and_captures_raw(field,value):
+    values,day=zero_entry_response();values[DATA+field]=[value]
+    with pytest.raises(source.SyncError,match='LOT_NUM') as error:parse_daily(values,day,MACHINES[5],SHIFTS[1])
+    assert error.value.failure_data['fields'][DATA+'LOT_NUM']==[',LX20260414065']
+
+
+def test_single_zero_lot_row_is_empty_performance_not_a_failed_day():
+    values=daily_response();values={k:v for k,v in values.items() if not k.startswith((STOP,FAULT))}
+    values.update({DATA+k:[v] for k,v in dict(LOT_NUM='',JOB_PROD_QTY='0',JOB_FAULT_QTY='0',SET_UP_QTY='0',JOB_TIME_STRING='19:28 ~ 19:28',PREV_LOT_STR='').items()})
+    rows,warnings=parse_daily(values,DAY,MACHINES[0],SHIFTS[0])
+    assert rows==[] and len(warnings)==1
+
+
+def test_zero_entry_import_stores_only_real_lot_once(setup):
+    values,day=zero_entry_response()
+    rows,_=parse_daily(values,day,MACHINES[5],SHIFTS[1])
+    token,_=sync.claim(day,day,'MANUAL')
+    assert sync.save_day(rows,token)['inserted']==1
+    assert sync.save_day(rows,token)['unchanged']==1
+    with setup.sessions() as db:
+        records=db.query(ExternalProductionRecord).all()
+        assert len(records)==1
+        record=records[0]
+        assert record.lot_no=='LX20260414065' and record.work_date=='2026-04-13'
+        assert (record.job_qty,record.fault_qty,record.lot_qty)==('127','1','129')
+        assert json.loads(record.raw_json)['DEFECTS']==[{'code':'F4','name':'칩 엉김','qty':1.0}]
