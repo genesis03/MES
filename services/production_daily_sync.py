@@ -82,11 +82,14 @@ def _parse_daily(values,day,machine,shift,allow_aggregate=False):
         return [],[]
     count=len((scalar(values,DATA+'ITEM_NUM') if aggregate or not lot_value else lot_value).split(','))
     keys='ITEM_NUM LOT_NUM RULE_NO JOB_PROD_QTY JOB_FAULT_QTY SET_UP_QTY JOB_TIME_STRING JOB_USER_NM PRODUCT_NM PREV_LOT_STR'.split()
-    arrays=columns(values,DATA,keys,count,required=[k for k in keys[:7] if k!='LOT_NUM'])
+    arrays=columns(values,DATA,keys,count,required=[k for k in keys[:7] if k!='LOT_NUM'],free_text=['PRODUCT_NM'])
+    raw_product=scalar(values,DATA+'PRODUCT_NM')
+    unassigned_product=raw_product if count>1 and raw_product and len(raw_product.split(','))!=count else ''
     related_ids=scalar(values,'MES.Product.RunDailyList.RunRelSet.REL_NO').split(',')
     allowed_relations=set(arrays['RULE_NO'])|({r for r in related_ids if r} if aggregate and count==1 else set())
     # Stops belong to this machine/day/shift, rather than an arbitrary item row.
     stop_ids=scalar(values,STOP+'RULE_NO');stops=[];warnings=[]
+    if unassigned_product:warnings.append('품명 구분자가 모호한 날짜는 내부 품목 마스터의 품명을 표시합니다.')
     stop_count=len(stop_ids.split(',')) if stop_ids else 0
     raw_note=scalar(values,STOP+'JOB_PROD_NOTE')
     unassigned_note=raw_note if raw_note and (not stop_count or stop_count>1 and len(raw_note.split(','))!=stop_count) else ''
@@ -122,7 +125,7 @@ def _parse_daily(values,day,machine,shift,allow_aggregate=False):
             lot,sep,qty=line.rpartition(':')
             if not sep or not lot.strip():raise protocol.SyncError('투입 LOT·수량 형식을 확인할 수 없습니다.')
             materials.append(dict(lot_no=lot.strip(),qty=str(quantity(qty.strip(),'투입 LOT'))))
-        rows.append(dict(ITEM_NUM=arrays['ITEM_NUM'][i],PRODUCT_NM=arrays['PRODUCT_NM'][i],PROC_TYPE_NM=process_name,JOB_TIME=day.strftime('%Y%m%d'),JOB_ST_TIME=a.strftime('%Y%m%d%H%M%S'),JOB_END_TIME=b.strftime('%Y%m%d%H%M%S'),JOB_NUM=rel,LOT_NUM=arrays['LOT_NUM'][i],JOB_QTY=str(good),LOT_QTY=str(good+combined),FAULT_QTY=str(defect),F10=str(setup),DAILY_SOURCE=True,SHIFT_TYPE=shift_type,SHIFT_NAME=shift_name,OPERATOR_NAME=arrays['JOB_USER_NM'][i],MACHINE_NAME=name,MACHINE_NO=str(int(name.split('-')[1])),MATERIAL_LOTS=materials,DOWNTIMES=stops,UNASSIGNED_DOWNTIME_NOTE=unassigned_note,DEFECTS=details,SOURCE_FAULT_WITH_SETUP=str(combined),DAILY_REL_IDS=[r for r in related_ids if r],AGGREGATE_ONLY=aggregate))
+        rows.append(dict(ITEM_NUM=arrays['ITEM_NUM'][i],PRODUCT_NM=arrays['PRODUCT_NM'][i],PROC_TYPE_NM=process_name,JOB_TIME=day.strftime('%Y%m%d'),JOB_ST_TIME=a.strftime('%Y%m%d%H%M%S'),JOB_END_TIME=b.strftime('%Y%m%d%H%M%S'),JOB_NUM=rel,LOT_NUM=arrays['LOT_NUM'][i],JOB_QTY=str(good),LOT_QTY=str(good+combined),FAULT_QTY=str(defect),F10=str(setup),DAILY_SOURCE=True,SHIFT_TYPE=shift_type,SHIFT_NAME=shift_name,OPERATOR_NAME=arrays['JOB_USER_NM'][i],MACHINE_NAME=name,MACHINE_NO=str(int(name.split('-')[1])),MATERIAL_LOTS=materials,DOWNTIMES=stops,UNASSIGNED_DOWNTIME_NOTE=unassigned_note,UNASSIGNED_PRODUCT_NAME=unassigned_product,DEFECTS=details,SOURCE_FAULT_WITH_SETUP=str(combined),DAILY_REL_IDS=[r for r in related_ids if r],AGGREGATE_ONLY=aggregate))
     return rows,warnings
 
 
@@ -181,7 +184,7 @@ def supplement_assembly(client,day,legacy):
                 continue
             for row in candidates:
                 used.add(row['LOT_NUM'])
-                for key in ('DAILY_SOURCE','SHIFT_TYPE','SHIFT_NAME','OPERATOR_NAME','MACHINE_NAME','MACHINE_NO','DOWNTIMES','UNASSIGNED_DOWNTIME_NOTE','DAILY_REL_IDS'):
+                for key in ('DAILY_SOURCE','SHIFT_TYPE','SHIFT_NAME','OPERATOR_NAME','MACHINE_NAME','MACHINE_NO','DOWNTIMES','UNASSIGNED_DOWNTIME_NOTE','UNASSIGNED_PRODUCT_NAME','DAILY_REL_IDS'):
                     row[key]=aggregate[key]
                 row['ASSEMBLY_DAILY_SUPPLEMENT']=True
                 # Aggregated material usage and defects cannot be allocated to individual production lots.

@@ -297,3 +297,28 @@ def test_zero_entry_import_stores_only_real_lot_once(setup):
         assert record.lot_no=='LX20260414065' and record.work_date=='2026-04-13'
         assert (record.job_qty,record.fault_qty,record.lot_qty)==('127','1','129')
         assert json.loads(record.raw_json)['DEFECTS']==[{'code':'F4','name':'칩 엉김','qty':1.0}]
+
+
+def test_single_product_name_with_comma_is_preserved():
+    values=daily_response()
+    values[DATA+'PRODUCT_NM']=['JK-EV TERMINAL ASSY(L,N)']
+    rows,warnings=parse_daily(values,DAY,MACHINES[0],SHIFTS[0])
+    assert rows[0]['PRODUCT_NM']=='JK-EV TERMINAL ASSY(L,N)'
+    assert rows[0]['LOT_QTY']=='314'
+    assert not warnings
+
+
+def test_assembly_product_name_comma_does_not_block_three_valid_records():
+    values=daily_response(machine=ASSEMBLY_MACHINES[0],empty=True)
+    names='Ø9 2M WP ROUND TERMINAL LONG,ø9 2M WP ROUND TERMINAL SHORT,JK-EV PE COMBO 7P AC CHARGE TERMINAL ASSY(L,N)'
+    fields=dict(ITEM_NUM='310069,310067,YR310235',LOT_NUM='',RULE_NO='job-1,job-2,job-3',JOB_PROD_QTY='100,200,300',JOB_FAULT_QTY='0,0,0',SET_UP_QTY='0,0,0',JOB_TIME_STRING='08:00 ~ 10:00,10:00 ~ 12:00,12:00 ~ 18:00',JOB_USER_NM='Worker1,Worker2,Worker3',PRODUCT_NM=names,PREV_LOT_STR='')
+    values.update({DATA+k:[v] for k,v in fields.items()})
+    rows,warnings=parse_daily(values,DAY,ASSEMBLY_MACHINES[0],SHIFTS[0],allow_aggregate=True)
+    assert [r['ITEM_NUM'] for r in rows]==['310069','310067','YR310235']
+    assert [r['JOB_QTY'] for r in rows]==['100','200','300']
+    assert [r['OPERATOR_NAME'] for r in rows]==['Worker1','Worker2','Worker3']
+    assert all(r['PRODUCT_NM']=='' and r['UNASSIGNED_PRODUCT_NAME']==names for r in rows)
+    assert any('품명 구분자가 모호' in w for w in warnings)
+    values[DATA+'JOB_PROD_QTY']=['100,200']
+    with pytest.raises(source.SyncError,match='JOB_PROD_QTY'):
+        parse_daily(values,DAY,ASSEMBLY_MACHINES[0],SHIFTS[0],allow_aggregate=True)
