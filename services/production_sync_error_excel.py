@@ -41,3 +41,31 @@ def build_error_excel(data):
             for index,token in enumerate(tokens,1):
                 for chunk_index,start in enumerate(range(0,max(1,len(token)),30000),1):append(pieces,[key,number,index,chunk_index,token[start:start+30000]])
     buffer=BytesIO();workbook.save(buffer);return buffer.getvalue()
+
+
+def build_assembly_review_excel(reviews):
+    """Compare observed assembly totals with candidate LOTs; never infer allocations."""
+    workbook=Workbook()
+    workbook.remove(workbook.active)
+    summary=workbook.create_sheet('조립 확인')
+    lots=workbook.create_sheet('LOT 비교')
+    headers=['번호','작업일','설비','주야','품번','연결 확인사유','작업자','작업일보 양품','작업일보 불량','작업일보 셋업','LOT 합계 양품','LOT 합계 불량','LOT 합계 셋업','작업일보 시작','작업일보 종료']
+    def append(ws,values):
+        ws.append(values)
+        for cell in ws[ws.max_row]:
+            if isinstance(cell.value,str):cell.data_type='s'
+            cell.alignment=Alignment(vertical='top',wrap_text=True)
+    append(summary,headers)
+    append(lots,['확인 번호','작업일','설비','품번','LOT 번호','작업번호','양품','불량','셋업','시작','종료'])
+    for index,review in enumerate(reviews,1):
+        daily=review['daily'];candidates=review['lots']
+        totals=[sum(float(r[k]) for r in candidates) for k in ('JOB_QTY','FAULT_QTY','F10')]
+        append(summary,[index,review['work_date'],review['equipment'],review['shift'],review['part_no'],review['reason'],daily['OPERATOR_NAME'],
+                        daily['JOB_QTY'],daily['FAULT_QTY'],daily['F10'],*totals,daily['JOB_ST_TIME'],daily['JOB_END_TIME']])
+        for row in candidates:
+            append(lots,[index,review['work_date'],review['equipment'],review['part_no'],row['LOT_NUM'],row['JOB_NUM'],row['JOB_QTY'],row['FAULT_QTY'],row['F10'],row['JOB_ST_TIME'],row['JOB_END_TIME']])
+    for ws in workbook:
+        ws.freeze_panes='A2';ws.auto_filter.ref=ws.dimensions
+        for cell in ws[1]:cell.font=Font(bold=True,color='FFFFFF');cell.fill=PatternFill('solid',fgColor='24476B')
+        for column in range(1,ws.max_column+1):ws.column_dimensions[get_column_letter(column)].width=24 if column>1 else 10
+    buffer=BytesIO();workbook.save(buffer);return buffer.getvalue()

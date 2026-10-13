@@ -89,11 +89,9 @@ def _parse_daily(values,day,machine,shift,allow_aggregate=False):
     allowed_relations=set(arrays['RULE_NO'])|({r for r in related_ids if r} if aggregate and count==1 else set())
     # Stops belong to this machine/day/shift, rather than an arbitrary item row.
     stop_ids=scalar(values,STOP+'RULE_NO');stops=[];warnings=[]
-    if unassigned_product:warnings.append('품명 구분자가 모호한 날짜는 내부 품목 마스터의 품명을 표시합니다.')
     stop_count=len(stop_ids.split(',')) if stop_ids else 0
     raw_note=scalar(values,STOP+'JOB_PROD_NOTE')
     unassigned_note=raw_note if raw_note and (not stop_count or stop_count>1 and len(raw_note.split(','))!=stop_count) else ''
-    if unassigned_note:warnings.append('일부 비가동 비고는 구분자가 모호하여 개별 연결 없이 원문으로 보관했습니다.')
     if stop_ids:
         fields=columns(values,STOP,['RULE_NO','JOB_TIME_STRING','NON_OPER_TYPE','NON_OPER_TYPE_NM','JOB_PROD_NOTE','Q_CHECK'],len(stop_ids.split(',')),required=['RULE_NO','JOB_TIME_STRING','NON_OPER_TYPE'],free_text=['JOB_PROD_NOTE'])
         for i,identity in enumerate(fields['RULE_NO']):
@@ -118,7 +116,6 @@ def _parse_daily(values,day,machine,shift,allow_aggregate=False):
         if not arrays['LOT_NUM'][i].strip():
             empty=good==combined==setup==0 and a==b and not arrays['PREV_LOT_STR'][i].strip() and not any(d['qty'] for d in details)
             if empty:
-                warnings.append('LOT 없는 0수량·0분 기록은 생산실적에서 제외했습니다.')
                 continue
             if not aggregate:raise protocol.SyncError('작업일보 LOT_NUM 필수 항목이 없습니다. 수량·시간이 있는 기록이라 저장하지 않습니다.')
         materials=[]
@@ -185,22 +182,32 @@ def supplement_assembly(client,day,legacy):
         warnings.extend(notes)
         used=set()
         for aggregate in aggregates:
-            candidates=[]
-            for row in legacy:
-                if stage_suffix(row['PROC_TYPE_NM'])!='-C' or row['ITEM_NUM'].strip().casefold()!=aggregate['ITEM_NUM'].strip().casefold() or external_machine_no(row['LOT_NUM'])!=aggregate['MACHINE_NO']:
-                    continue
-                if aggregate['LOT_NUM'] and row['LOT_NUM'].strip().upper()!=aggregate['LOT_NUM'].strip().upper():continue
-                # The old LOT timestamps must be contained in the observed assembly work period.
-                if aggregate['JOB_ST_TIME']:
-                    if not row['JOB_ST_TIME'] or not row['JOB_END_TIME'] or not (aggregate['JOB_ST_TIME']<=row['JOB_ST_TIME']<=row['JOB_END_TIME']<=aggregate['JOB_END_TIME']):continue
-                else:
-                    # Without times, only an unambiguous item aggregate with matching quantities can enrich LOTs.
-                    if sum(a['ITEM_NUM'].strip().casefold()==aggregate['ITEM_NUM'].strip().casefold() for a in aggregates)!=1:continue
-                    if row.get('SHIFT_TYPE') and row['SHIFT_TYPE']!=aggregate['SHIFT_TYPE']:continue
-                candidates.append(row)
             quantities=('JOB_QTY','FAULT_QTY','F10')
-            if not candidates or any(sum(Decimal(row[key]) for row in candidates)!=Decimal(aggregate[key]) for key in quantities) or any(row['LOT_NUM'] in used for row in candidates):
-                warnings.append(name+' 조립 작업일보와 LOT별 수량·시간을 연결할 수 없어 기존 실적을 유지했습니다.')
+            part=aggregate['ITEM_NUM'].strip().casefold()
+            matches=[row for row in legacy if stage_suffix(row['PROC_TYPE_NM'])=='-C'
+                     and row['ITEM_NUM'].strip().casefold()==part
+                     and row['JOB_TIME']==aggregate['JOB_TIME']
+                     and external_machine_no(row['LOT_NUM'])==aggregate['MACHINE_NO']
+                     and (not aggregate['LOT_NUM'] or row['LOT_NUM'].strip().upper()==aggregate['LOT_NUM'].strip().upper())
+                     and (not row.get('SHIFT_TYPE') or row['SHIFT_TYPE']==aggregate['SHIFT_TYPE'])]
+            def same_quantities(rows):
+                return bool(rows) and all(sum(Decimal(row[key]) for row in rows)==Decimal(aggregate[key]) for key in quantities)
+            # Prefer explicit LOT/job identities, then actual work periods.
+            candidates=[r for r in matches if aggregate['LOT_NUM'] and r['LOT_NUM'].strip().upper()==aggregate['LOT_NUM'].strip().upper()
+                        or r['JOB_NUM'] in aggregate['DAILY_REL_IDS']]
+            if not same_quantities(candidates):
+                candidates=[r for r in matches if aggregate['JOB_ST_TIME'] and r['JOB_ST_TIME'] and r['JOB_END_TIME']
+                            and aggregate['JOB_ST_TIME']<=r['JOB_ST_TIME']<=r['JOB_END_TIME']<=aggregate['JOB_END_TIME']]
+            # Legacy timestamps may be registration times. A single item aggregate can instead match its exact LOT totals.
+            if not same_quantities(candidates) and sum(a['ITEM_NUM'].strip().casefold()==part for a in aggregates)==1:
+                candidates=matches
+            if not same_quantities(candidates) or any(r['LOT_NUM'] in used for r in candidates):
+                reason='같은 날짜·호기·품번의 LOT 없음' if not matches else '중복 연결' if any(r['LOT_NUM'] in used for r in candidates) else '수량 합계 또는 작업별 연결 불일치'
+                if not hasattr(client,'review_items'):client.review_items=[]
+                client.review_items.append(dict(work_date=day.isoformat(),equipment=name,shift=shift[1],part_no=aggregate['ITEM_NUM'],reason=reason,
+                    daily={k:aggregate[k] for k in ('JOB_QTY','FAULT_QTY','F10','JOB_ST_TIME','JOB_END_TIME','OPERATOR_NAME','JOB_NUM')},
+                    lots=[{k:r[k] for k in ('LOT_NUM','JOB_NUM','JOB_QTY','FAULT_QTY','F10','JOB_ST_TIME','JOB_END_TIME')} for r in matches]))
+                warnings.append(f'{day.isoformat()} {name} {shift[1]} {aggregate["ITEM_NUM"]}: 조립 상세정보 미연결 ({reason}, 기존 실적 유지)')
                 continue
             for row in candidates:
                 used.add(row['LOT_NUM'])

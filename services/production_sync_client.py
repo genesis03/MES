@@ -231,12 +231,11 @@ class ProductionClient:
                 raise SyncError('서버 표시 건수와 수신 건수가 다릅니다. 페이지 처리 확인이 필요합니다.')
             names = result.get(prefix + 'PRODUCT_NM', [''])[0].split(',')
             warnings = []
-            if len(names) != count:
-                warnings.append('품명 구분자가 모호한 날짜는 내부 품목 마스터의 품명을 표시합니다.')
             rows = []
             for i in range(count):
                 row = {key: values[i] for key, values in arrays.items()}
                 row['PRODUCT_NM'] = names[i] if len(names) == count else ''
+                if len(names)!=count:row['UNASSIGNED_PRODUCT_NAME']=result.get(prefix+'PRODUCT_NM',[''])[0]
                 if not all(row[key].strip() for key in ('ITEM_NUM', 'PROC_TYPE_NM', 'JOB_TIME', 'JOB_NUM', 'LOT_NUM')):
                     raise SyncError('품번·공정·작업일·작업번호·LOT 중 누락된 항목이 있습니다.')
                 location = f'{i + 1}행'

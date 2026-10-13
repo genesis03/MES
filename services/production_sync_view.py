@@ -58,6 +58,7 @@ def external_record_view(record, connections):
         'assembly_group_materials':raw.get('ASSEMBLY_GROUP_MATERIALS',[]),
         'assembly_group_defects':raw.get('ASSEMBLY_GROUP_DEFECTS',[]),
         'unassigned_downtime_note':raw.get('UNASSIGNED_DOWNTIME_NOTE',''),
+        'unassigned_product_name':raw.get('UNASSIGNED_PRODUCT_NAME',''),
         'downtimes':raw.get('DOWNTIMES',[]),'defects':raw.get('DEFECTS',[]),
         'started_at': record.started_at or '', 'ended_at': record.ended_at or '',
         'job_qty': record.job_qty, 'lot_qty': record.lot_qty, 'fault_qty': record.fault_qty,

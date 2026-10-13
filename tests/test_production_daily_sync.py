@@ -129,7 +129,7 @@ def test_multiple_downtime_notes_with_ambiguous_commas_preserve_source_without_m
     assert [d['action'] for d in record['DOWNTIMES']]==['','']
     assert [d['minutes'] for d in record['DOWNTIMES']]==[10,5]
     assert record['FAULT_QTY']=='5' and record['LOT_QTY']=='314'
-    assert len(warnings)==1 and '원문' in warnings[0]
+    assert not warnings
     with pytest.raises(source.SyncError):
         parse_daily(values|{STOP+'JOB_TIME_STRING':['09:49 ~ 09:59']},DAY,MACHINES[0],SHIFTS[0])
 
@@ -201,7 +201,7 @@ def test_assembly_aggregate_supplements_original_lots_without_duplicating_quanti
     assert all(p[COND+'JOB_TYPE']=='JOB_ORDER' and p[COND+'SHIFT_TYPE']=='DAY_SHIFT' for p in requested)
 
 
-@pytest.mark.parametrize('change',[{'JOB_QTY':'3119'},{'JOB_ST_TIME':'20260325060000'},{'ITEM_NUM':'different'},{'LOT_NUM':'LA20260325021'}])
+@pytest.mark.parametrize('change',[{'JOB_QTY':'3119'},{'ITEM_NUM':'different'},{'LOT_NUM':'LA20260325021'}])
 def test_assembly_mismatch_preserves_original_lots(monkeypatch,change):
     from services.production_daily_sync import supplement_assembly
     client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
@@ -255,7 +255,7 @@ def zero_entry_response():
 def test_observed_zero_lot_row_is_skipped_and_real_night_performance_retained():
     values,day=zero_entry_response()
     rows,warnings=parse_daily(values,day,MACHINES[5],SHIFTS[1])
-    assert len(rows)==1 and len(warnings)==1
+    assert len(rows)==1 and not warnings
     data=rows[0]
     assert data['LOT_NUM']=='LX20260414065'
     assert (data['JOB_QTY'],data['FAULT_QTY'],data['F10'],data['LOT_QTY'])==('127','1','1','129')
@@ -281,7 +281,7 @@ def test_single_zero_lot_row_is_empty_performance_not_a_failed_day():
     values=daily_response();values={k:v for k,v in values.items() if not k.startswith((STOP,FAULT))}
     values.update({DATA+k:[v] for k,v in dict(LOT_NUM='',JOB_PROD_QTY='0',JOB_FAULT_QTY='0',SET_UP_QTY='0',JOB_TIME_STRING='19:28 ~ 19:28',PREV_LOT_STR='').items()})
     rows,warnings=parse_daily(values,DAY,MACHINES[0],SHIFTS[0])
-    assert rows==[] and len(warnings)==1
+    assert rows==[] and not warnings
 
 
 def test_zero_entry_import_stores_only_real_lot_once(setup):
@@ -318,7 +318,7 @@ def test_assembly_product_name_comma_does_not_block_three_valid_records():
     assert [r['JOB_QTY'] for r in rows]==['100','200','300']
     assert [r['OPERATOR_NAME'] for r in rows]==['Worker1','Worker2','Worker3']
     assert all(r['PRODUCT_NM']=='' and r['UNASSIGNED_PRODUCT_NAME']==names for r in rows)
-    assert any('품명 구분자가 모호' in w for w in warnings)
+    assert not warnings
     values[DATA+'JOB_PROD_QTY']=['100,200']
     with pytest.raises(source.SyncError,match='JOB_PROD_QTY'):
         parse_daily(values,DAY,ASSEMBLY_MACHINES[0],SHIFTS[0],allow_aggregate=True)
@@ -374,3 +374,37 @@ def test_partial_defect_details_preserve_source_total_without_sync_warning():
     assert rows[0]['FAULT_QTY']=='5' and rows[0]['F10']=='25' and rows[0]['LOT_QTY']=='314'
     assert sum(d['qty'] for d in rows[0]['DEFECTS'])==3
     assert not warnings
+
+
+def test_assembly_registration_time_difference_still_matches_exact_lot_totals(monkeypatch):
+    from services.production_daily_sync import supplement_assembly
+    client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
+    monkeypatch.setattr(source,'post',lambda _,payload:assembly_response() if payload[COND+'MACH_NM']=='AS-01' else daily_response(machine=ASSEMBLY_MACHINES[1],empty=True))
+    legacy=assembly_lots();legacy[0]['JOB_ST_TIME']=DAY.strftime('%Y%m%d')+'060000'
+    original=[dict(r) for r in legacy]
+    assert not supplement_assembly(client,DAY,legacy)
+    assert all(r['OPERATOR_NAME']=='Assembly worker' for r in legacy)
+    assert all(after['JOB_ST_TIME']==before['JOB_ST_TIME'] for before,after in zip(original,legacy))
+
+
+def test_assembly_mismatch_keeps_reviewable_date_part_quantities_and_lots(monkeypatch):
+    from services.production_daily_sync import supplement_assembly
+    client=source.ProductionClient.__new__(source.ProductionClient);client.opener=object();client.context={}
+    monkeypatch.setattr(source,'post',lambda _,payload:assembly_response() if payload[COND+'MACH_NM']=='AS-01' else daily_response(machine=ASSEMBLY_MACHINES[1],empty=True))
+    legacy=assembly_lots();legacy[0]['JOB_QTY']='1';original=[dict(r) for r in legacy]
+    warnings=supplement_assembly(client,DAY,legacy)
+    assert legacy==original and len(client.review_items)==1
+    review=client.review_items[0]
+    assert review['work_date']==DAY.isoformat() and review['part_no']=='310061'
+    assert review['daily']['JOB_QTY']=='4560' and sum(int(r['JOB_QTY']) for r in review['lots'])==1441
+    assert DAY.isoformat() in warnings[0] and '310061' in warnings[0]
+
+
+def test_external_combined_fault_ten_is_five_defects_and_five_setup():
+    values=daily_response()
+    values[DATA+'JOB_FAULT_QTY']=['10'];values[DATA+'SET_UP_QTY']=['5']
+    rows,warnings=parse_daily(values,DAY,MACHINES[0],SHIFTS[0])
+    assert rows[0]['SOURCE_FAULT_WITH_SETUP']=='10'
+    assert rows[0]['FAULT_QTY']=='5' and rows[0]['F10']=='5'
+    assert sum(d['qty'] for d in rows[0]['DEFECTS'])==5
+    assert rows[0]['LOT_QTY']=='294' and not warnings

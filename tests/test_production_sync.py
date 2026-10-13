@@ -187,7 +187,8 @@ def test_ambiguous_product_name_does_not_shift_quantities(monkeypatch):
     client = source.ProductionClient.__new__(source.ProductionClient); client.opener = object(); client.context = {}; client.fetch_day=client.fetch_lot_day
     monkeypatch.setattr(source, 'post', lambda *_: response([row(PRODUCT_NM='A,B')]))
     rows, warnings = client.fetch_day(DAY)
-    assert rows[0]['PRODUCT_NM'] == '' and rows[0]['F10'] == '115' and warnings
+    assert rows[0]['PRODUCT_NM'] == '' and rows[0]['F10'] == '115' and not warnings
+    assert rows[0]['UNASSIGNED_PRODUCT_NAME']=='A,B'
 
 
 def empty_query_response():
@@ -1006,3 +1007,16 @@ def test_partial_query_errors_save_successful_rows_and_keep_error_excel(setup,mo
         assert run.status=='FAILED' and counts['received']==1 and counts['completed_days']==0
         assert db.query(ExternalProductionRecord).count()==1
         assert db.get(ProductionSyncFailureData,run_id) is not None
+
+
+def test_history_hides_handled_notices_but_keeps_original_and_actionable_items(setup):
+    token,run_id=sync.claim(DAY,DAY,'MANUAL')
+    with setup.sessions() as db:
+        run=db.get(ProductionSyncRun,run_id)
+        run.counts_json=json.dumps({'warnings':['LOT 없는 0수량·0분 기록은 생산실적에서 제외했습니다.','AS-01 조립 작업일보와 LOT별 수량·시간을 연결할 수 없어 기존 실적을 유지했습니다.']})
+        db.commit()
+    result=setup.client.get('/api/production/external-sync/runs')
+    assert result.status_code==200
+    assert len(result.json()[0]['counts']['warnings'])==1
+    with setup.sessions() as db:
+        assert len(json.loads(db.get(ProductionSyncRun,run_id).counts_json)['warnings'])==2

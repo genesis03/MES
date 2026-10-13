@@ -184,10 +184,34 @@ def run(payload: Run, user=Depends(get_current_user)):
 def runs(db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
     available={r[0] for r in db.query(ProductionSyncFailureData.run_id)}
-    return [{'has_error_data':row.id in available,'id': row.id, 'started_at': local_time(row.started_at), 'finished_at': local_time(row.finished_at),
-             'start_date': row.start_date, 'end_date': row.end_date, 'trigger': row.trigger, 'status': row.status,
-             'counts': json.loads(row.counts_json), 'error': row.error or ''}
-            for row in db.query(ProductionSyncRun).order_by(ProductionSyncRun.id.desc()).limit(30)]
+    handled={
+        '불량 합계와 유형별 상세 합계가 다른 작업이 있습니다.',
+        'LOT 없는 0수량·0분 기록은 생산실적에서 제외했습니다.',
+        '일부 비가동 비고는 구분자가 모호하여 개별 연결 없이 원문으로 보관했습니다.',
+        '품명 구분자가 모호한 날짜는 내부 품목 마스터의 품명을 표시합니다.',
+    }
+    result=[]
+    for row in db.query(ProductionSyncRun).order_by(ProductionSyncRun.id.desc()).limit(30):
+        counts=json.loads(row.counts_json)
+        counts['warnings']=[w for w in counts.get('warnings',[]) if w not in handled]
+        if counts.get('review_items'):
+            counts['warnings']=[w for w in counts['warnings'] if ': 조립 상세정보 미연결 (' not in w]
+            counts['warnings'].append(f'조립 상세정보 미연결 {len(counts["review_items"])}건: 조립 확인 자료에서 일자·품번·수량을 확인하세요. 기존 실적은 유지됩니다.')
+        result.append(dict(has_error_data=row.id in available,id=row.id,started_at=local_time(row.started_at),finished_at=local_time(row.finished_at),
+                           start_date=row.start_date,end_date=row.end_date,trigger=row.trigger,status=row.status,counts=counts,error=row.error or ''))
+    return result
+
+
+@router.get('/api/production/external-sync/runs/{run_id}/assembly-review-excel')
+def assembly_review_excel(run_id:int,db:Session=Depends(get_db),user=Depends(get_current_user)):
+    access(user)
+    run=db.get(ProductionSyncRun,run_id)
+    reviews=json.loads(run.counts_json).get('review_items',[]) if run else []
+    if not reviews:raise HTTPException(404,'보관된 조립 확인 자료가 없습니다. 수정본 적용 후 해당 기간을 다시 가져오세요.')
+    from services.production_sync_error_excel import build_assembly_review_excel
+    return Response(build_assembly_review_excel(reviews),media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition':f'attachment; filename="AssemblySyncReview_{run_id}.xlsx"'})
+
 
 
 @router.get('/api/production/external-sync/runs/{run_id}/error-excel')

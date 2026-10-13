@@ -189,7 +189,9 @@ def execute(start, end, token, run_id, kind='production'):
                         days.add(datetime.strptime(packing_date, '%Y-%m-%d').date())
         for day in sorted(days):
             querying_day = day
-            if kind=='production':client.query_errors=[]
+            if kind=='production':
+                client.query_errors=[]
+                client.review_items=[]
             try:
                 rows, warnings = client.fetch_day(day)
                 result = save_day(rows, token) if kind == 'production' else save_day(rows, token, kind, queried_day=day)
@@ -199,6 +201,8 @@ def execute(start, end, token, run_id, kind='production'):
                 partial_errors.append(f'{day.isoformat()} 조회: {exc}')
                 failure_data=failure_data or getattr(exc,'failure_data',None)
                 continue
+            if kind=='production' and getattr(client,'review_items',[]):
+                counts.setdefault('review_items',[]).extend(client.review_items)
             for key in result:
                 counts[key] += result[key]
             query_errors=getattr(client,'query_errors',[]) if kind=='production' else []
