@@ -66,7 +66,7 @@ def test_native_oee_missing_cycle_and_overlapping_downtime_union(setup):
         result=calculate(db,date(2026,10,12),date(2026,10,17),now=datetime(2026,10,19))
         row=next(r for r in result['items'] if r['key']==str(equipment))
         assert row['planned_seconds']==0
-        assert row['downtime_seconds']==0
+        assert row['downtime_seconds']==45*60
         assert row['oee'] is None and any('생산계획 C/T 미등록' in issue for issue in row['issues'])
         db.add(ProductionCycleTime(item_id=item,seconds=60));plan_ct(db,equipment,item,'2026-10-12',60);db.commit()
         result=calculate(db,date(2026,10,12),date(2026,10,17),now=datetime(2026,10,19))
@@ -76,8 +76,8 @@ def test_native_oee_missing_cycle_and_overlapping_downtime_union(setup):
         assert row['oee']==pytest.approx(900*60/(24*3600))
         assert row['planned_seconds']==24*3600
         assert row['registered_downtime_seconds']==45*60
-        assert row['downtime_seconds']==12*3600
-        assert row['runtime_seconds']==12*3600
+        assert row['downtime_seconds']==45*60
+        assert row['runtime_seconds']==12*3600-45*60
 
 
 @pytest.mark.parametrize('lot,machine_no',[('LX20260325011','1'),('LX202603250612','6'),('LX2026032506123','6')])
@@ -145,8 +145,9 @@ def test_equipment_shift_runtime_and_remaining_downtime(setup,process,shifts,min
         base=24*3600-(210*60 if process=='TP' else 0)
         assert row['runtime_seconds']==minutes*60
         assert row['planned_seconds']==pytest.approx(base)
-        assert row['planned_stop_seconds']==pytest.approx(210*60 if process=='TP' else 0)
-        assert row['downtime_seconds']==pytest.approx(base-minutes*60)
+        assert row['planned_stop_seconds']==0
+        assert row['planned_break_seconds']==pytest.approx(210*60 if process=='TP' else 0)
+        assert row['downtime_seconds']==0
 
 
 def test_all_only_managed_processes_and_same_machine_number_separated(setup):
@@ -205,7 +206,7 @@ def test_optional_exclusion_uses_equipment_item_and_day_and_preserves_original(s
         assert original['summary']['performance'] is None and original['summary']['oee'] is None
         assert original['summary']['runtime_seconds']==36*3600
         assert row['total_qty']==100 and row['runtime_seconds']==12*3600
-        assert row['planned_seconds']==24*3600 and row['downtime_seconds']==12*3600
+        assert row['planned_seconds']==24*3600 and row['downtime_seconds']==0
         assert row['excluded_records']==2 and row['excluded_total_qty']==200
         from models.models import ItemMasterModel
         assert set(row['excluded_parts'])=={'NO-PLAN-A',db.get(ItemMasterModel,item).part_no}
@@ -241,3 +242,114 @@ def test_summary_aggregates_selected_process_with_weighted_ratios(setup):
         lathe=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,15),process_code='LT')['summary']
         assert lathe['name']=='복합선반 종합' and lathe['total_qty']==100
         assert lathe['planned_seconds']==24*3600
+
+
+def test_registered_planned_and_other_stops_are_separate_union_and_recalculate_oee(setup):
+    from models.production import ProductionWorkOrder
+    order,_,worker,equipment,_=prepare(setup)
+    with setup.sessions() as db:
+        item=db.get(ProductionWorkOrder,order).item_id
+        plan_ct(db,equipment,item,'2026-10-12',30)
+        perf=ProductionPerformance(work_order_id=order,performance_date='2026-10-12',process_code='LT',shift_type='DAY',equipment_id=equipment,good_qty=90,defect_qty=10)
+        db.add(perf);db.flush()
+        run=ProductionRun(work_order_id=order,performance_id=perf.id,performance_type='MACHINING',performance_date='2026-10-12',process_code='LT',shift_type='DAY',operator_id=worker,operator_name='Worker',equipment_id=equipment,equipment_code=db.get(EquipmentMaster,equipment).equipment_code,equipment_name='복합선반 1호기',start_time='2026-10-12 08:00',end_time='2026-10-12 20:00',status='COMPLETED')
+        db.add(run);db.flush()
+        for code,name,start,end in [('8','계획정지','10:00','11:00'),('2','툴교환','10:30','12:00'),('7','청소','11:30','12:30')]:
+            db.add(ProductionRunDowntime(run_id=run.id,type_code=code,type_name=name,started_at='2026-10-12 '+start,ended_at='2026-10-12 '+end,action=''))
+        db.commit()
+        result=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,14))
+        row=next(r for r in result['items'] if r['key']==str(equipment))
+        assert row['planned_stop_seconds']==3600
+        assert row['planned_seconds']==23*3600
+        assert row['downtime_seconds']==90*60
+        assert row['runtime_seconds']==9.5*3600
+        assert row['registered_downtime_seconds']==150*60
+        assert row['availability']==pytest.approx(9.5/23)
+        assert row['performance']==pytest.approx(3000/(9.5*3600))
+        assert row['oee']==pytest.approx(90*30/(23*3600))
+        assert result['summary']['planned_stop_seconds']==3600
+        assert result['summary']['downtime_seconds']==90*60
+        assert result['summary']['runtime_seconds']==9.5*3600
+
+
+def test_external_stops_night_rollover_are_merged_and_missing_plan_records_excluded(setup):
+    from models.production import ProductionWorkOrder
+    from models.production_sync import ExternalProductionRecord,ProductionSyncItemMap
+    from services import production_sync_service as sync
+    from test_production_sync import row
+    order,_,_,equipment,_=prepare(setup)
+    day=date(2026,10,12)
+    with setup.sessions() as db:
+        item=db.get(ProductionWorkOrder,order).item_id
+        plan_ct(db,equipment,item,day.isoformat(),30)
+        db.add(ProductionSyncItemMap(source_part_no='EXTERNAL-A',source_process_name='복합선반',item_id=item));db.commit()
+    stop=dict(id='stop-1',type_code='PLANNED_STOP',type_name='계획정지',started_at='2026-10-13 01:00',ended_at='2026-10-13 02:00',action='',minutes=60,quality_confirmed=False)
+    other=dict(stop,id='stop-2',type_code='TOOL_CHANGE',type_name='툴교환',started_at='2026-10-13 01:30',ended_at='2026-10-13 02:30',minutes=60)
+    data=row(lot='LX20261013011',day=day,PROC_TYPE_NM='복합선반',JOB_ST_TIME='20261012200000',JOB_END_TIME='20261013080000')|{'DOWNTIMES':[stop,stop,other]}
+    token,_=sync.claim(day,day,'MANUAL');sync.save_day([data],token)
+    with setup.sessions() as db:
+        row_data=next(r for r in calculate(db,day,day,now=datetime(2026,10,14))['items'] if r['key']==str(equipment))
+        assert row_data['planned_stop_seconds']==3600 and row_data['downtime_seconds']==1800
+        assert row_data['runtime_seconds']==10.5*3600
+        assert row_data['planned_seconds']==23*3600
+        # No C/T on the next day: filtering must omit both its production and attached stops.
+        record=db.query(ExternalProductionRecord).one();record.work_date='2026-10-13';db.commit()
+        filtered=calculate(db,day,date(2026,10,13),now=datetime(2026,10,15),exclude_unplanned=True)
+        machine=next(r for r in filtered['items'] if r['key']==str(equipment))
+        assert machine['runtime_seconds']==machine['downtime_seconds']==machine['planned_stop_seconds']==0
+        assert machine['planned_seconds']==24*3600
+        assert machine['excluded_records']==1
+
+
+def test_plan_without_performance_is_not_registered_downtime(setup):
+    from models.production import ProductionWorkOrder
+    order,_,_,equipment,_=prepare(setup)
+    with setup.sessions() as db:
+        item=db.get(ProductionWorkOrder,order).item_id
+        plan_ct(db,equipment,item,'2026-10-12',30);db.commit()
+        machine=next(r for r in calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,14))['items'] if r['key']==str(equipment))
+        assert machine['planned_seconds']==24*3600
+        assert machine['downtime_seconds']==machine['planned_stop_seconds']==machine['runtime_seconds']==0
+        assert any('실적 기준 교대시간 미확인: 24.00시간' in issue for issue in machine['issues'])
+        assert all('전체를 비가동' not in issue for issue in machine['issues'])
+
+
+def test_tapping_fixed_break_and_registered_planned_stop_are_not_mixed(setup):
+    from models.production import ProductionWorkOrder
+    order,_,worker,equipment,_=prepare(setup)
+    with setup.sessions() as db:
+        db.get(EquipmentMaster,equipment).process_code='TP'
+        item=db.get(ProductionWorkOrder,order).item_id
+        plan_ct(db,equipment,item,'2026-10-12',30)
+        for shift in ['DAY','NIGHT']:
+            db.add(ProductionPerformance(work_order_id=order,performance_date='2026-10-12',process_code='TP',shift_type=shift,equipment_id=equipment,good_qty=100))
+        db.flush()
+        run=ProductionRun(work_order_id=order,performance_type='MACHINING',performance_date='2026-10-12',process_code='TP',shift_type='DAY',operator_id=worker,operator_name='Worker',equipment_id=equipment,equipment_code=db.get(EquipmentMaster,equipment).equipment_code,equipment_name='탭핑 1호기',start_time='2026-10-12 08:00',end_time='2026-10-12 20:00',status='COMPLETED')
+        db.add(run);db.flush()
+        for code,name,start,end in [('8','계획정지','10:00','10:30'),('2','툴교환','11:00','11:15')]:
+            db.add(ProductionRunDowntime(run_id=run.id,type_code=code,type_name=name,started_at='2026-10-12 '+start,ended_at='2026-10-12 '+end,action=''))
+        db.commit()
+        machine=next(r for r in calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,14),process_code='TP')['items'] if r['key']==str(equipment))
+        assert machine['planned_break_seconds']==pytest.approx(210*60)
+        assert machine['planned_stop_seconds']==30*60
+        assert machine['planned_seconds']==20*3600
+        assert machine['downtime_seconds']==15*60
+        assert machine['runtime_seconds']==19.75*3600
+        assert machine['availability']==pytest.approx(19.75/20)
+
+
+
+def test_full_planned_stop_without_production_does_not_show_unreported_plan_time(setup):
+    from models.production import ProductionWorkOrder
+    order,_,worker,equipment,_=prepare(setup)
+    with setup.sessions() as db:
+        item=db.get(ProductionWorkOrder,order).item_id
+        plan_ct(db,equipment,item,'2026-10-12',30)
+        run=ProductionRun(work_order_id=order,performance_type='MACHINING',performance_date='2026-10-12',process_code='LT',shift_type='DAY',operator_id=worker,operator_name='Worker',equipment_id=equipment,equipment_code=db.get(EquipmentMaster,equipment).equipment_code,equipment_name='복합선반 1호기',start_time='2026-10-12 08:00',end_time='2026-10-13 08:00',status='COMPLETED')
+        db.add(run);db.flush()
+        db.add(ProductionRunDowntime(run_id=run.id,type_code='8',type_name='계획정지',started_at='2026-10-12 08:00',ended_at='2026-10-13 08:00',action=''))
+        db.commit()
+        machine=next(r for r in calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,14))['items'] if r['key']==str(equipment))
+        assert machine['planned_stop_seconds']==24*3600
+        assert machine['planned_seconds']==machine['downtime_seconds']==machine['runtime_seconds']==0
+        assert not any('교대시간 미확인' in issue for issue in machine['issues'])

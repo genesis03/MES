@@ -34,6 +34,45 @@ def merge_intervals(intervals):
     return merged
 
 
+def intersect_intervals(intervals,windows):
+    return merge_intervals([(max(a,c),min(b,d)) for a,b in merge_intervals(intervals) for c,d in merge_intervals(windows) if max(a,c)<min(b,d)])
+
+
+def subtract_intervals(intervals,excluded):
+    result=[]
+    for a,b in merge_intervals(intervals):
+        for c,d in merge_intervals(excluded):
+            if d<=a or c>=b:continue
+            if c>a:result.append((a,c))
+            a=max(a,d)
+            if a>=b:break
+        if a<b:result.append((a,b))
+    return result
+
+
+def seconds(intervals):
+    return sum((b-a).total_seconds() for a,b in merge_intervals(intervals))
+
+
+def is_planned_stop(code,name):
+    name=re.sub(r'\s+','',name or '')
+    if name:return name=='계획정지'
+    return str(code or '').upper() in ('8','PLAN_STOP','PLANNED_STOP')
+
+
+def performance_window(day,shift,start,end,now):
+    def clock(value):
+        value=str(value or '')
+        return datetime.strptime(value,'%Y%m%d%H%M%S') if len(value)==14 and value.isdigit() else parse_time(value[:16])
+    if start and end:
+        a,b=clock(start),clock(end)
+    else:
+        a=datetime.combine(date.fromisoformat(day),time(8))
+        if shift=='NIGHT':a+=timedelta(hours=12)
+        b=a+timedelta(hours=12 if shift in ('DAY','NIGHT') else 24)
+    return a,min(b,now)
+
+
 def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=False):
     now=now or datetime.now(ZoneInfo('Asia/Seoul')).replace(tzinfo=None)
     start=datetime.combine(start_day,time());end=min(datetime.combine(end_day+timedelta(days=1),time()),now)
@@ -56,13 +95,13 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
             segments,holidays=workday_segments(db,e.process_code,start_day,end_day,now,e.id) if e else ([],[])
             excluded.update({r['work_date']:r for r in holidays})
             periods=merge_intervals([(a,b) for a,b,_ in segments])
-            groups[key]=dict(segments=segments,intervals=periods,shift_days={},process_code=e.process_code if e else key.split(':')[1],planned_stop_seconds=weighted_seconds([(a,b,1-weight) for a,b,weight in segments]),key=key,equipment_name=e.equipment_name if e else key.split(':',1)[1]+' (호기 연결 미확인)',planned_seconds=weighted_seconds(segments),good_qty=0,total_qty=0,ideal_seconds=0,downtime_intervals=[],issues=[],parts={},missing=set(),excluded_records=0,excluded_total_qty=0,excluded_good_qty=0,excluded_parts=set())
+            groups[key]=dict(segments=segments,intervals=periods,shift_days={},process_code=e.process_code if e else key.split(':')[1],planned_stop_seconds=0,planned_break_seconds=weighted_seconds([(a,b,1-weight) for a,b,weight in segments]),key=key,equipment_name=e.equipment_name if e else key.split(':',1)[1]+' (호기 연결 미확인)',planned_seconds=weighted_seconds(segments),good_qty=0,total_qty=0,ideal_seconds=0,downtime_intervals=[],planned_stop_intervals=[],observed_intervals=[],issues=[],parts={},missing=set(),excluded_records=0,excluded_total_qty=0,excluded_good_qty=0,excluded_parts=set())
         return groups[key]
     for e in equipment.values():
         if e.is_active=='Y':group(str(e.id))
     cycles={(line.equipment_id,line.item_id,day.work_date):day.cycle_seconds for day,line in db.query(ProductionMonthPlanDay,ProductionMonthPlanLine).join(ProductionMonthPlanLine,ProductionMonthPlanLine.id==ProductionMonthPlanDay.line_id).filter(ProductionMonthPlanDay.work_date>=start_day.isoformat(),ProductionMonthPlanDay.work_date<=end_day.isoformat())}
     items={i.id:i for i in db.query(ItemMasterModel)}
-    def add(key,item_id,part_no,total,good,source,work_date,shift=None):
+    def add(key,item_id,part_no,total,good,source,work_date,shift=None,start_time=None,end_time=None,window_shift=None):
         g=group(key)
         cycle=cycles.get((int(key),item_id,work_date)) if key.isdigit() else None
         if exclude_unplanned and cycle is None:
@@ -70,17 +109,20 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
             g['excluded_total_qty']+=float(total or 0)
             g['excluded_good_qty']+=float(good or 0)
             g['excluded_parts'].add(part_no)
-            return
+            return False
+        g['observed_intervals'].append(performance_window(work_date,window_shift or shift,start_time,end_time,now))
         g['good_qty']+=float(good or 0)
         day=g['shift_days'].setdefault(work_date,dict(shifts=set(),unknown=0))
         if shift in ('DAY','NIGHT'):day['shifts'].add(shift)
         else:day['unknown']+=1
         p=g['parts'].setdefault((part_no,cycle),dict(part_no=part_no,total_qty=0,good_qty=0,cycle_seconds=cycle,sources=set()))
         p['good_qty']+=float(good or 0);p['sources'].add(source)
-        if total is None:g['issues'].append(part_no+': 총생산수량 미확인');return
+        if total is None:g['issues'].append(part_no+': 총생산수량 미확인');return True
         g['total_qty']+=float(total);p['total_qty']+=float(total)
         if cycle is None:g['missing'].add(part_no)
         else:g['ideal_seconds']+=float(total)*cycle
+        return True
+    run_times={r.performance_id:r for r in db.query(ProductionRun).filter(ProductionRun.performance_id.isnot(None),ProductionRun.status!='CANCELLED',ProductionRun.performance_date>=start_day.isoformat(),ProductionRun.performance_date<=min(end_day,now.date()).isoformat())}
     for perf,order in db.query(ProductionPerformance,ProductionWorkOrder).join(ProductionWorkOrder,ProductionWorkOrder.id==ProductionPerformance.work_order_id).filter(ProductionPerformance.process_code.in_(codes),ProductionPerformance.performance_date>=start_day.isoformat(),ProductionPerformance.performance_date<=min(end_day,now.date()).isoformat()):
         item=items.get(order.item_id)
         e=equipment.get(perf.equipment_id)
@@ -88,27 +130,47 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
         if not machine_no:
             match=re.search(r'(\d+)\s*호기',perf.equipment_name or '')
             machine_no=match.group(1) if match else ''
-        add(key_for(perf.equipment_id,machine_no,perf.equipment_name,perf.process_code),order.item_id,item.part_no if item else order.part_no,float(perf.good_qty or 0)+float(perf.defect_qty or 0)+float(perf.setup_qty or 0),perf.good_qty,'내부',perf.performance_date,perf.shift_type)
+        run=run_times.get(perf.id)
+        add(key_for(perf.equipment_id,machine_no,perf.equipment_name,perf.process_code),order.item_id,item.part_no if item else order.part_no,float(perf.good_qty or 0)+float(perf.defect_qty or 0)+float(perf.setup_qty or 0),perf.good_qty,'내부',perf.performance_date,perf.shift_type,run.start_time if run else None,run.end_time if run else None)
     connections=ItemConnections(db)
     for record in db.query(ExternalProductionRecord).filter(ExternalProductionRecord.work_date>=start_day.isoformat(),ExternalProductionRecord.work_date<=min(end_day,now.date()).isoformat()):
         view=external_record_view(record,connections)
         if view['lot_conflict'] or view['process_code'] not in codes:continue
-        add(key_for(machine_no=view['machine_no'],code=view['process_code']),view['item_id'],view['mes_part_no'] or record.part_no,view['total_qty'],record.job_qty,'외부',record.work_date)
-        for stop in view['downtimes']:
-            group(key_for(machine_no=view['machine_no'],code=view['process_code']))['downtime_intervals'].append((parse_time(stop['started_at']),parse_time(stop['ended_at'])))
-    all_periods=[p for g in groups.values() for p in g['intervals']]
+        included=add(key_for(machine_no=view['machine_no'],code=view['process_code']),view['item_id'],view['mes_part_no'] or record.part_no,view['total_qty'],record.job_qty,'외부',record.work_date,start_time=record.started_at,end_time=record.ended_at,window_shift=view['shift_type'])
+        if included:
+            for stop in view['downtimes']:
+                field='planned_stop_intervals' if is_planned_stop(stop['type_code'],stop['type_name']) else 'downtime_intervals'
+                group(key_for(machine_no=view['machine_no'],code=view['process_code']))[field].append((parse_time(stop['started_at']),parse_time(stop['ended_at'])))
+    all_periods=[p for g in groups.values() for p in g['intervals']+g['observed_intervals'] if p[1]>p[0]]
     if all_periods:start,end=min(p[0] for p in all_periods),max(p[1] for p in all_periods)
-    for downtime,run in db.query(ProductionRunDowntime,ProductionRun).join(ProductionRun,ProductionRun.id==ProductionRunDowntime.run_id).filter(ProductionRun.process_code.in_(codes),ProductionRun.status!='CANCELLED',ProductionRunDowntime.ended_at>start.strftime('%Y-%m-%d %H:%M'),ProductionRunDowntime.started_at<end.strftime('%Y-%m-%d %H:%M')):
-        group(key_for(run.equipment_id,name=run.equipment_name,code=run.process_code))['downtime_intervals'].append((parse_time(downtime.started_at),parse_time(downtime.ended_at)))
+    for downtime,run in db.query(ProductionRunDowntime,ProductionRun).join(ProductionRun,ProductionRun.id==ProductionRunDowntime.run_id).filter(ProductionRun.process_code.in_(codes),ProductionRun.status!='CANCELLED',ProductionRun.performance_date>=start_day.isoformat(),ProductionRun.performance_date<=min(end_day,now.date()).isoformat(),ProductionRunDowntime.ended_at>start.strftime('%Y-%m-%d %H:%M'),ProductionRunDowntime.started_at<end.strftime('%Y-%m-%d %H:%M')):
+        order=db.get(ProductionWorkOrder,run.work_order_id)
+        if exclude_unplanned and (not order or (run.equipment_id,order.item_id,run.performance_date) not in cycles):continue
+        field='planned_stop_intervals' if is_planned_stop(downtime.type_code,downtime.type_name) else 'downtime_intervals'
+        group(key_for(run.equipment_id,name=run.equipment_name,code=run.process_code))[field].append((parse_time(downtime.started_at),parse_time(downtime.ended_at)))
     result=[]
     for key,g in groups.items():
-        intervals=g.pop('intervals');g.pop('segments');planned=g['planned_seconds']
-        registered_downtime=sum(max(0,(min(b,d)-max(a,c)).total_seconds()) for a,b in merge_intervals(g.pop('downtime_intervals')) for c,d in intervals)
+        intervals=g.pop('intervals');g.pop('segments');schedule_seconds=g['planned_seconds']
+        observed=merge_intervals(g.pop('observed_intervals'))
+        windows=merge_intervals(intervals+observed)
+        plan_stops=intersect_intervals(g.pop('planned_stop_intervals'),windows)
+        other_stops=subtract_intervals(intersect_intervals(g.pop('downtime_intervals'),windows),plan_stops)
+        g['planned_stop_seconds']=seconds(plan_stops)
+        planned=max(0,schedule_seconds-seconds(intersect_intervals(plan_stops,intervals)))
+        g['planned_seconds']=planned
+        downtime=seconds(other_stops)
+        registered_downtime=g['planned_stop_seconds']+downtime
         tapping=stage_suffix(processes[g['process_code']].process_name)=='-B'
-        runtime=sum(shift_runtime(day['shifts'],day['unknown'],tapping) for day in g.pop('shift_days').values())
-        downtime=max(0,planned-runtime);missing=sorted(g.pop('missing'))
+        baseline=sum(shift_runtime(day['shifts'],day['unknown'],tapping) for day in g.pop('shift_days').values())
+        actual_stops=seconds(intersect_intervals(plan_stops+other_stops,observed))
+        runtime=max(0,baseline-actual_stops);missing=sorted(g.pop('missing'))
+        g['performance_shift_seconds']=baseline
+        reported_after_planned_stop=max(0,baseline-seconds(intersect_intervals(plan_stops,observed)))
+        unreported=max(0,planned-reported_after_planned_stop)
+        if unreported:g['issues'].append(f'생산계획 시간 중 실적 기준 교대시간 미확인: {unreported/3600:.2f}시간 (비가동에 합산하지 않음)')
+        if actual_stops>baseline:g['issues'].append('등록된 정지시간이 실적 기준 교대시간을 초과합니다. 정지 내역을 확인하세요.')
         if runtime>planned:g['issues'].append('실적 기준 가동시간이 기본시간을 초과합니다. 생산계획·실적 교대를 확인하세요.')
-        if planned and not runtime:g['issues'].append('생산실적 없음: 기본시간 전체를 비가동으로 계산합니다.')
+        if planned and not baseline:g['issues'].append('생산실적 없음: 가동 여부를 확인하세요. 비가동은 등록된 내역만 계산합니다.')
         g['issues'].extend('생산계획 C/T 미등록: '+part for part in missing)
         if not planned and g['total_qty']:g['issues'].append('가동 스케줄에 경과 시간이 없는데 생산실적이 있습니다. 가동일·시간을 확인하세요.')
         if key.startswith('unknown:'):g['issues'].append('생산호기를 설비 정보와 연결할 수 없습니다.')
@@ -123,7 +185,7 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
         for p in g['parts']:p['sources']=sorted(p['sources'])
         result.append(g)
     summary={field:sum(row[field] for row in result) for field in (
-        'planned_seconds','planned_stop_seconds','downtime_seconds','runtime_seconds',
+        'planned_seconds','planned_stop_seconds','planned_break_seconds','performance_shift_seconds','downtime_seconds','runtime_seconds',
         'total_qty','good_qty','ideal_seconds','excluded_records','excluded_total_qty','excluded_good_qty')}
     planned,runtime,total=summary['planned_seconds'],summary['runtime_seconds'],summary['total_qty']
     incomplete=any(row['performance'] is None and row['parts'] for row in result)
