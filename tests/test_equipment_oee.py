@@ -310,7 +310,7 @@ def test_plan_without_performance_is_not_registered_downtime(setup):
         machine=next(r for r in calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,14))['items'] if r['key']==str(equipment))
         assert machine['planned_seconds']==24*3600
         assert machine['downtime_seconds']==machine['planned_stop_seconds']==machine['runtime_seconds']==0
-        assert any('계획시간과 실적 기준 시간 차이: 24.00시간' in issue for issue in machine['issues'])
+        assert machine['issues']==[]
         assert all('전체를 비가동' not in issue for issue in machine['issues'])
 
 
