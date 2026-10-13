@@ -135,10 +135,10 @@ def test_equipment_shift_runtime_and_remaining_downtime(setup,process,shifts,min
             db.add(ProductionPerformance(work_order_id=order,performance_date='2026-10-12',process_code=process,shift_type=shift,equipment_id=equipment,good_qty=100))
         db.commit()
         row=next(r for r in calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20))['items'] if r['key']==str(equipment))
-        base=24*3600-(190*60 if process=='TP' else 0)
+        base=24*3600-(210*60 if process=='TP' else 0)
         assert row['runtime_seconds']==minutes*60
         assert row['planned_seconds']==pytest.approx(base)
-        assert row['planned_stop_seconds']==pytest.approx(190*60 if process=='TP' else 0)
+        assert row['planned_stop_seconds']==pytest.approx(210*60 if process=='TP' else 0)
         assert row['downtime_seconds']==pytest.approx(base-minutes*60)
 
 

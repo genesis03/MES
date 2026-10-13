@@ -11,7 +11,7 @@ from models.equipment import EquipmentMaster
 from models.production_cycle_time import ProductionCycleTime
 from models.production_month_plan import ProductionMonthPlanLine,ProductionMonthPlanDay,ProductionPlanWorkTime
 from routers.equipment_oee import require_access,machining_processes,validate_process,validate_equipment
-from services.oee_schedule import month_days,days,bounds,default_excluded_minutes,net_hours
+from services.oee_schedule import month_days,days,bounds,default_excluded_minutes,net_hours,daytime_hours,standard_daytime_hours
 from services.production_sync_mapping import stage_suffix
 
 router=APIRouter(prefix='/api/production/month-plan',tags=['Monthly Production Plans'])
@@ -174,6 +174,6 @@ def status(start_date:date,end_date:date,process_code:str|None=None,db:Session=D
         schedule=days(db,row['process_code'],start_date,end_date,row['equipment_id'])
         active=[d for d in schedule if row['quantities'].get(d['work_date'],0)>0]
         hours=[net_hours(d) for d in active]
-        daytime=[min(12,(p[1]-p[0]).total_seconds()/3600)*net_hours(d)/((p[1]-p[0]).total_seconds()/3600) for d in active if (p:=bounds(d))]
-        row.update(uph=uph,upd=math.floor(uph*(12-default_excluded_minutes(row['process_code'])/120)),upm_day=math.floor(round(uph*sum(daytime),8)),upm_full=math.floor(round(uph*sum(hours),8)))
+        daytime=[daytime_hours(d,row['process_code']) for d in active]
+        row.update(uph=uph,upd=math.floor(uph*standard_daytime_hours(row['process_code'])),upm_day=math.floor(round(uph*sum(daytime),8)),upm_full=math.floor(round(uph*sum(hours),8)))
     return dict(dates=[(start_date+timedelta(days=i)).isoformat() for i in range((end_date-start_date).days+1)],rows=rows,summary=sorted(summary.values(),key=lambda r:(r['vehicle_model'],r['part_no'])),processes=[dict(code=k,name=v) for k,v in supported.items() if not process_code or k==process_code],total=sum(s['total'] for s in summary.values()))

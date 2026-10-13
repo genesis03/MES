@@ -249,15 +249,15 @@ def test_tapping_planned_exclusion_updates_capacity_and_oee_without_changing_shi
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
     loaded=setup.client.get('/api/production/month-plan',params={'month':'2026-10','process_code':'TP'}).json()
     day=next(d for d in loaded['schedules'][str(equip_id)] if d['work_date']=='2026-10-12')
-    assert day['start_time']==day['end_time']=='08:00' and day['next_day'] and day['excluded_minutes']==190
+    assert day['start_time']==day['end_time']=='08:00' and day['next_day'] and day['excluded_minutes']==210
     report=setup.client.get('/api/production/month-plan/status',params={'start_date':'2026-10-12','end_date':'2026-10-12','process_code':'TP'}).json()['rows'][0]
-    assert report['upm_full']==2375 and report['upm_day']==1187 and report['upd']==1187
+    assert report['upm_full']==2337 and report['upm_day']==1178 and report['upd']==1178
     with setup.sessions() as db:
         result=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,14),process_code='TP')
-        assert result['planned_seconds']==pytest.approx(75000)
-        assert result['items'][0]['oee']==pytest.approx(900*30/75000)
+        assert result['planned_seconds']==pytest.approx(73800)
+        assert result['items'][0]['oee']==pytest.approx(900*30/73800)
         partial=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,12,12),process_code='TP')
-        assert partial['planned_seconds']==pytest.approx(12500)
+        assert partial['planned_seconds']==pytest.approx(12300)
     plan['work_times']=[dict(equipment_id=equip_id,work_date='2026-10-12',start_time='08:00',end_time='08:00',next_day=True,excluded_minutes=60)]
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
     with setup.sessions() as db:
@@ -272,7 +272,7 @@ def test_tapping_planned_exclusion_updates_capacity_and_oee_without_changing_shi
     plan['work_times'][0]|={'excluded_minutes':90,'next_day':True,'end_time':'08:00'}
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
     two_days=setup.client.get('/api/production/month-plan/status',params={'start_date':'2026-10-01','end_date':'2026-10-31','process_code':'TP'}).json()['rows'][0]
-    assert two_days['upm_full']==4940 and two_days['upm_day']==2470
+    assert two_days['upm_full']==4902 and two_days['upm_day']==2460
 
 
 def test_legacy_tapping_exclusion_migration_is_once_only_and_keeps_shorter_custom_shifts(setup,monkeypatch):
@@ -289,9 +289,32 @@ def test_legacy_tapping_exclusion_migration_is_once_only_and_keeps_shorter_custo
     ensure_production_plan_work_times(setup.engine,today=date(2026,10,13))
     with setup.sessions() as db:
         full=db.query(ProductionPlanWorkTime).filter_by(equipment_id=tap_id,work_date='2026-10-12').one()
-        assert full.excluded_minutes==190 and full.end_time=='08:00'
+        assert full.excluded_minutes==210 and full.end_time=='08:00'
         assert db.query(ProductionPlanWorkTime).filter_by(equipment_id=tap_id,work_date='2026-10-13').one().excluded_minutes==0
         assert db.query(ProductionPlanWorkTime).filter_by(equipment_id=lathe).one().excluded_minutes==0
         full.excluded_minutes=0;db.commit()
     ensure_production_plan_work_times(setup.engine,today=date(2026,10,13))
     with setup.sessions() as db:assert db.query(ProductionPlanWorkTime).filter_by(equipment_id=tap_id,work_date='2026-10-12').one().excluded_minutes==0
+
+
+def test_old_190_minute_defaults_correct_once_and_keep_custom_hours(setup,monkeypatch):
+    from models.equipment import EquipmentMaster
+    from models.production_month_plan import ProductionPlanWorkTime
+    from models.production_plan_time_migration import ensure_production_plan_work_times
+    _,_,lathe,_=initialize(setup,monkeypatch)
+    with setup.sessions() as db:
+        tap=EquipmentMaster(equipment_code='TP-OLD',equipment_name='탭핑 1호기',process_code='TP',machine_no='1');db.add(tap);db.flush()
+        for equip,day,end,excluded in [(tap.id,'2026-10-01','08:00',190),(tap.id,'2026-10-02','08:00',60),(tap.id,'2026-10-03','05:00',190),(lathe,'2026-10-02','05:00',0)]:
+            db.add(ProductionPlanWorkTime(equipment_id=equip,work_date=day,start_time='08:00',end_time=end,next_day=True,excluded_minutes=excluded))
+        db.commit();tap_id=tap.id
+    ensure_production_plan_work_times(setup.engine,today=date(2026,10,13))
+    with setup.sessions() as db:
+        times={r.work_date:r for r in db.query(ProductionPlanWorkTime).filter_by(equipment_id=tap_id)}
+        assert times['2026-10-01'].excluded_minutes==210
+        assert times['2026-10-02'].excluded_minutes==60
+        assert times['2026-10-03'].excluded_minutes==190
+        assert db.query(ProductionPlanWorkTime).filter_by(equipment_id=lathe,work_date='2026-10-02').one().end_time=='05:00'
+        times['2026-10-01'].excluded_minutes=190;db.commit()
+    ensure_production_plan_work_times(setup.engine,today=date(2026,10,13))
+    with setup.sessions() as db:
+        assert db.query(ProductionPlanWorkTime).filter_by(equipment_id=tap_id,work_date='2026-10-01').one().excluded_minutes==190

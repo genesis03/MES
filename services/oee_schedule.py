@@ -17,7 +17,7 @@ def month_days(month):
 
 
 def default_excluded_minutes(process_code):
-    return 190 if process_code=='TP' else 0
+    return 210 if process_code=='TP' else 0
 
 
 def default_day(day,public_days):
@@ -59,6 +59,18 @@ def net_hours(value):
     period=bounds(value | {'working':True})
     duration=(period[1]-period[0]).total_seconds()/3600
     return max(0,duration-float(value.get('excluded_minutes',0))/60)
+
+
+def daytime_hours(value,process_code):
+    period=bounds(value | {'working':True})
+    hours=(period[1]-period[0]).total_seconds()/3600
+    if process_code=='TP' and hours==24 and value.get('excluded_minutes')==210:
+        return 620/60
+    return min(12,hours)*net_hours(value)/hours
+
+
+def standard_daytime_hours(process_code):
+    return 620/60 if process_code=='TP' else 12
 
 
 def workday_segments(db,process_code,first,last,now,equipment_id=None):
