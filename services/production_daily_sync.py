@@ -111,7 +111,6 @@ def _parse_daily(values,day,machine,shift,allow_aggregate=False):
         if combined<setup:raise protocol.SyncError('불량·셋업 합계가 셋업 수량보다 작아 저장하지 않습니다.')
         defect=combined-setup;rel=arrays['RULE_NO'][i]
         details=[{k:v for k,v in d.items() if k!='rel_no'} for d in defects if d['rel_no']==rel or aggregate and count==1]
-        if details and sum(Decimal(str(d['qty'])) for d in details)!=defect:warnings.append('불량 합계와 유형별 상세 합계가 다른 작업이 있습니다.')
         if allow_aggregate and not arrays['JOB_TIME_STRING'][i].strip():
             a=b=None
         else:

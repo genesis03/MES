@@ -365,3 +365,12 @@ def test_failed_machine_query_does_not_block_other_machines_and_shifts(monkeypat
     assert 'LT-01 주간' in client.query_errors[0]['error']
     assert client.query_errors[0]['failure_data']['equipment']=='LT-01'
     assert any(r['MACHINE_NAME']=='TP-02' and r['SHIFT_TYPE']=='NIGHT' for r in rows)
+
+
+def test_partial_defect_details_preserve_source_total_without_sync_warning():
+    values=daily_response()
+    values[FAULT+'FAULT_QTY']=['1,2']
+    rows,warnings=parse_daily(values,DAY,MACHINES[0],SHIFTS[0])
+    assert rows[0]['FAULT_QTY']=='5' and rows[0]['F10']=='25' and rows[0]['LOT_QTY']=='314'
+    assert sum(d['qty'] for d in rows[0]['DEFECTS'])==3
+    assert not warnings
