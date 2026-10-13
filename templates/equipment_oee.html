@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% block title %}설비 가동 현황 (OEE){% endblock %}
 {% block extra_head %}<style>
-.oee-panel{background:#fff;border:1px solid #cbd5e1;border-radius:6px;padding:16px;margin:14px 0}.oee-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.oee-toolbar input,.oee-panel input{padding:7px;border:1px solid #cbd5e1;border-radius:4px;box-sizing:border-box}.oee-btn{background:#2563eb;color:#fff;border:0;border-radius:4px;padding:8px 12px;cursor:pointer}.oee-delete{background:#b91c1c}.oee-help{color:#64748b;font-size:12px;line-height:1.6}.oee-scroll{overflow:auto}.oee-table{width:100%;border-collapse:collapse;font-size:12px}.oee-table th,.oee-table td{border:1px solid #dbe3ec;padding:9px;text-align:center}.oee-table th{background:#f1f5f9;white-space:nowrap}.oee-table td.left{text-align:left}.oee-table input{width:110px}.oee-alert{color:#b45309;font-size:12px;white-space:pre-wrap}#oeeMessage{white-space:pre-wrap;color:#1e40af}.oee-detail{margin:8px 0}.oee-detail summary{cursor:pointer;color:#2563eb}
+.oee-panel{background:#fff;border:1px solid #cbd5e1;border-radius:6px;padding:16px;margin:14px 0}.oee-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.oee-toolbar input,.oee-panel input{padding:7px;border:1px solid #cbd5e1;border-radius:4px;box-sizing:border-box}.oee-btn{background:#2563eb;color:#fff;border:0;border-radius:4px;padding:8px 12px;cursor:pointer}.oee-delete{background:#b91c1c}.oee-help{color:#64748b;font-size:12px;line-height:1.6}.oee-scroll{overflow:auto}.oee-table{width:100%;border-collapse:collapse;font-size:12px}.oee-table th,.oee-table td{border:1px solid #dbe3ec;padding:9px;text-align:center}.oee-table th{background:#f1f5f9;white-space:nowrap}.oee-table td.left{text-align:left}.oee-table input{width:110px}.oee-alert{color:#b45309;font-size:12px;white-space:pre-wrap}#oeeMessage{white-space:pre-wrap;color:#1e40af}.oee-detail{margin:0}.oee-detail summary{cursor:pointer;color:#2563eb;white-space:nowrap}
+.oee-equipment-table th,.oee-equipment-table td{line-height:16px}.oee-equipment-table td.left{width:30%}.oee-checks{display:flex;align-items:center;gap:8px;min-width:0}.oee-checks .oee-alert{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.oee-checks .oee-alert:empty{display:none}.oee-checks .oee-detail{flex-shrink:0}.oee-checks:has(.oee-detail[open]){display:block}.oee-checks:has(.oee-detail[open]) .oee-alert{white-space:pre-wrap;overflow:visible}.oee-detail[open] summary{margin-bottom:6px}
 </style>{% endblock %}
 {% block content %}
 <h1>설비 가동 현황 (OEE)</h1>
@@ -12,7 +13,7 @@
 <div id="oeeMessage" role="status"></div>
 <h2>1. 종합현황</h2><div class="oee-panel oee-scroll"><table class="oee-table"><thead><tr><th>구분</th><th>기본 시간(h)</th><th>계획정지(h)</th><th>비가동(h)</th><th>실제 가동(h)</th><th>총생산</th><th>양품</th><th>가동률</th><th>성능률</th><th>양품률</th><th>OEE</th></tr></thead><tbody id="oeeSummary"></tbody></table><div class="oee-help" id="oeeExclusionSummary"></div></div>
 <h2>2. 설비별 현황</h2>
-<div class="oee-panel oee-scroll"><table class="oee-table"><thead><tr><th>생산호기</th><th>기본 시간(h)</th><th>계획정지(h)</th><th>비가동(h)</th><th>실제 가동(h)</th><th>총생산</th><th>양품</th><th>가동률</th><th>성능률</th><th>양품률</th><th>OEE</th><th>확인사항 / 품번별 내역</th></tr></thead><tbody id="oeeRows"></tbody></table></div>
+<div class="oee-panel oee-scroll"><table class="oee-table oee-equipment-table"><thead><tr><th>생산호기</th><th>기본 시간(h)</th><th>계획정지(h)</th><th>비가동(h)</th><th>실제 가동(h)</th><th>총생산</th><th>양품</th><th>가동률</th><th>성능률</th><th>양품률</th><th>OEE</th><th>확인사항 / 품번별 내역</th></tr></thead><tbody id="oeeRows"></tbody></table></div>
 
 {% endblock %}
-{% block extra_script %}<script src="/static/equipment_oee.js?v=20261013-8"></script>{% endblock %}
+{% block extra_script %}<script src="/static/equipment_oee.js?v=20261013-9"></script>{% endblock %}
