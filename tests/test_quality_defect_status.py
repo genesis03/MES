@@ -88,7 +88,7 @@ def test_external_defects_use_type_quantities_exclude_setup_and_support_filters(
     assert {d['code'] for d in record['defect_items']} == {'EXTERNAL:F4', 'EXTERNAL:F2'}
     assert any(t['code'] == 'EXTERNAL:F4' for t in data['defect_types'])
     for filters, count in [({'source': 'EXTERNAL_PRODUCTION', 'defect_type_code': 'EXTERNAL:F4'}, 1),
-                           ({'source': 'PRODUCTION_RUN'}, 0), ({'part_no': 'OTHER'}, 0),
+                           ({'source': 'PRODUCTION_RUN'}, 1), ({'part_no': 'OTHER'}, 0),
                            ({'end_date': '2026-03-24'}, 0)]:
         assert setup.client.get(url, params=filters).json()['total'] == count
     # Updates replace imported records, rather than adding another quality entry.
@@ -111,3 +111,35 @@ def test_assembly_group_defects_count_once_without_assigning_them_to_each_lot(se
     assert data['total'] == 1 and data['total_defect_qty'] == 4
     assert data['items'][0]['base_qty'] == 204
     assert data['items'][0]['lot_no'] == ', '.join(lots)
+
+
+def test_production_filter_combines_internal_and_external_defects(setup):
+    from models.production import ProductionWorkOrder
+    from models.production_run import ProductionRun, ProductionRunDefect
+    setup.app.include_router(router)
+    with setup.sessions() as db:
+        db.execute(text('PRAGMA foreign_keys=OFF'))
+        item_id = add_item(db, part='310062-A')
+        order = ProductionWorkOrder(work_order_no='QUALITY-WORK', order_date=DAY.isoformat(),
+            item_id=item_id, part_no='310062-A', order_qty=100)
+        db.add(order); db.flush()
+        for status in ['COMPLETED', 'CANCELLED']:
+            run = ProductionRun(work_order_id=order.id, performance_date=DAY.isoformat(),
+                process_code='LT', operator_id=1, operator_name='내부 작업자', equipment_id=1,
+                equipment_code='LT-01', equipment_name='선반 1호기', shift_type='DAY',
+                start_time='08:00', good_qty=98, defect_qty=2, status=status)
+            db.add(run); db.flush()
+            db.add(ProductionRunDefect(run_id=run.id, defect_type_code='F4',
+                defect_type_name='칩 엉김', defect_qty=2))
+        db.commit()
+    token, _ = sync.claim(DAY, DAY, 'MANUAL')
+    sync.save_day([source_row(lot='LX2026032501001', ITEM_NUM='310062-A', PROC_TYPE_NM='복합선반',
+        JOB_QTY='97', LOT_QTY='100', FAULT_QTY='3', F10='0',
+        DEFECTS=[{'code': 'F4', 'name': '칩 엉김', 'qty': 3}])], token)
+    for source in ['ALL', 'PRODUCTION_RUN']:
+        data = setup.client.get('/api/quality/defect-status', params={'source': source}).json()
+        assert data['total'] == 2 and data['total_defect_qty'] == 5
+        assert {r['source_name'] for r in data['items']} == {'생산실적'}
+        assert {r['source_type'] for r in data['items']} == {'PRODUCTION_RUN', 'EXTERNAL_PRODUCTION'}
+        internal = next(r for r in data['items'] if r['source_type'] == 'PRODUCTION_RUN')
+        assert internal['operator_name'] == '내부 작업자' and internal['shift_name'] == '주간'

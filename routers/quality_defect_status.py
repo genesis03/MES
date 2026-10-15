@@ -42,7 +42,10 @@ def _matches(row: dict, part_no: str, defect_type_code: str, source: str) -> boo
         return False
     if defect_type_code and defect_type_code not in row.get("defect_codes", []):
         return False
-    if source != "ALL" and row.get("source_type") != source:
+    row_source = row.get("source_type")
+    if source == "PRODUCTION_RUN":
+        return row_source in {"PRODUCTION_RUN", "EXTERNAL_PRODUCTION"}
+    if source != "ALL" and row_source != source:
         return False
     return True
 
@@ -198,6 +201,9 @@ def defect_status(
             "defect_codes": [x["code"] for x in defect_items],
             "partner_name": "",
             "created_by": run.created_by or run.operator_name or "",
+            "equipment_name": run.equipment_name,
+            "shift_name": {"DAY": "주간", "NIGHT": "야간"}.get(run.shift_type, ""),
+            "operator_name": run.operator_name,
             "target_key": f"PRODUCTION_RUN:{run.id}",
         }
         if _matches(row, part_filter, defect_filter, source):
@@ -255,7 +261,7 @@ def defect_status(
             rows.append(row)
 
     external_names = {}
-    if source in {"ALL", "EXTERNAL_PRODUCTION"}:
+    if source in {"ALL", "PRODUCTION_RUN", "EXTERNAL_PRODUCTION"}:
         query = db.query(ExternalProductionRecord)
         if start_date:
             query = query.filter(ExternalProductionRecord.work_date >= start_date)
@@ -290,7 +296,7 @@ def defect_status(
             if not defect_items:
                 continue
             row = {
-                'source_type': 'EXTERNAL_PRODUCTION', 'source_name': '외부 MES 생산실적',
+                'source_type': 'EXTERNAL_PRODUCTION', 'source_name': '생산실적',
                 'date': record.work_date, 'part_no': view['mes_part_no'] or record.part_no,
                 'part_name': view['part_name'], 'process_name': view['process_name'] or record.process_name,
                 'lot_no': ', '.join(view['assembly_group_lots']) if view['assembly_group_defects'] else record.lot_no,
