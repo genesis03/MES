@@ -106,7 +106,7 @@ def defect_status(
             item = db.get(PurchaseInboundItem, result.inbound_item_id)
             master = db.get(PurchaseInboundMaster, result.inbound_id)
             product = db.get(ItemMasterModel, item.item_id) if item and item.item_id else None
-            if not item or not master:
+            if not item or not master or master.status != "CONFIRMED":
                 continue
             date_value = master.inbound_date
             row = {
@@ -129,7 +129,7 @@ def defect_status(
             item = db.get(SubcontractInboundItem, result.inbound_item_id)
             master = db.get(SubcontractInboundMaster, result.inbound_id)
             product = db.get(ItemMasterModel, item.item_id) if item and item.item_id else None
-            if not item or not master:
+            if not item or not master or master.status != "RECEIVED":
                 continue
             date_value = master.inbound_date
             row = {
