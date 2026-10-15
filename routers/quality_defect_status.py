@@ -19,6 +19,20 @@ from services.production_sync_view import external_record_view
 router = APIRouter(prefix="/api/quality/defect-status", tags=["Quality Defect Status"])
 
 
+@router.get("/subcontract")
+def subcontract_status(
+    start_date: Optional[str] = Query(None, max_length=10),
+    end_date: Optional[str] = Query(None, max_length=10),
+    part_no: str = Query('', max_length=80),
+    partner_name: str = Query('', max_length=100),
+    limit: int = Query(5000, ge=1, le=5000),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    from services.subcontract_defect_status import subcontract_defect_status
+    return subcontract_defect_status(db, start_date, end_date, part_no, partner_name, limit)
+
+
 def _defect_name_map(db: Session) -> dict[str, str]:
     rows = (
         db.query(CommonCodeModel)

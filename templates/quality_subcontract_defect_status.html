@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}불량 현황 외주가공{% endblock %}
+{% block extra_head %}
+<style>
+.sd-wrap h1{font-size:22px;margin-bottom:16px}.sd-filter{display:flex;flex-wrap:wrap;align-items:end;gap:10px;padding:14px;border:1px solid #cbd5e1;border-radius:7px;background:#fff;margin-bottom:12px}.sd-filter label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:#475569}.sd-filter input{height:34px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:4px}.sd-filter button{height:34px;padding:0 15px;border:0;border-radius:4px;background:#2563eb;color:white;font-weight:700;cursor:pointer}.sd-filter button[type=reset]{background:#e2e8f0;color:#334155}.sd-cards{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}.sd-card{min-width:160px;padding:12px 16px;border:1px solid #dbe2eb;background:white;border-radius:6px}.sd-card span{display:block;font-size:12px;color:#64748b}.sd-card strong{font-size:20px}.sd-bad{color:#dc2626}.sd-scroll{overflow:auto;max-height:68vh;border:1px solid #dbe2eb;border-radius:6px;background:#fff}.sd-table{border-collapse:collapse;min-width:100%;font-size:12px;white-space:nowrap}.sd-table th,.sd-table td{padding:8px;border:1px solid #dbe2eb;text-align:center}.sd-table th{background:#f1f5f9;position:sticky;top:0;z-index:1}.sd-table .num{text-align:right}.sd-table .left{text-align:left}.sd-table tfoot td{position:sticky;bottom:0;background:#e2e8f0;font-weight:700}.sd-note{font-size:12px;color:#64748b;margin:8px 0;line-height:1.6}.sd-pending{color:#b45309}
+</style>
+{% endblock %}
+{% block content %}
+<section class="sd-wrap">
+  <h1>불량 현황 외주가공</h1>
+  <form id="sd-filter" class="sd-filter">
+    <label>시작일<input type="date" id="sd-start" aria-label="시작일"></label>
+    <label>종료일<input type="date" id="sd-end" aria-label="종료일"></label>
+    <label>품번<input id="sd-part" placeholder="품번"></label>
+    <label>거래처<input id="sd-partner" placeholder="거래처명"></label>
+    <button type="submit">조회</button><button type="reset">초기화</button>
+  </form>
+  <div class="sd-cards">
+    <div class="sd-card"><span>입고 품목 건수</span><strong id="sd-count">0</strong></div>
+    <div class="sd-card"><span>입고수량</span><strong id="sd-inbound">0</strong></div>
+    <div class="sd-card"><span>양품수량</span><strong id="sd-good">0</strong></div>
+    <div class="sd-card"><span>불량 계</span><strong id="sd-bad" class="sd-bad">0</strong></div>
+  </div>
+  <p class="sd-note">불량이 등록된 외주 입고품목을 LOT별로 표시합니다. 양품수량 = 입고수량 − 불량 계. 취소된 입고는 제외합니다.</p>
+  <p id="sd-note" class="sd-note" role="status"></p>
+  <div class="sd-scroll"><table class="sd-table" id="sd-table" aria-label="외주가공 LOT별 불량 현황"></table></div>
+</section>
+{% endblock %}
+{% block extra_script %}
+<script src="/static/js/quality_subcontract_defect_status.js?v=20261015-1" defer></script>
+{% endblock %}

@@ -44,6 +44,14 @@ def defect_status_page(request: Request, current_user=Depends(get_current_user))
     )
 
 
+@router.get("/quality/defect-status/subcontract", response_class=HTMLResponse)
+def subcontract_defect_status_page(request: Request, current_user=Depends(get_current_user)):
+    return templates.TemplateResponse(
+        request=request, name="quality_subcontract_defect_status.html",
+        context={"request": request, "user": current_user},
+    )
+
+
 # 화면 안내만 정의합니다. 검사기준서/성적서 데이터 및 작성 API는 아직 추가하지 않습니다.
 PLANNED_INSPECTION_PAGES = {
     "/quality/patrol-inspections": {

@@ -340,6 +340,7 @@
                     <li class="submenu-item"><a href="/quality/inbound-defects" id="nav-quality-inbound-defects">입고 품목 불량 처리</a></li>
                     <li class="submenu-item"><a href="/quality/production-defects" id="nav-quality-production-defects">생산 LOT 불량 처리</a></li>
                     <li class="submenu-item"><a href="/quality/defect-status" id="nav-quality-defect-status">불량 현황</a></li>
+                    <li class="submenu-item"><a href="/quality/defect-status/subcontract" id="nav-quality-subcontract-defect-status">불량 현황 외주가공</a></li>
                 </ul>
             </li>
             {% endif %}
@@ -561,7 +562,8 @@
                 "/quality/outbound-reports": "nav-quality-outbound-reports",
                 "/quality/inbound-defects": "nav-quality-inbound-defects",
                 "/quality/production-defects": "nav-quality-production-defects",
-                "/quality/defect-status": "nav-quality-defect-status"
+                "/quality/defect-status": "nav-quality-defect-status",
+                "/quality/defect-status/subcontract": "nav-quality-subcontract-defect-status"
             };
             // Use sidebar paths for new menus and their nested pages; retain legacy aliases.
             const sidebarMatch = Array.from(document.querySelectorAll('.sidebar-menu .submenu a[href]'))
