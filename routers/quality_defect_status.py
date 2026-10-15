@@ -12,6 +12,9 @@ from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunDefect
 from models.quality import QualityInboundDefectDetail, QualityInboundResult
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundMaster
+from models.production_sync import ExternalProductionRecord
+from services.production_sync_mapping import ItemConnections
+from services.production_sync_view import external_record_view
 
 router = APIRouter(prefix="/api/quality/defect-status", tags=["Quality Defect Status"])
 
@@ -56,7 +59,7 @@ def defect_status(
     current_user=Depends(get_current_user),
 ):
     source = (source or "ALL").strip().upper()
-    allowed_sources = {"ALL", "GENERAL", "SUBCONTRACT", "PRODUCTION_RUN", "PRODUCTION_LOT"}
+    allowed_sources = {"ALL", "GENERAL", "SUBCONTRACT", "PRODUCTION_RUN", "PRODUCTION_LOT", "EXTERNAL_PRODUCTION"}
     if source not in allowed_sources:
         source = "ALL"
     part_filter = (part_no or "").strip()
@@ -251,6 +254,56 @@ def defect_status(
         if _matches(row, part_filter, defect_filter, source):
             rows.append(row)
 
+    external_names = {}
+    if source in {"ALL", "EXTERNAL_PRODUCTION"}:
+        query = db.query(ExternalProductionRecord)
+        if start_date:
+            query = query.filter(ExternalProductionRecord.work_date >= start_date)
+        if end_date:
+            query = query.filter(ExternalProductionRecord.work_date <= end_date)
+        connections = ItemConnections(db)
+        groups = {}
+        for record in query.order_by(ExternalProductionRecord.id):
+            view = external_record_view(record, connections)
+            if view['lot_conflict']:
+                continue
+            group_lots = view['assembly_group_lots'] if view['assembly_group_defects'] else []
+            key = (record.work_date, record.process_name, view['equipment_name'], view['shift_type'],
+                   tuple(sorted(group_lots))) if group_lots else ('record', record.id)
+            if key not in groups:
+                groups[key] = {'record': record, 'view': view, 'base_qty': 0}
+            groups[key]['base_qty'] += float(view['total_qty'] or record.lot_qty or 0)
+
+        for group in groups.values():
+            record, view = group['record'], group['view']
+            # Assembly types belong to a group of LOTs and must be counted once.
+            details = view['assembly_group_defects'] or view['defects']
+            defect_items = []
+            for detail in details:
+                qty = float(detail.get('qty') or 0)
+                if qty <= 0:
+                    continue
+                code = 'EXTERNAL:' + str(detail.get('code') or detail.get('name') or 'UNKNOWN')
+                name = str(detail.get('name') or detail.get('code') or '미지정')
+                external_names[code] = name + ' (외부 MES)'
+                defect_items.append({'code': code, 'name': name, 'qty': qty})
+            if not defect_items:
+                continue
+            row = {
+                'source_type': 'EXTERNAL_PRODUCTION', 'source_name': '외부 MES 생산실적',
+                'date': record.work_date, 'part_no': view['mes_part_no'] or record.part_no,
+                'part_name': view['part_name'], 'process_name': view['process_name'] or record.process_name,
+                'lot_no': ', '.join(view['assembly_group_lots']) if view['assembly_group_defects'] else record.lot_no,
+                'base_qty': group['base_qty'], 'defect_qty': sum(d['qty'] for d in defect_items),
+                'defect_items': defect_items, 'defect_codes': [d['code'] for d in defect_items],
+                'partner_name': '', 'created_by': '', 'operator_name': view['operator_name'],
+                'shift_name': view['shift_name'],
+                'equipment_name': view['equipment_name'] or (view['machine_no'] + '호기' if view['machine_no'] else ''),
+                'target_key': f'EXTERNAL_PRODUCTION:{record.id}',
+            }
+            if _matches(row, part_filter, defect_filter, source):
+                rows.append(row)
+
     rows.sort(key=lambda x: (x["date"], x["source_name"], x["part_no"]), reverse=True)
     rows = rows[:limit]
     total_defect = sum(float(row["defect_qty"] or 0) for row in rows)
@@ -259,5 +312,5 @@ def defect_status(
         "items": rows,
         "total": len(rows),
         "total_defect_qty": total_defect,
-        "defect_types": [{"code": code, "name": name} for code, name in names.items()],
+        "defect_types": [{"code": code, "name": name} for code, name in (names | external_names).items()],
     }

@@ -2,7 +2,8 @@
 import pytest
 from sqlalchemy import text
 
-from test_production_sync import setup, add_item
+from test_production_sync import setup, add_item, DAY, row as source_row
+from services import production_sync_service as sync
 from models.models import PurchaseInboundItem, PurchaseInboundMaster
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundMaster
 from models.quality import QualityInboundDefectDetail, QualityInboundResult
@@ -61,3 +62,52 @@ def test_cancelled_receipt_defects_excluded_from_rows_and_totals(setup, source):
         # Cancellation hides history without deleting quality records.
         assert db.query(QualityInboundResult).count() == 3
         assert db.query(QualityInboundDefectDetail).count() == 3
+
+
+def test_external_defects_use_type_quantities_exclude_setup_and_support_filters(setup):
+    setup.app.include_router(router)
+    with setup.sessions() as db:
+        add_item(db, part='310062-A'); db.commit()
+    token, _ = sync.claim(DAY, DAY, 'MANUAL')
+    rows = [source_row(lot='LX2026032501001', ITEM_NUM='310062-A', PROC_TYPE_NM='복합선반',
+        JOB_QTY='100', LOT_QTY='110', FAULT_QTY='5', F10='5',
+        DEFECTS=[{'code': 'F4', 'name': '칩 엉김', 'qty': 3}, {'code': 'F2', 'name': '치수', 'qty': 2}],
+        SHIFT_NAME='주간', MACHINE_NAME='LT-01', OPERATOR_NAME='작업자'),
+        source_row(lot='LX2026032501002', ITEM_NUM='310062-A', PROC_TYPE_NM='복합선반',
+            JOB_QTY='100', LOT_QTY='105', FAULT_QTY='0', F10='5', DEFECTS=[])]
+    sync.save_day(rows, token)
+    url = '/api/quality/defect-status'
+    data = setup.client.get(url, params={'start_date': DAY.isoformat(), 'end_date': DAY.isoformat()}).json()
+    assert data['total'] == 1 and data['total_defect_qty'] == 5
+    record = data['items'][0]
+    assert record['source_type'] == 'EXTERNAL_PRODUCTION'
+    assert record['equipment_name'] == 'LT-01' and record['shift_name'] == '주간'
+    assert record['operator_name'] == '작업자'
+    assert record['base_qty'] == 110
+    assert record['part_no'] == '310062-A'
+    assert {d['code'] for d in record['defect_items']} == {'EXTERNAL:F4', 'EXTERNAL:F2'}
+    assert any(t['code'] == 'EXTERNAL:F4' for t in data['defect_types'])
+    for filters, count in [({'source': 'EXTERNAL_PRODUCTION', 'defect_type_code': 'EXTERNAL:F4'}, 1),
+                           ({'source': 'PRODUCTION_RUN'}, 0), ({'part_no': 'OTHER'}, 0),
+                           ({'end_date': '2026-03-24'}, 0)]:
+        assert setup.client.get(url, params=filters).json()['total'] == count
+    # Updates replace imported records, rather than adding another quality entry.
+    rows[0]['DEFECTS'][0]['qty'] = 1
+    sync.save_day(rows, token)
+    data = setup.client.get(url).json()
+    assert data['total'] == 1 and data['total_defect_qty'] == 3
+
+
+def test_assembly_group_defects_count_once_without_assigning_them_to_each_lot(setup):
+    setup.app.include_router(router)
+    token, _ = sync.claim(DAY, DAY, 'MANUAL')
+    lots = ['LA20260325001', 'LA20260325002']
+    rows = [source_row(lot=lot, ITEM_NUM='310062-C', PROC_TYPE_NM='조립', JOB_QTY='100',
+        LOT_QTY='102', FAULT_QTY='2', F10='0', MACHINE_NAME='AS-01', SHIFT_TYPE='DAY',
+        ASSEMBLY_GROUP_LOTS=lots, ASSEMBLY_GROUP_DEFECTS=[{'code': 'F4', 'name': '칩 엉김', 'qty': 4}])
+        for lot in lots]
+    sync.save_day(rows, token)
+    data = setup.client.get('/api/quality/defect-status').json()
+    assert data['total'] == 1 and data['total_defect_qty'] == 4
+    assert data['items'][0]['base_qty'] == 204
+    assert data['items'][0]['lot_no'] == ', '.join(lots)
