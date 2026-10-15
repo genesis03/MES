@@ -102,19 +102,38 @@ def test_external_defects_use_type_quantities_exclude_setup_and_support_filters(
     assert data['total'] == 1 and data['total_defect_qty'] == 3
 
 
-def test_assembly_group_defects_count_once_without_assigning_them_to_each_lot(setup):
+@pytest.mark.parametrize('lot_count', [2, 3])
+def test_assembly_group_defects_count_once_without_assigning_them_to_each_lot(setup, lot_count):
     setup.app.include_router(router)
     token, _ = sync.claim(DAY, DAY, 'MANUAL')
-    lots = ['LA20260325001', 'LA20260325002']
+    lots = [f'LA2026032500{i}' for i in range(1, lot_count + 1)]
     rows = [source_row(lot=lot, ITEM_NUM='310062-C', PROC_TYPE_NM='조립', JOB_QTY='100',
         LOT_QTY='102', FAULT_QTY='2', F10='0', MACHINE_NAME='AS-01', SHIFT_TYPE='DAY',
-        ASSEMBLY_GROUP_LOTS=lots, ASSEMBLY_GROUP_DEFECTS=[{'code': 'F4', 'name': '칩 엉김', 'qty': 4}])
+        ASSEMBLY_GROUP_LOTS=lots, ASSEMBLY_GROUP_DEFECTS=[{'code': 'F4', 'name': '칩 엉김', 'qty': 2 * lot_count}])
         for lot in lots]
     sync.save_day(rows, token)
     data = setup.client.get('/api/quality/defect-status').json()
-    assert data['total'] == 1 and data['total_defect_qty'] == 4
-    assert data['items'][0]['base_qty'] == 204
-    assert data['items'][0]['lot_no'] == ', '.join(lots)
+    assert data['total'] == lot_count and data['total_defect_qty'] == 2 * lot_count
+    assert len(data['items']) == lot_count + 1
+    assert [r['lot_no'] for r in data['items'][:-1]] == lots
+    for item in data['items'][:-1]:
+        assert item['production_qty'] == 102 and item['good_qty'] == 100
+        assert item['defect_qty'] == 2 and item['setup_qty'] == 0
+        assert set(item['report_by_type'].values()) == {None}
+    annotation = data['items'][-1]
+    assert annotation['is_unallocated_defect'] and annotation['related_lots'] == lots
+    assert annotation['production_qty'] is None and annotation['good_qty'] is None
+    assert annotation['defect_qty'] is None and annotation['setup_qty'] is None
+    assert annotation['report_by_type']['4'] == 2 * lot_count
+    totals = data['report_totals']
+    assert totals['production_qty'] == 102 * lot_count and totals['good_qty'] == 100 * lot_count
+    assert totals['defect_qty'] == totals['by_type']['4'] == 2 * lot_count
+    # Type filtering retains the LOT context, without multiplying shared details.
+    filtered = setup.client.get('/api/quality/defect-status', params={'defect_type_code': 'EXTERNAL:F4'}).json()
+    assert filtered['total'] == lot_count and len(filtered['items']) == lot_count + 1
+    assert filtered['report_totals'] == totals
+    limited = setup.client.get('/api/quality/defect-status', params={'limit': 1}).json()
+    assert limited['truncated'] and limited['report_totals'] == totals
 
 
 def test_production_filter_combines_internal_and_external_defects(setup):

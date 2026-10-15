@@ -294,7 +294,8 @@ def defect_status(
             key = (record.work_date, record.process_name, view['equipment_name'], view['shift_type'],
                    tuple(sorted(group_lots))) if group_lots else ('record', record.id)
             if key not in groups:
-                groups[key] = {'record': record, 'view': view, 'base_qty': 0, 'good_qty': 0, 'setup_qty': 0}
+                groups[key] = {'record': record, 'view': view, 'base_qty': 0, 'good_qty': 0, 'setup_qty': 0, 'members': []}
+            groups[key]['members'].append((record, view))
             groups[key]['base_qty'] += float(view['total_qty'] or record.lot_qty or 0)
             groups[key]['good_qty'] += float(record.job_qty or 0)
             groups[key]['setup_qty'] += float(view['setup_qty'] or 0)
@@ -318,7 +319,7 @@ def defect_status(
                 'source_type': 'EXTERNAL_PRODUCTION', 'source_name': '생산실적',
                 'date': record.work_date, 'part_no': view['mes_part_no'] or record.part_no,
                 'part_name': view['part_name'], 'process_name': view['process_name'] or record.process_name,
-                'lot_no': ', '.join(view['assembly_group_lots']) if view['assembly_group_defects'] else record.lot_no,
+                'lot_no': record.lot_no,
                 'base_qty': group['base_qty'], 'defect_qty': sum(d['qty'] for d in defect_items),
                 'production_qty': group['base_qty'], 'good_qty': group['good_qty'], 'setup_qty': group['setup_qty'],
                 'defect_items': defect_items, 'defect_codes': [d['code'] for d in defect_items],
@@ -327,11 +328,29 @@ def defect_status(
                 'equipment_name': view['equipment_name'] or (view['machine_no'] + '호기' if view['machine_no'] else ''),
                 'target_key': f'EXTERNAL_PRODUCTION:{record.id}',
             }
-            if _matches(row, part_filter, defect_filter, source):
+            if not _matches(row, part_filter, defect_filter, source):
+                continue
+            if not view['assembly_group_defects']:
                 rows.append(row)
+                continue
+            # Source quantities exist per LOT; only the defect TYPE allocation is unknown.
+            # Keep the source's per-LOT counts and put the shared types on a separate row.
+            for member, member_view in group['members']:
+                received = float(member_view['total_qty'] or member.lot_qty or 0)
+                rows.append(row | {
+                    'lot_no': member.lot_no, 'base_qty': received, 'production_qty': received,
+                    'good_qty': float(member.job_qty or 0), 'setup_qty': float(member_view['setup_qty'] or 0),
+                    'defect_qty': float(member.fault_qty or 0), 'defect_items': [],
+                    'types_unallocated': True, 'target_key': f'EXTERNAL_PRODUCTION:{member.id}',
+                })
+            rows.append(row | {
+                'lot_no': '', 'related_lots': list(view['assembly_group_lots']),
+                'is_unallocated_defect': True, 'base_qty': None, 'production_qty': None,
+                'good_qty': None, 'setup_qty': None, 'defect_qty': None,
+                'target_key': f'EXTERNAL_PRODUCTION_GROUP:{record.id}',
+            })
 
     rows.sort(key=lambda x: (x["date"], x["source_name"], x["part_no"]), reverse=True)
-    rows = rows[:limit]
     total_defect = sum(float(row["defect_qty"] or 0) for row in rows)
     columns = report_types(db)
     report_totals = {'production_qty': 0., 'good_qty': 0., 'defect_qty': total_defect,
@@ -342,15 +361,17 @@ def defect_status(
             row['production_qty'] = row['base_qty']
             row['good_qty'] = max(row['base_qty'] - row['defect_qty'], 0)
             row['setup_qty'] = None
-        row['report_by_type'] = report_quantities(row['defect_items'], columns, row['defect_qty'])
+        row['report_by_type'] = ({c['code']: None for c in columns} if row.get('types_unallocated')
+                                 else report_quantities(row['defect_items'], columns, row['defect_qty']))
         for key in ('production_qty', 'good_qty', 'setup_qty'):
             report_totals[key] += float(row.get(key) or 0)
         for code, qty in row['report_by_type'].items():
-            report_totals['by_type'][code] += qty
+            report_totals['by_type'][code] += float(qty or 0)
 
     return {
-        "items": rows,
-        "total": len(rows),
+        "items": rows[:limit],
+        "total": sum(not row.get('is_unallocated_defect', False) for row in rows),
+        "truncated": len(rows) > limit,
         "total_defect_qty": total_defect,
         "report_defect_types": columns, "report_totals": report_totals,
         "defect_types": [{"code": code, "name": name} for code, name in (names | external_names).items()],
