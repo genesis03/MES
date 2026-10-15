@@ -9,6 +9,7 @@
 .ds-tablebox{background:#fff;border:1px solid #dbe2eb;border-radius:8px;overflow:auto;max-height:68vh}.ds-table{width:100%;border-collapse:collapse;font-size:12px}.ds-table th,.ds-table td{border:1px solid #e2e8f0;padding:7px;text-align:center;white-space:nowrap}.ds-table th{position:sticky;top:0;background:#f1f5f9;z-index:2}.ds-left{text-align:left!important}.ds-num{text-align:right!important}
 .ds-table tfoot td{position:sticky;bottom:0;background:#e2e8f0;font-weight:700}
 </style>
+<link rel="stylesheet" href="/static/css/quality_defect_report.css?v=20261015-1">
 {% endblock %}
 {% block content %}
 <div class="ds-wrap">
@@ -33,8 +34,11 @@
 
   <div class="ds-summary">
     <div class="ds-card"><span>등록 건수</span><strong id="ds-count">0</strong></div>
+    <div class="ds-card"><span>생산/입고수량</span><strong id="ds-production">0</strong></div>
+    <div class="ds-card"><span>양품수량</span><strong id="ds-good">0</strong></div>
     <div class="ds-card bad"><span>총 불량수량</span><strong id="ds-total">0</strong></div>
   </div>
+  <p class="ds-note">생산실적은 셋업을 포함한 총수량, 입고 자료는 입고수량을 표시합니다. 확인할 수 없는 셋업수량은 —로 표시합니다.</p>
 
   <div class="ds-tablebox">
     <table class="ds-table">
@@ -50,9 +54,9 @@
 (function(){
   const $=function(id){return document.getElementById(id)};
   const esc=function(v){const s=document.createElement('span');s.textContent=v==null?'':v;return s.innerHTML};
-  const fmt=function(v){return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6})};
-  const headings=['일자','구분','품번','품명','공정','호기','주/야','거래처','LOT NO','기준수량','불량 계'];
-  function renderHead(types){$('ds-head').innerHTML='<tr>'+[...headings,...types,'등록자'].map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr>'}
+  const fmt=function(v){return v==null?'—':Number(v).toLocaleString('ko-KR',{maximumFractionDigits:6})};
+  const headings=['일자','구분','품번','품명','공정','호기','주/야','거래처','LOT NO','생산수량','양품수량','불량 계'];
+  function renderHead(types){$('ds-head').innerHTML='<tr>'+[...headings,...types.map(t=>t.name),'셋업수량','등록자'].map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr>'}
   function dateOffset(days){const d=new Date();d.setDate(d.getDate()+days);return MesLocalDate.format(d)}
   async function search(){
     const p=new URLSearchParams({source:$('ds-source').value,limit:'5000'});
@@ -73,24 +77,14 @@
     }
     $('ds-count').textContent=fmt(d.total);$('ds-total').textContent=fmt(d.total_defect_qty);
     const rows=d.items||[];
-    // The same displayed defect type shares a column across internal/external sources.
-    const types=[],typeSet=new Set(),typeTotals=new Map();
-    const rowTypes=rows.map(function(row){
-      const values=new Map();
-      (row.defect_items||[]).forEach(function(detail){
-        const qty=Number(detail.qty||0);if(qty<=0)return;
-        const name=String(detail.name||detail.code||'미분류').trim();
-        if(!typeSet.has(name)){typeSet.add(name);types.push(name)}
-        values.set(name,(values.get(name)||0)+qty);
-        typeTotals.set(name,(typeTotals.get(name)||0)+qty);
-      });
-      return values;
-    });
+    const types=d.report_defect_types,totals=d.report_totals;
+    $('ds-production').textContent=fmt(totals.production_qty);$('ds-good').textContent=fmt(totals.good_qty);
+    headings[9]=rows.some(x=>['GENERAL','SUBCONTRACT'].includes(x.source_type))?'생산/입고수량':'생산수량';
     renderHead(types);
     $('ds-body').innerHTML=rows.length?rows.map(function(x,index){
-      return '<tr><td>'+esc(x.date)+'</td><td>'+esc(x.source_name)+'</td><td>'+esc(x.part_no)+'</td><td class="ds-left">'+esc(x.part_name)+'</td><td>'+esc(x.process_name)+'</td><td>'+esc(x.equipment_name)+'</td><td>'+esc(x.shift_name)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(x.lot_no)+'</td><td class="ds-num">'+fmt(x.base_qty)+'</td><td class="ds-num">'+fmt(x.defect_qty)+'</td>'+types.map(name=>'<td class="ds-num">'+fmt(rowTypes[index].get(name))+'</td>').join('')+'<td>'+esc(x.created_by)+'</td></tr>';
-    }).join(''):'<tr><td colspan="'+(12+types.length)+'">조회 결과가 없습니다.</td></tr>';
-    $('ds-foot').innerHTML='<tr><td colspan="9">합계</td><td></td><td class="ds-num">'+fmt(d.total_defect_qty)+'</td>'+types.map(name=>'<td class="ds-num">'+fmt(typeTotals.get(name))+'</td>').join('')+'<td></td></tr>';
+      return '<tr><td>'+esc(x.date)+'</td><td>'+esc(x.source_name)+'</td><td>'+esc(x.part_no)+'</td><td class="ds-left">'+esc(x.part_name)+'</td><td>'+esc(x.process_name)+'</td><td>'+esc(x.equipment_name)+'</td><td>'+esc(x.shift_name)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(x.lot_no)+'</td>'+[x.production_qty,x.good_qty,x.defect_qty].map(v=>'<td class="ds-num">'+fmt(v)+'</td>').join('')+types.map(t=>'<td class="ds-num">'+fmt(x.report_by_type[t.code]||0)+'</td>').join('')+'<td class="ds-num">'+fmt(x.setup_qty)+'</td><td>'+esc(x.created_by)+'</td></tr>';
+    }).join(''):'<tr><td colspan="'+(14+types.length)+'">조회 결과가 없습니다.</td></tr>';
+    $('ds-foot').innerHTML='<tr><td colspan="9">합계</td>'+[totals.production_qty,totals.good_qty,totals.defect_qty].map(v=>'<td class="ds-num">'+fmt(v)+'</td>').join('')+types.map(t=>'<td class="ds-num">'+fmt(totals.by_type[t.code]||0)+'</td>').join('')+'<td class="ds-num">'+fmt(totals.setup_qty)+'</td><td></td></tr>';
   }
   function reset(){$('ds-start').value=dateOffset(-30);$('ds-end').value=dateOffset(0);$('ds-source').value='ALL';$('ds-part').value='';$('ds-type').value='';search()}
   $('ds-search').addEventListener('click',search);$('ds-reset').addEventListener('click',reset);$('ds-part').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();search()}});

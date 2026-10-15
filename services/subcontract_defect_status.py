@@ -4,6 +4,7 @@ from collections import defaultdict
 from models.models import CommonCodeModel, ItemMasterModel
 from models.quality import QualityInboundDefectDetail, QualityInboundLotDefect, QualityInboundResult
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundLot, SubcontractInboundMaster
+from services.defect_report_format import report_types, report_quantities
 
 
 def subcontract_defect_status(db, start_date=None, end_date=None, part_no='', partner_name='', limit=5000):
@@ -38,7 +39,7 @@ def subcontract_defect_status(db, start_date=None, end_date=None, part_no='', pa
         for lot in db.query(SubcontractInboundLot).filter(SubcontractInboundLot.inbound_item_id.in_(item_ids)).order_by(SubcontractInboundLot.id):
             lots[lot.inbound_item_id].append(lot)
 
-    rows, used_codes = [], set()
+    rows = []
     totals = {'inbound_qty': 0., 'good_qty': 0., 'defect_qty': 0., 'by_type': defaultdict(float)}
     for master, item, result, product in records:
         by_type = defaultdict(float)
@@ -57,7 +58,7 @@ def subcontract_defect_status(db, start_date=None, end_date=None, part_no='', pa
         totals['good_qty'] += max(qty - bad, 0)
         totals['defect_qty'] += bad
         for code, value in by_type.items():
-            used_codes.add(code); totals['by_type'][code] += value
+            totals['by_type'][code] += value
         common = {'date': master.inbound_date, 'inbound_no': master.inbound_no,
                   'inbound_item_id': item.id, 'part_no': product.part_no if product else item.part_no,
                   'part_name': product.part_name if product else item.part_name,
@@ -93,8 +94,12 @@ def subcontract_defect_status(db, start_date=None, end_date=None, part_no='', pa
                 'inbound_qty': unlinked_qty if unlinked_qty or not lot_quantities else None,
                 'good_qty': max(qty - bad, 0) if not lot_quantities else None,
                 'defect_qty': sum(remaining.values()), 'by_type': remaining})
-    columns = [{'code': code, 'name': names.get(code, code)} for code in names if code in used_codes]
-    columns += [{'code': code, 'name': code} for code in sorted(used_codes - names.keys())]
-    totals['by_type'] = dict(totals['by_type'])
+    columns = report_types(db)
+    def normalize(values):
+        return report_quantities([{'code': code, 'name': names.get(code, code), 'qty': qty}
+                                  for code, qty in values.items()], columns)
+    for row in rows:
+        row['by_type'] = normalize(row['by_type'])
+    totals['by_type'] = normalize(totals['by_type'])
     return {'items': rows[:limit], 'total': len(rows), 'receipt_item_count': len(records),
             'truncated': len(rows) > limit, 'defect_types': columns, 'totals': totals}

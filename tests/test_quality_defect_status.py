@@ -84,6 +84,10 @@ def test_external_defects_use_type_quantities_exclude_setup_and_support_filters(
     assert record['equipment_name'] == 'LT-01' and record['shift_name'] == '주간'
     assert record['operator_name'] == '작업자'
     assert record['base_qty'] == 110
+    assert record['production_qty'] == 110 and record['good_qty'] == 100 and record['setup_qty'] == 5
+    assert len(data['report_defect_types']) == 13
+    assert record['report_by_type']['4'] == 3 and record['report_by_type']['2'] == 2
+    assert sum(data['report_totals']['by_type'].values()) == 5
     assert record['part_no'] == '310062-A'
     assert {d['code'] for d in record['defect_items']} == {'EXTERNAL:F4', 'EXTERNAL:F2'}
     assert any(t['code'] == 'EXTERNAL:F4' for t in data['defect_types'])
@@ -143,3 +147,7 @@ def test_production_filter_combines_internal_and_external_defects(setup):
         assert {r['source_type'] for r in data['items']} == {'PRODUCTION_RUN', 'EXTERNAL_PRODUCTION'}
         internal = next(r for r in data['items'] if r['source_type'] == 'PRODUCTION_RUN')
         assert internal['operator_name'] == '내부 작업자' and internal['shift_name'] == '주간'
+        assert internal['production_qty'] == 100 and internal['good_qty'] == 98 and internal['setup_qty'] == 0
+        assert data['report_totals']['production_qty'] == 200
+        assert data['report_totals']['good_qty'] == 195
+        assert data['report_totals']['by_type']['4'] == 5

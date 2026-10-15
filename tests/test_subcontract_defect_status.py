@@ -59,8 +59,11 @@ def test_lot_rows_type_columns_totals_filters_and_cancelled_receipts(setup):
     assert [r['lot_no'] for r in data['items']] == ['LOT-1-0', 'LOT-1-1']
     assert [r['inbound_qty'] for r in data['items']] == [60, 40]
     assert [r['good_qty'] for r in data['items']] == [57, 38]
-    assert data['totals'] == {'inbound_qty': 100, 'good_qty': 95, 'defect_qty': 5, 'by_type': {'D1': 3, 'D2': 2}}
-    assert data['defect_types'] == [{'code': 'D1', 'name': '치수'}, {'code': 'D2', 'name': '미도금'}]
+    assert data['totals']['inbound_qty'] == 100 and data['totals']['good_qty'] == 95
+    assert data['totals']['defect_qty'] == 5
+    assert data['totals']['by_type']['3'] == 3 and data['totals']['by_type']['8'] == 2
+    assert len(data['defect_types']) == 13
+    assert {c['code'] for c in data['defect_types']} == {str(i) for i in range(1, 14)}
     assert get(setup, part_no='310062', partner_name='은도금', start_date='2026-09-23', end_date='2026-09-23')['total'] == 2
     for params in [{'part_no': 'OTHER'}, {'partner_name': 'OTHER'}, {'end_date': '2026-09-22'}, {'start_date': '2026-09-24'}]:
         assert get(setup, **params)['total'] == 0
@@ -96,8 +99,9 @@ def test_unclassified_legacy_quantity_keeps_type_totals_balanced(setup):
         db.query(QualityInboundDefectDetail).filter(QualityInboundDefectDetail.defect_type_code == 'D2').delete()
         db.commit()
     data = get(setup)
-    assert data['totals']['by_type'] == {'D1': 3, '__UNCLASSIFIED__': 2}
-    assert {'code': '__UNCLASSIFIED__', 'name': '미분류'} in data['defect_types']
+    assert data['totals']['by_type']['3'] == 3 and data['totals']['by_type']['13'] == 2
+    assert sum(data['totals']['by_type'].values()) == 5
+    assert {'code': '13', 'name': '기타'} in data['defect_types']
 
 
 def test_new_page_and_navigation(setup):

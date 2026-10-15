@@ -15,6 +15,7 @@ from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboun
 from models.production_sync import ExternalProductionRecord
 from services.production_sync_mapping import ItemConnections
 from services.production_sync_view import external_record_view
+from services.defect_report_format import report_types, report_quantities
 
 router = APIRouter(prefix="/api/quality/defect-status", tags=["Quality Defect Status"])
 
@@ -210,6 +211,8 @@ def defect_status(
             "process_name": process_names.get(run.process_code, run.process_code),
             "lot_no": "",
             "base_qty": float(run.good_qty or 0) + float(run.defect_qty or 0),
+            "production_qty": float(run.good_qty or 0) + float(run.defect_qty or 0) + float(run.setup_qty or 0),
+            "good_qty": float(run.good_qty or 0), "setup_qty": float(run.setup_qty or 0),
             "defect_qty": float(run.defect_qty or 0),
             "defect_items": defect_items,
             "defect_codes": [x["code"] for x in defect_items],
@@ -291,8 +294,10 @@ def defect_status(
             key = (record.work_date, record.process_name, view['equipment_name'], view['shift_type'],
                    tuple(sorted(group_lots))) if group_lots else ('record', record.id)
             if key not in groups:
-                groups[key] = {'record': record, 'view': view, 'base_qty': 0}
+                groups[key] = {'record': record, 'view': view, 'base_qty': 0, 'good_qty': 0, 'setup_qty': 0}
             groups[key]['base_qty'] += float(view['total_qty'] or record.lot_qty or 0)
+            groups[key]['good_qty'] += float(record.job_qty or 0)
+            groups[key]['setup_qty'] += float(view['setup_qty'] or 0)
 
         for group in groups.values():
             record, view = group['record'], group['view']
@@ -315,6 +320,7 @@ def defect_status(
                 'part_name': view['part_name'], 'process_name': view['process_name'] or record.process_name,
                 'lot_no': ', '.join(view['assembly_group_lots']) if view['assembly_group_defects'] else record.lot_no,
                 'base_qty': group['base_qty'], 'defect_qty': sum(d['qty'] for d in defect_items),
+                'production_qty': group['base_qty'], 'good_qty': group['good_qty'], 'setup_qty': group['setup_qty'],
                 'defect_items': defect_items, 'defect_codes': [d['code'] for d in defect_items],
                 'partner_name': '', 'created_by': '', 'operator_name': view['operator_name'],
                 'shift_name': view['shift_name'],
@@ -327,10 +333,25 @@ def defect_status(
     rows.sort(key=lambda x: (x["date"], x["source_name"], x["part_no"]), reverse=True)
     rows = rows[:limit]
     total_defect = sum(float(row["defect_qty"] or 0) for row in rows)
+    columns = report_types(db)
+    report_totals = {'production_qty': 0., 'good_qty': 0., 'defect_qty': total_defect,
+                     'setup_qty': 0., 'by_type': {c['code']: 0. for c in columns}}
+    for row in rows:
+        # Receipt/post-detection quantities are not original production counts.
+        if 'production_qty' not in row:
+            row['production_qty'] = row['base_qty']
+            row['good_qty'] = max(row['base_qty'] - row['defect_qty'], 0)
+            row['setup_qty'] = None
+        row['report_by_type'] = report_quantities(row['defect_items'], columns, row['defect_qty'])
+        for key in ('production_qty', 'good_qty', 'setup_qty'):
+            report_totals[key] += float(row.get(key) or 0)
+        for code, qty in row['report_by_type'].items():
+            report_totals['by_type'][code] += qty
 
     return {
         "items": rows,
         "total": len(rows),
         "total_defect_qty": total_defect,
+        "report_defect_types": columns, "report_totals": report_totals,
         "defect_types": [{"code": code, "name": name} for code, name in (names | external_names).items()],
     }
