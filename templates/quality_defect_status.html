@@ -7,6 +7,7 @@
 .ds-btn{height:34px;border:0;border-radius:4px;padding:0 14px;font-weight:700;cursor:pointer}.ds-primary{background:#2563eb;color:#fff}.ds-light{background:#e2e8f0;color:#334155}
 .ds-summary{display:flex;gap:10px;margin-bottom:12px}.ds-card{background:#fff;border:1px solid #dbe2eb;border-radius:7px;padding:10px 16px;min-width:160px}.ds-card span{display:block;font-size:11px;color:#64748b}.ds-card strong{font-size:20px}.ds-card.bad strong{color:#dc2626}
 .ds-tablebox{background:#fff;border:1px solid #dbe2eb;border-radius:8px;overflow:auto;max-height:68vh}.ds-table{width:100%;border-collapse:collapse;font-size:12px}.ds-table th,.ds-table td{border:1px solid #e2e8f0;padding:7px;text-align:center;white-space:nowrap}.ds-table th{position:sticky;top:0;background:#f1f5f9;z-index:2}.ds-left{text-align:left!important}.ds-num{text-align:right!important}
+.ds-table tfoot td{position:sticky;bottom:0;background:#e2e8f0;font-weight:700}
 </style>
 {% endblock %}
 {% block content %}
@@ -37,8 +38,9 @@
 
   <div class="ds-tablebox">
     <table class="ds-table">
-      <thead><tr><th>일자</th><th>구분</th><th>품번</th><th>품명</th><th>공정</th><th>호기</th><th>주/야</th><th>작업자</th><th>거래처</th><th>LOT NO</th><th>기준수량</th><th>불량수량</th><th>불량유형</th><th>등록자</th></tr></thead>
-      <tbody id="ds-body"><tr><td colspan="14">조회 중...</td></tr></tbody>
+      <thead id="ds-head"></thead>
+      <tbody id="ds-body"><tr><td colspan="12">조회 중...</td></tr></tbody>
+      <tfoot id="ds-foot"></tfoot>
     </table>
   </div>
 </div>
@@ -49,6 +51,8 @@
   const $=function(id){return document.getElementById(id)};
   const esc=function(v){const s=document.createElement('span');s.textContent=v==null?'':v;return s.innerHTML};
   const fmt=function(v){return Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6})};
+  const headings=['일자','구분','품번','품명','공정','호기','주/야','거래처','LOT NO','기준수량','불량 계'];
+  function renderHead(types){$('ds-head').innerHTML='<tr>'+[...headings,...types,'등록자'].map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr>'}
   function dateOffset(days){const d=new Date();d.setDate(d.getDate()+days);return MesLocalDate.format(d)}
   async function search(){
     const p=new URLSearchParams({source:$('ds-source').value,limit:'5000'});
@@ -56,9 +60,11 @@
     if($('ds-end').value)p.set('end_date',$('ds-end').value);
     if($('ds-part').value.trim())p.set('part_no',$('ds-part').value.trim());
     if($('ds-type').value)p.set('defect_type_code',$('ds-type').value);
-    $('ds-body').innerHTML='<tr><td colspan="14">조회 중...</td></tr>';
+    const columnCount=$('ds-head').querySelectorAll('th').length;
+    $('ds-body').innerHTML='<tr><td colspan="'+columnCount+'">조회 중...</td></tr>';
+    $('ds-foot').innerHTML='';
     const r=await fetch('/api/quality/defect-status?'+p.toString());const d=await r.json();
-    if(!r.ok){$('ds-body').innerHTML='<tr><td colspan="14">'+esc(d.detail||'조회 실패')+'</td></tr>';return}
+    if(!r.ok){$('ds-body').innerHTML='<tr><td colspan="'+columnCount+'">'+esc(d.detail||'조회 실패')+'</td></tr>';return}
     {
       const selected=$('ds-type').value;
       $('ds-type').innerHTML='<option value="">전체</option>';
@@ -67,14 +73,28 @@
     }
     $('ds-count').textContent=fmt(d.total);$('ds-total').textContent=fmt(d.total_defect_qty);
     const rows=d.items||[];
-    $('ds-body').innerHTML=rows.length?rows.map(function(x){
-      const defects=(x.defect_items||[]).map(function(y){return esc(y.name)+' '+fmt(y.qty)}).join(' / ');
-      return '<tr><td>'+esc(x.date)+'</td><td>'+esc(x.source_name)+'</td><td>'+esc(x.part_no)+'</td><td class="ds-left">'+esc(x.part_name)+'</td><td>'+esc(x.process_name)+'</td><td>'+esc(x.equipment_name)+'</td><td>'+esc(x.shift_name)+'</td><td>'+esc(x.operator_name)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(x.lot_no)+'</td><td class="ds-num">'+fmt(x.base_qty)+'</td><td class="ds-num">'+fmt(x.defect_qty)+'</td><td class="ds-left">'+defects+'</td><td>'+esc(x.created_by)+'</td></tr>';
-    }).join(''):'<tr><td colspan="14">조회 결과가 없습니다.</td></tr>';
+    // The same displayed defect type shares a column across internal/external sources.
+    const types=[],typeSet=new Set(),typeTotals=new Map();
+    const rowTypes=rows.map(function(row){
+      const values=new Map();
+      (row.defect_items||[]).forEach(function(detail){
+        const qty=Number(detail.qty||0);if(qty<=0)return;
+        const name=String(detail.name||detail.code||'미분류').trim();
+        if(!typeSet.has(name)){typeSet.add(name);types.push(name)}
+        values.set(name,(values.get(name)||0)+qty);
+        typeTotals.set(name,(typeTotals.get(name)||0)+qty);
+      });
+      return values;
+    });
+    renderHead(types);
+    $('ds-body').innerHTML=rows.length?rows.map(function(x,index){
+      return '<tr><td>'+esc(x.date)+'</td><td>'+esc(x.source_name)+'</td><td>'+esc(x.part_no)+'</td><td class="ds-left">'+esc(x.part_name)+'</td><td>'+esc(x.process_name)+'</td><td>'+esc(x.equipment_name)+'</td><td>'+esc(x.shift_name)+'</td><td>'+esc(x.partner_name)+'</td><td>'+esc(x.lot_no)+'</td><td class="ds-num">'+fmt(x.base_qty)+'</td><td class="ds-num">'+fmt(x.defect_qty)+'</td>'+types.map(name=>'<td class="ds-num">'+fmt(rowTypes[index].get(name))+'</td>').join('')+'<td>'+esc(x.created_by)+'</td></tr>';
+    }).join(''):'<tr><td colspan="'+(12+types.length)+'">조회 결과가 없습니다.</td></tr>';
+    $('ds-foot').innerHTML='<tr><td colspan="9">합계</td><td></td><td class="ds-num">'+fmt(d.total_defect_qty)+'</td>'+types.map(name=>'<td class="ds-num">'+fmt(typeTotals.get(name))+'</td>').join('')+'<td></td></tr>';
   }
   function reset(){$('ds-start').value=dateOffset(-30);$('ds-end').value=dateOffset(0);$('ds-source').value='ALL';$('ds-part').value='';$('ds-type').value='';search()}
   $('ds-search').addEventListener('click',search);$('ds-reset').addEventListener('click',reset);$('ds-part').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();search()}});
-  $('ds-start').value=dateOffset(-30);$('ds-end').value=dateOffset(0);search();
+  renderHead([]);$('ds-start').value=dateOffset(-30);$('ds-end').value=dateOffset(0);search();
 })();
 </script>
 {% endblock %}
