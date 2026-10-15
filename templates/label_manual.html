@@ -163,7 +163,7 @@
                 </div>
                 <div class="form-group" style="min-width: 150px;">
                     <label>품 명</label>
-                    <input type="text" id="inPartName" placeholder="예: SV1 COMBO 5P DC TML" required>
+                    <input type="text" id="inPartName" placeholder="품번 입력 시 자동 표시 · 직접 수정 가능" required>
                 </div>
                 <div class="form-group" style="min-width: 80px;">
                     <label>수 량</label>
@@ -257,6 +257,7 @@
 {% block extra_script %}
 <script src="/static/js/barcode_engine.js"></script>
 <script src="/static/js/label_templates.js"></script>
+<script src="/static/js/manual_item_name.js?v=20261015-1" defer></script>
 
 <script>
     let MANUAL_DATA = [];

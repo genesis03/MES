@@ -12,6 +12,15 @@ from services.excel_service import create_manual_history_excel
 
 router = APIRouter(prefix="/api/manual", tags=["Manual Labels"])
 
+@router.get("/item")
+async def get_manual_item(
+    part_no: str,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_permission("shipping", "manual", "READ")),
+):
+    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no.strip()).first()
+    return {"part_name": item.part_name if item else None}
+
 @router.get("/data")
 async def get_manual_data(
     db: Session = Depends(get_db),
@@ -51,7 +60,7 @@ async def add_manual_data(
     item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
     if item:
         part_no = item.part_no
-        part_name = item.part_name
+        part_name = part_name or item.part_name
     qty_str = str(body.get("qty", "0")).replace(",", "").strip()
     qty = int(qty_str) if qty_str.isdigit() else 0
     serial = str(body.get("serial", "")).strip()
