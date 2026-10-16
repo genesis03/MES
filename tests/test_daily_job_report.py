@@ -29,8 +29,41 @@ def test_page_has_process_and_equipment_choices_before_any_day_query(setup):
     equipment=re.search(r'<select id="djEquipment">(.*?)</select>',response.text,re.S)[1]
     for name in ['복합선반','탭핑','조립']:
         assert f'value="{name}"' in process
-    assert '복합선반 1호기' in equipment and 'AS-01' in equipment
+    assert '복합선반 1호기' in equipment and 'AS-01' not in equipment
+    assert '<option value="">전체</option>' not in process
     assert setup.client.get('/api/production/daily-job-report',params={'day':DAY.isoformat()}).json()['items']==[]
+
+
+def test_equipment_master_unifies_native_and_external_display_without_codes_or_duplicates(setup):
+    from models.models import ProcessModel
+    from models.equipment import EquipmentMaster
+    from models.production import ProductionPerformance, ProductionWorkOrder
+    from routers.daily_job_report import filter_options
+    from test_production_sync import add_item
+    setup.app.include_router(router)
+    with setup.sessions() as db:
+        item=add_item(db,part='310060-A')
+        db.add_all([ProcessModel(process_code='LT',process_name='복합선반',created_at=DAY.isoformat()),
+                    ProcessModel(process_code='TP',process_name='탭핑',created_at=DAY.isoformat())]);db.flush()
+        e=EquipmentMaster(equipment_code='LT-01',equipment_name='복합선반 1호기',process_code='LT',machine_no='1')
+        db.add(e);db.flush()
+        db.add(EquipmentMaster(equipment_code='OLD-LT-01',equipment_name='복합선반 01호기',process_code='LT',machine_no='01'))
+        db.add(EquipmentMaster(equipment_code='TP-01',equipment_name='탭핑 1호기',process_code='TP',machine_no='1'))
+        order=ProductionWorkOrder(work_order_no='DAILY-EQUIPMENT',order_date=DAY.isoformat(),item_id=item,part_no='310060-A',order_qty=100)
+        db.add(order);db.flush()
+        db.add(ProductionPerformance(work_order_id=order.id,performance_date=DAY.isoformat(),process_code='LT',
+            shift_type='DAY',equipment_id=e.id,equipment_code='LT-01',equipment_name='LT-01',good_qty=100,defect_qty=0))
+        db.commit()
+        options=filter_options(db)
+        assert options['equipments']==[{'process':'복합선반','name':'복합선반 1호기'},{'process':'탭핑','name':'탭핑 1호기'}]
+    token,_=sync.claim(DAY,DAY,'MANUAL')
+    sync.save_day([row(ITEM_NUM='310060-A',PROC_TYPE_NM='복합선반',MACHINE_NAME='LT-01',MACHINE_NO='1',SHIFT_NAME='주간',SHIFT_TYPE='DAY')],token)
+    items=setup.client.get('/api/production/daily-job-report',params={'day':DAY.isoformat()}).json()['items']
+    assert len(items)==2
+    assert {r['equipment_name'] for r in items}=={'복합선반 1호기'}
+    book=build_workbook(items)
+    assert len(book.worksheets)==1
+    assert cell(book.active,'C2').value=='복합선반 1호기'
 
 
 

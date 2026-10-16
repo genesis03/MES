@@ -12,9 +12,11 @@ from models.daily_job_report import DailyJobReportSupplement
 from models.production_run import ProductionRun
 from models.production_sync import ExternalProductionRecord
 from models.inspection_standard import InspectionStandard
-from models.models import CommonCodeModel, ProcessModel
-from models.equipment import EquipmentMaster
-from services.production_sync_mapping import stage_suffix
+from models.models import CommonCodeModel
+from models.production import ProductionPerformance
+from services.daily_report_equipment import DailyReportEquipment
+from services.production_sync_view import external_machine_no
+import json
 from models.production_defect import QualityProductionDefect, QualityProductionDefectDetail
 from models.production_lot import ProductionLotModel
 from services.production_lot_service import performance_id_from_lot_note
@@ -60,6 +62,8 @@ def records(db,day,user):
         process_code=None,work_order_no=None,part_no=None,operator_name=None,db=db,current_user=user)
     supplements={(s.record_source,s.record_id):s for s in db.query(DailyJobReportSupplement)}
     runs={r.performance_id:r for r in db.query(ProductionRun).filter(ProductionRun.performance_date==day.isoformat(),ProductionRun.status=='COMPLETED')}
+    equipment_names=DailyReportEquipment(db)
+    performances={p.id:p for p in db.query(ProductionPerformance).filter(ProductionPerformance.performance_date==day.isoformat())}
     native_items={r['source_record_id']:r.get('item_id') for r in rows if r['record_source']=='MES'}
     processed_defects={}
     if native_items:
@@ -86,6 +90,10 @@ def records(db,day,user):
         row['downtimes']=[serialize_downtime(d) for d in run.downtimes] if run and run.performance_type=='MACHINING' else row.get('downtimes',[])
         if row['record_source']=='MES':
             row['defects'].extend(processed_defects.get(row['source_record_id'],[]))
+            performance=performances.get(row['source_record_id'])
+            row['equipment_name']=equipment_names.label(row['process_code'],row['equipment_name'],
+                equipment_id=performance.equipment_id if performance else None,
+                equipment_code=performance.equipment_code if performance else '')
         row['work_time']='';row['material_lots']=row['source_lot_no']
         if run:
             row['work_time']=run.start_time+' ~ '+(run.end_time or '')
@@ -96,6 +104,9 @@ def records(db,day,user):
                 available_codes.setdefault(c.code_name,[]).append(c.code)
             row['downtimes']=[dict(d,type_code=available_codes[d['type_name']][0]) if len(available_codes.get(d['type_name'],[]))==1 else d for d in row['downtimes']]
             external=db.get(ExternalProductionRecord,row['source_record_id'])
+            raw=json.loads(external.raw_json)
+            row['equipment_name']=equipment_names.label(row['process_code'],row['equipment_name'],
+                equipment_code=raw.get('MACHINE_NAME',''),machine_no=raw.get('MACHINE_NO') or external_machine_no(external.lot_no))
             row['work_time']=' ~ '.join(str(x or '') for x in [external.started_at,external.ended_at])
             row['material_lots']=' / '.join(m['lot_no']+': '+str(m['qty']) for m in row.get('material_lots_data',[])) or row['material_lots']
         if not saved and row.get('item_id'):
@@ -114,19 +125,7 @@ def selected(db,payload,user):
     return [rows[key] for key in keys]
 
 def filter_options(db):
-    processes = list(db.query(ProcessModel).filter(ProcessModel.is_active=='Y').order_by(ProcessModel.sort_order,ProcessModel.id))
-    equipment = list(db.query(EquipmentMaster).filter(EquipmentMaster.is_active=='Y').order_by(EquipmentMaster.sort_order,EquipmentMaster.id))
-    codes = {e.process_code for e in equipment}
-    names = [p.process_name for p in processes if p.process_code in codes or stage_suffix(p.process_name) in {'-A','-B','-C','-D'}]
-    from models.production_sync import ProductionSyncProcessMap
-    mappings = {m.source_name:m.process_code for m in db.query(ProductionSyncProcessMap)}
-    by_code = {p.process_code:p.process_name for p in processes}
-    for (source,) in db.query(ExternalProductionRecord.process_name).distinct():
-        candidates = [p.process_name for p in processes if stage_suffix(p.process_name)==stage_suffix(source)] if stage_suffix(source) else []
-        names.append(by_code.get(mappings.get(source)) or (candidates[0] if len(candidates)==1 else source))
-    from services.production_daily_sync import MACHINES, ASSEMBLY_MACHINES
-    return {'processes':list(dict.fromkeys(names or ['복합선반','탭핑가공','조립'])),
-            'equipments':list(dict.fromkeys([e.equipment_name for e in equipment]+[m[0] for m in MACHINES+ASSEMBLY_MACHINES]))}
+    return DailyReportEquipment(db).options()
 
 
 @router.get('/production/daily-job-report',response_class=HTMLResponse)
