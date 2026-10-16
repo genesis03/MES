@@ -27,6 +27,8 @@ def external_record_view(record, connections):
     conflict = connections.production_conflict_cache.get(lot_identity(record.lot_no), '')
     if conflict:
         notes.append(conflict)
+    from services.assembly_defect_allocation import allocated_defects
+    allocation = allocated_defects(record, raw, connections)
     if not item:
         notes.append('품번 연결 확인')
     if code not in connections.processes:
@@ -56,10 +58,11 @@ def external_record_view(record, connections):
         'operator_name':raw.get('OPERATOR_NAME',''),'material_lots':raw.get('MATERIAL_LOTS',[]),
         'assembly_group_lots':raw.get('ASSEMBLY_GROUP_LOTS',[]),
         'assembly_group_materials':raw.get('ASSEMBLY_GROUP_MATERIALS',[]),
-        'assembly_group_defects':raw.get('ASSEMBLY_GROUP_DEFECTS',[]),
+        'assembly_group_defects':raw.get('ASSEMBLY_GROUP_DEFECTS',[]) if allocation is None else [],
         'unassigned_downtime_note':raw.get('UNASSIGNED_DOWNTIME_NOTE',''),
         'unassigned_product_name':raw.get('UNASSIGNED_PRODUCT_NAME',''),
-        'downtimes':raw.get('DOWNTIMES',[]),'defects':raw.get('DEFECTS',[]),
+        'downtimes':raw.get('DOWNTIMES',[]),'defects':raw.get('DEFECTS',[]) if allocation is None else allocation,
+        'defect_allocation': 'UNIQUE_DEFECT_LOT' if allocation is not None else '',
         'started_at': record.started_at or '', 'ended_at': record.ended_at or '',
         'job_qty': record.job_qty, 'lot_qty': record.lot_qty, 'fault_qty': record.fault_qty,
         'good_qty': record.job_qty, 'setup_qty': setup, 'total_qty': str(total) if total is not None else None,

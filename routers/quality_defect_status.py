@@ -6,14 +6,15 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
 from models.models import CommonCodeModel, ItemMasterModel, ProcessModel, PurchaseInboundItem, PurchaseInboundMaster
-from models.production import ProductionWorkOrder
+from models.production import ProductionWorkOrder, ProductionPerformance
+from services.production_lot_service import performance_id_from_lot_note
 from models.production_defect import QualityProductionDefect, QualityProductionDefectDetail
 from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunDefect
 from models.quality import QualityInboundDefectDetail, QualityInboundResult
 from models.subcontract_inbound import SubcontractInboundItem, SubcontractInboundMaster
 from models.production_sync import ExternalProductionRecord
-from services.production_sync_mapping import ItemConnections
+from services.production_sync_mapping import ItemConnections, stage_suffix
 from services.production_sync_view import external_record_view
 from services.defect_report_format import report_types, report_quantities
 
@@ -58,6 +59,8 @@ def _matches(row: dict, part_no: str, defect_type_code: str, source: str) -> boo
     if defect_type_code and defect_type_code not in row.get("defect_codes", []):
         return False
     row_source = row.get("source_type")
+    if source == "PRODUCTION":
+        return row_source in {"PRODUCTION_RUN", "EXTERNAL_PRODUCTION", "PRODUCTION_LOT"}
     if source == "PRODUCTION_RUN":
         return row_source in {"PRODUCTION_RUN", "EXTERNAL_PRODUCTION"}
     if source != "ALL" and row_source != source:
@@ -72,12 +75,13 @@ def defect_status(
     source: str = Query("ALL", max_length=30),
     part_no: Optional[str] = Query(None, max_length=80),
     defect_type_code: Optional[str] = Query(None, max_length=30),
+    process_code: Optional[str] = Query(None, max_length=200),
     limit: int = Query(2000, ge=1, le=5000),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     source = (source or "ALL").strip().upper()
-    allowed_sources = {"ALL", "GENERAL", "SUBCONTRACT", "PRODUCTION_RUN", "PRODUCTION_LOT", "EXTERNAL_PRODUCTION"}
+    allowed_sources = {"ALL", "GENERAL", "SUBCONTRACT", "PRODUCTION", "PRODUCTION_RUN", "PRODUCTION_LOT", "EXTERNAL_PRODUCTION"}
     if source not in allowed_sources:
         source = "ALL"
     part_filter = (part_no or "").strip()
@@ -209,6 +213,7 @@ def defect_status(
             "part_no": product.part_no if product else (work_order.part_no if work_order else ""),
             "part_name": product.part_name if product else "",
             "process_name": process_names.get(run.process_code, run.process_code),
+            "process_code": run.process_code,
             "lot_no": "",
             "base_qty": float(run.good_qty or 0) + float(run.defect_qty or 0),
             "production_qty": float(run.good_qty or 0) + float(run.defect_qty or 0) + float(run.setup_qty or 0),
@@ -252,6 +257,9 @@ def defect_status(
             continue
         product = db.get(ItemMasterModel, defect.item_id)
         lot = db.get(ProductionLotModel, defect.production_lot_id)
+        performance_id = performance_id_from_lot_note(lot.note) if lot else None
+        performance = db.get(ProductionPerformance, performance_id) if performance_id else None
+        lot_process = performance.process_code if performance else ''
         details = lot_detail_map.get(defect.id, [])
         defect_items = [{
             "code": detail.defect_type_code,
@@ -264,7 +272,8 @@ def defect_status(
             "date": defect.defect_date,
             "part_no": product.part_no if product else (lot.part_no if lot else ""),
             "part_name": product.part_name if product else "",
-            "process_name": "",
+            "process_name": process_names.get(lot_process, lot_process),
+            "process_code": lot_process,
             "lot_no": defect.lot_no,
             "base_qty": float(defect.lot_qty or 0),
             "defect_qty": float(defect.defect_qty or 0),
@@ -278,7 +287,7 @@ def defect_status(
             rows.append(row)
 
     external_names = {}
-    if source in {"ALL", "PRODUCTION_RUN", "EXTERNAL_PRODUCTION"}:
+    if source in {"ALL", "PRODUCTION", "PRODUCTION_RUN", "EXTERNAL_PRODUCTION"}:
         query = db.query(ExternalProductionRecord)
         if start_date:
             query = query.filter(ExternalProductionRecord.work_date >= start_date)
@@ -319,6 +328,7 @@ def defect_status(
                 'source_type': 'EXTERNAL_PRODUCTION', 'source_name': '생산실적',
                 'date': record.work_date, 'part_no': view['mes_part_no'] or record.part_no,
                 'part_name': view['part_name'], 'process_name': view['process_name'] or record.process_name,
+                'process_code': view['process_code'],
                 'lot_no': record.lot_no,
                 'base_qty': group['base_qty'], 'defect_qty': sum(d['qty'] for d in defect_items),
                 'production_qty': group['base_qty'], 'good_qty': group['good_qty'], 'setup_qty': group['setup_qty'],
@@ -350,6 +360,17 @@ def defect_status(
                 'target_key': f'EXTERNAL_PRODUCTION_GROUP:{record.id}',
             })
 
+    processes = {code: name for code, name in process_names.items()
+                 if stage_suffix(name) in {'-A', '-B', '-C', '-D'}}
+    for row in rows:
+        if row.get('process_name'):
+            row['process_filter'] = row.get('process_code') or 'SOURCE:' + row['process_name']
+            processes[row['process_filter']] = row['process_name']
+        elif row['source_type'] == 'PRODUCTION_LOT':
+            row['process_filter'] = 'UNKNOWN'
+            processes['UNKNOWN'] = '미확인'
+    if process_code:
+        rows = [row for row in rows if row.get('process_filter') == process_code]
     rows.sort(key=lambda x: (x["date"], x["source_name"], x["part_no"]), reverse=True)
     total_defect = sum(float(row["defect_qty"] or 0) for row in rows)
     columns = report_types(db)
@@ -374,5 +395,6 @@ def defect_status(
         "truncated": len(rows) > limit,
         "total_defect_qty": total_defect,
         "report_defect_types": columns, "report_totals": report_totals,
+        "processes": [{"code": code, "name": name} for code, name in processes.items()],
         "defect_types": [{"code": code, "name": name} for code, name in (names | external_names).items()],
     }

@@ -64,6 +64,20 @@ def test_cancelled_receipt_defects_excluded_from_rows_and_totals(setup, source):
         assert db.query(QualityInboundDefectDetail).count() == 3
 
 
+@pytest.mark.parametrize('inbound_source', ['GENERAL', 'SUBCONTRACT'])
+def test_production_scope_excludes_receipt_defects(setup, inbound_source):
+    # The legacy ALL API remains available; the production menu sends PRODUCTION.
+    test_cancelled_receipt_defects_excluded_from_rows_and_totals(setup, inbound_source)
+    with setup.sessions() as db:
+        model = PurchaseInboundMaster if inbound_source == 'GENERAL' else SubcontractInboundMaster
+        master = db.get(model, 1)
+        master.status = 'CONFIRMED' if inbound_source == 'GENERAL' else 'RECEIVED'
+        db.commit()
+    assert setup.client.get('/api/quality/defect-status').json()['total'] == 1
+    data = setup.client.get('/api/quality/defect-status', params={'source': 'PRODUCTION'}).json()
+    assert data['total'] == 0 and data['total_defect_qty'] == 0
+
+
 def test_external_defects_use_type_quantities_exclude_setup_and_support_filters(setup):
     setup.app.include_router(router)
     with setup.sessions() as db:
