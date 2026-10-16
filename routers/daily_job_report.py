@@ -12,7 +12,9 @@ from models.daily_job_report import DailyJobReportSupplement
 from models.production_run import ProductionRun
 from models.production_sync import ExternalProductionRecord
 from models.inspection_standard import InspectionStandard
-from models.models import CommonCodeModel
+from models.models import CommonCodeModel, ProcessModel
+from models.equipment import EquipmentMaster
+from services.production_sync_mapping import stage_suffix
 from models.production_defect import QualityProductionDefect, QualityProductionDefectDetail
 from models.production_lot import ProductionLotModel
 from services.production_lot_service import performance_id_from_lot_note
@@ -111,9 +113,25 @@ def selected(db,payload,user):
     if any(key not in rows for key in keys):raise HTTPException(409,'선택한 생산실적이 변경되거나 삭제되었습니다. 다시 조회해 주세요.')
     return [rows[key] for key in keys]
 
+def filter_options(db):
+    processes = list(db.query(ProcessModel).filter(ProcessModel.is_active=='Y').order_by(ProcessModel.sort_order,ProcessModel.id))
+    equipment = list(db.query(EquipmentMaster).filter(EquipmentMaster.is_active=='Y').order_by(EquipmentMaster.sort_order,EquipmentMaster.id))
+    codes = {e.process_code for e in equipment}
+    names = [p.process_name for p in processes if p.process_code in codes or stage_suffix(p.process_name) in {'-A','-B','-C','-D'}]
+    from models.production_sync import ProductionSyncProcessMap
+    mappings = {m.source_name:m.process_code for m in db.query(ProductionSyncProcessMap)}
+    by_code = {p.process_code:p.process_name for p in processes}
+    for (source,) in db.query(ExternalProductionRecord.process_name).distinct():
+        candidates = [p.process_name for p in processes if stage_suffix(p.process_name)==stage_suffix(source)] if stage_suffix(source) else []
+        names.append(by_code.get(mappings.get(source)) or (candidates[0] if len(candidates)==1 else source))
+    from services.production_daily_sync import MACHINES, ASSEMBLY_MACHINES
+    return {'processes':list(dict.fromkeys(names or ['복합선반','탭핑가공','조립'])),
+            'equipments':list(dict.fromkeys([e.equipment_name for e in equipment]+[m[0] for m in MACHINES+ASSEMBLY_MACHINES]))}
+
+
 @router.get('/production/daily-job-report',response_class=HTMLResponse)
-def page(request:Request,user=Depends(get_current_user)):
-    return Jinja2Templates(directory='templates').TemplateResponse(request=request,name='daily_job_report.html',context={'request':request,'user':user})
+def page(request:Request,user=Depends(get_current_user),db:Session=Depends(get_db)):
+    return Jinja2Templates(directory='templates').TemplateResponse(request=request,name='daily_job_report.html',context={'request':request,'user':user,'filter_options':filter_options(db)})
 
 @router.get('/api/production/daily-job-report')
 def list_records(day:date,db:Session=Depends(get_db),user=Depends(get_current_user)):

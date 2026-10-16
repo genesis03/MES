@@ -12,6 +12,27 @@ def cell(sheet,coordinate):
     return sheet[sheet._report_cell_map.get(coordinate,coordinate)]
 
 
+def test_page_has_process_and_equipment_choices_before_any_day_query(setup):
+    import re
+    from models.models import ProcessModel
+    from models.equipment import EquipmentMaster
+    setup.app.include_router(router)
+    with setup.sessions() as db:
+        for code, name in [('LT','복합선반'),('TP','탭핑'),('ASSY','조립')]:
+            db.add(ProcessModel(process_code=code,process_name=name,created_at=DAY.isoformat()))
+        db.flush()
+        db.add(EquipmentMaster(equipment_code='LT-01',equipment_name='복합선반 1호기',process_code='LT',machine_no='1'))
+        db.commit()
+    response=setup.client.get('/production/daily-job-report')
+    assert response.status_code==200,response.text
+    process=re.search(r'<select id="djProcess">(.*?)</select>',response.text,re.S)[1]
+    equipment=re.search(r'<select id="djEquipment">(.*?)</select>',response.text,re.S)[1]
+    for name in ['복합선반','탭핑','조립']:
+        assert f'value="{name}"' in process
+    assert '복합선반 1호기' in equipment and 'AS-01' in equipment
+    assert setup.client.get('/api/production/daily-job-report',params={'day':DAY.isoformat()}).json()['items']==[]
+
+
 
 def test_external_supplement_round_trip_and_readonly_export(setup):
     setup.app.include_router(router)
