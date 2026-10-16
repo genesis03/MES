@@ -52,7 +52,7 @@ def subcontract_defect_status_page(request: Request, current_user=Depends(get_cu
     )
 
 
-# 화면 안내만 정의합니다. 검사기준서/성적서 데이터 및 작성 API는 아직 추가하지 않습니다.
+# 아직 구현되지 않은 검사 화면의 안내입니다. 출하 성적서는 quality_reports에서 처리합니다.
 PLANNED_INSPECTION_PAGES = {
     "/quality/patrol-inspections": {
         "title": "공정순회 검사",
@@ -66,18 +66,11 @@ PLANNED_INSPECTION_PAGES = {
         "description": "입고 성적서를 작성하는 기능을 준비 중입니다.",
         "detail": "향후 해당 품목의 입고검사 기준서와 연결하여 검사항목·규격을 가져오고 측정값 외 추가 입력을 최소화합니다. 사용한 기준서 Revision과 당시 기준은 보존합니다.",
     },
-    "/quality/outbound-reports": {
-        "title": "출하 성적서",
-        "section": "품질관리 · 검사 및 성적서",
-        "description": "출하 성적서를 작성하는 기능을 준비 중입니다.",
-        "detail": "향후 해당 품목의 출하검사 기준서와 연결하여 검사항목·규격을 가져오고 측정값 외 추가 입력을 최소화합니다. 사용한 기준서 Revision과 당시 기준은 보존합니다.",
-    },
 }
 
 
 @router.get("/quality/patrol-inspections", response_class=HTMLResponse)
 @router.get("/quality/inbound-reports", response_class=HTMLResponse)
-@router.get("/quality/outbound-reports", response_class=HTMLResponse)
 def planned_inspection_page(request: Request, current_user=Depends(get_current_user)):
     if not check_admin_permission(current_user):
         access = parse_user_permissions(current_user).get("menu_access")

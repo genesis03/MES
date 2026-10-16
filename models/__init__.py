@@ -41,6 +41,7 @@ from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
 from models.packing_sync import PackingSyncState, PackingSyncRun, ExternalPackingRecord, PackingSourcePresence
 from models.production_sync import ProductionSyncState, ExternalProductionRecord, ProductionSyncRun, ProductionSyncProcessMap, ProductionSyncItemMap, ProductionSyncCredential, ProductionSyncProtocol, ProductionSyncFailureData
 from models.inspection_standard import InspectionStandard, InspectionStandardPrecheck, InspectionStandardItem
+from models.quality_report import InspectionReportMaster, InspectionReportItem
 
 
 # 신규/수정 업무행은 품번과 함께 영구 item_id를 자동 연결합니다.

@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block content %}
+<link rel="stylesheet" href="/static/css/quality_pipeline.css">
+<h1>출하 성적서</h1>
+<p class="qp-help">현행 최종검사 기준서로 성적서를 작성합니다. 규격·기준서 개정과 측정값은 저장 당시 상태로 보존합니다.</p>
+<section class="qp-panel"><h2>성적서 등록</h2>
+<form id="qrForm">
+<div class="qp-toolbar">
+<label>품번<input id="qrPart" required maxlength="100"></label><button class="qp-button" id="qrStandards" type="button">기준서 불러오기</button>
+<label>검사기준서<select id="qrStandard" required><option value="">품번으로 불러와 주세요</option></select></label>
+<label>검사일<input id="qrDate" type="date" required></label><label>LOT 번호<input id="qrLot" required maxlength="100"></label>
+<label>수주번호<input id="qrOrder" maxlength="50"></label></div>
+<p id="qrPartName" class="qp-help"></p><p class="qp-help">치수는 시료 5개의 개별 규격 충족 여부로 판정합니다. 미입력은 보류이며, 수치 규격이 없는 외관 등은 판정을 직접 선택합니다. 최대 27항목입니다.</p>
+<div class="qp-scroll"><table class="qp-table"><thead><tr><th>순번</th><th>검사항목</th><th>규격</th><th>계측기</th><th>x1</th><th>x2</th><th>x3</th><th>x4</th><th>x5</th><th>평균</th><th>판정</th></tr></thead><tbody id="qrMeasurements"></tbody></table></div>
+<p><label>특기사항<br><textarea id="qrNote" rows="2" maxlength="2000" style="width:100%"></textarea></label></p>
+<button class="qp-button" id="qrSave" type="submit">성적서 저장</button><span id="qrMessage" role="status"></span></form></section>
+<section class="qp-panel"><h2>성적서 조회</h2><div class="qp-toolbar"><label>품번<input id="qrFindPart" maxlength="100"></label><label>시작일<input id="qrStart" type="date"></label><label>종료일<input id="qrEnd" type="date"></label><button id="qrFind" class="qp-button">조회</button></div>
+<p id="qrCount" class="qp-help"></p><div class="qp-scroll"><table class="qp-table"><thead><tr><th>관리번호</th><th>검사일</th><th>품번</th><th>LOT</th><th>검사자</th><th>기준서 개정</th><th>시료 수</th><th>판정</th><th>출력</th></tr></thead><tbody id="qrList"></tbody></table></div></section>
+<script src="/static/quality_outbound_reports.js?v=20261016-1"></script>
+{% endblock %}
