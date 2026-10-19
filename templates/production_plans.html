@@ -14,8 +14,8 @@
 <div id="ppMessage" class="pp-message" role="status"></div>
 <div class="pp-scroll" style="margin-top:12px"><table class="pp-table"><thead id="ppEditHead"></thead><tbody id="ppEditRows"></tbody></table></div>
 </div>
-<div class="pp-panel"><div class="pp-tools"><span class="pp-toolbar-title">기간별 생산계획 현황</span><label>조회 월 <input type="month" id="ppQueryMonth"></label><label>시작일 <input type="date" id="ppStart"></label><label>종료일 <input type="date" id="ppEnd"></label><label>공정 <select id="ppStatusProcess"><option value="">전체</option></select></label><button class="pp-btn" id="ppQuery">조회</button></div>
-<p class="pp-help"><button class="pp-btn" id="ppExcel" type="button">엑셀 다운로드</button> 위 조회 기간·공정의 저장된 생산계획을 다운로드합니다.</p>
+<div class="pp-panel"><div class="pp-tools"><span class="pp-toolbar-title">기간별 생산계획 현황</span><label>조회 월 <input type="month" id="ppQueryMonth"></label><label>시작일 <input type="date" id="ppStart"></label><label>종료일 <input type="date" id="ppEnd"></label><label>공정 <select id="ppStatusProcess"><option value="">전체</option></select></label><button class="pp-btn" id="ppQuery">조회</button><button class="pp-btn" id="ppExcel" type="button">엑셀 다운로드</button></div>
+<p class="pp-help">선택한 조회 기간·공정의 저장된 생산계획을 엑셀로 다운로드합니다.</p>
 <div id="ppStatusMessage" class="pp-message" role="status"></div>
 <div class="pp-section">1. 종합현황</div><div class="pp-scroll"><table class="pp-table" id="ppSummary"></table></div>
 <div class="pp-section">2. 세부내용</div><p class="pp-help">UPH = 내림[3,600 ÷ (C/T × (2 − 목표 OEE))], UPD는 12시간 일정 기준이며, UPD·월 생산성에는 계획 차감시간을 제외합니다. 탭핑 기본 차감은 주간 100분·야간 110분으로 하루 210분입니다. 같은 기간에 C/T가 바뀌면 적용값별로 행을 나눠 표시합니다.</p><div class="pp-scroll"><table class="pp-table" id="ppStatus"></table></div>
