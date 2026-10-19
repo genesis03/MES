@@ -2,6 +2,7 @@ import math
 from datetime import date,datetime,timedelta
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter,Depends,HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel,Field,field_validator
 from sqlalchemy.orm import Session
 from core.database import get_db
@@ -15,6 +16,15 @@ from services.oee_schedule import month_days,days,bounds,default_excluded_minute
 from services.production_sync_mapping import stage_suffix
 
 router=APIRouter(prefix='/api/production/month-plan',tags=['Monthly Production Plans'])
+
+
+@router.get('/excel')
+def excel(start_date:date,end_date:date,process_code:str|None=None,db:Session=Depends(get_db),user=Depends(get_current_user)):
+    from services.production_plan_excel import build_plan_excel
+    data=status(start_date,end_date,process_code,db,user)
+    return Response(build_plan_excel(data,start_date,end_date),
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition':f'attachment; filename="ProductionPlan_{start_date}_{end_date}.xlsx"'})
 
 
 def options_data(db):

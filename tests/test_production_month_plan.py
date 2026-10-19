@@ -25,6 +25,28 @@ def value(item,equipment,ct=30):
     return dict(month='2026-10',process_code='LT',ct_effective_date='2026-10-12',lines=[dict(item_id=item,equipment_id=equipment,cycle_seconds=ct,expected_oee=.95,quantities={f'2026-10-{i:02d}':100 if i in (6,12) else 0 for i in range(1,32)})])
 
 
+def test_excel_matches_saved_status_and_rejects_invalid_range(setup,monkeypatch):
+    from io import BytesIO
+    from openpyxl import load_workbook
+    _,item,equipment,_=initialize(setup,monkeypatch)
+    assert setup.client.put('/api/production/month-plan',json=value(item,equipment)).status_code==200
+    params={'start_date':'2026-10-01','end_date':'2026-10-31','process_code':'LT'}
+    response=setup.client.get('/api/production/month-plan/excel',params=params)
+    assert response.status_code==200,response.text
+    book=load_workbook(BytesIO(response.content))
+    assert book.sheetnames==['공정별 요약','일자별 생산계획']
+    sheet=book.worksheets[1]
+    assert sheet['K3'].value==200 and sheet['Q3'].value==100 and sheet['W3'].value==100
+    assert sheet['F3'].value==.95 and sheet['F3'].number_format=='0.00%'
+    assert sheet['K4'].value==200 and sheet.freeze_panes=='L3'
+    assert book.worksheets[0].cell(4,5).value==200
+    params['start_date']='2026-10-12';params['end_date']='2026-10-12'
+    day=load_workbook(BytesIO(setup.client.get('/api/production/month-plan/excel',params=params).content)).worksheets[1]
+    assert day['K3'].value==100 and day['L3'].value==100
+    params['end_date']='2026-10-01'
+    assert setup.client.get('/api/production/month-plan/excel',params=params).status_code==422
+
+
 def test_plan_ct_is_date_scoped_and_master_changes_do_not_rewrite_oee(setup,monkeypatch):
     order,item,equipment,_=initialize(setup,monkeypatch)
     response=setup.client.put('/api/production/month-plan',json=value(item,equipment));assert response.status_code==200,response.text
