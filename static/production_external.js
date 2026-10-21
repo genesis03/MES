@@ -1,6 +1,6 @@
 (() => {
     'use strict';
-    const $=id=>document.getElementById(id), base='/api/production/external-sync';
+    const $=id=>document.getElementById(id), base='/api/production/external-sync', pageSize=20;
     let page=1,total=0,running=false,request=0,settingsBusy=false,settingsDirty=false,itemPair=null,itemPage=1,itemTotal=0,itemRequest=0;
     const esc=value=>{const e=document.createElement('span');e.textContent=value??'';return e.innerHTML.replaceAll('"','&quot;').replaceAll("'",'&#39;');};
     const integer=value=>value==null||value===''?'':Number.isFinite(Number(value))?Number(value).toFixed(0):value;
@@ -8,14 +8,14 @@
     const message=(text,error=false)=>{$('esMessage').textContent=text;$('esMessage').classList.toggle('es-error',error);};
     async function api(path,method='GET',data){const response=await fetch(base+path,{method,headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined});const extra=!response.ok&&path.startsWith('/credentials')?await response.clone().json().catch(()=>null):null;try{return await MesResponse.read(response);}catch(e){if(extra?.diagnostic)e.diagnostic=extra.diagnostic;throw e;}}
     async function rows(){
-        const id=++request,q=new URLSearchParams({start_date:$('esStart').value,end_date:$('esEnd').value,keyword:$('esKeyword').value.trim(),page,page_size:50});
+        const id=++request,q=new URLSearchParams({start_date:$('esStart').value,end_date:$('esEnd').value,keyword:$('esKeyword').value.trim(),page,page_size:pageSize});
         const d=await api('/records?'+q);if(id!==request)return;
-        total=d.total;if(page>1&&!d.rows.length){page=Math.max(1,Math.ceil(total/50));return rows();}
+        total=d.total;if(page>1&&!d.rows.length){page=Math.max(1,Math.ceil(total/pageSize));return rows();}
         $('esTotal').textContent=`총 ${total.toLocaleString()}건`;
         $('esRows').innerHTML=d.rows.length?d.rows.map((r,index)=>{
             const type={MACHINING:'가공',ASSEMBLY:'조립'}[r.performance_type]||'미지정';
             const machine=r.machine_no||'';
-            const values=[(page-1)*50+index+1,r.work_date,type,r.shift_name||'미확인',r.process_name||r.source_process,r.operator_name||'미확인',/^[0-9]$/.test(machine)?machine:'미확인','미연결',r.mes_part_no||'미연결',r.part_name,r.total_qty==null?'미확인':integer(r.total_qty),integer(r.good_qty),integer(r.fault_qty),r.setup_qty===''?'미확인':integer(r.setup_qty),r.lot_no||'미확인','외부 연동',r.notes.join(' / ')];
+            const values=[(page-1)*pageSize+index+1,r.work_date,type,r.shift_name||'미확인',r.process_name||r.source_process,r.operator_name||'미확인',/^[0-9]$/.test(machine)?machine:'미확인','미연결',r.mes_part_no||'미연결',r.part_name,r.total_qty==null?'미확인':integer(r.total_qty),integer(r.good_qty),integer(r.fault_qty),r.setup_qty===''?'미확인':integer(r.setup_qty),r.lot_no||'미확인','외부 연동',r.notes.join(' / ')];
             const raw=[['원본 품번',r.part_no],['원본 공정',r.source_process],['원본 작업번호',r.job_no],['원본 LOT',r.lot_no],['시작시간',r.started_at],['종료시간',r.ended_at],['총생산수량',r.total_qty==null?'미확인':integer(r.total_qty)],['양품수량',integer(r.job_qty)],['원본 LOT수량',integer(r.lot_qty)],['불량수량',integer(r.fault_qty)],['셋업',integer(r.setup_qty)],['투입 LOT',(r.material_lots||[]).map(m=>m.lot_no+': '+m.qty).join(' / ')],['비가동',(r.downtimes||[]).map(d=>d.type_name+' '+d.started_at+' ~ '+d.ended_at+' ('+d.minutes+'분) '+d.action).join(' / ')],['불량 유형',(r.defects||[]).map(d=>d.name+': '+d.qty).join(' / ')],['변경 수신일',r.changed_at]];
             if(r.assembly_group_materials?.length)raw.push(['조립 묶음 투입 (LOT별 미배분)',r.assembly_group_materials.map(d=>d.lot_no+': '+d.qty).join(' / ')]);
             if(r.assembly_group_defects?.length)raw.push(['조립 묶음 불량 (LOT별 미배분)',r.assembly_group_defects.map(d=>d.name+': '+d.qty).join(' / ')]);
@@ -23,7 +23,7 @@
             if(r.unassigned_downtime_note)raw.push(['비가동 비고 원문 (개별 연결 미확인)',r.unassigned_downtime_note]);
             return '<tr>'+values.map((v,i)=>`<td${i===16?' class="es-notes"':''}>${esc(v)}</td>`).join('')+`<td><details><summary>원본 보기</summary>${raw.map(([key,value])=>`<p>${esc(key)}: ${esc(value)}</p>`).join('')}</details></td><td>${ExternalLabels.button(r)}</td></tr>`;
         }).join(''):'<tr><td colspan="19">조회된 외부 실적이 없습니다.</td></tr>';
-        $('esPage').textContent=`${page} / ${Math.max(1,Math.ceil(total/50))}`;$('esPrev').disabled=page===1;$('esNext').disabled=page*50>=total;
+        $('esPage').textContent=`${page} / ${Math.max(1,Math.ceil(total/pageSize))}`;$('esPrev').disabled=page===1;$('esNext').disabled=page*pageSize>=total;
     }
     async function state(){
         const s=await api('/settings'),previous=running;running=s.running;
@@ -100,7 +100,7 @@
     $('esSearch').onsubmit=e=>{e.preventDefault();page=1;rows().catch(e=>message(e.message,true));};
     $('esReset').onclick=()=>{$('esStart').value=date(-6);$('esEnd').value=date(0);$('esKeyword').value='';page=1;rows().catch(e=>message(e.message,true));};
     $('esPrev').onclick=()=>{if(page>1){page--;rows().catch(e=>message(e.message,true));}};
-    $('esNext').onclick=()=>{if(page*50<total){page++;rows().catch(e=>message(e.message,true));}};
+    $('esNext').onclick=()=>{if(page*pageSize<total){page++;rows().catch(e=>message(e.message,true));}};
     if($('esSettings'))$('esSettings').oninput=()=>{settingsDirty=true;};
     if($('esSettings'))$('esSettings').onsubmit=async e=>{e.preventDefault();settingsBusy=true;const b=e.target.querySelector('button');b.disabled=true;try{await api('/settings','PUT',{enabled:$('esEnabled').checked,interval_minutes:Number($('esInterval').value),lookback_days:Number($('esLookback').value)});settingsDirty=false;message('설정을 저장했습니다.');await state();}catch(e){message(e.message,true);}finally{settingsBusy=false;b.disabled=false;}};
     if($('esRun'))$('esRun').onclick=async()=>{const b=$('esRun');b.disabled=true;try{await api('/run','POST',{start_date:$('esStart').value,end_date:$('esEnd').value});running=true;message('선택 기간의 실적 동기화를 시작했습니다.');await state();await runs();}catch(e){message(e.message,true);await state().catch(()=>{});}};

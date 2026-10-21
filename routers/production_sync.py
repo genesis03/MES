@@ -264,7 +264,7 @@ def save_mapping(payload: Mapping, db: Session = Depends(get_db), user=Depends(g
 @router.get('/api/production/external-sync/records')
 def records(start_date: date | None = None, end_date: date | None = None,
             keyword: str = Query('', max_length=200), page: int = Query(1, ge=1),
-            page_size: int = Query(50, ge=1, le=200), db: Session = Depends(get_db), user=Depends(get_current_user)):
+            page_size: int = Query(20, ge=1, le=200), db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
     if start_date and end_date and start_date > end_date:
         raise HTTPException(422, '시작일과 종료일을 확인해 주세요.')
