@@ -21,8 +21,8 @@
             if(r.assembly_group_defects?.length)raw.push(['조립 묶음 불량 (LOT별 미배분)',r.assembly_group_defects.map(d=>d.name+': '+d.qty).join(' / ')]);
             if(r.unassigned_product_name)raw.push(['품명 원문 (표시는 품목 정보 기준)',r.unassigned_product_name]);
             if(r.unassigned_downtime_note)raw.push(['비가동 비고 원문 (개별 연결 미확인)',r.unassigned_downtime_note]);
-            return '<tr>'+values.map((v,i)=>`<td${i===16?' class="es-notes"':''}>${esc(v)}</td>`).join('')+`<td><details><summary>원본 보기</summary>${raw.map(([key,value])=>`<p>${esc(key)}: ${esc(value)}</p>`).join('')}</details></td><td>${ExternalLabels.button(r)}</td></tr>`;
-        }).join(''):'<tr><td colspan="19">조회된 외부 실적이 없습니다.</td></tr>';
+            return '<tr>'+values.map((v,i)=>`<td${i===16?' class="es-notes"':''}>${esc(v)}</td>`).join('')+`<td><details><summary>원본 보기</summary>${raw.map(([key,value])=>`<p>${esc(key)}: ${esc(value)}</p>`).join('')}</details></td></tr>`;
+        }).join(''):'<tr><td colspan="18">조회된 외부 실적이 없습니다.</td></tr>';
         $('esPage').textContent=`${page} / ${Math.max(1,Math.ceil(total/pageSize))}`;$('esPrev').disabled=page===1;$('esNext').disabled=page*pageSize>=total;
     }
     async function state(){
