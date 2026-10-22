@@ -95,7 +95,7 @@ def test_mapping_changes_existing_report_without_reimport_and_nullable_totals(se
     save([row(), row(IN_NUM='ZERO', FAULT_QTY='0', F1='0', F11='0')],token)
     with setup.sessions() as db:
         report = subcontract_defect_status(db)
-        assert report['total'] == 1 and report['totals']['defect_qty'] == 5
+        assert report['total'] == 2 and report['totals']['defect_qty'] == 5
         assert report['totals']['inbound_qty'] is None
         assert all(v is None for v in report['totals']['by_type'].values())
     payload = {'defects': {'F1':'1','F11':'3'}, 'inbound_field':'ORI_LOT_QTY',
@@ -103,7 +103,9 @@ def test_mapping_changes_existing_report_without_reimport_and_nullable_totals(se
     assert setup.client.put(BASE+'/mapping',json=payload).status_code == 200
     with setup.sessions() as db:
         report = subcontract_defect_status(db)
-        assert report['totals']['inbound_qty'] == 100 and report['totals']['good_qty'] == 95
+        assert report['totals']['inbound_qty'] == 200 and report['totals']['good_qty'] == 195
+        assert report['totals']['defect_rate']==2.5
+        assert next(r for r in report['items'] if r['defect_qty']==0)['defect_rate']==0
         assert report['totals']['by_type']['1'] == 2 and report['totals']['by_type']['3'] == 3
         assert report['items'][0]['record_source'] == 'EXTERNAL_SUBCONTRACT'
         assert subcontract_defect_status(db, part_no='missing')['total'] == 0

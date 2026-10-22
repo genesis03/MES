@@ -92,7 +92,7 @@ def test_external_defects_use_type_quantities_exclude_setup_and_support_filters(
     sync.save_day(rows, token)
     url = '/api/quality/defect-status'
     data = setup.client.get(url, params={'start_date': DAY.isoformat(), 'end_date': DAY.isoformat()}).json()
-    assert data['total'] == 1 and data['total_defect_qty'] == 5
+    assert data['total'] == 2 and data['total_defect_qty'] == 5
     record = data['items'][0]
     assert record['source_type'] == 'EXTERNAL_PRODUCTION'
     assert record['equipment_name'] == 'LT-01' and record['shift_name'] == '주간'
@@ -103,17 +103,22 @@ def test_external_defects_use_type_quantities_exclude_setup_and_support_filters(
     assert record['report_by_type']['4'] == 3 and record['report_by_type']['2'] == 2
     assert sum(data['report_totals']['by_type'].values()) == 5
     assert record['part_no'] == '310062-A'
+    zero = next(r for r in data['items'] if r['defect_qty']==0)
+    assert zero['lot_no']=='LX2026032501002' and zero['defect_rate']==0
+    assert set(zero['report_by_type'].values())=={0}
+    assert data['report_totals']['production_qty']==215
+    assert data['report_totals']['defect_rate']==pytest.approx(5/215*100)
     assert {d['code'] for d in record['defect_items']} == {'EXTERNAL:F4', 'EXTERNAL:F2'}
     assert any(t['code'] == 'EXTERNAL:F4' for t in data['defect_types'])
     for filters, count in [({'source': 'EXTERNAL_PRODUCTION', 'defect_type_code': 'EXTERNAL:F4'}, 1),
-                           ({'source': 'PRODUCTION_RUN'}, 1), ({'part_no': 'OTHER'}, 0),
+                           ({'source': 'PRODUCTION_RUN'}, 2), ({'part_no': 'OTHER'}, 0),
                            ({'end_date': '2026-03-24'}, 0)]:
         assert setup.client.get(url, params=filters).json()['total'] == count
     # Updates replace imported records, rather than adding another quality entry.
     rows[0]['DEFECTS'][0]['qty'] = 1
     sync.save_day(rows, token)
     data = setup.client.get(url).json()
-    assert data['total'] == 1 and data['total_defect_qty'] == 3
+    assert data['total'] == 2 and data['total_defect_qty'] == 3
 
 
 @pytest.mark.parametrize('lot_count', [2, 3])
@@ -138,6 +143,7 @@ def test_assembly_group_defects_count_once_without_assigning_them_to_each_lot(se
     assert annotation['is_unallocated_defect'] and annotation['related_lots'] == lots
     assert annotation['production_qty'] is None and annotation['good_qty'] is None
     assert annotation['defect_qty'] is None and annotation['setup_qty'] is None
+    assert annotation['defect_rate'] is None
     assert annotation['report_by_type']['4'] == 2 * lot_count
     totals = data['report_totals']
     assert totals['production_qty'] == 102 * lot_count and totals['good_qty'] == 100 * lot_count
@@ -184,3 +190,48 @@ def test_production_filter_combines_internal_and_external_defects(setup):
         assert data['report_totals']['production_qty'] == 200
         assert data['report_totals']['good_qty'] == 195
         assert data['report_totals']['by_type']['4'] == 5
+
+
+def test_zero_internal_lots_completed_runs_and_post_detection_do_not_duplicate_production(setup):
+    from models.production import ProductionPerformance, ProductionWorkOrder
+    from models.production_run import ProductionRun
+    from models.production_lot import ProductionLotModel
+    from models.production_defect import QualityProductionDefect
+    setup.app.include_router(router)
+    with setup.sessions() as db:
+        db.execute(text('PRAGMA foreign_keys=OFF'))
+        item_id=add_item(db,part='QUALITY-A')
+        order=ProductionWorkOrder(work_order_no='ZERO-QUALITY',order_date=DAY.isoformat(),
+            item_id=item_id,part_no='QUALITY-A',order_qty=1000)
+        db.add(order);db.flush()
+        for index,(good,bad,setup_qty,status) in enumerate([
+            (100,0,5,None),(90,10,0,'COMPLETED'),(200,0,0,'CANCELLED'),
+            (100,0,0,None),(300,0,0,'IN_PROGRESS')],start=1):
+            perf=ProductionPerformance(work_order_id=order.id,performance_date=DAY.isoformat(),
+                process_code='LT',good_qty=good,defect_qty=bad,setup_qty=setup_qty)
+            db.add(perf);db.flush()
+            lot=ProductionLotModel(item_id=item_id,part_no='QUALITY-A',lot_no=f'LOCAL-{index}',
+                lot_qty=good,note=f'PERF:{perf.id}|생산실적 자동생성')
+            db.add(lot);db.flush()
+            if status:
+                db.add(ProductionRun(work_order_id=order.id,performance_id=perf.id,
+                    performance_date=DAY.isoformat(),process_code='LT',operator_id=1,
+                    operator_name='TEST',equipment_id=1,equipment_code='LT-01',equipment_name='선반 1호기',
+                    shift_type='DAY',start_time='08:00',good_qty=good,defect_qty=bad,setup_qty=setup_qty,status=status))
+            if index==4:
+                db.add(QualityProductionDefect(production_lot_id=lot.id,item_id=item_id,lot_no=lot.lot_no,
+                    lot_qty=100,defect_date=DAY.isoformat(),defect_qty=2,status='ACTIVE'))
+        db.commit()
+    params={'source':'PRODUCTION','start_date':DAY.isoformat(),'end_date':DAY.isoformat()}
+    data=setup.client.get('/api/quality/defect-status',params=params).json()
+    assert data['total']==3
+    by_lot={r['lot_no']:r for r in data['items']}
+    assert set(by_lot)=={'LOCAL-1','LOCAL-2','LOCAL-4'}
+    assert by_lot['LOCAL-1']['defect_qty']==0 and by_lot['LOCAL-1']['defect_rate']==0
+    assert by_lot['LOCAL-4']['production_qty']==100 and by_lot['LOCAL-4']['good_qty']==98
+    assert by_lot['LOCAL-4']['defect_qty']==2
+    totals=data['report_totals']
+    assert totals['production_qty']==305 and totals['good_qty']==288 and totals['defect_qty']==12
+    assert totals['defect_rate']==pytest.approx(12/305*100)
+    limited=setup.client.get('/api/quality/defect-status',params=params|{'limit':1}).json()
+    assert limited['report_totals']==totals

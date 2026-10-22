@@ -41,10 +41,12 @@ def test_existing_import_resolves_one_defective_lot_consistently_in_all_reports(
     assert other['defects'] == []
     assert not target['assembly_group_defects'] and not other['assembly_group_defects']
     quality = setup.client.get('/api/quality/defect-status', params={'source': 'PRODUCTION', 'process_code': 'ASSY'}).json()
-    assert quality['total'] == 1 and quality['total_defect_qty'] == 5
-    assert quality['items'][0]['lot_no'] == 'LA20260921012'
-    assert quality['items'][0]['report_by_type']['1'] == 2
-    assert quality['items'][0]['report_by_type']['3'] == 3
+    assert quality['total'] == 2 and quality['total_defect_qty'] == 5
+    defective = next(r for r in quality['items'] if r['lot_no']=='LA20260921012')
+    assert defective['report_by_type']['1'] == 2
+    assert defective['report_by_type']['3'] == 3
+    assert next(r for r in quality['items'] if r['lot_no']=='LA20260921011')['defect_rate']==0
+    assert quality['report_totals']['defect_rate']==pytest.approx(5/1090*100)
     assert not any(row.get('is_unallocated_defect') for row in quality['items'])
     assert setup.client.get('/api/quality/defect-status', params={'source': 'PRODUCTION', 'process_code': 'OTHER'}).json()['total'] == 0
     daily = setup.client.get('/api/production/daily-job-report', params={'day': DAY.isoformat()}).json()['items']

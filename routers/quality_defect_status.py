@@ -7,7 +7,7 @@ from core.database import get_db
 from core.security import get_current_user
 from models.models import CommonCodeModel, ItemMasterModel, ProcessModel, PurchaseInboundItem, PurchaseInboundMaster
 from models.production import ProductionWorkOrder, ProductionPerformance
-from services.production_lot_service import performance_id_from_lot_note
+from services.production_lot_service import performance_id_from_lot_note, output_lots_for_performance
 from models.production_defect import QualityProductionDefect, QualityProductionDefectDetail
 from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunDefect
@@ -17,6 +17,7 @@ from models.production_sync import ExternalProductionRecord
 from services.production_sync_mapping import ItemConnections, stage_suffix
 from services.production_sync_view import external_record_view
 from services.defect_report_format import report_types, report_quantities
+from services.subcontract_fault_view import defect_rate
 
 router = APIRouter(prefix="/api/quality/defect-status", tags=["Quality Defect Status"])
 
@@ -186,7 +187,6 @@ def defect_status(
     # 생산실적 입력 시 발생한 공정 불량
     run_query = db.query(ProductionRun).filter(
         ProductionRun.status == "COMPLETED",
-        ProductionRun.defect_qty > 0,
     )
     if start_date:
         run_query = run_query.filter(ProductionRun.performance_date >= start_date)
@@ -228,6 +228,35 @@ def defect_status(
             "operator_name": run.operator_name,
             "target_key": f"PRODUCTION_RUN:{run.id}",
         }
+        output_lots = output_lots_for_performance(db, run.performance_id) if run.performance_id else []
+        if len(output_lots) == 1:
+            row['lot_no'] = output_lots[0].lot_no
+        if _matches(row, part_filter, defect_filter, source):
+            rows.append(row)
+
+    # Older/direct registrations have a performance and output LOT without a run.
+    # Never count a run-linked performance again, including cancelled runs.
+    performance_query = db.query(ProductionPerformance).filter(~db.query(ProductionRun.id).filter(
+        ProductionRun.performance_id == ProductionPerformance.id).exists())
+    if start_date:
+        performance_query = performance_query.filter(ProductionPerformance.performance_date >= start_date)
+    if end_date:
+        performance_query = performance_query.filter(ProductionPerformance.performance_date <= end_date)
+    for performance in performance_query.order_by(ProductionPerformance.id):
+        order = db.get(ProductionWorkOrder, performance.work_order_id)
+        product = db.get(ItemMasterModel, order.item_id) if order else None
+        lots = output_lots_for_performance(db, performance.id)
+        good, bad, setup = float(performance.good_qty), float(performance.defect_qty), float(performance.setup_qty)
+        row = {'source_type':'PRODUCTION_RUN', 'source_name':'생산실적', 'date':performance.performance_date,
+            'part_no':product.part_no if product else (order.part_no if order else ''),
+            'part_name':product.part_name if product else '', 'process_code':performance.process_code,
+            'process_name':process_names.get(performance.process_code, performance.process_code),
+            'lot_no':lots[0].lot_no if len(lots)==1 else '', 'base_qty':good+bad,
+            'production_qty':good+bad+setup, 'good_qty':good, 'defect_qty':bad, 'setup_qty':setup,
+            'defect_items':[], 'defect_codes':[], 'partner_name':'', 'created_by':performance.created_by or '',
+            'equipment_name':performance.equipment_name or '',
+            'shift_name':{'DAY':'주간','NIGHT':'야간'}.get(performance.shift_type,''),
+            'operator_name':performance.operator_name or '', 'target_key':f'PRODUCTION_PERFORMANCE:{performance.id}'}
         if _matches(row, part_filter, defect_filter, source):
             rows.append(row)
 
@@ -322,15 +351,14 @@ def defect_status(
                 name = str(detail.get('name') or detail.get('code') or '미지정')
                 external_names[code] = name + ' (외부 MES)'
                 defect_items.append({'code': code, 'name': name, 'qty': qty})
-            if not defect_items:
-                continue
             row = {
                 'source_type': 'EXTERNAL_PRODUCTION', 'source_name': '생산실적',
                 'date': record.work_date, 'part_no': view['mes_part_no'] or record.part_no,
                 'part_name': view['part_name'], 'process_name': view['process_name'] or record.process_name,
                 'process_code': view['process_code'],
                 'lot_no': record.lot_no,
-                'base_qty': group['base_qty'], 'defect_qty': sum(d['qty'] for d in defect_items),
+                'base_qty': group['base_qty'], 'defect_qty': (sum(d['qty'] for d in defect_items) if defect_items
+                                                            else sum(float(member.fault_qty or 0) for member, _ in group['members'])),
                 'production_qty': group['base_qty'], 'good_qty': group['good_qty'], 'setup_qty': group['setup_qty'],
                 'defect_items': defect_items, 'defect_codes': [d['code'] for d in defect_items],
                 'partner_name': '', 'created_by': '', 'operator_name': view['operator_name'],
@@ -360,6 +388,26 @@ def defect_status(
                 'target_key': f'EXTERNAL_PRODUCTION_GROUP:{record.id}',
             })
 
+    # A post-detection event on an already listed production LOT adds defects,
+    # not a second copy of that LOT's production quantity.
+    if source in {'ALL', 'PRODUCTION'}:
+        primary = {}
+        for row in rows:
+            if row['source_type'] == 'PRODUCTION_RUN' and row['lot_no']:
+                primary.setdefault((row['part_no'],row['lot_no']),[]).append(row)
+        combined = []
+        for row in rows:
+            matches = primary.get((row['part_no'],row['lot_no']),[]) if row['source_type']=='PRODUCTION_LOT' else []
+            if len(matches)==1:
+                target=matches[0]
+                target['defect_qty'] += row['defect_qty']
+                target['good_qty'] = max(target['good_qty']-row['defect_qty'],0)
+                target['defect_items'] += row['defect_items']
+                target['defect_codes'] = list(set(target['defect_codes']+row['defect_codes']))
+            else:
+                combined.append(row)
+        rows=combined
+
     processes = {code: name for code, name in process_names.items()
                  if stage_suffix(name) in {'-A', '-B', '-C', '-D'}}
     for row in rows:
@@ -384,10 +432,13 @@ def defect_status(
             row['setup_qty'] = None
         row['report_by_type'] = ({c['code']: None for c in columns} if row.get('types_unallocated')
                                  else report_quantities(row['defect_items'], columns, row['defect_qty']))
+        row['defect_rate'] = defect_rate(row['defect_qty'], row['production_qty'])
         for key in ('production_qty', 'good_qty', 'setup_qty'):
             report_totals[key] += float(row.get(key) or 0)
         for code, qty in row['report_by_type'].items():
             report_totals['by_type'][code] += float(qty or 0)
+
+    report_totals['defect_rate'] = defect_rate(total_defect, report_totals['production_qty'])
 
     return {
         "items": rows[:limit],

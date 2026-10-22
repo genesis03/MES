@@ -83,8 +83,6 @@ def external_rows(db, start_date=None, end_date=None, part_no='', partner_name='
     rows = []
     for record in query.order_by(ExternalSubcontractFault.confirm_date.desc(), ExternalSubcontractFault.id.desc()):
         view = record_view(record, connections, settings, columns)
-        if view['defect_qty'] <= 0:
-            continue
         if part_no and part_no.strip().casefold() not in view['part_no'].casefold():
             continue
         if partner_name and partner_name.strip().casefold() not in view['partner_name'].casefold():

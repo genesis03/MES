@@ -124,3 +124,23 @@ def test_samples_sum_per_lot_and_unallocated_defects_do_not_show_false_zero_rate
     assert data['totals']['keep_qty'] is None
     assert all(r['defect_rate'] is None for r in data['items'])
     assert data['totals']['defect_rate']==5
+
+
+def test_inspected_zero_defect_receipt_increases_denominator_and_cancelled_does_not(setup):
+    seed(setup)
+    with setup.sessions() as db:
+        # Reuse the second receipt, which was initially cancelled in this fixture.
+        db.get(SubcontractInboundMaster,2).status='RECEIVED'
+        db.get(QualityInboundResult,2).defect_qty=0
+        db.query(QualityInboundDefectDetail).filter_by(result_id=2).delete()
+        db.query(QualityInboundLotDefect).filter_by(result_id=2).delete()
+        db.commit()
+    data=get(setup)
+    assert data['receipt_item_count']==2 and data['total']==4
+    assert data['totals']['inbound_qty']==200 and data['totals']['defect_qty']==5
+    assert data['totals']['defect_rate']==2.5
+    zero=[r for r in data['items'] if r['inbound_no']=='SI-2']
+    assert len(zero)==2 and all(r['defect_rate']==0 for r in zero)
+    with setup.sessions() as db:
+        db.get(SubcontractInboundMaster,2).status='CANCELLED';db.commit()
+    assert get(setup)['totals']['defect_rate']==5

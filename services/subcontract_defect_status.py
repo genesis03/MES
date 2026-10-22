@@ -15,7 +15,7 @@ def subcontract_defect_status(db, start_date=None, end_date=None, part_no='', pa
               & (QualityInboundResult.source_type == 'SUBCONTRACT'))
         .outerjoin(ItemMasterModel, ItemMasterModel.id == SubcontractInboundItem.item_id)
         .filter(SubcontractInboundMaster.status == 'RECEIVED',
-                QualityInboundResult.inspection_status == 'COMPLETED', QualityInboundResult.defect_qty > 0))
+                QualityInboundResult.inspection_status == 'COMPLETED'))
     if start_date:
         query = query.filter(SubcontractInboundMaster.inbound_date >= start_date)
     if end_date:

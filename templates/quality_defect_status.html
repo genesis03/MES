@@ -5,7 +5,7 @@
 .ds-wrap{padding:16px}.ds-wrap h1{font-size:20px;margin:0 0 12px}.ds-filter{display:flex;flex-wrap:wrap;gap:8px;align-items:end;background:#fff;border:1px solid #dbe2eb;border-radius:8px;padding:12px;margin-bottom:12px}
 .ds-field{display:flex;flex-direction:column;gap:4px}.ds-field label{font-size:11px;font-weight:700;color:#64748b}.ds-field input,.ds-field select{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;min-width:140px}
 .ds-btn{height:34px;border:0;border-radius:4px;padding:0 14px;font-weight:700;cursor:pointer}.ds-primary{background:#2563eb;color:#fff}.ds-light{background:#e2e8f0;color:#334155}
-.ds-summary{display:flex;gap:10px;margin-bottom:12px}.ds-card{background:#fff;border:1px solid #dbe2eb;border-radius:7px;padding:10px 16px;min-width:160px}.ds-card span{display:block;font-size:11px;color:#64748b}.ds-card strong{font-size:20px}.ds-card.bad strong{color:#dc2626}
+.ds-summary{display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap}.ds-card{background:#fff;border:1px solid #dbe2eb;border-radius:7px;padding:10px 16px;min-width:160px}.ds-card span{display:block;font-size:11px;color:#64748b}.ds-card strong{font-size:20px}.ds-card.bad strong{color:#dc2626}
 .ds-tablebox{background:#fff;border:1px solid #dbe2eb;border-radius:8px;overflow:auto;max-height:68vh}.ds-table{width:100%;border-collapse:collapse;font-size:12px}.ds-table th,.ds-table td{border:1px solid #e2e8f0;padding:7px;text-align:center;white-space:nowrap}.ds-table th{position:sticky;top:0;background:#f1f5f9;z-index:2}.ds-left{text-align:left!important}.ds-num{text-align:right!important}
 .ds-table tfoot td{position:sticky;bottom:0;background:#e2e8f0;font-weight:700}
 </style>
@@ -27,9 +27,10 @@
     <div class="ds-card"><span>등록 건수</span><strong id="ds-count">0</strong></div>
     <div class="ds-card"><span>생산수량</span><strong id="ds-production">0</strong></div>
     <div class="ds-card"><span>양품수량</span><strong id="ds-good">0</strong></div>
+    <div class="ds-card"><span>불량률</span><strong id="ds-rate">—</strong></div>
     <div class="ds-card bad"><span>총 불량수량</span><strong id="ds-total">0</strong></div>
   </div>
-  <p class="ds-note">내부·외부의 생산·조립 불량을 함께 조회합니다. 생산수량은 셋업을 포함한 총수량이며, 확인할 수 없는 셋업수량은 —로 표시합니다. 외주가공 불량은 별도 메뉴에서 조회합니다.</p>
+  <p class="ds-note">불량이 0인 LOT를 포함해 내부·외부 생산·조립 실적을 조회합니다. 불량률 = 불량수량 ÷ 생산수량 × 100이며, 전체 불량률은 조회된 전체 수량으로 계산합니다. 생산수량은 셋업을 포함하며, 확인할 수 없는 셋업수량은 —로 표시합니다. 외주가공 불량은 별도 메뉴에서 조회합니다.</p>
   <p id="ds-allocation-note" class="ds-note" hidden></p>
 
   <div class="ds-tablebox">
@@ -48,7 +49,8 @@
   const esc=function(v){const s=document.createElement('span');s.textContent=v==null?'':v;return s.innerHTML};
   const attr=function(v){return esc(v).replace(/"/g,'&quot;')};
   const fmt=function(v){return v==null?'—':Number(v).toLocaleString('ko-KR',{maximumFractionDigits:6})};
-  const headings=['일자','구분','품번','품명','공정','호기','주/야','거래처','LOT NO','생산수량','양품수량','불량 계'];
+  const rate=function(v){return v==null?'—':Number(v).toFixed(2)+'%'};
+  const headings=['일자','구분','품번','품명','공정','호기','주/야','거래처','LOT NO','생산수량','양품수량','불량률','불량 계'];
   function renderHead(types){$('ds-head').innerHTML='<tr>'+[...headings,...types.map(t=>t.name),'셋업수량','등록자'].map(x=>'<th>'+esc(x)+'</th>').join('')+'</tr>'}
   function dateOffset(days){const d=new Date();d.setDate(d.getDate()+days);return MesLocalDate.format(d)}
   async function search(){
@@ -76,11 +78,12 @@
     if(d.truncated)notes.push('상세는 5,000행까지 표시합니다. 합계는 전체 조회 결과 기준입니다. 기간을 줄이면 상세를 모두 확인할 수 있습니다.');
     $('ds-allocation-note').hidden=!notes.length;$('ds-allocation-note').textContent=notes.join(' ');
     $('ds-production').textContent=fmt(totals.production_qty);$('ds-good').textContent=fmt(totals.good_qty);
+    $('ds-rate').textContent=rate(totals.defect_rate);
     renderHead(types);
     $('ds-body').innerHTML=rows.length?rows.map(function(x,index){
-      return '<tr'+(x.is_unallocated_defect?' class="ds-unallocated"':'')+'><td>'+esc(x.date)+'</td><td>'+esc(x.source_name)+'</td><td>'+esc(x.part_no)+'</td><td class="ds-left">'+esc(x.part_name)+'</td><td>'+esc(x.process_name)+'</td><td>'+esc(x.equipment_name)+'</td><td>'+esc(x.shift_name)+'</td><td>'+esc(x.partner_name)+'</td><td title="'+attr((x.related_lots||[]).join(', '))+'">'+esc(x.is_unallocated_defect?'LOT별 미배분 불량':x.lot_no)+'</td>'+[x.production_qty,x.good_qty,x.defect_qty].map(v=>'<td class="ds-num">'+fmt(v)+'</td>').join('')+types.map(t=>'<td class="ds-num">'+fmt(x.report_by_type[t.code])+'</td>').join('')+'<td class="ds-num">'+fmt(x.setup_qty)+'</td><td>'+esc(x.created_by)+'</td></tr>';
-    }).join(''):'<tr><td colspan="'+(14+types.length)+'">조회 결과가 없습니다.</td></tr>';
-    $('ds-foot').innerHTML='<tr><td colspan="9">합계</td>'+[totals.production_qty,totals.good_qty,totals.defect_qty].map(v=>'<td class="ds-num">'+fmt(v)+'</td>').join('')+types.map(t=>'<td class="ds-num">'+fmt(totals.by_type[t.code]||0)+'</td>').join('')+'<td class="ds-num">'+fmt(totals.setup_qty)+'</td><td></td></tr>';
+      return '<tr'+(x.is_unallocated_defect?' class="ds-unallocated"':'')+'><td>'+esc(x.date)+'</td><td>'+esc(x.source_name)+'</td><td>'+esc(x.part_no)+'</td><td class="ds-left">'+esc(x.part_name)+'</td><td>'+esc(x.process_name)+'</td><td>'+esc(x.equipment_name)+'</td><td>'+esc(x.shift_name)+'</td><td>'+esc(x.partner_name)+'</td><td title="'+attr((x.related_lots||[]).join(', '))+'">'+esc(x.is_unallocated_defect?'LOT별 미배분 불량':x.lot_no)+'</td>'+[x.production_qty,x.good_qty].map(v=>'<td class="ds-num">'+fmt(v)+'</td>').join('')+'<td class="ds-num">'+rate(x.defect_rate)+'</td><td class="ds-num">'+fmt(x.defect_qty)+'</td>'+types.map(t=>'<td class="ds-num">'+fmt(x.report_by_type[t.code])+'</td>').join('')+'<td class="ds-num">'+fmt(x.setup_qty)+'</td><td>'+esc(x.created_by)+'</td></tr>';
+    }).join(''):'<tr><td colspan="'+(15+types.length)+'">조회 결과가 없습니다.</td></tr>';
+    $('ds-foot').innerHTML='<tr><td colspan="9">합계</td>'+[totals.production_qty,totals.good_qty].map(v=>'<td class="ds-num">'+fmt(v)+'</td>').join('')+'<td class="ds-num">'+rate(totals.defect_rate)+'</td><td class="ds-num">'+fmt(totals.defect_qty)+'</td>'+types.map(t=>'<td class="ds-num">'+fmt(totals.by_type[t.code]||0)+'</td>').join('')+'<td class="ds-num">'+fmt(totals.setup_qty)+'</td><td></td></tr>';
   }
   function reset(){$('ds-start').value=dateOffset(-30);$('ds-end').value=dateOffset(0);$('ds-process').value='';$('ds-part').value='';search()}
   $('ds-search').addEventListener('click',search);$('ds-reset').addEventListener('click',reset);$('ds-part').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();search()}});
