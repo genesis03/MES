@@ -90,6 +90,7 @@ def test_repeat_import_removal_reappearance_and_isolation(setup):
 
 def test_mapping_changes_existing_report_without_reimport_and_nullable_totals(setup):
     setup.app.include_router(router)
+    assert setup.client.put(BASE+'/mapping',json={'defects':{}}).status_code == 200
     token, _ = sync.claim(DAY, DAY, 'MANUAL', 'subcontract')
     save([row(), row(IN_NUM='ZERO', FAULT_QTY='0', F1='0', F11='0')],token)
     with setup.sessions() as db:
@@ -150,7 +151,8 @@ def test_native_duplicate_requires_receipt_identity_not_only_lot(setup):
     with setup.sessions() as db:
         columns = report_types(db)
         native = {'date':DAY.isoformat(), 'inbound_no':'DIFFERENT', 'part_no':'PART',
-            'lot_no':'LOT-001', 'process_name':'은도금', 'unallocated':False}
+            'lot_no':'LOT-001', 'process_name':'은도금', 'unallocated':False,
+            'inbound_qty':10., 'good_qty':9., 'defect_qty':1.}
         def totals():
             return {'inbound_qty':10.,'good_qty':9.,'defect_qty':1.,'by_type':{c['code']:0. for c in columns}}
         args = (1,columns,None,None,'','',5000)
@@ -159,3 +161,37 @@ def test_native_duplicate_requires_receipt_identity_not_only_lot(setup):
         native['inbound_no'] = 'IN-001'
         combined = merge_report(db,[native],totals(),*args)
         assert combined['total'] == 1 and combined['totals']['defect_qty'] == 1
+
+
+def test_confirmed_mapping_rate_samples_and_keep_apply_to_existing_data(setup):
+    from models.subcontract_fault_sync import SubcontractFaultFieldMap
+    setup.app.include_router(router)
+    token, _ = sync.claim(DAY,DAY,'MANUAL','subcontract')
+    save([row(ORI_LOT_QTY='89',JOB_QTY='60',FAULT_QTY='25',REST_QTY='25',
+        F1='8',F2='8',F7='8',F11='1',F5='0',SAMPLE_QTY='0',KIPUP_QTY='4')],token)
+    with setup.sessions() as db:
+        # A previously saved unconfirmed map is upgraded without reimporting.
+        db.add(SubcontractFaultFieldMap(id=1,settings_json=json.dumps({'defects':{},'inbound_field':''})))
+        db.commit()
+        report = subcontract_defect_status(db)
+        item=report['items'][0]
+        assert item['process_name']=='은도금' and item['inbound_qty']==89 and item['good_qty']==64
+        assert item['sample_qty']==0 and item['keep_qty']==4
+        assert item['defect_rate']==pytest.approx(25/89*100)
+        assert item['by_type']['9']==8 and item['by_type']['13']==1
+        assert item['by_type']['7']==0  # F7 is 얼룩, not 오조립.
+        assert report['totals']['keep_qty']==4
+        assert report['totals']['defect_rate']==pytest.approx(25/89*100)
+    settings=setup.client.get(BASE+'/mapping').json()['settings']['defects']
+    assert settings=={'F1':'1','F2':'2','F3':'3','F4':'4','F5':'6','F6':'7','F7':'9','F8':'11','F9':'12','F11':'13'}
+
+
+def test_defect_rate_is_weighted_and_zero_denominator_is_unknown(setup):
+    from services.subcontract_fault_view import defect_rate
+    token, _ = sync.claim(DAY,DAY,'MANUAL','subcontract')
+    save([row(ORI_LOT_QTY='100'),row(IN_NUM='OTHER',ORI_LOT_QTY='10')],token)
+    with setup.sessions() as db:
+        report=subcontract_defect_status(db)
+        assert report['totals']['defect_rate']==pytest.approx(10/110*100)
+    assert defect_rate(0,0) is None
+    assert defect_rate(0,100)==0

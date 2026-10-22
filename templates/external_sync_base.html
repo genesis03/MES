@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}외부 데이터 연동{% endblock %}
+{% block extra_head %}
+<style>
+.es-card{background:white;border:1px solid #cbd5e1;border-radius:6px;padding:16px;margin:14px 0}.es-line{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.es-line label{font-size:12px;display:block}.es-line input,.es-line select,.es-btn{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 10px}.es-btn{background:#2563eb;color:white;cursor:pointer}.es-btn:disabled{opacity:.5;cursor:default}.es-muted{font-size:12px;color:#64748b}.es-error{color:#dc2626}.es-scroll{overflow-x:auto}.es-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}.es-table th,.es-table td{padding:8px;border:1px solid #e2e8f0;text-align:left}.es-table th{background:#f1f5f9}.es-table input,.es-table select{height:34px}.es-notes{color:#b45309}.es-result{white-space:pre-wrap;font-size:12px}
+</style>
+<style>.ex-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.ex-tabs a{padding:9px 18px;border:1px solid #cbd5e1;border-radius:5px;text-decoration:none;color:#334155;background:white}.ex-tabs a[aria-current=page]{background:#2563eb;color:white;border-color:#2563eb}.ex-status{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}.ex-status article{padding:12px;border:1px solid #dbe2eb;border-radius:6px;white-space:pre-wrap;font-size:12px}.ex-settings label{display:flex;flex-direction:column;gap:5px}.ex-settings input[type=number]{width:110px}.ex-settings input[type=checkbox]{height:auto}</style>
+{% endblock %}
+{% block content %}
+<div id="externalSyncRoot"><h1>외부 데이터 연동</h1>
+<details class="es-card"><summary>연동 계정 · 접속키 설정</summary>
+<h3>연동 계정 설정</h3>
+<div class="es-line" style="justify-content:space-between"><form id="esCredentials" class="es-line">
+<label>연동 아이디<br><input id="esUsername" autocomplete="username" maxlength="200" required></label>
+<label>연동 비밀번호<br><input id="esPassword" type="password" autocomplete="new-password" maxlength="4096" placeholder="기존 비밀번호 유지 시 공란"></label>
+<button id="esTestLogin" class="es-btn" type="button">로그인 확인</button><button class="es-btn" type="submit">계정 저장</button>
+</form><form id="esProtocolForm" class="es-line"><label>접속키<br><input id="esProtocolKey" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" style="width:100px" required></label><button class="es-btn" type="submit">키 저장</button></form></div><p id="esProtocolMessage" class="es-result" role="status"></p><button id="esLoginDiagnostic" class="es-btn" type="button" hidden>로그인 진단정보 다운로드</button><p id="esCredentialMessage" class="es-result" role="status" aria-live="polite"></p>
+<p class="es-muted">비밀번호는 암호화해 저장하며 화면에 다시 표시하지 않습니다. 각 서버에서 계정을 설정해 주세요. 접속키는 자동으로 찾으면 그 값을 사용하고, 못 찾으면 저장한 값을 사용합니다.</p>
+
+</details>
+<section class="es-card"><h2>자동 동기화</h2>
+<p class="es-muted">기존 대상별 설정은 공통 설정을 저장하기 전까지 유지됩니다. 저장하면 선택한 대상에 같은 조회 간격과 최근 조회 일수를 적용합니다.</p>
+<form id="exSettings" class="es-line ex-settings">
+<label><span><input id="exEnabled" type="checkbox"> 자동 동기화 사용</span></label>
+<label>조회 간격(분)<input id="exInterval" type="number" min="5" max="1440" required></label>
+<label>최근 조회 일수<input id="exLookback" type="number" min="1" max="90" required></label>
+{% for key,label in [('production','생산실적'),('subcontract','외주불량'),('packing','포장현황')] %}
+<label><span><input type="checkbox" data-sync-target="{{key}}"> {{label}}</span></label>
+{% endfor %}
+<button class="es-btn" type="submit">공통 설정 저장</button>
+</form><p id="exMessage" role="status" class="es-result"></p><div id="exStatus" class="ex-status"></div>
+</section>
+<section class="es-card"><form id="exRunAll" class="es-line"><label>시작일<br><input id="exStart" type="date" required></label><label>종료일<br><input id="exEnd" type="date" required></label><button class="es-btn" type="submit">선택 대상 전체 가져오기</button></form><p class="es-muted">위에서 체크한 대상을 생산실적 → 외주불량 → 포장현황 순서로 가져옵니다. 개별 실패 시 나머지 대상은 계속 실행됩니다.</p><p id="exBatch" class="es-result" role="status"></p></section>
+<nav class="ex-tabs" aria-label="외부 연동 자료">
+{% for key,label in [('production','생산실적'),('subcontract','외주불량'),('packing','포장현황'),('history','연동 이력')] %}
+<a href="/admin/external-sync?tab={{key}}" {% if active_sync|default('production') == key %}aria-current="page"{% endif %}>{{label}}</a>
+{% endfor %}</nav>
+{% block sync_content %}{% endblock %}
+</div><script src="/static/external_sync.js?v=20261022-1" defer></script>
+{% endblock %}

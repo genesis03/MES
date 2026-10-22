@@ -21,7 +21,7 @@ BASE = '/api/packing/external-sync'
 @router.get('/admin/packing-sync', response_class=HTMLResponse)
 def page(request: Request, user=Depends(get_current_user)):
     access(user)
-    return templates.TemplateResponse(request=request, name='packing_external.html', context={'user': user})
+    return templates.TemplateResponse(request=request, name='packing_external.html', context={'user': user, 'active_sync':'packing'})
 
 
 @router.get(BASE + '/settings')

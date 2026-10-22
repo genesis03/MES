@@ -1,22 +1,13 @@
-{% extends "base.html" %}
+{% extends "external_sync_base.html" %}
 {% block title %}외부 연동 포장현황{% endblock %}
-{% block extra_head %}
+{% block extra_head %}{{ super() }}
 <script src="/static/external_label_buttons.js?v=1"></script>
-<style>
-.es-card{background:white;border:1px solid #cbd5e1;border-radius:6px;padding:16px;margin:14px 0}.es-line{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.es-line label{font-size:12px;display:block}.es-line input,.es-line select,.es-btn{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 10px}.es-btn{background:#2563eb;color:white;cursor:pointer}.es-btn:disabled{opacity:.5;cursor:default}.es-muted{font-size:12px;color:#64748b}.es-error{color:#dc2626}.es-scroll{overflow-x:auto}.es-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}.es-table th,.es-table td{padding:8px;border:1px solid #e2e8f0;text-align:left}.es-table th{background:#f1f5f9}.es-table input,.es-table select{height:34px}.es-notes{color:#b45309}.es-result{white-space:pre-wrap;font-size:12px}
-</style>
+
 {% endblock %}
-{% block content %}
-<h1>외부 연동 포장현황</h1>
+{% block sync_content %}
+<h2>외부 연동 포장현황</h2>
 <p class="es-muted">생산실적 연동 계정을 함께 사용합니다. 최초에는 올해 1월 1일부터 오늘까지, 이후에는 최근 기간과 기존 포장 LOT를 다시 조회해 출고·출고 취소를 반영합니다. 재고수량은 포장수량 − 외부 출고수량입니다. 외부 생산실적은 재고에 반영하지 않습니다.</p>
-<p><a href="/admin/production-sync">연동 계정 설정 · 품번 연결</a> · <a href="/production/packing/status">포장현황 보기</a></p>
-<div class="es-card"><h3>자동 동기화</h3>
-<form id="pkSettings" class="es-line">
-<label><input id="pkEnabled" type="checkbox"> 자동 동기화 사용</label>
-<label>조회 간격(분)<br><input id="pkInterval" type="number" min="5" max="1440" value="60" required></label>
-<label>최근 조회 일수<br><input id="pkLookback" type="number" min="1" max="90" value="7" required></label>
-<button class="es-btn" type="submit">설정 저장</button></form>
-<p id="pkState" class="es-result" aria-live="polite"></p></div>
+<p><a href="/admin/external-sync?tab=production">연동 계정 설정 · 품번 연결</a> · <a href="/production/packing/status">포장현황 보기</a></p>
 <div class="es-card"><form id="pkSearch" class="es-line">
 <label>시작일<br><input id="pkStart" type="date" required></label>
 <label>종료일<br><input id="pkEnd" type="date" required></label>
@@ -28,5 +19,5 @@
 <p id="pkTotal"></p><div class="es-scroll"><table class="es-table"><thead><tr><th>품번</th><th>품명</th><th>LOT 번호</th><th>포장일자</th><th>포장수량</th><th>출고수량</th><th>출고일</th><th>거래처</th><th>재고수량</th><th>재고 반영</th><th>품번 연결</th><th>원본 품번</th><th>라벨</th></tr></thead><tbody id="pkRows"></tbody></table></div>
 <p class="es-line"><button id="pkPrev" class="es-btn" type="button">이전</button><span id="pkPage"></span><button id="pkNext" class="es-btn" type="button">다음</button></p></div>
 <div class="es-card"><h3>동기화 이력</h3><p class="es-muted">일별 저장이 완료된 내역은 유지됩니다. 오류가 발생한 기간은 다시 가져올 수 있습니다.</p><div class="es-scroll"><table class="es-table"><thead><tr><th>시작</th><th>기간</th><th>실행</th><th>결과</th><th>수신 / 신규 / 수정 / 동일</th><th>확인사항</th></tr></thead><tbody id="pkRuns"></tbody></table></div></div>
-<script src="/static/packing_external.js?v=3" defer></script>
+<script src="/static/packing_external.js?v=4" defer></script>
 {% endblock %}

@@ -38,6 +38,15 @@ def page(request: Request, user=Depends(get_current_user)):
                                       context={'user': user, 'can_manage': check_admin_permission(user)})
 
 
+@router.get('/admin/external-sync', response_class=HTMLResponse)
+def integrated_page(request: Request, tab: Literal['production','subcontract','packing','history'] = 'production', user=Depends(get_current_user)):
+    access(user)
+    names = {'production':'production_external.html', 'subcontract':'subcontract_fault_external.html',
+             'packing':'packing_external.html', 'history':'external_sync_history.html'}
+    return templates.TemplateResponse(request=request, name=names[tab],
+        context={'user':user, 'can_manage':True, 'active_sync':tab})
+
+
 @router.get('/production/performance/external')
 def old_page(user=Depends(get_current_user)):
     access(user)

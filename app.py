@@ -30,6 +30,7 @@ from routers import pages, manual, shipping, basic_info, basic_info_workers, bas
 from routers import production_sync, packing_sync
 from routers import quality_reports, production_pipeline
 from routers import subcontract_fault_sync
+from routers import external_sync
 from services.production_sync_service import start_scheduler, stop_scheduler
 from routers import control_plan
 from routers import documents, inspection_standards, standard_documents, process_fmea, process_flow
@@ -239,6 +240,7 @@ app.include_router(control_plan.router)
 app.include_router(production_sync.router)
 app.include_router(packing_sync.router)
 app.include_router(subcontract_fault_sync.router)
+app.include_router(external_sync.router)
 app.include_router(process_flow.router)
 app.include_router(basic_info_workers.router)
 app.include_router(basic_info_equipment.router)

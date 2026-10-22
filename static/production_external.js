@@ -1,7 +1,7 @@
 (() => {
     'use strict';
     const $=id=>document.getElementById(id), base='/api/production/external-sync', pageSize=20;
-    let page=1,total=0,running=false,request=0,settingsBusy=false,settingsDirty=false,itemPair=null,itemPage=1,itemTotal=0,itemRequest=0;
+    let page=1,total=0,running=false,request=0,itemPair=null,itemPage=1,itemTotal=0,itemRequest=0;
     const esc=value=>{const e=document.createElement('span');e.textContent=value??'';return e.innerHTML.replaceAll('"','&quot;').replaceAll("'",'&#39;');};
     const integer=value=>value==null||value===''?'':Number.isFinite(Number(value))?Number(value).toFixed(0):value;
     const date=days=>{const d=new Date();d.setDate(d.getDate()+days);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
@@ -27,19 +27,17 @@
     }
     async function state(){
         const s=await api('/settings'),previous=running;running=s.running;
-        $('esState').textContent=[`자동 동기화: ${s.enabled?'사용':'중지'} / ${s.interval_minutes}분마다 최근 ${s.lookback_days}일 조회`,`연동 계정: ${s.credentials_ready?'설정됨':'설정 필요'}`,`최초 가져오기: ${s.initial_completed_at?'완료 ('+s.initial_completed_at+')':s.initial_start_date+'부터 오늘까지 조회 예정'}`,`실행 상태: ${running?'조회 중':'대기'}`,`마지막 성공: ${s.last_success_at||'없음'}`,s.enabled?`다음 예정: ${s.next_run_at||'설정 후 실행'}`:'',s.last_error?`오류: ${s.last_error}`:''].filter(Boolean).join('\n');
-        if($('esEnabled')&&!settingsBusy&&!settingsDirty&&!$('esSettings').contains(document.activeElement)){$('esEnabled').checked=s.enabled;$('esInterval').value=s.interval_minutes;$('esLookback').value=s.lookback_days;}
         if($('esRun'))$('esRun').disabled=running||!s.credentials_ready;
         if(previous&&!running){await rows();await mappings();await itemMaps();}
     }
     async function runs(){const d=await api('/runs');$('esRuns').innerHTML=d.map(r=>`<tr><td>${esc(r.started_at)}</td><td>${esc(r.start_date)} ~ ${esc(r.end_date)}</td><td>${r.trigger==='INITIAL'?'최초 가져오기':r.trigger==='AUTO'?'자동':'수동'}</td><td>${esc(r.status==='FAILED'&&r.counts.received?'일부 실패':({SUCCESS:'완료',FAILED:'실패',RUNNING:'진행 중'}[r.status]||r.status))}</td><td>${['received','inserted','updated','unchanged'].map(k=>r.counts[k]||0).join(' / ')}</td><td>${esc([r.error,...r.counts.warnings||[]].filter(Boolean).join(' / '))}${r.counts.review_items?.length?` <a class="es-btn" href="${base}/runs/${Number(r.id)}/assembly-review-excel">조립 확인 자료 (${r.counts.review_items.length}건)</a>`:''}${r.has_error_data?` <a class="es-btn" href="${base}/runs/${Number(r.id)}/error-excel">오류 자료 엑셀</a>`:''}</td></tr>`).join('')||'<tr><td colspan="6">동기화 이력이 없습니다.</td></tr>';}
     async function mappings(){
-        const d=await api('/process-maps'),writable=!!$('esSettings');
+        const d=await api('/process-maps'),writable=!!$('externalSyncRoot');
         $('esMappings').innerHTML=d.mappings.length?'<table class="es-table"><thead><tr><th>원본 공정</th><th>MES 공정</th><th>가공/조립</th><th>저장</th></tr></thead><tbody>'+d.mappings.map(m=>`<tr><td>${esc(m.source_name)}</td><td><select ${writable?'':'disabled'}>${['<option value="">이름이 정확히 같은 공정으로 연결</option>',...d.processes.map(p=>`<option value="${esc(p.code)}" ${m.process_code===p.code?'selected':''}>${esc(p.code+' · '+p.name)}</option>`)].join('')}</select></td><td><select class="es-performance-type" ${writable?'':'disabled'}>${[['','미지정'],['MACHINING','가공'],['ASSEMBLY','조립']].map(([code,label])=>`<option value="${code}" ${m.performance_type===code?'selected':''}>${label}</option>`).join('')}</select></td><td>${writable?'<button type="button" class="es-btn">저장</button>':''}</td></tr>`).join('')+'</tbody></table>':'<p class="es-muted">실적을 가져오면 공정 연결 항목이 표시됩니다.</p>';
         $('esMappings').querySelectorAll('tbody tr').forEach((tr,i)=>{const b=tr.querySelector('button');if(b)b.onclick=async()=>{b.disabled=true;try{await api('/process-maps','PUT',{source_name:d.mappings[i].source_name,process_code:tr.querySelector('select').value,performance_type:tr.querySelector('.es-performance-type').value});await rows();await itemMaps();message('공정 연결을 저장했습니다.');}catch(e){message(e.message,true);}finally{b.disabled=false;}};});
     }
     async function itemMaps(){
-        const d=await api('/item-maps'),writable=!!$('esSettings');
+        const d=await api('/item-maps'),writable=!!$('externalSyncRoot');
         const connectionNames={AUTO_BOM:'BOM 기준 자동',AUTO_STAGE:'공정 기준 자동',AUTO_EXACT:'동일 품번 자동',MANUAL:'수동'};
         $('esItemMaps').innerHTML=d.length?'<table class="es-table"><thead><tr><th>원본 품번</th><th>원본 공정</th><th>MES 품번</th><th>품명</th><th>연결 방식</th><th>연결</th></tr></thead><tbody>'+d.map(m=>`<tr><td>${esc(m.source_part_no)}</td><td>${esc(m.source_process)}</td><td>${esc(m.part_no||'미연결')}</td><td>${esc(m.part_name)}</td><td>${esc(connectionNames[m.connection_type]||'미연결')}</td><td>${writable?'<button type="button" class="es-btn" data-item-op="choose">품번 조회</button>':''} ${writable&&m.explicit?'<button type="button" class="es-btn" data-item-op="clear">자동 연결로 전환</button>':''}</td></tr>`).join('')+'</tbody></table>':'<p class="es-muted">실적을 가져오면 원본 품번이 표시됩니다.</p>';
         $('esItemMaps').querySelectorAll('tbody tr').forEach((tr,i)=>{
@@ -73,39 +71,13 @@
     $('esItemDialog').oncancel=()=>{itemPair=null;itemRequest++;};
     $('esItemPrev').onclick=()=>{if(itemPage>1){itemPage--;itemCandidates().catch(e=>{$('esItemHelp').textContent=e.message;});}};
     $('esItemNext').onclick=()=>{if(itemPage*50<itemTotal){itemPage++;itemCandidates().catch(e=>{$('esItemHelp').textContent=e.message;});}};
-    async function credentials(){
-        const c=await api('/credentials');
-        $('esUsername').value=c.username||'';
-        $('esProtocolKey').value=c.encrypt_key||'';
-        $('esCredentialMessage').textContent=c.error||(c.configured?'연동 계정이 설정되어 있습니다. 비밀번호 공란으로 저장하면 기존 값을 유지합니다.':'아이디와 비밀번호를 입력하고 계정을 저장해 주세요.');
-    }
-    $('esProtocolForm').onsubmit=async e=>{e.preventDefault();if(!$('esProtocolForm').reportValidity())return;const b=e.target.querySelector('button');b.disabled=true;try{const result=await api('/protocol-key','PUT',{encrypt_key:$('esProtocolKey').value.trim()});$('esProtocolMessage').textContent=result.message;}catch(error){$('esProtocolMessage').textContent=error.message;}finally{b.disabled=false;}};
-    let credentialBusy=false,loginDiagnostic=null;
-    $('esLoginDiagnostic').onclick=()=>{if(!loginDiagnostic)return;const url=URL.createObjectURL(new Blob([JSON.stringify(loginDiagnostic,null,2)],{type:'application/json'}));const link=document.createElement('a');link.href=url;link.download='production_login_diagnostic.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-    async function credentialAction(save){
-        if(credentialBusy||!$('esCredentials').reportValidity())return;
-        credentialBusy=true;loginDiagnostic=null;$('esLoginDiagnostic').hidden=true;
-        const payload={username:$('esUsername').value.trim(),password:$('esPassword').value};
-        const controls=$('esCredentials').querySelectorAll('input,button');controls.forEach(e=>e.disabled=true);
-        $('esCredentialMessage').textContent='외부 생산 시스템의 로그인을 확인 중입니다…';
-        try{
-            const d=await api(save?'/credentials':'/credentials/test',save?'PUT':'POST',payload);
-            $('esCredentialMessage').textContent=d.message;
-            if(save){$('esPassword').value='';await state();}
-        }catch(e){$('esCredentialMessage').textContent=e.message;if(e.diagnostic){loginDiagnostic=e.diagnostic;$('esLoginDiagnostic').hidden=false;const names={server_object_not_found:'외부 서버 파일·객체 없음',server_database_error:'외부 서버 DB 오류',server_timeout:'외부 서버 처리시간 초과',server_exception:'외부 서버 예외',protocol_key_ambiguous:'초기 화면의 접속키가 여러 개여서 확인 필요',server_null_reference:'외부 서버 필수 정보 참조 오류',server_argument_missing:'외부 서버 필수 인자 누락',server_format_error:'외부 서버 입력 형식 오류',server_key_not_found:'외부 서버 항목 조회 오류',server_access_denied:'외부 서버 접근 권한 오류',unexpected_response:'예상한 응답 형식과 다름',login_user_not_returned:'로그인 사용자 정보가 반환되지 않음',login_context_format:'로그인 사용자 정보 형식 오류',http_error:'외부 HTTP 오류',transport_error:'접속·통신 오류'};$('esCredentialMessage').textContent+='\n진단: '+(names[e.diagnostic.error_kind]||'서버 응답 확인 필요');if(e.diagnostic.protocol_key)$('esCredentialMessage').textContent+=' · 접속키 '+e.diagnostic.protocol_key;}}
-        finally{credentialBusy=false;controls.forEach(e=>e.disabled=false);}
-    }
-    $('esCredentials').onsubmit=e=>{e.preventDefault();credentialAction(true);};
-    $('esTestLogin').onclick=()=>credentialAction(false);
     $('esSearch').onsubmit=e=>{e.preventDefault();page=1;rows().catch(e=>message(e.message,true));};
     $('esReset').onclick=()=>{$('esStart').value=date(-6);$('esEnd').value=date(0);$('esKeyword').value='';page=1;rows().catch(e=>message(e.message,true));};
     $('esPrev').onclick=()=>{if(page>1){page--;rows().catch(e=>message(e.message,true));}};
     $('esNext').onclick=()=>{if(page*pageSize<total){page++;rows().catch(e=>message(e.message,true));}};
-    if($('esSettings'))$('esSettings').oninput=()=>{settingsDirty=true;};
-    if($('esSettings'))$('esSettings').onsubmit=async e=>{e.preventDefault();settingsBusy=true;const b=e.target.querySelector('button');b.disabled=true;try{await api('/settings','PUT',{enabled:$('esEnabled').checked,interval_minutes:Number($('esInterval').value),lookback_days:Number($('esLookback').value)});settingsDirty=false;message('설정을 저장했습니다.');await state();}catch(e){message(e.message,true);}finally{settingsBusy=false;b.disabled=false;}};
     if($('esRun'))$('esRun').onclick=async()=>{const b=$('esRun');b.disabled=true;try{await api('/run','POST',{start_date:$('esStart').value,end_date:$('esEnd').value});running=true;message('선택 기간의 실적 동기화를 시작했습니다.');await state();await runs();}catch(e){message(e.message,true);await state().catch(()=>{});}};
     $('esStart').value=date(-6);$('esEnd').value=date(0);
-    Promise.all([rows(),state(),runs(),mappings(),itemMaps(),credentials()]).catch(e=>message(e.message,true));
+    Promise.all([rows(),state(),runs(),mappings(),itemMaps()]).catch(e=>message(e.message,true));
     let polling=false;
     setInterval(async()=>{if(document.hidden||polling)return;polling=true;try{await state();await runs();}catch(e){message(e.message,true);}finally{polling=false;}},10000);
 })();

@@ -361,9 +361,7 @@
             <li class="menu-item{% if request.url.path.startswith('/admin/') %} open{% endif %}" id="adminMenu" data-perm-key="admin">
                 <div class="menu-title" onclick="toggleAccordion('adminMenu')"><span>관리자 메뉴</span><span class="arrow-icon">▼</span></div>
                 <ul class="submenu">
-                    <li class="submenu-item"><a href="/admin/production-sync" id="nav-admin-production-sync">외부 연동 생산실적</a></li>
-                    <li class="submenu-item"><a href="/admin/subcontract-fault-sync" id="nav-admin-subcontract-fault-sync">외부 연동 외주불량</a></li>
-                    <li class="submenu-item"><a href="/admin/packing-sync" id="nav-admin-packing-sync">외부 연동 포장현황</a></li>
+                    <li class="submenu-item"><a href="/admin/external-sync" data-permission-paths="/admin/production-sync,/admin/subcontract-fault-sync,/admin/packing-sync" id="nav-admin-production-sync">외부 데이터 연동</a></li>
                     <li class="submenu-item"><a href="/admin/users" id="nav-admin-users">계정 관리</a></li>
                     <li class="submenu-item"><a href="/admin/common-codes" id="nav-admin-common-codes">공통 코드 관리</a></li>
                     <li class="submenu-item"><a href="/admin/processes-locations" id="nav-admin-processes-locations">공정 및 저장위치 관리</a></li>
@@ -556,7 +554,8 @@
                 "/production/packing": "nav-production-packing",
                 "/production/performance/status": "nav-production-status",
                 "/admin/production-sync": "nav-admin-production-sync",
-                "/admin/packing-sync": "nav-admin-packing-sync",
+                "/admin/packing-sync": "nav-admin-production-sync",
+                "/admin/subcontract-fault-sync": "nav-admin-production-sync",
                 "/production/packing/status": "nav-production-packing-status",
                 "/production/equipment/status": "nav-production-equipment",
                 "/production/equipment/efficiency": "nav-production-efficiency",

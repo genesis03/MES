@@ -4,7 +4,7 @@
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const fmt=v=>v==null?'—':Number(v).toLocaleString('ko-KR',{maximumFractionDigits:6});
  const quantityNames={ORI_LOT_QTY:'원수량',JOB_QTY:'작업수량',LOT_QTY:'LOT 수량',KIPUP_QTY:'KIPUP 수량',SAMPLE_QTY:'시료 수량',LOSS_QTY:'손실 수량',REST_QTY:'잔여 수량'};
- let page=1,total=0,request=0,dirty=false,busy=false,running=false,sourceFields=[];
+ let page=1,total=0,request=0,busy=false,running=false,sourceFields=[];
  const message=(text,error=false)=>{$('sfMessage').textContent=text;$('sfMessage').className=error?'qp-error':'qp-help';};
  const api=async(path,method='GET',data)=>MesResponse.read(await fetch(base+path,{method,headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined}));
  const guard=fn=>async e=>{try{await fn(e);}catch(error){message(error.message,true);}};
@@ -22,13 +22,9 @@
    $('sfTotal').textContent=`총 ${total.toLocaleString()}건 · 페이지당 20건`;$('sfPage').textContent=`${page} / ${Math.max(1,Math.ceil(total/20))}`;$('sfPrev').disabled=page===1;$('sfNext').disabled=page*20>=total;
  }
  async function state(){const data=await api('/settings'),previous=running;running=data.running;
-   $('sfState').textContent=[`자동 동기화: ${data.enabled?'사용':'중지'} / ${data.interval_minutes}분마다 최근 ${data.lookback_days}일 조회`,`연동 계정: ${data.credentials_ready?'설정됨':'설정 필요'}`,`실행 상태: ${running?'조회 중':'대기'}`,`마지막 성공: ${data.last_success_at||'없음'}`,data.enabled?`다음 예정: ${data.next_run_at||'대기'}`:'',data.last_error?`확인사항: ${data.last_error}`:''].filter(Boolean).join('\n');
-   if(!dirty&&!busy&&!$('sfSettings').contains(document.activeElement)){$('sfEnabled').checked=data.enabled;$('sfInterval').value=data.interval_minutes;$('sfLookback').value=data.lookback_days;}
    $('sfRun').disabled=running||busy||!data.credentials_ready;if(previous&&!running)await rows();
  }
  async function runs(){const data=await api('/runs');$('sfRuns').innerHTML=data.map(r=>'<tr>'+[r.started_at,`${r.start_date} ~ ${r.end_date}`,{MANUAL:'수동',AUTO:'자동',INITIAL:'최초'}[r.trigger]||r.trigger,{SUCCESS:'완료',FAILED:'실패',RUNNING:'조회 중'}[r.status]||r.status,['received','inserted','updated','unchanged'].map(k=>r.counts[k]||0).join(' / '),[r.error,...(r.counts.warnings||[])].filter(Boolean).join(' / ')].map(v=>`<td>${esc(v)}</td>`).join('')+'</tr>').join('')||'<tr><td colspan="6">동기화 이력이 없습니다.</td></tr>';}
- $('sfSettings').oninput=()=>dirty=true;
- $('sfSettings').onsubmit=guard(async e=>{e.preventDefault();busy=true;e.submitter.disabled=true;try{message((await api('/settings','PUT',{enabled:$('sfEnabled').checked,interval_minutes:Number($('sfInterval').value),lookback_days:Number($('sfLookback').value)})).message);dirty=false;}finally{busy=false;e.submitter.disabled=false;}await state();});
  $('sfMapping').onsubmit=guard(async e=>{e.preventDefault();e.submitter.disabled=true;try{message((await api('/mapping','PUT',{defects:Object.fromEntries(sourceFields.map(f=>[f,document.querySelector(`[data-source="${f}"]`).value])),inbound_field:$('sfInbound').value,good_field:$('sfGood').value,partner_field:$('sfPartner').value})).message);await rows();}finally{e.submitter.disabled=false;}});
  $('sfSearch').onsubmit=guard(async e=>{e.preventDefault();page=1;await rows();});
  $('sfReset').onclick=guard(async()=>{defaults();await rows();});

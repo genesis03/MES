@@ -1,33 +1,11 @@
-{% extends "base.html" %}
+{% extends "external_sync_base.html" %}
 {% block title %}외부 연동 생산실적{% endblock %}
-{% block extra_head %}
-<style>
-.es-card{background:white;border:1px solid #cbd5e1;border-radius:6px;padding:16px;margin:14px 0}.es-line{display:flex;gap:8px;align-items:end;flex-wrap:wrap}.es-line label{font-size:12px;display:block}.es-line input,.es-line select,.es-btn{height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 10px}.es-btn{background:#2563eb;color:white;cursor:pointer}.es-btn:disabled{opacity:.5;cursor:default}.es-muted{font-size:12px;color:#64748b}.es-error{color:#dc2626}.es-scroll{overflow-x:auto}.es-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}.es-table th,.es-table td{padding:8px;border:1px solid #e2e8f0;text-align:left}.es-table th{background:#f1f5f9}.es-table input,.es-table select{height:34px}.es-notes{color:#b45309}.es-result{white-space:pre-wrap;font-size:12px}
-</style>
-{% endblock %}
-{% block content %}
-<h1>외부 연동 생산실적</h1>
-<div class="es-card"><h3>연동 계정 설정</h3>
-<div class="es-line" style="justify-content:space-between"><form id="esCredentials" class="es-line">
-<label>연동 아이디<br><input id="esUsername" autocomplete="username" maxlength="200" required></label>
-<label>연동 비밀번호<br><input id="esPassword" type="password" autocomplete="new-password" maxlength="4096" placeholder="기존 비밀번호 유지 시 공란"></label>
-<button id="esTestLogin" class="es-btn" type="button">로그인 확인</button><button class="es-btn" type="submit">계정 저장</button>
-</form><form id="esProtocolForm" class="es-line"><label>접속키<br><input id="esProtocolKey" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" style="width:100px" required></label><button class="es-btn" type="submit">키 저장</button></form></div><p id="esProtocolMessage" class="es-result" role="status"></p><button id="esLoginDiagnostic" class="es-btn" type="button" hidden>로그인 진단정보 다운로드</button><p id="esCredentialMessage" class="es-result" role="status" aria-live="polite"></p>
-<p class="es-muted">비밀번호는 암호화해 저장하며 화면에 다시 표시하지 않습니다. 각 서버에서 계정을 설정해 주세요. 접속키는 자동으로 찾으면 그 값을 사용하고, 못 찾으면 저장한 값을 사용합니다.</p></div>
-<p class="es-muted">최초에는 올해 1월 1일부터 오늘까지, 이후에는 최근 기간의 실적을 자동으로 가져옵니다. 복합선반·탭핑은 호기별 주간·야간 작업일보에서 수량과 상세 내역을 가져옵니다. 조립 AS-01·AS-02 주간은 LOT별 수량·시간과 작업일보 합계가 맞을 때 작업자·주야·상세 정보를 보완합니다. 다른 공정은 기존 생산실적 조회를 사용합니다. 자재 차감·재고·MES 작업지시에는 자동 반영하지 않습니다.</p>
-<div class="es-card">
-<h3>자동 동기화</h3>
-{% if can_manage %}
-<form id="esSettings" class="es-line">
-<label><input id="esEnabled" type="checkbox"> 자동 동기화 사용</label>
-<label>조회 간격(분)<br><input id="esInterval" type="number" min="5" max="1440" value="60" required></label>
-<label>최근 조회 일수<br><input id="esLookback" type="number" min="1" max="90" value="7" required></label>
-<button class="es-btn" type="submit">설정 저장</button>
-</form>
-{% endif %}
-<p id="esState" class="es-result" aria-live="polite"></p>
+{% block extra_head %}{{ super() }}
 
-</div>
+{% endblock %}
+{% block sync_content %}
+<h2>외부 연동 생산실적</h2>
+<p class="es-muted">최초에는 올해 1월 1일부터 오늘까지, 이후에는 최근 기간의 실적을 자동으로 가져옵니다. 복합선반·탭핑은 호기별 주간·야간 작업일보에서 수량과 상세 내역을 가져옵니다. 조립 AS-01·AS-02 주간은 LOT별 수량·시간과 작업일보 합계가 맞을 때 작업자·주야·상세 정보를 보완합니다. 다른 공정은 기존 생산실적 조회를 사용합니다. 자재 차감·재고·MES 작업지시에는 자동 반영하지 않습니다.</p>
 <div class="es-card">
 <form id="esSearch" class="es-line">
 <label>시작일<br><input id="esStart" type="date" required></label>
@@ -47,5 +25,5 @@
 <div class="es-card"><h3>품번 연결</h3><p class="es-muted">BOM에서 해당 공정의 생산품목을 찾아 자동 연결합니다. 복합선반 -A · 탭핑 -B · 세레이션 -D · 은도금 -Ag · 조립 -C · 포장은 완제품입니다. BOM이 없는 경우 같은 기본품번의 공정 품목을 확인합니다. 해당 품목이 없거나 후보가 여러 개면 미연결로 표시합니다. 품번 조회에서 우리 MES 품목을 직접 선택할 수 있으며 수동 연결이 우선합니다. 나중에 품목이나 BOM을 등록하면 기존 실적에도 적용됩니다.</p><p><a href="/basic-info/items" target="_blank" rel="noopener">품목 등록 · 수정</a></p><div id="esItemMaps" class="es-scroll"></div></div>
 <dialog id="esItemDialog"><h3 id="esItemTitle">MES 품번 연결</h3><form id="esItemSearch" class="es-line"><label>품번 · 품명<br><input id="esItemKeyword"></label><button class="es-btn" type="submit">조회</button><button id="esItemReset" class="es-btn" type="button">초기화</button></form><p id="esItemHelp" class="es-muted"></p><div id="esItemCandidates"></div><p class="es-line"><button id="esItemPrev" class="es-btn" type="button">이전</button><span id="esItemPage"></span><button id="esItemNext" class="es-btn" type="button">다음</button><button id="esItemClose" class="es-btn" type="button">닫기</button></p></dialog>
 <div class="es-card"><h3>동기화 이력</h3><p class="es-muted">일부 설비·주야 조회에 오류가 있어도 정상 조회 자료와 이후 날짜는 계속 가져옵니다. 오류가 난 자료는 기존 내용을 유지하며 같은 기간을 재실행할 수 있습니다.</p><div class="es-scroll"><table class="es-table"><thead><tr><th>시작</th><th>기간</th><th>실행</th><th>결과</th><th>수신 / 신규 / 수정 / 동일</th><th>확인사항</th></tr></thead><tbody id="esRuns"></tbody></table></div></div>
-<script src="/static/production_external.js?v=20261022-2" defer></script>
+<script src="/static/production_external.js?v=20261022-3" defer></script>
 {% endblock %}

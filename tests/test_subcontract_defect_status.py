@@ -111,3 +111,16 @@ def test_new_page_and_navigation(setup):
     assert '불량 현황 외주가공' in response.text
     assert 'nav-quality-subcontract-defect-status' in response.text
     assert 'sd-table' in response.text
+
+
+def test_samples_sum_per_lot_and_unallocated_defects_do_not_show_false_zero_rate(setup):
+    seed(setup, allocated=False)
+    with setup.sessions() as db:
+        lots=db.query(SubcontractInboundLot).filter_by(inbound_item_id=1).order_by(SubcontractInboundLot.id).all()
+        lots[0].sample_qty=2;lots[1].sample_qty=1;db.commit()
+    data=get(setup)
+    assert [r['sample_qty'] for r in data['items']]==[2,1,0]
+    assert data['totals']['sample_qty']==3
+    assert data['totals']['keep_qty'] is None
+    assert all(r['defect_rate'] is None for r in data['items'])
+    assert data['totals']['defect_rate']==5

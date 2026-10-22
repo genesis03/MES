@@ -22,7 +22,7 @@ BASE = '/api/subcontract/fault-sync'
 @router.get('/admin/subcontract-fault-sync', response_class=HTMLResponse)
 def page(request: Request, user=Depends(get_current_user)):
     access(user)
-    return templates.TemplateResponse(request=request, name='subcontract_fault_external.html', context={'user': user})
+    return templates.TemplateResponse(request=request, name='subcontract_fault_external.html', context={'user': user, 'active_sync':'subcontract'})
 
 
 @router.get(BASE + '/settings')
@@ -117,6 +117,6 @@ def save_mapping(payload: FieldMapping, db: Session = Depends(get_db), user=Depe
     if row is None:
         row = SubcontractFaultFieldMap(id=1)
         db.add(row)
-    row.settings_json = json.dumps(payload.model_dump(), ensure_ascii=False)
+    row.settings_json = json.dumps(payload.model_dump() | {'mapping_version':2}, ensure_ascii=False)
     db.commit()
     return {'message': '외주불량 항목 연결을 저장했습니다. 기존 수신 자료에도 바로 적용됩니다.'}

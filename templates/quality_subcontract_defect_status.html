@@ -20,13 +20,16 @@
     <div class="sd-card"><span>입고 품목 건수</span><strong id="sd-count">0</strong></div>
     <div class="sd-card"><span>입고수량</span><strong id="sd-inbound">0</strong></div>
     <div class="sd-card"><span>양품수량</span><strong id="sd-good">0</strong></div>
+    <div class="sd-card"><span>불량률</span><strong id="sd-rate">—</strong></div>
     <div class="sd-card"><span>불량 계</span><strong id="sd-bad" class="sd-bad">0</strong></div>
+    <div class="sd-card"><span>샘플</span><strong id="sd-sample">0</strong></div>
+    <div class="sd-card"><span>킵업</span><strong id="sd-keep">0</strong></div>
   </div>
-  <p class="sd-note">내부 외주입고 검사와 외부 연동 외주불량을 LOT별로 표시합니다. 내부 취소 입고와 정상 재조회에서 누락된 외부 기록은 제외합니다. 외부 수량·유형은 관리자 메뉴에서 확인된 원본 항목을 연결한 뒤 표시합니다.</p>
+  <p class="sd-note">내부 외주입고 검사와 외부 연동 외주불량을 LOT별로 표시합니다. 취소된 내부 입고와 정상 재조회에서 누락된 외부 기록은 제외합니다. 양품수량 = 입고수량 − 불량 계, 불량률 = 불량 계 ÷ 입고수량 × 100입니다. 샘플·킵업은 별도로 표시하며 양품에서 다시 차감하지 않습니다.</p>
   <p id="sd-note" class="sd-note" role="status"></p>
   <div class="sd-scroll"><table class="sd-table" id="sd-table" aria-label="외주가공 LOT별 불량 현황"></table></div>
 </section>
 {% endblock %}
 {% block extra_script %}
-<script src="/static/js/quality_subcontract_defect_status.js?v=20261022-1" defer></script>
+<script src="/static/js/quality_subcontract_defect_status.js?v=20261022-2" defer></script>
 {% endblock %}

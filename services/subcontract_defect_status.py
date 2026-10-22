@@ -64,10 +64,12 @@ def subcontract_defect_status(db, start_date=None, end_date=None, part_no='', pa
                   'part_name': product.part_name if product else item.part_name,
                   'process_name': master.processing_type_name, 'partner_name': master.partner_name}
         lot_quantities = defaultdict(float)
+        lot_samples = defaultdict(float)
         for lot in lots[item.id]:
             lot_no = (lot.child_lot_no or lot.source_lot_no or '').strip()
             if lot_no:
                 lot_quantities[lot_no] += float(lot.good_qty or 0)
+                lot_samples[lot_no] += float(lot.sample_qty or 0)
         allocated = {lot: defaultdict(float) for lot in lot_quantities}
         remaining = dict(by_type)
         for detail in allocations[result.id]:
@@ -85,12 +87,14 @@ def subcontract_defect_status(db, start_date=None, end_date=None, part_no='', pa
         for lot_no, received in lot_quantities.items():
             values = dict(allocated[lot_no]); lot_bad = sum(values.values())
             rows.append(common | {'lot_no': lot_no, 'unallocated': False,
+                'sample_qty': lot_samples[lot_no],
                 'inbound_qty': received, 'good_qty': None if remaining else max(received - lot_bad, 0),
                 'defect_qty': lot_bad, 'by_type': values})
         unlinked_qty = max(qty - sum(lot_quantities.values()), 0)
         if remaining or not lot_quantities or unlinked_qty > 1e-9:
             # Quantity belongs to the receipt item; do not invent a per-LOT allocation.
             rows.append(common | {'lot_no': '', 'unallocated': True,
+                'sample_qty': 0. if lot_quantities else None,
                 'inbound_qty': unlinked_qty if unlinked_qty or not lot_quantities else None,
                 'good_qty': max(qty - bad, 0) if not lot_quantities else None,
                 'defect_qty': sum(remaining.values()), 'by_type': remaining})
