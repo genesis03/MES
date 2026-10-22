@@ -37,6 +37,10 @@ def credentials_ready(db=None):
 
 
 def backend(kind):
+    if kind == 'subcontract':
+        from models.subcontract_fault_sync import SubcontractFaultSyncState, SubcontractFaultSyncRun, ExternalSubcontractFault
+        from services.subcontract_fault_client import SubcontractFaultClient
+        return SubcontractFaultSyncState, SubcontractFaultSyncRun, ExternalSubcontractFault, SubcontractFaultClient
     if kind == 'packing':
         from models.packing_sync import PackingSyncState, PackingSyncRun, ExternalPackingRecord
         from services.packing_sync_client import PackingClient
@@ -97,6 +101,9 @@ def key_for(row, kind='production'):
 
 
 def save_day(rows, token, kind='production', queried_day=None):
+    if kind == 'subcontract':
+        from services.subcontract_fault_store import save_day as save_subcontract_day
+        return save_subcontract_day(rows, token, queried_day)
     State, _, Record, _ = backend(kind)
     counts = {'received': len(rows), 'inserted': 0, 'updated': 0, 'unchanged': 0}
     keys = [key_for(row, kind) for row in rows]
@@ -177,15 +184,17 @@ def execute(start, end, token, run_id, kind='production'):
         password = ''
         client.on_query_progress=lambda:renew_query_lease(State,token)
         days = {start + timedelta(days=offset) for offset in range((end - start).days + 1)}
-        if kind == 'packing':
+        if kind in ('packing', 'subcontract'):
             with SessionLocal() as db:
                 run = db.get(Run, run_id)
                 if run and run.trigger == 'AUTO':
                     # Packing queries filter CREATE_DATE, not shipment date.
                     # Revisit all known dates, including previously shipped lots:
                     # a later shipment cancellation can restore old stock too.
-                    for (packing_date,) in db.query(Record.packing_date).filter(
-                            Record.packing_date < start.isoformat()).distinct():
+                    # Subcontract inspection cancellations also change old dates.
+                    date_column = Record.packing_date if kind == 'packing' else Record.confirm_date
+                    for (packing_date,) in db.query(date_column).filter(
+                            date_column < start.isoformat()).distinct():
                         days.add(datetime.strptime(packing_date, '%Y-%m-%d').date())
         for day in sorted(days):
             querying_day = day
@@ -272,7 +281,7 @@ def loop():
     while not _stop.wait(30):
         if not credentials_ready():
             continue
-        for kind in ('production', 'packing'):
+        for kind in ('production', 'packing', 'subcontract'):
             try:
                 schedule_cycle(kind)
             except Exception:

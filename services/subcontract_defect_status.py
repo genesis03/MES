@@ -101,5 +101,5 @@ def subcontract_defect_status(db, start_date=None, end_date=None, part_no='', pa
     for row in rows:
         row['by_type'] = normalize(row['by_type'])
     totals['by_type'] = normalize(totals['by_type'])
-    return {'items': rows[:limit], 'total': len(rows), 'receipt_item_count': len(records),
-            'truncated': len(rows) > limit, 'defect_types': columns, 'totals': totals}
+    from services.subcontract_fault_view import merge_report
+    return merge_report(db, rows, totals, len(records), columns, start_date, end_date, part_no, partner_name, limit)
