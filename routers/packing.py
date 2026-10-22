@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
@@ -238,6 +238,9 @@ def packing_status(
     part_no: Optional[str] = Query(None, max_length=50),
     lot_no: Optional[str] = Query(None, max_length=60),
     limit: int = Query(2000, ge=1, le=5000),
+    sort_by: Optional[Literal['part_no','part_name','lot_no','packing_date','packing_qty',
+                             'shipment_qty','shipment_date','customer_name','stock_qty','source_label']] = None,
+    sort_order: Literal['asc','desc'] = 'asc',
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -319,6 +322,22 @@ def packing_status(
             continue
         items.append(item)
     items.sort(key=lambda r: (r['packing_date'], r['lot_no'], str(r['packing_box_id'] or '')), reverse=True)
+    if sort_by:
+        def value(row):
+            if sort_by == 'stock_qty':
+                return (row.get('stock_qty') if row['record_source']=='EXTERNAL'
+                        else max(row['packing_qty']-row['shipment_qty'],0))
+            if sort_by == 'source_label':
+                return ('외부 연동'+(' · '+row['stock_note'] if row.get('stock_note') else '')
+                        if row['record_source']=='EXTERNAL' else 'MES')
+            return row.get(sort_by)
+        # Unknown stock and empty dates stay at the end in either direction.
+        populated = [r for r in items if value(r) is not None and value(r) != '']
+        empty = [r for r in items if value(r) is None or value(r) == '']
+        numeric = sort_by in {'packing_qty','shipment_qty','stock_qty'}
+        populated.sort(key=lambda r: float(value(r)) if numeric else str(value(r)).casefold(),
+                       reverse=sort_order=='desc')
+        items = populated + empty
     return {'items': items[:limit], 'total': len(items), 'truncated': len(items) > limit}
 
 

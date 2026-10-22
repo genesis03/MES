@@ -3,6 +3,8 @@
 
 {% block extra_head %}
 <script src="/static/external_label_buttons.js?v=1"></script>
+<script src="/static/table_sort_menu.js?v=1"></script>
+<link rel="stylesheet" href="/static/css/table_sort_menu.css?v=1">
 <style>
 .packing-status-page h1{font-size:20px;margin:0 0 14px}
 .ps-filter{display:grid;grid-template-columns:180px 180px 220px 220px auto;gap:12px;align-items:end;background:#fff;border:1px solid #dbe3ec;border-radius:6px;padding:14px;margin-bottom:14px}
@@ -52,18 +54,18 @@
   </div>
 
   <div class="ps-table-wrap">
-    <table class="ps-table">
+    <table class="ps-table" id="packingStatusTable">
       <thead>
         <tr>
-          <th>품번</th>
-          <th>품명</th>
-          <th>LOT 번호</th>
-          <th>포장일자</th>
-          <th>포장수량</th>
-          <th>출고수량</th>
-          <th>출고일</th>
-          <th>거래처</th>
-          <th>재고수량</th><th>구분 / 확인사항</th><th>라벨</th>
+          <th data-sort-key="part_no">품번</th>
+          <th data-sort-key="part_name">품명</th>
+          <th data-sort-key="lot_no">LOT 번호</th>
+          <th data-sort-key="packing_date">포장일자</th>
+          <th data-sort-key="packing_qty">포장수량</th>
+          <th data-sort-key="shipment_qty">출고수량</th>
+          <th data-sort-key="shipment_date">출고일</th>
+          <th data-sort-key="customer_name">거래처</th>
+          <th data-sort-key="stock_qty">재고수량</th><th data-sort-key="source_label">구분 / 확인사항</th><th>라벨</th>
         </tr>
       </thead>
       <tbody id="resultBody">
@@ -80,21 +82,29 @@
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:0});
+let sortBy='',sortOrder='asc',appliedParams=new URLSearchParams(),requestNumber=0,sortMenu;
 function localDate(offsetDays=0){
   const d=new Date(); d.setDate(d.getDate()+offsetDays);
   const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${day}`;
 }
-async function loadRows(){
+function queryParams(){
   const params=new URLSearchParams();
   if($('startDate').value) params.set('start_date',$('startDate').value);
   if($('endDate').value) params.set('end_date',$('endDate').value);
   if($('partNo').value.trim()) params.set('part_no',$('partNo').value.trim());
   if($('lotNo').value.trim()) params.set('lot_no',$('lotNo').value.trim());
+  return params;
+}
+async function loadRows(reuseQuery=false){
+  if(!reuseQuery)appliedParams=queryParams();
+  const params=new URLSearchParams(appliedParams),request=++requestNumber;
+  if(sortBy){params.set('sort_by',sortBy);params.set('sort_order',sortOrder);}
   $('resultBody').innerHTML='<tr><td colspan="11" class="ps-empty">조회 중...</td></tr>';
   try{
     const r=await fetch('/api/packing/status?'+params.toString());
     const d=await MesResponse.read(r);
+    if(request!==requestNumber)return;
     const rows=d.items||[];
     $('resultCount').textContent=rows.length.toLocaleString()+'건'+(d.truncated?' / 총 '+d.total.toLocaleString()+'건 (조회 범위를 줄여 주세요)':'')+' · 포장수량 '+rows.reduce((sum,x)=>sum+Number(x.packing_qty||0),0).toLocaleString(undefined,{maximumFractionDigits:0});
     $('resultBody').innerHTML=rows.length?rows.map(x=>`
@@ -112,6 +122,7 @@ async function loadRows(){
         <td>${ExternalLabels.button(x)}</td>
       </tr>`).join(''):'<tr><td colspan="11" class="ps-empty">조회된 포장현황이 없습니다.</td></tr>';
   }catch(e){
+    if(request!==requestNumber)return;
     $('resultCount').textContent='0건';
     $('resultBody').innerHTML=`<tr><td colspan="11" class="ps-empty">${esc(e.message)}</td></tr>`;
   }
@@ -121,12 +132,14 @@ function resetFilters(){
   $('endDate').value=localDate(0);
   $('partNo').value='';
   $('lotNo').value='';
+  sortBy='';sortOrder='asc';sortMenu.reset();
   loadRows();
 }
 document.addEventListener('DOMContentLoaded',()=>{
+  sortMenu=MesTableSortMenu.attach($('packingStatusTable'),(key,order)=>{sortBy=key;sortOrder=order;loadRows(true);});
   $('startDate').value=localDate(-30);
   $('endDate').value=localDate(0);
-  $('searchBtn').addEventListener('click',loadRows);
+  $('searchBtn').addEventListener('click',()=>loadRows());
   $('resetBtn').addEventListener('click',resetFilters);
   ['partNo','lotNo','startDate','endDate'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();loadRows();}}));
   loadRows();
