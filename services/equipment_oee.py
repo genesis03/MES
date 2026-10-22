@@ -18,11 +18,32 @@ def managed_codes(db):
     return [p.process_code for p in db.query(ProcessModel) if p.is_active=='Y' and stage_suffix(p.process_name) in ('-A','-B')]
 
 
-def shift_runtime(shifts, unknown, tapping):
+def counted_shifts(shifts, unknown):
     known=set(shifts)
     for shift in ('DAY','NIGHT'):
         if unknown and shift not in known:known.add(shift);unknown-=1
-    return sum((620 if shift=='DAY' else 610)*60 if tapping else 12*3600 for shift in known)
+    return known
+
+
+def shift_runtime(shifts, unknown, tapping):
+    return sum((620 if shift=='DAY' else 610)*60 if tapping else 12*3600
+               for shift in counted_shifts(shifts, unknown))
+
+
+def runtime_intervals(shift_days, now):
+    """Stop deductions use the full shifts counted in the runtime baseline.
+
+    Keep the existing unknown-count policy. For one unknown record, retain
+    its physical night alignment when the source indicates a night operation.
+    """
+    intervals=[]
+    for work_date, day in shift_days.items():
+        shifts=counted_shifts(day['shifts'],day['unknown'])
+        if not day['shifts'] and day['unknown']==1 and day['unknown_alignment']:
+            shifts={day['unknown_alignment'][0]}
+        for shift in shifts:
+            intervals.append(performance_window(work_date,shift,None,None,now))
+    return merge_intervals(intervals)
 
 
 def merge_intervals(intervals):
@@ -114,12 +135,19 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
             g['excluded_good_qty']+=float(good or 0)
             g['excluded_parts'].add(part_no)
             return False
-        g['observed_intervals'].append(performance_window(work_date,window_shift or shift,start_time,end_time,now))
+        observed=performance_window(work_date,window_shift or shift,start_time,end_time,now)
+        g['observed_intervals'].append(observed)
         g['good_qty']+=float(good or 0)
         g['defect_qty']+=float(defect or 0);g['setup_qty']+=float(setup or 0)
-        day=g['shift_days'].setdefault(work_date,dict(shifts=set(),unknown=0))
+        day=g['shift_days'].setdefault(work_date,dict(shifts=set(),unknown=0,unknown_alignment=[]))
         if shift in ('DAY','NIGHT'):day['shifts'].add(shift)
-        else:day['unknown']+=1
+        else:
+            day['unknown']+=1
+            alignment={'DAY_SHIFT':'DAY','NIGHT_SHIFT':'NIGHT','DAY':'DAY','NIGHT':'NIGHT'}.get(window_shift)
+            if not alignment:
+                night_start=datetime.combine(date.fromisoformat(work_date),time(20))
+                alignment='NIGHT' if observed[0]>=night_start else 'DAY'
+            day['unknown_alignment'].append(alignment)
         p=g['parts'].setdefault((part_no,cycle),dict(part_no=part_no,total_qty=0,good_qty=0,cycle_seconds=cycle,sources=set()))
         p['good_qty']+=float(good or 0);p['sources'].add(source)
         if total is None:g['issues'].append(part_no+': 총생산수량 미확인');return True
@@ -150,7 +178,8 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
             for stop in view['downtimes']:
                 field='planned_stop_intervals' if is_planned_stop(stop['type_code'],stop['type_name']) else 'downtime_intervals'
                 group(key_for(machine_no=view['machine_no'],code=view['process_code']))[field].append((parse_time(stop['started_at']),parse_time(stop['ended_at'])))
-    all_periods=[p for g in groups.values() for p in g['intervals']+g['observed_intervals'] if p[1]>p[0]]
+    for g in groups.values():g['runtime_intervals']=runtime_intervals(g['shift_days'],now)
+    all_periods=[p for g in groups.values() for p in g['intervals']+g['observed_intervals']+g['runtime_intervals'] if p[1]>p[0]]
     if all_periods:start,end=min(p[0] for p in all_periods),max(p[1] for p in all_periods)
     for downtime,run in db.query(ProductionRunDowntime,ProductionRun).join(ProductionRun,ProductionRun.id==ProductionRunDowntime.run_id).filter(ProductionRun.process_code.in_(codes),ProductionRun.status!='CANCELLED',ProductionRun.performance_date>=start_day.isoformat(),ProductionRun.performance_date<=min(end_day,now.date()).isoformat(),ProductionRunDowntime.ended_at>start.strftime('%Y-%m-%d %H:%M'),ProductionRunDowntime.started_at<end.strftime('%Y-%m-%d %H:%M')):
         order=db.get(ProductionWorkOrder,run.work_order_id)
@@ -163,7 +192,8 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
         intervals=g.pop('intervals');g.pop('segments');schedule_seconds=g['planned_seconds']
         g['schedule_seconds']=schedule_seconds
         observed=merge_intervals(g.pop('observed_intervals'))
-        windows=merge_intervals(intervals+observed)
+        runtime_windows=g.pop('runtime_intervals',[])
+        windows=merge_intervals(intervals+observed+runtime_windows)
         plan_stops=intersect_intervals(g.pop('planned_stop_intervals'),windows)
         other_stops=subtract_intervals(intersect_intervals(g.pop('downtime_intervals'),windows),plan_stops)
         g['planned_stop_seconds']=seconds(plan_stops)
@@ -173,7 +203,7 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
         registered_downtime=g['planned_stop_seconds']+downtime
         tapping=stage_suffix(processes[g['process_code']].process_name)=='-B'
         baseline=sum(shift_runtime(day['shifts'],day['unknown'],tapping) for day in g.pop('shift_days').values())
-        actual_stops=seconds(intersect_intervals(plan_stops+other_stops,observed))
+        actual_stops=seconds(intersect_intervals(plan_stops+other_stops,runtime_windows))
         runtime=max(0,baseline-actual_stops);missing=sorted(g.pop('missing'))
         g['performance_shift_seconds']=baseline
         if actual_stops>baseline:g['issues'].append('등록된 정지시간이 실적 건수로 계산한 시간을 초과합니다. 정지 내역을 확인하세요.')

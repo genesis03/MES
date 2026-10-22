@@ -272,7 +272,34 @@ def test_registered_planned_and_other_stops_are_separate_union_and_recalculate_o
         assert result['summary']['runtime_seconds']==9.5*3600
 
 
-def test_external_stops_night_rollover_are_merged_and_missing_plan_records_excluded(setup):
+@pytest.mark.parametrize('actual_start',['08:00','12:00','14:40'])
+def test_full_shift_deducts_400_planned_minutes_even_before_actual_production_start(setup,actual_start):
+    from models.production import ProductionWorkOrder
+    order,_,worker,equipment,_=prepare(setup)
+    with setup.sessions() as db:
+        item=db.get(ProductionWorkOrder,order).item_id
+        plan_ct(db,equipment,item,'2026-10-12',30)
+        day=ProductionPerformance(work_order_id=order,performance_date='2026-10-12',process_code='LT',shift_type='DAY',equipment_id=equipment,good_qty=100)
+        night=ProductionPerformance(work_order_id=order,performance_date='2026-10-12',process_code='LT',shift_type='NIGHT',equipment_id=equipment,good_qty=100)
+        db.add_all([day,night]);db.flush()
+        run=ProductionRun(work_order_id=order,performance_id=day.id,performance_type='MACHINING',performance_date='2026-10-12',process_code='LT',shift_type='DAY',operator_id=worker,operator_name='Worker',equipment_id=equipment,equipment_code=db.get(EquipmentMaster,equipment).equipment_code,equipment_name='복합선반 1호기',start_time='2026-10-12 '+actual_start,end_time='2026-10-12 20:00',status='COMPLETED')
+        db.add(run);db.flush()
+        for _ in range(2):
+            db.add(ProductionRunDowntime(run_id=run.id,type_code='8',type_name='계획정지',started_at='2026-10-12 08:00',ended_at='2026-10-12 14:40',action=''))
+        # Overlapping cleaning cannot subtract the same planned minutes twice.
+        db.add(ProductionRunDowntime(run_id=run.id,type_code='7',type_name='청소',started_at='2026-10-12 09:00',ended_at='2026-10-12 10:00',action=''))
+        db.commit()
+        row=next(r for r in calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,14))['items'] if r['key']==str(equipment))
+        assert row['performance_shift_seconds']==1440*60
+        assert row['planned_stop_seconds']==400*60
+        assert row['planned_seconds']==row['runtime_seconds']==1040*60
+        assert row['downtime_seconds']==0
+        assert row['availability']==1
+        assert not any('기본시간을 초과' in issue for issue in row['issues'])
+
+
+@pytest.mark.parametrize('actual_start',['20261012200000','20261013030000'])
+def test_external_stops_night_rollover_are_merged_and_missing_plan_records_excluded(setup,actual_start):
     from models.production import ProductionWorkOrder
     from models.production_sync import ExternalProductionRecord,ProductionSyncItemMap
     from services import production_sync_service as sync
@@ -285,7 +312,7 @@ def test_external_stops_night_rollover_are_merged_and_missing_plan_records_exclu
         db.add(ProductionSyncItemMap(source_part_no='EXTERNAL-A',source_process_name='복합선반',item_id=item));db.commit()
     stop=dict(id='stop-1',type_code='PLANNED_STOP',type_name='계획정지',started_at='2026-10-13 01:00',ended_at='2026-10-13 02:00',action='',minutes=60,quality_confirmed=False)
     other=dict(stop,id='stop-2',type_code='TOOL_CHANGE',type_name='툴교환',started_at='2026-10-13 01:30',ended_at='2026-10-13 02:30',minutes=60)
-    data=row(lot='LX20261013011',day=day,PROC_TYPE_NM='복합선반',JOB_ST_TIME='20261012200000',JOB_END_TIME='20261013080000')|{'DOWNTIMES':[stop,stop,other]}
+    data=row(lot='LX20261013011',day=day,PROC_TYPE_NM='복합선반',JOB_ST_TIME=actual_start,JOB_END_TIME='20261013080000')|{'DOWNTIMES':[stop,stop,other]}
     token,_=sync.claim(day,day,'MANUAL');sync.save_day([data],token)
     with setup.sessions() as db:
         row_data=next(r for r in calculate(db,day,day,now=datetime(2026,10,14))['items'] if r['key']==str(equipment))
