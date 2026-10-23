@@ -21,11 +21,6 @@
             button.onclick = () => {
                 const key = selected.dataset.sortKey;
                 close(true);
-                headers.forEach(header => {
-                    const active = header === selected;
-                    header.setAttribute('aria-sort', active ? (order === 'asc' ? 'ascending' : 'descending') : 'none');
-                    header.querySelector('.table-sort-indicator').textContent = active ? (order === 'asc' ? ' ▲' : ' ▼') : '';
-                });
                 onSort(key, order);
             };
             menu.appendChild(button);
@@ -73,7 +68,16 @@
         };
         document.addEventListener('scroll', () => close(false), true);
         window.addEventListener('resize', () => close(false));
-        return {reset() {close(false);headers.forEach(h=>{h.setAttribute('aria-sort','none');h.querySelector('.table-sort-indicator').textContent='';});}};
+        function setSort(criteria) {
+            headers.forEach(header => {
+                const index=criteria.findIndex(c=>c.key===header.dataset.sortKey);
+                const direction=index<0?'':criteria[index].order;
+                header.setAttribute('aria-sort',index===0?(direction==='asc'?'ascending':'descending'):index>0?'other':'none');
+                header.querySelector('.table-sort-indicator').textContent=index<0?'':` ${index+1}${direction==='asc'?'▲':'▼'}`;
+                header.title=index<0?'우클릭하여 정렬 기준 추가':`${index+1}차 ${direction==='asc'?'오름차순':'내림차순'} · 우클릭하여 방향 변경`;
+            });
+        }
+        return {setSort,reset() {close(false);setSort([]);}};
     }
     window.MesTableSortMenu = Object.freeze({attach});
 })();

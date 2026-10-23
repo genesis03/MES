@@ -3,7 +3,7 @@
 
 {% block extra_head %}
 <script src="/static/external_label_buttons.js?v=1"></script>
-<script src="/static/table_sort_menu.js?v=1"></script>
+<script src="/static/table_sort_menu.js?v=2"></script>
 <link rel="stylesheet" href="/static/css/table_sort_menu.css?v=1">
 <style>
 .packing-status-page h1{font-size:20px;margin:0 0 14px}
@@ -53,6 +53,7 @@
     </div>
   </div>
 
+  <div class="ps-summary" style="justify-content:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:10px" id="sortCriteria" aria-live="polite"></div>
   <div class="ps-table-wrap">
     <table class="ps-table" id="packingStatusTable">
       <thead>
@@ -82,7 +83,21 @@
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:0});
-let sortBy='',sortOrder='asc',appliedParams=new URLSearchParams(),requestNumber=0,sortMenu;
+let sortCriteria=[],appliedParams=new URLSearchParams(),requestNumber=0,sortMenu;
+function renderSortCriteria(){
+  sortMenu.setSort(sortCriteria);
+  $('sortCriteria').replaceChildren();
+  const hint=document.createElement('span');hint.textContent=sortCriteria.length?'정렬 우선순위:':'열 제목 우클릭으로 정렬 기준을 추가하세요. 최대 10개 · 선택 순서대로 적용';$('sortCriteria').appendChild(hint);
+  sortCriteria.forEach((criterion,index)=>{
+    const header=document.querySelector(`th[data-sort-key="${criterion.key}"]`);
+    const button=document.createElement('button');button.type='button';button.className='ps-btn';
+    button.textContent=`${index+1}차 ${header.dataset.sortLabel} ${criterion.order==='asc'?'↑':'↓'} ×`;
+    button.setAttribute('aria-label',`${index+1}차 ${header.dataset.sortLabel} 정렬 해제`);
+    button.onclick=()=>{sortCriteria.splice(index,1);renderSortCriteria();loadRows(true);};
+    $('sortCriteria').appendChild(button);
+  });
+  if(sortCriteria.length){const clear=document.createElement('button');clear.type='button';clear.className='ps-btn';clear.textContent='정렬 전체 해제';clear.onclick=()=>{sortCriteria=[];renderSortCriteria();loadRows(true);};$('sortCriteria').appendChild(clear);}
+}
 function localDate(offsetDays=0){
   const d=new Date(); d.setDate(d.getDate()+offsetDays);
   const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
@@ -99,7 +114,7 @@ function queryParams(){
 async function loadRows(reuseQuery=false){
   if(!reuseQuery)appliedParams=queryParams();
   const params=new URLSearchParams(appliedParams),request=++requestNumber;
-  if(sortBy){params.set('sort_by',sortBy);params.set('sort_order',sortOrder);}
+  sortCriteria.forEach(c=>{params.append('sort_by',c.key);params.append('sort_order',c.order);});
   $('resultBody').innerHTML='<tr><td colspan="11" class="ps-empty">조회 중...</td></tr>';
   try{
     const r=await fetch('/api/packing/status?'+params.toString());
@@ -132,11 +147,12 @@ function resetFilters(){
   $('endDate').value=localDate(0);
   $('partNo').value='';
   $('lotNo').value='';
-  sortBy='';sortOrder='asc';sortMenu.reset();
+  sortCriteria=[];sortMenu.reset();renderSortCriteria();
   loadRows();
 }
 document.addEventListener('DOMContentLoaded',()=>{
-  sortMenu=MesTableSortMenu.attach($('packingStatusTable'),(key,order)=>{sortBy=key;sortOrder=order;loadRows(true);});
+  sortMenu=MesTableSortMenu.attach($('packingStatusTable'),(key,order)=>{const existing=sortCriteria.find(c=>c.key===key);if(existing)existing.order=order;else sortCriteria.push({key,order});renderSortCriteria();loadRows(true);});
+  renderSortCriteria();
   $('startDate').value=localDate(-30);
   $('endDate').value=localDate(0);
   $('searchBtn').addEventListener('click',()=>loadRows());
