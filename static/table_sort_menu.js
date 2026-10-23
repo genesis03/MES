@@ -1,7 +1,7 @@
 /* Header context menu; the page supplies sorting over its complete query. */
 (() => {
     'use strict';
-    function attach(table, onSort) {
+    function attach(table, onSort, onSubtotal) {
         const headers = [...table.querySelectorAll('thead th[data-sort-key]')];
         const menu = document.createElement('div');
         menu.className = 'table-sort-menu';
@@ -9,6 +9,7 @@
         menu.setAttribute('aria-label', '열 정렬');
         menu.hidden = true;
         let selected = null;
+        let criteria = [];
         const close = restore => {
             menu.hidden = true;
             if (restore && selected) selected.focus();
@@ -25,11 +26,21 @@
             };
             menu.appendChild(button);
         }
+        let subtotalButton;
+        if(onSubtotal){
+            subtotalButton=document.createElement('button');
+            subtotalButton.type='button';subtotalButton.setAttribute('role','menuitemcheckbox');
+            subtotalButton.setAttribute('aria-label','부분합 표시');
+            subtotalButton.textContent='부분합 표시';
+            subtotalButton.onclick=()=>{const key=selected.dataset.sortKey;const checked=!criteria.find(c=>c.key===key)?.subtotal;close(true);onSubtotal(key,checked);};
+            menu.appendChild(subtotalButton);
+        }
         document.body.appendChild(menu);
         function open(header, x, y) {
             selected = header;
             menu.hidden = false;
             menu.setAttribute('aria-label', header.dataset.sortLabel + ' 정렬');
+            if(subtotalButton)subtotalButton.setAttribute('aria-checked',String(!!criteria.find(c=>c.key===header.dataset.sortKey)?.subtotal));
             menu.style.left = Math.max(4, Math.min(x, innerWidth-menu.offsetWidth-4)) + 'px';
             menu.style.top = Math.max(4, Math.min(y, innerHeight-menu.offsetHeight-4)) + 'px';
             menu.querySelector('button').focus();
@@ -68,12 +79,13 @@
         };
         document.addEventListener('scroll', () => close(false), true);
         window.addEventListener('resize', () => close(false));
-        function setSort(criteria) {
+        function setSort(nextCriteria) {
+            criteria=nextCriteria;
             headers.forEach(header => {
                 const index=criteria.findIndex(c=>c.key===header.dataset.sortKey);
                 const direction=index<0?'':criteria[index].order;
                 header.setAttribute('aria-sort',index===0?(direction==='asc'?'ascending':'descending'):index>0?'other':'none');
-                header.querySelector('.table-sort-indicator').textContent=index<0?'':` ${index+1}${direction==='asc'?'▲':'▼'}`;
+                header.querySelector('.table-sort-indicator').textContent=index<0?'':` ${index+1}${direction==='asc'?'▲':'▼'}${criteria[index].subtotal?' Σ':''}`;
                 header.title=index<0?'우클릭하여 정렬 기준 추가':`${index+1}차 ${direction==='asc'?'오름차순':'내림차순'} · 우클릭하여 방향 변경`;
             });
         }

@@ -4,4 +4,7 @@
 .table-sort-menu button:hover,.table-sort-menu button:focus-visible{background:#e2e8f0;outline:2px solid #2563eb;outline-offset:-2px}
 th[data-sort-key]{cursor:context-menu}
 .table-sort-indicator{color:#2563eb;font-size:10px}
+.table-sort-menu [role=menuitemcheckbox]{border-top:1px solid #e2e8f0;margin-top:4px}
+.table-sort-menu [role=menuitemcheckbox]::before{content:'□';margin-right:8px}
+.table-sort-menu [role=menuitemcheckbox][aria-checked=true]::before{content:'✓';color:#2563eb}
 @media print{.table-sort-menu{display:none!important}}

@@ -74,3 +74,44 @@ def test_ten_unique_criteria_and_invalid_combinations(setup):
     assert setup.client.get('/api/packing/status',params=params+[('sort_by','part_no')]).status_code==422
     assert setup.client.get('/api/packing/status',params=[('sort_by','part_no'),('sort_by','part_no')]).status_code==422
     assert setup.client.get('/api/packing/status',params=params+[('sort_order','asc')]).status_code==422
+
+
+def test_nested_subtotals_and_totals_use_all_filtered_rows_before_limit(setup):
+    from datetime import timedelta
+    seed(setup)
+    with setup.sessions() as db:
+        item_id=db.query(PackingMaster).first().item_id
+        for index,qty in enumerate([4,6]):
+            master=PackingMaster(packing_no=f'SUB-{index}',packing_date=(DAY+timedelta(days=index)).isoformat(),
+                item_id=item_id,part_no='가',part_name='가 품명',box_count=1,box_qty=qty,total_qty=qty,status='PACKED')
+            db.add(master);db.flush()
+            db.add(PackingBox(packing_id=master.id,box_no=1,package_lot_no=f'SUB-{index}',box_qty=qty))
+        db.commit()
+    params=[('part_no','가'),('sort_by','part_no'),('sort_by','packing_date'),
+            ('subtotal_by','part_no'),('subtotal_by','packing_date')]
+    response=setup.client.get('/api/packing/status',params=params)
+    assert response.status_code==200,response.text
+    data=response.json()
+    assert data['total']==3 and len(data['items'])==3
+    assert data['totals']=={'packing_qty':110,'shipment_qty':0,'stock_qty':110}
+    assert [(s['after_index'],s['level'],s['totals']['packing_qty']) for s in data['subtotals']]==[(1,1,104),(2,1,6),(2,0,110)]
+    assert all(not s['truncated'] for s in data['subtotals'])
+    limited=setup.client.get('/api/packing/status',params=params+[('limit','1')]).json()
+    assert limited['totals']==data['totals'] and limited['total']==3 and len(limited['items'])==1
+    assert [(s['after_index'],s['level'],s['totals']['packing_qty']) for s in limited['subtotals']]==[(0,1,104),(0,0,110)]
+    assert all(s['truncated'] for s in limited['subtotals'])
+
+
+def test_unknown_stock_group_and_invalid_subtotal_requests(setup):
+    seed(setup)
+    url='/api/packing/status'
+    data=setup.client.get(url,params={'sort_by':'source_label','subtotal_by':'source_label'}).json()
+    assert data['total']==4 and data['totals']=={'packing_qty':115,'shipment_qty':1,'stock_qty':None}
+    assert len(data['subtotals'])==2
+    native=next(s for s in data['subtotals'] if s['context'][0]['value']=='MES')
+    assert native['totals']['stock_qty']==112
+    assert next(s for s in data['subtotals'] if s!=native)['totals']['stock_qty'] is None
+    assert setup.client.get(url,params={'subtotal_by':'part_no'}).status_code==422
+    assert setup.client.get(url,params={'sort_by':'part_no','subtotal_by':'raw_json'}).status_code==422
+    empty=setup.client.get(url,params={'part_no':'NO-MATCH','sort_by':'part_no','subtotal_by':'part_no'}).json()
+    assert empty['subtotals']==[] and empty['totals']=={'packing_qty':0,'shipment_qty':0,'stock_qty':0}

@@ -24,6 +24,7 @@ from services.packing_sync_view import packing_record_view
 from services.packing_inventory_service import packing_stock_snapshot
 from services.shipping_lot_service import next_shipping_lot_no
 from services.production_defect_service import active_production_defect_qty
+from services.packing_status_report import packing_value, packing_summaries, NUMERIC_FIELDS
 
 router = APIRouter(tags=["Packing"])
 templates = Jinja2Templates(directory="templates")
@@ -241,6 +242,7 @@ def packing_status(
     sort_by: Optional[list[Literal['part_no','part_name','lot_no','packing_date','packing_qty',
                              'shipment_qty','shipment_date','customer_name','stock_qty','source_label']]] = Query(None, max_length=10),
     sort_order: Optional[list[Literal['asc','desc']]] = Query(None, max_length=10),
+    subtotal_by: Optional[list[str]] = Query(None, max_length=10),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -248,6 +250,8 @@ def packing_status(
         raise HTTPException(422, '같은 열을 정렬 기준에 중복 지정할 수 없습니다.')
     if sort_order and len(sort_order) != len(sort_by or []):
         raise HTTPException(422, '정렬 기준과 방향의 개수를 맞춰 주세요.')
+    if subtotal_by and (len(set(subtotal_by))!=len(subtotal_by) or not set(subtotal_by).issubset(sort_by or [])):
+        raise HTTPException(422, '부분합은 정렬 기준에 포함된 열만 지정할 수 있습니다.')
     query = (
         db.query(PackingBox, PackingMaster)
         .join(PackingMaster, PackingMaster.id == PackingBox.packing_id)
@@ -329,21 +333,16 @@ def packing_status(
     # Stable sorts from the last priority preserve earlier tie-breaking values.
     for field, direction in reversed(list(zip(sort_by or [], sort_order or ['asc']*len(sort_by or [])))):
         def value(row):
-            if field == 'stock_qty':
-                return (row.get('stock_qty') if row['record_source']=='EXTERNAL'
-                        else max(row['packing_qty']-row['shipment_qty'],0))
-            if field == 'source_label':
-                return ('외부 연동'+(' · '+row['stock_note'] if row.get('stock_note') else '')
-                        if row['record_source']=='EXTERNAL' else 'MES')
-            return row.get(field)
+            return packing_value(row,field)
         # Unknown stock and empty dates stay at the end in either direction.
         populated = [r for r in items if value(r) is not None and value(r) != '']
         empty = [r for r in items if value(r) is None or value(r) == '']
-        numeric = field in {'packing_qty','shipment_qty','stock_qty'}
+        numeric = field in NUMERIC_FIELDS
         populated.sort(key=lambda r: float(value(r)) if numeric else str(value(r)).casefold(),
                        reverse=direction=='desc')
         items = populated + empty
-    return {'items': items[:limit], 'total': len(items), 'truncated': len(items) > limit}
+    return {'items': items[:limit], 'total': len(items), 'truncated': len(items) > limit,
+            **packing_summaries(items,sort_by or [],subtotal_by or [],limit)}
 
 
 @router.get("/api/packing/items")

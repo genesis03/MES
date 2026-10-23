@@ -3,8 +3,8 @@
 
 {% block extra_head %}
 <script src="/static/external_label_buttons.js?v=1"></script>
-<script src="/static/table_sort_menu.js?v=2"></script>
-<link rel="stylesheet" href="/static/css/table_sort_menu.css?v=1">
+<script src="/static/table_sort_menu.js?v=3"></script>
+<link rel="stylesheet" href="/static/css/table_sort_menu.css?v=2">
 <style>
 .packing-status-page h1{font-size:20px;margin:0 0 14px}
 .ps-filter{display:grid;grid-template-columns:180px 180px 220px 220px auto;gap:12px;align-items:end;background:#fff;border:1px solid #dbe3ec;border-radius:6px;padding:14px;margin-bottom:14px}
@@ -20,6 +20,9 @@
 .ps-table th{background:#f8fafc;color:#64748b;font-weight:700;position:sticky;top:0;z-index:1}
 .ps-table td.left{text-align:left}
 .ps-table td.num{text-align:right}
+.ps-table .ps-subtotal td{background:#eef4fb;font-weight:700}
+.ps-table .ps-subtotal[data-level="0"] td{background:#dce9f8}
+.ps-table tfoot td{background:#dbe4ef;font-weight:700;border-top:2px solid #94a3b8}
 .ps-empty{height:330px;color:#94a3b8;text-align:center}
 .ps-summary{display:flex;justify-content:space-between;align-items:center;padding:9px 2px 0;font-size:12px;color:#64748b}
 @media(max-width:1100px){.ps-filter{grid-template-columns:1fr 1fr}.ps-actions{grid-column:1/-1}}
@@ -72,6 +75,7 @@
       <tbody id="resultBody">
         <tr><td colspan="11" class="ps-empty">조회해 주세요.</td></tr>
       </tbody>
+      <tfoot id="resultFoot"></tfoot>
     </table>
   </div>
   <div class="ps-summary"><span id="resultCount">0건</span><span>미출고 포장은 재고에 반영합니다. MES 품목·LOT와 중복되는 외부 내역은 재고에서 제외합니다. 취소된 MES 포장은 제외됩니다.</span></div>
@@ -91,12 +95,16 @@ function renderSortCriteria(){
   sortCriteria.forEach((criterion,index)=>{
     const header=document.querySelector(`th[data-sort-key="${criterion.key}"]`);
     const button=document.createElement('button');button.type='button';button.className='ps-btn';
-    button.textContent=`${index+1}차 ${header.dataset.sortLabel} ${criterion.order==='asc'?'↑':'↓'} ×`;
+    button.textContent=`${index+1}차 ${header.dataset.sortLabel} ${criterion.order==='asc'?'↑':'↓'}${criterion.subtotal?' · 부분합':''} ×`;
     button.setAttribute('aria-label',`${index+1}차 ${header.dataset.sortLabel} 정렬 해제`);
     button.onclick=()=>{sortCriteria.splice(index,1);renderSortCriteria();loadRows(true);};
     $('sortCriteria').appendChild(button);
   });
   if(sortCriteria.length){const clear=document.createElement('button');clear.type='button';clear.className='ps-btn';clear.textContent='정렬 전체 해제';clear.onclick=()=>{sortCriteria=[];renderSortCriteria();loadRows(true);};$('sortCriteria').appendChild(clear);}
+}
+function summaryRow(label,totals,level=null){
+  const number=v=>v==null?'—':fmt(v);
+  return `<tr${level==null?'':` class="ps-subtotal" data-level="${level}"`}><td colspan="4" class="left">${esc(label)}</td><td class="num">${number(totals.packing_qty)}</td><td class="num">${number(totals.shipment_qty)}</td><td colspan="2"></td><td class="num">${number(totals.stock_qty)}</td><td colspan="2"></td></tr>`;
 }
 function localDate(offsetDays=0){
   const d=new Date(); d.setDate(d.getDate()+offsetDays);
@@ -114,15 +122,19 @@ function queryParams(){
 async function loadRows(reuseQuery=false){
   if(!reuseQuery)appliedParams=queryParams();
   const params=new URLSearchParams(appliedParams),request=++requestNumber;
-  sortCriteria.forEach(c=>{params.append('sort_by',c.key);params.append('sort_order',c.order);});
+  sortCriteria.forEach(c=>{params.append('sort_by',c.key);params.append('sort_order',c.order);if(c.subtotal)params.append('subtotal_by',c.key);});
   $('resultBody').innerHTML='<tr><td colspan="11" class="ps-empty">조회 중...</td></tr>';
+  $('resultFoot').innerHTML='';
   try{
     const r=await fetch('/api/packing/status?'+params.toString());
     const d=await MesResponse.read(r);
     if(request!==requestNumber)return;
     const rows=d.items||[];
-    $('resultCount').textContent=rows.length.toLocaleString()+'건'+(d.truncated?' / 총 '+d.total.toLocaleString()+'건 (조회 범위를 줄여 주세요)':'')+' · 포장수량 '+rows.reduce((sum,x)=>sum+Number(x.packing_qty||0),0).toLocaleString(undefined,{maximumFractionDigits:0});
-    $('resultBody').innerHTML=rows.length?rows.map(x=>`
+    const grouped=new Map();
+    (d.subtotals||[]).forEach(s=>{if(!grouped.has(s.after_index))grouped.set(s.after_index,[]);grouped.get(s.after_index).push(s);});
+    $('resultCount').textContent=rows.length.toLocaleString()+'건'+(d.truncated?' / 총 '+d.total.toLocaleString()+'건 (부분합·전체 합계는 전체 조회 결과 기준)':'')+' · 포장수량 '+fmt(d.totals.packing_qty)+(d.totals.stock_qty==null?' · 미반영 재고가 포함된 합계는 —로 표시합니다.':'');
+    $('resultFoot').innerHTML=summaryRow('전체 합계',d.totals);
+    $('resultBody').innerHTML=rows.length?rows.map((x,index)=>`
       <tr>
         <td>${esc(x.part_no)}</td>
         <td class="left">${esc(x.part_name)}</td>
@@ -135,7 +147,7 @@ async function loadRows(reuseQuery=false){
         <td class="num">${x.record_source==='EXTERNAL'?(x.stock_qty==null?'미반영':fmt(x.stock_qty)):fmt(Math.max(Number(x.packing_qty)-Number(x.shipment_qty),0))}</td>
         <td>${x.record_source==='EXTERNAL'?'외부 연동'+(x.stock_note?' · '+esc(x.stock_note):''):'MES'}</td>
         <td>${ExternalLabels.button(x)}</td>
-      </tr>`).join(''):'<tr><td colspan="11" class="ps-empty">조회된 포장현황이 없습니다.</td></tr>';
+      </tr>`+(grouped.get(index)||[]).map(s=>summaryRow(s.context.map(c=>`${c.name}: ${c.value==null||c.value===''?(c.field==='stock_qty'?'미반영':'(공란)'):c.value}`).join(' / ')+` 소계 (${s.count.toLocaleString()}건)`+(s.truncated?' · 일부 상세 생략':''),s.totals,s.level)).join('')).join(''):'<tr><td colspan="11" class="ps-empty">조회된 포장현황이 없습니다.</td></tr>';
   }catch(e){
     if(request!==requestNumber)return;
     $('resultCount').textContent='0건';
@@ -151,7 +163,7 @@ function resetFilters(){
   loadRows();
 }
 document.addEventListener('DOMContentLoaded',()=>{
-  sortMenu=MesTableSortMenu.attach($('packingStatusTable'),(key,order)=>{const existing=sortCriteria.find(c=>c.key===key);if(existing)existing.order=order;else sortCriteria.push({key,order});renderSortCriteria();loadRows(true);});
+  sortMenu=MesTableSortMenu.attach($('packingStatusTable'),(key,order)=>{const existing=sortCriteria.find(c=>c.key===key);if(existing)existing.order=order;else sortCriteria.push({key,order});renderSortCriteria();loadRows(true);},(key,checked)=>{const existing=sortCriteria.find(c=>c.key===key);if(existing)existing.subtotal=checked;else sortCriteria.push({key,order:'asc',subtotal:checked});renderSortCriteria();loadRows(true);});
   renderSortCriteria();
   $('startDate').value=localDate(-30);
   $('endDate').value=localDate(0);
