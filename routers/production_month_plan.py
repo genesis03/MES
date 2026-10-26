@@ -38,6 +38,8 @@ def options_data(db):
     items=[]
     for item in db.query(ItemMasterModel).filter(ItemMasterModel.is_active=='Y').order_by(ItemMasterModel.part_no):
         if item.material_type in ('RAW','원재료'):continue
+        # Plated items are outsourced; stale production-location/BOM links must not offer them for machining.
+        if str(item.part_no or '').strip().upper().endswith('-AG'):continue
         allowed=set(linked.get(item.id,set()))
         if item.production_loc in codes:allowed.add(item.production_loc)
         for process in processes:

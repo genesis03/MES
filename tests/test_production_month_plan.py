@@ -337,3 +337,31 @@ def test_old_190_minute_defaults_correct_once_and_keep_custom_hours(setup,monkey
     ensure_production_plan_work_times(setup.engine,today=date(2026,10,13))
     with setup.sessions() as db:
         assert db.query(ProductionPlanWorkTime).filter_by(equipment_id=tap_id,work_date='2026-10-01').one().excluded_minutes==190
+
+
+def test_plated_ag_items_are_not_searchable_or_addable_to_machining_plans(setup,monkeypatch):
+    from test_production_sync import add_item
+    from models.equipment import EquipmentMaster
+    from models.models import ItemBomModel
+    from models.production_month_plan import ProductionMonthPlanLine
+    initialize(setup,monkeypatch)
+    with setup.sessions() as db:
+        machine=EquipmentMaster(equipment_code='TP-AG-TEST',equipment_name='탭핑 검증',process_code='TP',machine_no='1',is_active='Y')
+        db.add(machine);db.flush();machine_id=machine.id
+        valid=add_item(db,part='310068-B',code='TP')
+        child=add_item(db,part='AG-TEST-RAW')
+        plated=[]
+        for part in ['310068-Ag','310069-AG','310070-ag']:
+            item=add_item(db,part=part,code='TP');plated.append(item)
+            # Even an incorrect tapping BOM/location must not make a plated item eligible.
+            db.add(ItemBomModel(parent_item_id=item,child_item_id=child,parent_part_no=part,child_part_no='AG-TEST-RAW',process_code='TP',quantity=1,unit='EA',created_at='2026-01-01'))
+        db.commit()
+    candidates=setup.client.get('/api/production/month-plan/options').json()['items']
+    assert any(r['id']==valid and 'TP' in r['process_codes'] for r in candidates)
+    assert not {r['id'] for r in candidates}&set(plated)
+    for item in plated:
+        body=value(item,machine_id)|{'process_code':'TP'}
+        assert setup.client.put('/api/production/month-plan',json=body).status_code==422
+        generation=setup.client.get('/api/production/month-plan/revisions',params={'month':'2026-10'}).json()['generation']
+        assert setup.client.put('/api/production/month-plan/revisions/0',json=body|{'generation':generation}).status_code==422
+    with setup.sessions() as db:assert db.query(ProductionMonthPlanLine).count()==0
