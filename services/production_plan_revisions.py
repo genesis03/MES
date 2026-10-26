@@ -1,4 +1,4 @@
-"""Monthly plan versions with independent drafts and audited same-Rev edits."""
+"""Monthly numbered plans with audited edits and an applied-plan projection."""
 import hashlib
 import json
 from datetime import datetime
@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import update, func
 from sqlalchemy.exc import IntegrityError
 from models.production_month_plan import ProductionMonthPlanLine, ProductionMonthPlanDay, ProductionPlanWorkTime
-from models.production_plan_revision import ProductionPlanRevisionState as State, ProductionPlanRevision as Revision, ProductionPlanRevisionReference as Reference, ProductionPlanRevisionApplication as Application, ProductionPlanRevisionEdit as Edit
+from models.production_plan_revision import ProductionPlanRevisionState as State, ProductionPlanRevision as Revision, ProductionPlanRevisionReference as Reference, ProductionPlanRevisionApplication as Application, ProductionPlanRevisionEdit as Edit, ProductionPlanRevisionMigration as Migration
 
 
 def label(number):return f'Rev.{number:02d}'
@@ -55,6 +55,7 @@ def ensure(db,month):
             db.flush()
             revision=add_revision(db,month,0,capture(db,month),'기존 생산계획 최초 보존','system')
             db.add(Application(month=month,revision_id=revision.id,reason='기존 적용 계획 보존',applied_by='system'))
+            db.add(Migration(month=month))
             db.commit()
         except IntegrityError:
             db.rollback()
@@ -64,6 +65,7 @@ def ensure(db,month):
 
 
 def lock(db,month,generation=None):
+    migrate_legacy_draft(db,month)
     state=ensure(db,month)
     expected=state.generation if generation is None else generation
     result=db.execute(update(State).where(State.month==month,State.generation==expected).values(generation=State.generation+1))
@@ -79,12 +81,28 @@ def snapshot(db,month,number):
     return json.loads(revision.snapshot_json)|{'_revision_number':number}
 
 
+def migrate_legacy_draft(db,month):
+    state=ensure(db,month)
+    if db.get(Migration,month) is not None:return
+    expected=state.generation
+    result=db.execute(update(State).where(State.month==month,State.generation==expected).values(generation=State.generation+1))
+    if result.rowcount!=1:
+        db.rollback();raise HTTPException(409,'계획 전환 중입니다. 다시 조회하세요.')
+    data=capture(db,month)
+    existing=db.query(Revision).filter_by(month=month).all()
+    if not any(r.snapshot_json==encoded(data) for r in existing):
+        add_revision(db,month,max(r.number for r in existing)+1,data,'기존 작업본 보존 (Rev 전용 전환)','system')
+    active=next(r for r in existing if r.number==state.applied_revision)
+    sync_applied(db,month,json.loads(active.snapshot_json))
+    db.add(Migration(month=month));db.commit()
+
+
 def details(db,month):
+    migrate_legacy_draft(db,month)
     state=ensure(db,month)
     revisions=db.query(Revision).filter_by(month=month).order_by(Revision.number.desc()).all()
-    applied=next(r for r in revisions if r.number==state.applied_revision)
     return {'month':month,'generation':state.generation,'applied_revision':state.applied_revision,
-        'applied_label':label(state.applied_revision),'dirty':encoded(capture(db,month))!=applied.snapshot_json,
+        'applied_label':label(state.applied_revision),
         'saved_by':state.saved_by or '', 'saved_at':timestamp(state.saved_at),
         'revisions':[{'number':r.number,'label':label(r.number),'reason':r.reason,'created_by':r.created_by,
                       'created_at':timestamp(r.created_at)} for r in revisions],
@@ -96,22 +114,9 @@ def details(db,month):
                          'applied_at':timestamp(a.applied_at)} for a in db.query(Application).filter_by(month=month).order_by(Application.id.desc()).limit(100)]}
 
 
-def publish(db,month,reason,user,generation):
-    state=lock(db,month,generation)
-    data=capture(db,month)
-    latest=db.query(Revision).filter_by(month=month).order_by(Revision.number.desc()).first()
-    if encoded(data)==latest.snapshot_json:
-        db.rollback();raise HTTPException(409,'최신 Revision과 작업본이 같습니다. 기존 Rev를 선택해 적용하세요.')
-    revision=add_revision(db,month,latest.number+1,data,reason,actor(user))
-    state.applied_revision=revision.number
-    db.add(Application(month=month,revision_id=revision.id,reason=reason,applied_by=actor(user)))
-    db.commit()
-    return details(db,month)
-
-
 def copy_revision(db,month,number,reason,user,generation):
-    lock(db,month,generation)
-    data=capture(db,month) if number is None else snapshot(db,month,number)
+    state=lock(db,month,generation)
+    data=snapshot(db,month,state.applied_revision if number is None else number)
     data.pop('_revision_number',None)
     latest=db.query(Revision).filter_by(month=month).order_by(Revision.number.desc()).first()
     revision=add_revision(db,month,latest.number+1,data,reason,actor(user))
@@ -120,11 +125,40 @@ def copy_revision(db,month,number,reason,user,generation):
     return details(db,month)|{'created_revision':created}
 
 
+def sync_applied(db,month,data):
+    """Maintain the legacy tables as the applied-plan projection, never a separate draft."""
+    lines={(r.equipment_id,r.item_id):r for r in db.query(ProductionMonthPlanLine).filter_by(month=month)}
+    keep={(r['equipment_id'],r['item_id']) for r in data['lines']}
+    for key,row in lines.items():
+        if key not in keep:db.delete(row)
+    for value in data['lines']:
+        key=(value['equipment_id'],value['item_id']);row=lines.get(key)
+        if row is None:
+            row=ProductionMonthPlanLine(month=month,equipment_id=key[0],item_id=key[1],cycle_seconds=value['cycle_seconds'],expected_oee=value['expected_oee']);db.add(row);db.flush()
+        row.cycle_seconds=value['cycle_seconds'];row.expected_oee=value['expected_oee']
+        saved={d.work_date:d for d in row.days};wanted={d['work_date'] for d in value['days']}
+        for day in row.days:
+            if day.work_date not in wanted:db.delete(day)
+        for day in value['days']:
+            target=saved.get(day['work_date'])
+            if target is None:target=ProductionMonthPlanDay(line_id=row.id,work_date=day['work_date']);db.add(target)
+            target.quantity=day['quantity'];target.cycle_seconds=day['cycle_seconds'];target.expected_oee=day['expected_oee']
+    times={(r.equipment_id,r.work_date):r for r in db.query(ProductionPlanWorkTime).filter(ProductionPlanWorkTime.work_date.like(month+'-%'))}
+    keep={(r['equipment_id'],r['work_date']) for r in data['times']}
+    for key,row in times.items():
+        if key not in keep:db.delete(row)
+    for value in data['times']:
+        row=times.get((value['equipment_id'],value['work_date']))
+        if row is None:row=ProductionPlanWorkTime(equipment_id=value['equipment_id'],work_date=value['work_date']);db.add(row)
+        for key in ('start_time','end_time','next_day','excluded_minutes'):setattr(row,key,value[key])
+
+
 def apply(db,month,number,reason,user,generation):
     state=lock(db,month,generation)
     revision=db.query(Revision).filter_by(month=month,number=number).first()
     if revision is None:db.rollback();raise HTTPException(404,'해당 월의 Revision이 없습니다.')
     state.applied_revision=number
+    sync_applied(db,month,json.loads(revision.snapshot_json))
     db.add(Application(month=month,revision_id=revision.id,reason=reason,applied_by=actor(user)))
     db.commit()
     return details(db,month)
@@ -140,6 +174,9 @@ def edit_revision(db,month,number,data,process_code,user,generation,reason=''):
     db.add(Edit(revision_id=revision.id,process_code=process_code,before_json=revision.snapshot_json,
                 after_json=after,reason=reason.strip() or label(number)+' 직접 수정',edited_by=actor(user)))
     revision.snapshot_json=after
+    if state.applied_revision==number:
+        sync_applied(db,month,data)
+    state.saved_by=actor(user);state.saved_at=datetime.utcnow()
     # Keep old references too: before-images remain part of the audit history.
     refs={(r.item_id,r.equipment_id) for r in db.query(Reference).filter_by(revision_id=revision.id)}
     for line in data['lines']:

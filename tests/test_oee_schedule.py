@@ -36,8 +36,6 @@ def test_calendar_is_readonly_and_plan_quantities_enable_holiday_work(setup):
     assert setup.client.put('/api/production/equipment/schedule',json=payload(rows)).status_code==409
     plan={'month':'2026-10','process_code':'LT','ct_effective_date':'2026-10-12','lines':[{'equipment_id':equipment,'item_id':item,'cycle_seconds':30,'expected_oee':.95,'quantities':{f'2026-10-{i:02d}':100 if i in (9,10) else 0 for i in range(1,32)}}]}
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
-    from test_production_month_plan import publish_saved
-    publish_saved(setup)
     by_date={r['work_date']:r for r in monthly(setup)}
     assert by_date['2026-10-09']['working'] and by_date['2026-10-10']['working']
     with setup.sessions() as db:

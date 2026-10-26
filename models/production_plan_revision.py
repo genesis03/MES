@@ -52,3 +52,9 @@ class ProductionPlanRevisionEdit(Base):
     reason=Column(Text,nullable=False)
     edited_by=Column(String(100),nullable=False)
     edited_at=Column(DateTime,nullable=False,default=datetime.utcnow)
+
+
+class ProductionPlanRevisionMigration(Base):
+    __tablename__='production_plan_revision_migrations'
+    month=Column(String(7),ForeignKey('production_plan_revision_states.month'),primary_key=True)
+    migrated_at=Column(DateTime,nullable=False,default=datetime.utcnow)
