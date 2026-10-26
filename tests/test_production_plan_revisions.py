@@ -233,3 +233,35 @@ def test_revision_edit_keeps_other_process_content_and_old_references(setup,monk
     assert setup.client.put(BASE+'/revisions/1',json=body).status_code==200
     with setup.sessions() as db:
         assert db.query(ProductionPlanRevisionReference).filter_by(revision_id=revision_id,item_id=item,equipment_id=equipment).count()==1
+
+
+def test_copy_selected_revision_creates_next_number_without_applying(setup,monkeypatch):
+    _,item,equipment,_=initialize(setup,monkeypatch)
+    assert setup.client.put(BASE,json=value(item,equipment)).status_code==200
+    publish(setup)
+    def copy(number):
+        return setup.client.post(BASE+'/revisions/copy',json={'month':'2026-10','generation':meta(setup)['generation'],'number':number,'reason':'선택 계획 복사'})
+    response=copy(1)
+    assert response.status_code==200,response.text
+    assert response.json()['created_revision']==2 and response.json()['applied_revision']==1
+    params={'month':'2026-10','process_code':'LT'}
+    before=setup.client.get(BASE,params=params|{'revision':2}).json()['lines']
+    response=copy(2)
+    assert response.status_code==200 and response.json()['created_revision']==3
+    assert setup.client.get(BASE,params=params|{'revision':3}).json()['lines']==before
+    body=value(item,equipment,65)|{'generation':meta(setup)['generation'],'ct_effective_date':'2026-10-01'}
+    assert setup.client.put(BASE+'/revisions/3',json=body).status_code==200
+    assert setup.client.get(BASE,params=params|{'revision':2}).json()['lines']==before
+    assert meta(setup)['applied_revision']==1
+    assert setup.client.get(BASE,params=params).json()['lines'][0]['cycle_seconds']==30
+    stale=body['generation']
+    assert setup.client.post(BASE+'/revisions/copy',json={'month':'2026-10','generation':stale,'number':2,'reason':'stale'}).status_code==409
+    response=copy(0)
+    assert response.json()['created_revision']==4
+    assert setup.client.get(BASE,params=params|{'revision':4}).json()['lines']==[]
+    assert copy(99).status_code==404
+    response=copy(None)
+    assert response.status_code==200 and response.json()['created_revision']==5
+    assert setup.client.get(BASE,params=params|{'revision':5}).json()['lines'][0]['cycle_seconds']==30
+    setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='reader',role='USER',permissions=json.dumps({'menu_access':{'/production/plans':'READ'}}))
+    assert copy(2).status_code==403

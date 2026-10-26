@@ -109,6 +109,17 @@ def publish(db,month,reason,user,generation):
     return details(db,month)
 
 
+def copy_revision(db,month,number,reason,user,generation):
+    lock(db,month,generation)
+    data=capture(db,month) if number is None else snapshot(db,month,number)
+    data.pop('_revision_number',None)
+    latest=db.query(Revision).filter_by(month=month).order_by(Revision.number.desc()).first()
+    revision=add_revision(db,month,latest.number+1,data,reason,actor(user))
+    created=revision.number
+    db.commit()
+    return details(db,month)|{'created_revision':created}
+
+
 def apply(db,month,number,reason,user,generation):
     state=lock(db,month,generation)
     revision=db.query(Revision).filter_by(month=month,number=number).first()

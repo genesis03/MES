@@ -286,6 +286,16 @@ class ApplyRevision(RevisionAction):
     number:int=Field(ge=0)
 
 
+class CopyRevision(RevisionAction):
+    number:int|None=Field(default=None,ge=0)
+
+
+@router.post('/revisions/copy')
+def copy_revision(payload:CopyRevision,db:Session=Depends(get_db),user=Depends(get_current_user)):
+    require_access(user,'/production/plans','WRITE');month_days(payload.month)
+    return revisions.copy_revision(db,payload.month,payload.number,payload.reason,user,payload.generation)
+
+
 @router.get('/revisions')
 def revision_list(month:str,db:Session=Depends(get_db),user=Depends(get_current_user)):
     require_access(user,'/production/plans');month_days(month)
