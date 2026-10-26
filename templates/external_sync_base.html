@@ -14,8 +14,8 @@
 <label>연동 아이디<br><input id="esUsername" autocomplete="username" maxlength="200" required></label>
 <label>연동 비밀번호<br><input id="esPassword" type="password" autocomplete="new-password" maxlength="4096" placeholder="기존 비밀번호 유지 시 공란"></label>
 <button id="esTestLogin" class="es-btn" type="button">로그인 확인</button><button class="es-btn" type="submit">계정 저장</button>
-</form><form id="esProtocolForm" class="es-line"><label>접속키<br><input id="esProtocolKey" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" style="width:100px" required></label><button class="es-btn" type="submit">키 저장</button></form></div><p id="esProtocolMessage" class="es-result" role="status"></p><button id="esLoginDiagnostic" class="es-btn" type="button" hidden>로그인 진단정보 다운로드</button><p id="esCredentialMessage" class="es-result" role="status" aria-live="polite"></p>
-<p class="es-muted">비밀번호는 암호화해 저장하며 화면에 다시 표시하지 않습니다. 각 서버에서 계정을 설정해 주세요. 접속키는 자동으로 찾으면 그 값을 사용하고, 못 찾으면 저장한 값을 사용합니다.</p>
+</form><form id="esProtocolForm" class="es-line"><label>수동 접속키(예비)<br><input id="esProtocolKey" inputmode="numeric" pattern="[0-9]{1,8}" maxlength="8" style="width:100px" required></label><button class="es-btn" type="submit">키 저장</button></form></div><p id="esProtocolMessage" class="es-result" role="status"></p><button id="esLoginDiagnostic" class="es-btn" type="button" hidden>로그인 진단정보 다운로드</button><p id="esCredentialMessage" class="es-result" role="status" aria-live="polite"></p>
+<p class="es-muted">비밀번호는 암호화해 저장하며 화면에 다시 표시하지 않습니다. 각 서버에서 계정을 설정해 주세요. 접속할 때 서버에 최신 접속키를 자동 요청합니다. 자동 응답에 키가 없는 경우에만 초기 화면 또는 수동 저장값을 사용합니다.</p>
 
 </details>
 <section class="es-card"><h2>자동 동기화</h2>
@@ -36,5 +36,5 @@
 <a href="/admin/external-sync?tab={{key}}" {% if active_sync|default('production') == key %}aria-current="page"{% endif %}>{{label}}</a>
 {% endfor %}</nav>
 {% block sync_content %}{% endblock %}
-</div><script src="/static/external_sync.js?v=20261022-1" defer></script>
+</div><script src="/static/external_sync.js?v=auto-key-20261027" defer></script>
 {% endblock %}

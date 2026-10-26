@@ -69,8 +69,8 @@ def validate_login(payload, db):
             saved_user, password = read_credentials(db)
             if saved_user != username or not password:
                 raise CredentialError('아이디를 변경하거나 처음 설정할 때는 비밀번호를 입력해 주세요.')
-        ProductionClient(username, password)
-        return username, password
+        client = ProductionClient(username, password)
+        return username, password, getattr(client, 'encrypt_key_source', '')
     except (CredentialError, SyncError) as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -103,19 +103,26 @@ def update_protocol_key(payload:ProtocolKeyInput,db:Session=Depends(get_db),user
 def test_credentials(payload: Credentials, db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
     try:
-        validate_login(payload, db)
+        _, _, key_source = validate_login(payload, db)
     except HTTPException as exc:
         diagnostic=getattr(exc.__cause__,'diagnostic',None)
         if diagnostic:return JSONResponse(status_code=exc.status_code,content={'detail':exc.detail,'diagnostic':diagnostic})
         raise
-    return {'message': '외부 생산 시스템 로그인에 성공했습니다.'}
+    messages = {
+        'initialization': '최신 접속키를 자동으로 받아 외부 시스템 로그인에 성공했습니다.',
+        'landing': '초기 화면의 접속키로 외부 시스템 로그인에 성공했습니다.',
+        'saved': '저장된 예비 접속키로 외부 시스템 로그인에 성공했습니다.',
+        'configured': '설정된 예비 접속키로 외부 시스템 로그인에 성공했습니다.',
+    }
+    return {'message': messages.get(key_source, '외부 생산 시스템 로그인에 성공했습니다.'),
+            'protocol_key_source': key_source}
 
 
 @router.put('/api/production/external-sync/credentials')
 def update_credentials(payload: Credentials, db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
     try:
-        username, password = validate_login(payload, db)
+        username, password, _ = validate_login(payload, db)
     except HTTPException as exc:
         diagnostic=getattr(exc.__cause__,'diagnostic',None)
         if diagnostic:return JSONResponse(status_code=exc.status_code,content={'detail':exc.detail,'diagnostic':diagnostic})

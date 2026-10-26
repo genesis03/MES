@@ -590,7 +590,7 @@ def test_pagination_and_empty_day_preserve_previous_records(setup):
 def test_http_login_cookie_and_list_protocol(monkeypatch,bootstrap_key,kind):
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import threading
-    expected_key=bootstrap_key or '1837'
+    expected_key='939'
     monkeypatch.setattr(source.config,'PRODUCTION_SYNC_ENCRYPT_KEY','1837')
     from services.packing_sync_client import PackingClient
     from test_packing_sync import row as pack_row,response as pack_response
@@ -598,14 +598,24 @@ def test_http_login_cookie_and_list_protocol(monkeypatch,bootstrap_key,kind):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_): pass
         def do_GET(self):
-            self.send_response(200); self.end_headers(); self.wfile.write((' '*2048+('<script>window.protocol={"ENCRYPT.KEY":"'+bootstrap_key+'"}</script>' if bootstrap_key else 'login page')).encode())
+            self.send_response(200); self.send_header('Set-Cookie','ASP.NET_SessionId=landing-session; Path=/'); self.end_headers(); self.wfile.write((' '*2048+('<script>window.protocol={"ENCRYPT.KEY":"'+bootstrap_key+'"}</script>' if bootstrap_key else 'login page')).encode())
         def do_POST(self):
             raw = self.rfile.read(int(self.headers['Content-Length'])).decode()
             assert raw.endswith('SO.NET.END=SO.NET.END')
             payload = parse_qs(raw, keep_blank_values=True)
+            if payload.get('SO.INIT.LOAD')==['Y']:
+                assert payload['ENCRYPT.KEY']==[''] and payload['CHECK.ENCRYPT.KEY']==['']
+                assert not any('LoginShortSet' in key for key in payload)
+                assert 'ASP.NET_SessionId=landing-session' in self.headers.get('Cookie','')
+                seen.append('InitLoad')
+                self.send_response(200); self.send_header('Set-Cookie','ASP.NET_SessionId=bootstrap-session; Path=/')
+                self.send_header('Content-Type','application/x-www-form-urlencoded'); self.end_headers()
+                self.wfile.write(urlencode({'ENCRYPT.KEY':expected_key,'SO.NET.END':'SO.NET.END'}).encode())
+                return
             assert payload['ENCRYPT.KEY']==[expected_key]
             action = payload['jump.form.code'][0]; seen.append(action)
             if action == 'Login':
+                assert 'ASP.NET_SessionId=bootstrap-session' in self.headers.get('Cookie','')
                 assert payload['Common.Set.LoginShortSet.USER_ID'] == ['test-user']
                 # Match the successful October 9 request, rather than guessing login fields.
                 assert 'Common.Set.LoginShortSet.COMP_NO' not in payload
@@ -638,15 +648,15 @@ def test_http_login_cookie_and_list_protocol(monkeypatch,bootstrap_key,kind):
     try:
         client = (source.ProductionClient if kind=='production' else PackingClient)('test-user','test-password')
         assert client.encrypt_key==expected_key
-        assert client.encrypt_key_source==('landing' if bootstrap_key else 'configured')
+        assert client.encrypt_key_source=='initialization'
         # A configuration change after login cannot switch keys halfway through a session.
         monkeypatch.setattr(source.config,'PRODUCTION_SYNC_ENCRYPT_KEY','9999')
         rows, warnings = client.fetch_day(DAY)
         assert not warnings
         if kind=='production':
             assert len(rows)==17 and sum(bool(r.get('DAILY_SOURCE')) for r in rows)==16
-            assert seen==['Login']+['']*16+['List']+['']*2
-        else:assert rows==[pack_row()] and seen==['Login','List']
+            assert seen==['InitLoad','Login']+['']*16+['List']+['']*2
+        else:assert rows==[pack_row()] and seen==['InitLoad','Login','List']
     finally:
         server.shutdown(); server.server_close(); thread.join(timeout=2)
 
@@ -905,7 +915,7 @@ def test_server_exception_category_is_whitelisted_without_raw_details(server_typ
     kind=source.server_error_kind(values)
     assert kind==expected
     diagnostic=source.response_diagnostic(values,payload,kind)
-    assert diagnostic['schema_version']==3 and diagnostic['client_revision']=='protocol-key-20261012'
+    assert diagnostic['schema_version']==3 and diagnostic['client_revision']=='protocol-key-20261027'
     assert 'private-password' not in json.dumps(diagnostic) and 'SQL context' not in json.dumps(diagnostic)
 
 
@@ -965,7 +975,8 @@ def test_saved_key_used_for_both_clients_unless_landing_provides_one(setup,monke
     monkeypatch.setattr(source,'post',post)
     client=(source.ProductionClient if kind=='production' else PackingClient)('test-user','test-password')
     expected=landing or '6789'
-    assert client.encrypt_key==expected and seen[0]['ENCRYPT.KEY']==expected
+    assert seen[0]['SO.INIT.LOAD']=='Y' and seen[0]['ENCRYPT.KEY']==''
+    assert client.encrypt_key==expected and seen[1]['ENCRYPT.KEY']==expected
     assert client.encrypt_key_source==('landing' if landing else 'saved')
     assert setup.client.put('/api/production/external-sync/protocol-key',json={'encrypt_key':'9999'}).status_code==200
     assert source.client_common(client)['ENCRYPT.KEY']==expected

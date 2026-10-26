@@ -14,6 +14,7 @@ from urllib.request import HTTPCookieProcessor, Request, build_opener
 
 BASE = 'http://14.63.172.132:8081'
 ENDPOINT = BASE + '/SoServerNet/Web/Port/HttpPort.aspx'
+CLIENT_REVISION = 'protocol-key-20261027'
 CONDITIONS = ('FIELD_JOB_NUM FIELD_RULE_NO IS_CONFIRM IS_REST ITEM_COMP_NUM ITEM_NUM ITEM_TYPE '
               'JOB_DATE1 JOB_DATE2 JOB_END_TIME JOB_MACH_NO JOB_NUM JOB_ST_TIME JOB_USER_NO LOAD_PAGE '
               'LOT_NUM ORDER_NO ORDER_NUM PLAN_TYPE PO_NUM PROC_ITEM_NUM PROC_TYPE PRODUCT_NM '
@@ -31,7 +32,7 @@ def response_diagnostic(values,payload,kind):
     # Allowlisted protocol metadata only; never copy response text, passwords, cookies or SQL.
     fields=('TYPE','MESS','CLASS','METHOD','STACK')
     ids=values.get('Common.Set.LoginUserSet.USER_ID',[''])[0].split(',')
-    return dict(schema_version=3,client_revision='protocol-key-20261012',stage='login' if payload.get('run.object.name')=='Common.Login.LoginObj' else 'query',error_kind=kind,
+    return dict(schema_version=3,client_revision=CLIENT_REVISION,stage='initialization' if payload.get('SO.INIT.LOAD')=='Y' else 'login' if payload.get('run.object.name')=='Common.Login.LoginObj' else 'query',error_kind=kind,
                 response_complete=values.get('SO.NET.END')==['SO.NET.END'],
                 protocol_key=payload.get('ENCRYPT.KEY') if re.fullmatch(r'[0-9]{1,8}',str(payload.get('ENCRYPT.KEY',''))) else None,
                 throw_fields={f:bool(any(v.strip() for v in values.get('THROW.'+f,[]))) for f in fields},
@@ -70,13 +71,17 @@ def bootstrap_protocol_key(page):
     for pattern in (r"[\"']ENCRYPT\.KEY[\"']\s*[:=,]\s*[\"']?([0-9]{1,8})(?![0-9])",r'(?:^|[?&\s])ENCRYPT\.KEY\s*=\s*([0-9]{1,8})(?![0-9])'):
         found.update(re.findall(pattern,text,re.IGNORECASE))
     if len(found)>1:
-        raise SyncError('외부 초기 화면의 접속키가 여러 개라 확인할 수 없습니다.',dict(schema_version=3,client_revision='protocol-key-20261012',stage='landing',error_kind='protocol_key_ambiguous'))
+        raise SyncError('외부 초기 화면의 접속키가 여러 개라 확인할 수 없습니다.',dict(schema_version=3,client_revision=CLIENT_REVISION,stage='landing',error_kind='protocol_key_ambiguous'))
     return next(iter(found),None)
 
 
-def common(encrypt_key=None):
-    return {'SO.NET.START': 'SO.NET.START', 'SO.NET.SOLUTION': 'UNI_MES', 'ENCRYPT.KEY': protocol_key(config.PRODUCTION_SYNC_ENCRYPT_KEY if encrypt_key is None else encrypt_key),
+def _common_payload(encrypt_key):
+    return {'SO.NET.START': 'SO.NET.START', 'SO.NET.SOLUTION': 'UNI_MES', 'ENCRYPT.KEY': encrypt_key,
             'SO.NET.MODULE': 'MES', 'SO.NET.USERIP': '', 'user.lang.code': 'ko', 'client.web.mode': 'Web'}
+
+
+def common(encrypt_key=None):
+    return _common_payload(protocol_key(config.PRODUCTION_SYNC_ENCRYPT_KEY if encrypt_key is None else encrypt_key))
 
 
 def client_common(client):
@@ -98,10 +103,26 @@ def post(opener, values):
         raise SyncError('예상한 생산 시스템 응답이 아닙니다.',response_diagnostic(values,ordered,'unexpected_response'))
     if any(key.startswith('THROW.') and any(value.strip() for value in items) for key,items in values.items()):
         # Server exception text may contain credentials or SQL. Never persist it.
+        if ordered.get('SO.INIT.LOAD') == 'Y':
+            raise SyncError('외부 시스템의 접속키 초기화 요청에서 오류가 발생했습니다.',response_diagnostic(values,ordered,server_error_kind(values)))
         if ordered.get('run.object.name') == 'Common.Login.LoginObj':
             raise SyncError('외부 생산 시스템이 로그인 요청에서 오류를 반환했습니다. 진단정보를 다운로드해 확인할 수 있습니다.',response_diagnostic(values,ordered,server_error_kind(values)))
         raise SyncError('생산 시스템에서 조회 오류를 반환했습니다. 연동 계정과 조회 설정을 확인해 주세요.',response_diagnostic(values,ordered,server_error_kind(values)))
     return values
+
+
+def initialize_protocol_key(opener):
+    """Mirror SoEngine.Rule.InitLoad using the same cookie jar as login and queries."""
+    payload = _common_payload('')
+    payload.update({'SO.INIT.LOAD': 'Y', 'CHECK.ENCRYPT.KEY': ''})
+    values = post(opener, payload)
+    if 'ENCRYPT.KEY' not in values:
+        return None  # Older responses can still use the existing explicit/saved-key fallback.
+    keys = values['ENCRYPT.KEY']
+    if len(keys) != 1 or not re.fullmatch(r'[0-9]{1,8}', keys[0]):
+        raise SyncError('외부 초기화 응답의 접속키 형식을 확인할 수 없습니다.',
+                        response_diagnostic(values, payload, 'protocol_key_invalid'))
+    return protocol_key(keys[0])
 
 
 def query_with_retry(opener, payload):
@@ -132,8 +153,14 @@ class ProductionClient:
                 if len(raw)>2*1024*1024:raise SyncError('외부 초기 화면이 너무 커 접속키를 확인할 수 없습니다.')
                 headers=getattr(response,'headers',None)
                 charset=headers.get_content_charset() if headers is not None else None
-                detected=bootstrap_protocol_key(raw.decode(charset or 'utf-8',errors='replace'))
-            if detected:
+                page=raw.decode(charset or 'utf-8',errors='replace')
+            phase='initialization'
+            initialized=initialize_protocol_key(self.opener)
+            detected=bootstrap_protocol_key(page) if initialized is None else None
+            if initialized is not None:
+                self.encrypt_key=initialized
+                self.encrypt_key_source='initialization'
+            elif detected:
                 self.encrypt_key=protocol_key(detected)
                 self.encrypt_key_source='landing'
             else:
@@ -166,7 +193,7 @@ class ProductionClient:
             if exc.diagnostic is not None:exc.diagnostic['protocol_key_source']=getattr(self,'encrypt_key_source',None)
             raise
         except (HTTPError, URLError, TimeoutError, OSError, UnicodeError, ValueError) as exc:
-            raise SyncError('외부 생산 시스템에 접속하거나 로그인할 수 없습니다.',dict(schema_version=3,client_revision='protocol-key-20261012',stage=phase,error_kind='http_error' if isinstance(exc,HTTPError) else 'transport_error',http_status=exc.code if isinstance(exc,HTTPError) else None)) from exc
+            raise SyncError('외부 생산 시스템에 접속하거나 로그인할 수 없습니다.',dict(schema_version=3,client_revision=CLIENT_REVISION,stage=phase,error_kind='http_error' if isinstance(exc,HTTPError) else 'transport_error',http_status=exc.code if isinstance(exc,HTTPError) else None)) from exc
 
     def fetch_day(self, day):
         from services.production_daily_sync import fetch_day,supplement_assembly,record_query_error
