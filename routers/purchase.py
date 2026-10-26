@@ -432,10 +432,13 @@ def inbound_history(
 @api_router.get("/items/search")
 def search_purchase_items(
     keyword: str = Query("", max_length=100),
+    process_code: Optional[str] = Query(None, max_length=50),
     offset: int = Query(0, ge=0), limit: int = Query(30, ge=1, le=100),
     db: Session = Depends(get_purchase_db), current_user=Depends(get_current_user),
 ):
     query = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == "Y")
+    if process_code is not None:
+        query = query.filter(ItemMasterModel.production_loc == process_code.strip()) if process_code.strip() else query.filter(False)
     keyword = keyword.strip()
     if keyword:
         query = query.filter(or_(

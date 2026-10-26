@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user, check_admin_permission, parse_user_permissions, check_permission
-from models.models import ItemMasterModel, ItemBomModel, ProcessModel
+from models.models import ItemMasterModel, ProcessModel
 from services.production_sync_mapping import stage_suffix
 from models.equipment import EquipmentMaster
 from models.production_cycle_time import ProductionCycleTime
@@ -32,9 +32,8 @@ def require_access(user, menu, action='READ'):
 
 def cycle_items(db):
     codes=[p.process_code for p in machining_processes(db)]
-    bom_items={b.parent_item_id for b in db.query(ItemBomModel).filter(ItemBomModel.process_code.in_(codes))}
     registered={c.item_id:c for c in db.query(ProductionCycleTime)}
-    return [dict(item_id=i.id,part_no=i.part_no,part_name=i.part_name,seconds=registered[i.id].seconds if i.id in registered else None) for i in db.query(ItemMasterModel).filter(ItemMasterModel.is_active=='Y').order_by(ItemMasterModel.part_no) if i.material_type not in ('RAW','원재료') and (i.production_loc in codes or i.id in bom_items or i.part_no.upper().endswith(('-A','-B','-D')))]
+    return [dict(item_id=i.id,part_no=i.part_no,part_name=i.part_name,seconds=registered[i.id].seconds if i.id in registered else None) for i in db.query(ItemMasterModel).filter(ItemMasterModel.is_active=='Y').order_by(ItemMasterModel.part_no) if i.material_type not in ('RAW','원재료') and i.production_loc in codes]
 
 
 class CycleInput(BaseModel):

@@ -7,13 +7,12 @@ from pydantic import BaseModel,Field,field_validator
 from sqlalchemy.orm import Session
 from core.database import get_db
 from core.security import get_current_user
-from models.models import ItemMasterModel,ProcessModel,ItemBomModel
+from models.models import ItemMasterModel
 from models.equipment import EquipmentMaster
 from models.production_cycle_time import ProductionCycleTime
 from models.production_month_plan import ProductionMonthPlanLine
 from routers.equipment_oee import require_access,machining_processes,validate_process,validate_equipment
 from services.oee_schedule import month_days,days,bounds,default_excluded_minutes,net_hours,daytime_hours,standard_daytime_hours
-from services.production_sync_mapping import stage_suffix
 from services import production_plan_revisions as revisions
 from types import SimpleNamespace
 
@@ -33,18 +32,10 @@ def options_data(db):
     processes=machining_processes(db);codes={p.process_code for p in processes}
     equipment=db.query(EquipmentMaster).filter(EquipmentMaster.process_code.in_(codes),EquipmentMaster.is_active=='Y').order_by(EquipmentMaster.process_code,EquipmentMaster.sort_order,EquipmentMaster.machine_no).all()
     cycles={c.item_id:c.seconds for c in db.query(ProductionCycleTime)}
-    linked={}
-    for bom in db.query(ItemBomModel).filter(ItemBomModel.process_code.in_(codes)):linked.setdefault(bom.parent_item_id,set()).add(bom.process_code)
     items=[]
     for item in db.query(ItemMasterModel).filter(ItemMasterModel.is_active=='Y').order_by(ItemMasterModel.part_no):
         if item.material_type in ('RAW','원재료'):continue
-        # Plated items are outsourced; stale production-location/BOM links must not offer them for machining.
-        if str(item.part_no or '').strip().upper().endswith('-AG'):continue
-        allowed=set(linked.get(item.id,set()))
-        if item.production_loc in codes:allowed.add(item.production_loc)
-        for process in processes:
-            suffix=stage_suffix(process.process_name)
-            if item.part_no.upper().endswith(suffix):allowed.add(process.process_code)
+        allowed={item.production_loc} if item.production_loc in codes else set()
         if allowed:items.append(dict(id=item.id,part_no=item.part_no,part_name=item.part_name,process_codes=sorted(allowed),cycle_seconds=cycles.get(item.id)))
     return dict(processes=[dict(process_code=p.process_code,process_name=p.process_name) for p in processes],equipments=[dict(id=e.id,process_code=e.process_code,name=e.equipment_name,machine_no=e.machine_no) for e in equipment],items=items)
 

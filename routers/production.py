@@ -437,9 +437,8 @@ def performance_orders(process_code: Optional[str] = Query(None), db: Session = 
     orders = db.query(ProductionWorkOrder).filter(ProductionWorkOrder.status.in_(["WAITING", "IN_PROGRESS"])).order_by(ProductionWorkOrder.priority.asc(), ProductionWorkOrder.order_date.desc(), ProductionWorkOrder.id.desc()).all()
     if process_code:
         code = process_code.strip()
-        bom_items = {x[0] for x in db.query(ItemBomModel.parent_item_id).filter(ItemBomModel.process_code == code).distinct().all() if x[0]}
-        item_ids_for_process = {x[0] for x in db.query(ItemMasterModel.id).filter(ItemMasterModel.production_loc == code).all()}
-        allowed = bom_items | item_ids_for_process
+        allowed = {x[0] for x in db.query(ItemMasterModel.id).filter(
+            ItemMasterModel.production_loc == code, ItemMasterModel.is_active == 'Y').all()}
         orders = [x for x in orders if x.item_id in allowed]
     item_ids = {o.item_id for o in orders if o.item_id}
     item_map = {item.id: item for item in db.query(ItemMasterModel).filter(ItemMasterModel.id.in_(item_ids)).all()} if item_ids else {}

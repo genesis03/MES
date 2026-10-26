@@ -423,17 +423,7 @@ def selectable_orders(process_code: str = Query(...), db: Session = Depends(get_
     result = []
     for order in orders:
         item = db.get(ItemMasterModel, order.item_id) if order.item_id else None
-        # 작업지시 입력 화면과 동일하게, 해당 품목이 BOM의 자품번으로 등록된
-        # 공정을 우선 사용하고 품목마스터 생산공정을 보조 기준으로 사용합니다.
-        process_match = (
-            db.query(ItemBomModel.id)
-            .filter(
-                ItemBomModel.child_item_id == order.item_id,
-                ItemBomModel.process_code == code,
-            )
-            .first()
-        )
-        if not process_match and (not item or (item.production_loc or "") != code):
+        if not item or item.is_active != 'Y' or (item.production_loc or '') != code:
             continue
         result.append({
             "id": order.id,

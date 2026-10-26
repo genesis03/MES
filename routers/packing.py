@@ -12,7 +12,7 @@ from core.database import get_db
 from core.security import get_current_user
 from models.lot_consumption import LotConsumptionModel
 from models.lot_relation import LotRelationModel
-from models.models import ItemBomModel, ItemMasterModel, ShippingMasterModel
+from models.models import ItemBomModel, ItemMasterModel, ProcessModel, ShippingMasterModel
 from models.packing import PackingBox, PackingLotAllocation, PackingMaster
 from models.packing_sync import ExternalPackingRecord
 from models.production_lot import ProductionLotModel
@@ -351,7 +351,10 @@ def packing_items(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    query = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == "Y")
+    packing_processes = db.query(ProcessModel.process_code).filter(
+        ProcessModel.is_active == 'Y', func.trim(ProcessModel.process_name) == '포장')
+    query = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == "Y",
+        ItemMasterModel.production_loc.in_(packing_processes))
     if q and q.strip():
         query = query.filter(ItemMasterModel.part_no.contains(q.strip(), autoescape=True))
     rows = query.order_by(ItemMasterModel.part_no.asc()).limit(50).all()

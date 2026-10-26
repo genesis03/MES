@@ -339,7 +339,7 @@ def test_old_190_minute_defaults_correct_once_and_keep_custom_hours(setup,monkey
         assert db.query(ProductionPlanWorkTime).filter_by(equipment_id=tap_id,work_date='2026-10-01').one().excluded_minutes==190
 
 
-def test_plated_ag_items_are_not_searchable_or_addable_to_machining_plans(setup,monkeypatch):
+def test_other_registered_process_items_are_not_searchable_or_addable_to_machining_plans(setup,monkeypatch):
     from test_production_sync import add_item
     from models.equipment import EquipmentMaster
     from models.models import ItemBomModel
@@ -352,8 +352,8 @@ def test_plated_ag_items_are_not_searchable_or_addable_to_machining_plans(setup,
         child=add_item(db,part='AG-TEST-RAW')
         plated=[]
         for part in ['310068-Ag','310069-AG','310070-ag']:
-            item=add_item(db,part=part,code='TP');plated.append(item)
-            # Even an incorrect tapping BOM/location must not make a plated item eligible.
+            item=add_item(db,part=part,code='PL');plated.append(item)
+            # A tapping BOM must not override the item master plating registration.
             db.add(ItemBomModel(parent_item_id=item,child_item_id=child,parent_part_no=part,child_part_no='AG-TEST-RAW',process_code='TP',quantity=1,unit='EA',created_at='2026-01-01'))
         db.commit()
     candidates=setup.client.get('/api/production/month-plan/options').json()['items']

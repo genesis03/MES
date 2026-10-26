@@ -103,8 +103,10 @@
   }
 
   async function searchPart(row, keyword, version, autoSelect=false) {
-    const data = await request('/api/purchase/items/search?' + new URLSearchParams({keyword, limit: '100'}));
-    if (row.version !== version || !rows.includes(row)) return;
+    const processCode=row.process.value;
+    if(!processCode){row.suggestions.replaceChildren();msg('가공유형을 먼저 선택하세요.');return;}
+    const data = await request('/api/purchase/items/search?' + new URLSearchParams({keyword, process_code:processCode, limit: '100'}));
+    if (row.version !== version || row.process.value!==processCode || !rows.includes(row)) return;
     const match=autoSelect?MESPartSearch.pick(data.items||[],keyword,data.total):null;
     if(match){selectOutputPart(row,match);return;}
     showSuggestions(row, data.items || []);
@@ -198,7 +200,14 @@
       if (keyword) row.timer = setTimeout(() => searchPart(row, keyword, version).catch(error => { msg(error.message); }), 180);
     });
     orderPart.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.isComposing){event.preventDefault();clearTimeout(row.timer);searchPart(row,orderPart.value.trim(),++row.version,true).catch(error=>msg(error.message));}});
-    process.addEventListener('change', () => { if (row.outputPart) resolveBomInput(row); });
+    process.addEventListener('change', () => {
+      clearTimeout(row.timer); row.version++; row.suggestions.replaceChildren();
+      if (!row.outputPart) return;
+      row.outputPart = null; row.sourcePart = null;
+      for (const field of ['orderPart','orderName','previous','stock','spec','unit']) row[field].value = '';
+      $('so-confirm').disabled = true;
+      msg('변경한 공정에 등록된 품번을 다시 선택하세요.');
+    });
     qty.addEventListener('input', () => { allocationStatus(row); updateConfirmState(); });
     lotBtn.addEventListener('click', () => openLotModal(row));
     remove.addEventListener('click', () => {
