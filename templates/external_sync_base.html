@@ -7,7 +7,7 @@
 <style>.ex-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.ex-tabs a{padding:9px 18px;border:1px solid #cbd5e1;border-radius:5px;text-decoration:none;color:#334155;background:white}.ex-tabs a[aria-current=page]{background:#2563eb;color:white;border-color:#2563eb}.ex-status{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}.ex-status article{padding:12px;border:1px solid #dbe2eb;border-radius:6px;white-space:pre-wrap;font-size:12px}.ex-settings label{display:flex;flex-direction:column;gap:5px}.ex-settings input[type=number]{width:110px}.ex-settings input[type=checkbox]{height:auto}</style>
 {% endblock %}
 {% block content %}
-<div id="externalSyncRoot"><h1>외부 데이터 연동</h1>
+<div id="externalSyncRoot"><h1>외부 데이터 연동</h1><p class="es-muted">품명은 연결된 내부 품목마스터 기준으로 표시합니다. 미연결 자료는 외부 품명을 임시 표시하며, 원본 품명은 별도로 보관합니다. 내부 품명을 수정하면 기존 수신 자료에도 바로 반영됩니다.</p>
 <details class="es-card"><summary>연동 계정 · 접속키 설정</summary>
 <h3>연동 계정 설정</h3>
 <div class="es-line" style="justify-content:space-between"><form id="esCredentials" class="es-line">

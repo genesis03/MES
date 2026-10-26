@@ -355,6 +355,7 @@ def defect_status(
                 'source_type': 'EXTERNAL_PRODUCTION', 'source_name': '생산실적',
                 'date': record.work_date, 'part_no': view['mes_part_no'] or record.part_no,
                 'part_name': view['part_name'], 'process_name': view['process_name'] or record.process_name,
+                'linked':view['linked'], 'source_part_name':view['source_part_name'], 'name_source':view['name_source'],
                 'process_code': view['process_code'],
                 'lot_no': record.lot_no,
                 'base_qty': group['base_qty'], 'defect_qty': (sum(d['qty'] for d in defect_items) if defect_items

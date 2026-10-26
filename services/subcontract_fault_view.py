@@ -3,6 +3,7 @@ from models.subcontract_fault_sync import ExternalSubcontractFault, SubcontractF
 from services.subcontract_fault_client import FAULT_FIELDS, QUANTITY_FIELDS, amount
 from services.defect_report_format import report_types
 from services.production_sync_mapping import ItemConnections
+from services.external_item_display import item_display
 
 
 def field_settings(db):
@@ -60,7 +61,7 @@ def record_view(record, connections, settings, columns):
     partner = raw.get(settings['partner_field'], '') if settings['partner_field'] in ('APPLY_COMP_NM', 'ORDER_COMP_NM') else ''
     return {'id': record.id, 'date': record.confirm_date, 'inbound_no': record.inbound_no,
             'inbound_item_id': f'external-subcontract:{record.id}', 'part_no': item.part_no if item else record.part_no,
-            'part_name': item.part_name if item else raw.get('PRODUCT_NM', ''), 'source_part_no': record.part_no,
+            **item_display(item, raw), 'source_part_no': record.part_no,
             'item_id': item.id if item else None, 'connection_type': link,
             'process_name': record.process_name, 'partner_name': partner, 'lot_no': record.lot_no,
             'inbound_qty': received, 'good_qty': good, 'defect_qty': bad, 'by_type': values,

@@ -2,6 +2,7 @@ from services.external_label_policy import label_metadata
 import json
 from decimal import Decimal
 from services.packing_inventory_service import packing_stock_snapshot
+from services.external_item_display import item_display
 
 
 def packing_record_view(record, connections):
@@ -12,7 +13,7 @@ def packing_record_view(record, connections):
     raw = json.loads(record.raw_json)
     view = {'packing_box_id': None, 'record_source': 'EXTERNAL', 'source_record_id': record.id,
             'part_no': item.part_no if item else record.part_no,
-            'part_name': item.part_name if item else raw.get('PRODUCT_NM', ''),
+            **item_display(item, raw),
             'source_part_no': record.part_no, 'linked': bool(item), 'connection_type': connection_type,
             'lot_no': record.lot_no, 'packing_date': record.packing_date,
             'packing_qty': float(Decimal(record.packing_qty)),

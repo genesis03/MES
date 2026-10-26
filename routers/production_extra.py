@@ -297,6 +297,7 @@ def production_performance_status(
                 'performance_type_name': {'ASSEMBLY': '조립', 'MACHINING': '가공'}.get(view['performance_type'], '미지정'),
                 'work_order_no': '', 'item_id': view['item_id'], 'part_no': view['mes_part_no'] or record.part_no,
                 'part_name': view['part_name'], 'process_code': view['process_code'],
+                **{key:view[key] for key in ('source_part_name','name_source','linked')},
                 'process_name': view['process_name'] or record.process_name, 'operator_name': view['operator_name'],
                 'equipment_name': view['equipment_name'] or (view['machine_no'] + '호기' if view['machine_no'] else ''), 'shift_name': view['shift_name'],
                 'good_qty': float(record.job_qty), 'defect_qty': float(record.fault_qty),

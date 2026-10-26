@@ -137,7 +137,7 @@ async function loadRows(reuseQuery=false){
     $('resultBody').innerHTML=rows.length?rows.map((x,index)=>`
       <tr>
         <td>${esc(x.part_no)}</td>
-        <td class="left">${esc(x.part_name)}</td>
+        <td class="left">${esc(x.part_name)}${x.linked===false?' <small>(미연결)</small>':''}</td>
         <td>${esc(x.lot_no)}</td>
         <td>${esc(x.packing_date)}</td>
         <td class="num">${fmt(x.packing_qty)}</td>

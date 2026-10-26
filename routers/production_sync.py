@@ -13,6 +13,7 @@ from core.database import get_db
 from core.security import check_admin_permission, get_current_user
 from models.models import ItemMasterModel, ProcessModel
 from models.packing_sync import ExternalPackingRecord, PackingSyncState
+from models.subcontract_fault_sync import ExternalSubcontractFault
 from models.production_sync import ExternalProductionRecord, ProductionSyncProcessMap, ProductionSyncRun, ProductionSyncItemMap, ProductionSyncState, ProductionSyncFailureData
 from services.production_sync_client import SyncError, ProductionClient
 from services.production_sync_credentials import CredentialError, credential_status, read_credentials, save_credentials, read_protocol_key, save_protocol_key
@@ -239,6 +240,7 @@ def process_maps(db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
     maps = {row.source_name: row for row in db.query(ProductionSyncProcessMap)}
     names = {row[0] for row in db.query(ExternalProductionRecord.process_name).distinct()}
+    names.update(row[0] for row in db.query(ExternalSubcontractFault.process_name).distinct())
     return {'mappings': [{'source_name': name, 'process_code': maps[name].process_code if name in maps else '', 'performance_type': maps[name].performance_type if name in maps else ''} for name in sorted(names | maps.keys())],
             'processes': [{'code': p.process_code, 'name': p.process_name}
                           for p in db.query(ProcessModel).filter(ProcessModel.is_active == 'Y').order_by(ProcessModel.sort_order)]}
@@ -306,6 +308,7 @@ def item_maps(db: Session = Depends(get_db), user=Depends(get_current_user)):
     access(user)
     pairs = set(db.query(ExternalProductionRecord.part_no, ExternalProductionRecord.process_name).distinct().all())
     pairs.update((part, '포장') for (part,) in db.query(ExternalPackingRecord.part_no).distinct())
+    pairs.update(db.query(ExternalSubcontractFault.part_no, ExternalSubcontractFault.process_name).distinct().all())
     connections = ItemConnections(db)
     result = []
     for part, process in sorted(pairs):

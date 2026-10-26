@@ -28,7 +28,7 @@
             const headers = ['구분','일자','입고번호','품번','품명','공정','거래처','LOT NO','입고수량','양품수량','불량률','불량 계','샘플','킵업'];
             const head = '<thead><tr>' + [...headers, ...types.map(t => t.name)].map(h => '<th>' + esc(h) + '</th>').join('') + '</tr></thead>';
             const body = data.items.map(row => '<tr>' +
-                [row.record_source==='EXTERNAL_SUBCONTRACT'?'외부 연동':'내부',row.date,row.inbound_no,row.part_no,row.part_name,row.process_name,row.partner_name].map(v => '<td>' + esc(v) + '</td>').join('') +
+                [row.record_source==='EXTERNAL_SUBCONTRACT'?'외부 연동':'내부',row.date,row.inbound_no,row.part_no,row.part_name+(row.linked===false?' (미연결)':''),row.process_name,row.partner_name].map(v => '<td>' + esc(v) + '</td>').join('') +
                 '<td' + (row.unallocated ? ' class="sd-pending"' : '') + '>' + esc(row.unallocated ? '미배분' : row.lot_no) + '</td>' +
                 [row.inbound_qty,row.good_qty].map(numberCell).join('') + rateCell(row.defect_rate) +
                 [row.defect_qty,row.sample_qty,row.keep_qty,...types.map(t => row.by_type[t.code])].map(numberCell).join('') + '</tr>').join('');

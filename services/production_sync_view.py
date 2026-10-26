@@ -5,6 +5,7 @@ import re
 from datetime import timedelta, timezone
 from decimal import Decimal
 from services.lot_uniqueness import production_conflicts, lot_identity
+from services.external_item_display import item_display
 
 def external_machine_no(lot_no):
     lot=str(lot_no or '').strip()
@@ -48,7 +49,7 @@ def external_record_view(record, connections):
     machine = raw.get('MACHINE_NO') or external_machine_no(record.lot_no)
     view = {
         'id': record.id, 'work_date': record.work_date, 'part_no': record.part_no,
-        'part_name': item.part_name if item else raw.get('PRODUCT_NM', ''),
+        **item_display(item, raw),
         'item_id': item.id if item else None, 'mes_part_no': item.part_no if item else '',
         'connection_type': connection_type, 'source_process': record.process_name,
         'process_code': code, 'process_name': connections.processes.get(code, ''),
