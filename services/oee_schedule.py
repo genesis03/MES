@@ -26,14 +26,16 @@ def default_day(day,public_days):
                 holiday=public_days.get(day,''),custom=False,excluded_minutes=0)
 
 
-def days(db,process_code,first,last,equipment_id=None):
+def days(db,process_code,first,last,equipment_id=None,applied=True,selected=None,plan_context=None):
     public_days=holidays.KR(years=range(first.year,last.year+1),language='ko')
-    query=db.query(ProductionMonthPlanDay.work_date,func.sum(ProductionMonthPlanDay.quantity)).join(ProductionMonthPlanLine,ProductionMonthPlanLine.id==ProductionMonthPlanDay.line_id).join(EquipmentMaster,EquipmentMaster.id==ProductionMonthPlanLine.equipment_id).filter(EquipmentMaster.process_code==process_code,ProductionMonthPlanDay.work_date>=first.isoformat(),ProductionMonthPlanDay.work_date<=last.isoformat())
-    if equipment_id is not None:query=query.filter(ProductionMonthPlanLine.equipment_id==equipment_id)
-    quantities=dict(query.group_by(ProductionMonthPlanDay.work_date).all())
-    saved_times={}
-    if equipment_id is not None:
-        saved_times={r.work_date:r for r in db.query(ProductionPlanWorkTime).filter(ProductionPlanWorkTime.equipment_id==equipment_id,ProductionPlanWorkTime.work_date>=first.isoformat(),ProductionPlanWorkTime.work_date<=last.isoformat())}
+    from services.production_plan_revisions import plan_data
+    rows,times=plan_context if plan_context is not None else plan_data(db,first,last,applied,selected)
+    equipment={r.id for r in db.query(EquipmentMaster).filter(EquipmentMaster.process_code==process_code)}
+    quantities=defaultdict(float)
+    for day,line in rows:
+        if str(first)<=day.work_date<=str(last) and line.equipment_id in equipment and (equipment_id is None or line.equipment_id==equipment_id):
+            quantities[day.work_date]+=day.quantity
+    saved_times={day:r for (e,day),r in times.items() if e==equipment_id}
     result=[]
     while first<=last:
         value=default_day(first,public_days)
@@ -73,9 +75,9 @@ def standard_daytime_hours(process_code):
     return 620/60 if process_code=='TP' else 12
 
 
-def workday_segments(db,process_code,first,last,now,equipment_id=None):
+def workday_segments(db,process_code,first,last,now,equipment_id=None,plan_context=None):
     # Shift boundaries remain physical; planned exclusions are spread over elapsed time.
-    rows=days(db,process_code,first,last,equipment_id)
+    rows=days(db,process_code,first,last,equipment_id,plan_context=plan_context)
     result=[]
     for value in rows:
         period=bounds(value)

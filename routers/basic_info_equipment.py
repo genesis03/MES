@@ -230,6 +230,9 @@ def delete_equipment(
     if not row:
         raise HTTPException(status_code=404, detail="설비를 찾을 수 없습니다.")
     from models.production_month_plan import ProductionEquipmentSchedule, ProductionMonthPlanLine, ProductionPlanWorkTime
+    from models.production_plan_revision import ProductionPlanRevisionReference
+    if db.query(ProductionPlanRevisionReference.id).filter_by(equipment_id=equipment_id).first():
+        raise HTTPException(409,'생산계획 개정 이력에서 사용한 설비는 삭제할 수 없습니다. 사용중지로 처리하세요.')
     if db.query(ProductionPlanWorkTime.id).filter_by(equipment_id=equipment_id).first() or db.query(ProductionMonthPlanLine.id).filter_by(equipment_id=equipment_id).first() or db.query(ProductionEquipmentSchedule.id).filter_by(equipment_id=equipment_id).first():
         raise HTTPException(409, '생산계획·가동 스케줄에서 사용한 설비는 삭제할 수 없습니다. 사용중지로 처리하세요.')
     db.delete(row)

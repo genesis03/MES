@@ -70,7 +70,7 @@
         params.exclude_unplanned=$('eqExclude').checked;
         try{
             const data=await api(view,params);if(id!==request)return;
-            if(view==='efficiency')annual(data);else daily(data);
+            if(view==='efficiency')annual(data);else daily(data);$('eqPlanRevision').textContent='적용 생산계획: '+((data.plan_revisions||[]).map(r=>r.month+' '+r.label).join(' / ')||'없음');
             const url=new URL(window.location.href);url.search=new URLSearchParams({...params,process_code:$('eqProcess').value});window.history.replaceState(null,'',url);
             message('조회 완료');
         }catch(error){if(id===request)message(error.message,true);}

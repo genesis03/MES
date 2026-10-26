@@ -43,6 +43,7 @@ from models.production_sync import ProductionSyncState, ExternalProductionRecord
 from models.inspection_standard import InspectionStandard, InspectionStandardPrecheck, InspectionStandardItem
 from models.quality_report import InspectionReportMaster, InspectionReportItem
 from models.subcontract_fault_sync import SubcontractFaultSyncState, SubcontractFaultSyncRun, ExternalSubcontractFault, SubcontractFaultFieldMap
+from models.production_plan_revision import ProductionPlanRevisionState, ProductionPlanRevision, ProductionPlanRevisionReference, ProductionPlanRevisionApplication
 
 
 # 신규/수정 업무행은 품번과 함께 영구 item_id를 자동 연결합니다.

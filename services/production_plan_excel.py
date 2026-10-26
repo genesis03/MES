@@ -9,14 +9,14 @@ def build_plan_excel(data, start, end):
     summary = book.active
     summary.title = '공정별 요약'
     processes = data['processes']
-    summary.append(['생산계획', f'{start} ~ {end}'])
+    summary.append(['생산계획', f'{start} ~ {end}',data.get('revision_context','작업본')])
     summary.append(['차종', '품번', '품명', *[p['name'] for p in processes], '합계'])
     for row in data['summary']:
         summary.append([row['vehicle_model'], row['part_no'], row['part_name'],
                         *[row['by_process'].get(p['code'], 0) for p in processes], row['total']])
     summary.append(['합계', '', '', *[sum(r['by_process'].get(p['code'], 0) for r in data['summary']) for p in processes], data['total']])
     detail = book.create_sheet('일자별 생산계획')
-    detail.append(['생산계획', f'{start} ~ {end}', '저장된 계획 기준'])
+    detail.append(['생산계획', f'{start} ~ {end}', data.get('revision_context','작업본')])
     detail.append(['설비', '공정', '품번', '품명', 'C/T(초)', '목표 OEE', 'UPH', 'UPD(12H)',
                    '기간 생산성(주간)', '기간 생산성(주/야)', '합계', *data['dates']])
     for row in data['rows']:

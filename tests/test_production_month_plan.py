@@ -10,6 +10,13 @@ from models.production_month_plan import ProductionMonthPlanDay,ProductionEquipm
 from services.equipment_oee import calculate
 
 
+def publish_saved(setup,month='2026-10'):
+    meta=setup.client.get('/api/production/month-plan/revisions',params={'month':month}).json()
+    if meta['dirty']:
+        response=setup.client.post('/api/production/month-plan/revisions',json={'month':month,'generation':meta['generation'],'reason':'검증용 개정 반영'})
+        assert response.status_code==200,response.text
+
+
 def initialize(setup,monkeypatch):
     order,_,worker,equipment,other=prepare(setup)
     setup.app.include_router(router);setup.app.include_router(oee_router)
@@ -30,6 +37,7 @@ def test_excel_matches_saved_status_and_rejects_invalid_range(setup,monkeypatch)
     from openpyxl import load_workbook
     _,item,equipment,_=initialize(setup,monkeypatch)
     assert setup.client.put('/api/production/month-plan',json=value(item,equipment)).status_code==200
+    publish_saved(setup)
     params={'start_date':'2026-10-01','end_date':'2026-10-31','process_code':'LT'}
     response=setup.client.get('/api/production/month-plan/excel',params=params)
     assert response.status_code==200,response.text
@@ -50,7 +58,9 @@ def test_excel_matches_saved_status_and_rejects_invalid_range(setup,monkeypatch)
 def test_plan_ct_is_date_scoped_and_master_changes_do_not_rewrite_oee(setup,monkeypatch):
     order,item,equipment,_=initialize(setup,monkeypatch)
     response=setup.client.put('/api/production/month-plan',json=value(item,equipment));assert response.status_code==200,response.text
+    publish_saved(setup)
     response=setup.client.put('/api/production/month-plan',json=value(item,equipment,40));assert response.status_code==200,response.text
+    publish_saved(setup)
     with setup.sessions() as db:
         rows={d.work_date:d for d in db.query(ProductionMonthPlanDay)}
         assert rows['2026-10-06'].cycle_seconds==30
@@ -67,7 +77,8 @@ def test_plan_ct_is_date_scoped_and_master_changes_do_not_rewrite_oee(setup,monk
     # Quantity-only save must not overwrite earlier C/T even if an earlier date is supplied.
     same=value(item,equipment,40)|{'ct_effective_date':'2026-10-01'}
     assert setup.client.put('/api/production/month-plan',json=same).status_code==200
-    bad=value(item,equipment,50)|{'ct_effective_date':'2026-10-01'}
+    publish_saved(setup)
+    bad=value(item,equipment,50)|{'ct_effective_date':'2026-09-30'}
     assert setup.client.put('/api/production/month-plan',json=bad).status_code==422
     with setup.sessions() as db:assert db.query(ProductionMonthPlanDay).filter_by(work_date='2026-10-06').one().cycle_seconds==30
     report=setup.client.get('/api/production/month-plan/status',params={'start_date':'2026-10-01','end_date':'2026-10-31'}).json()
@@ -79,6 +90,7 @@ def test_plan_ct_is_date_scoped_and_master_changes_do_not_rewrite_oee(setup,monk
 def test_detail_quantities_determine_each_equipment_workdays(setup,monkeypatch):
     _,item,equipment,other=initialize(setup,monkeypatch)
     assert setup.client.put('/api/production/month-plan',json=value(item,equipment)).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:
         result=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20))
         assert next(r for r in result['items'] if r['key']==str(equipment))['planned_seconds']==24*3600
@@ -87,6 +99,7 @@ def test_detail_quantities_determine_each_equipment_workdays(setup,monkeypatch):
     empty=value(item,equipment)
     empty['lines'][0]['quantities']['2026-10-12']=0
     assert setup.client.put('/api/production/month-plan',json=empty).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:
         result=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20))
         assert all(r['planned_seconds']==0 for r in result['items'])
@@ -109,6 +122,7 @@ def test_plan_references_are_reported_in_item_usage_and_block_equipment_deletion
     from test_production_sync import ADMIN
     _,item,equipment,_=initialize(setup,monkeypatch)
     assert setup.client.put('/api/production/month-plan',json=value(item,equipment)).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:
         assert any(row['table']=='production_month_plan_lines' for row in item_usage_summary(db,item))
     setup.app.include_router(basic_info_equipment.router)
@@ -130,6 +144,7 @@ def test_multiple_detail_rows_share_one_equipment_day_and_ignore_old_calendar(se
     plan['lines'][0]['quantities']=quantities|{'2026-10-12':100}
     plan['lines'].append(dict(item_id=second,equipment_id=equipment,cycle_seconds=45,expected_oee=.95,quantities=quantities|{'2026-10-13':50}))
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:
         result=calculate(db,date(2026,10,12),date(2026,10,13),now=datetime(2026,10,20))
         assert next(r for r in result['items'] if r['key']==str(equipment))['planned_seconds']==48*3600
@@ -138,6 +153,7 @@ def test_multiple_detail_rows_share_one_equipment_day_and_ignore_old_calendar(se
     assert summary['total']==150 and len(summary['rows'])==2
     plan['lines'][0]['quantities']['2026-10-12']=0
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:
         result=calculate(db,date(2026,10,12),date(2026,10,13),now=datetime(2026,10,20))
         assert next(r for r in result['items'] if r['key']==str(equipment))['planned_seconds']==24*3600
@@ -150,6 +166,7 @@ def test_work_time_bulk_save_shared_hours_snapshot_and_atomic_validation(setup,m
     plan=value(item,equipment)
     plan['lines'][0]['quantities']['2026-10-16']=100
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:
         assert db.query(ProductionPlanWorkTime).count()==31
         rows=oee_schedule.days(db,'LT',date(2026,10,16),date(2026,10,16),equipment)
@@ -157,6 +174,7 @@ def test_work_time_bulk_save_shared_hours_snapshot_and_atomic_validation(setup,m
     overrides=[dict(equipment_id=equipment,work_date=d,start_time='08:00',end_time='05:00',next_day=True) for d in ['2026-10-12','2026-10-16']]
     plan['work_times']=overrides
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    publish_saved(setup)
     report=setup.client.get('/api/production/month-plan/status',params={'start_date':'2026-10-16','end_date':'2026-10-16'}).json()
     assert report['rows'][0]['upm_full']==report['rows'][0]['uph']*21
     with setup.sessions() as db:
@@ -168,6 +186,7 @@ def test_work_time_bulk_save_shared_hours_snapshot_and_atomic_validation(setup,m
     monkeypatch.setattr(oee_schedule,'default_day',lambda d,h:original(d,h)|{'end_time':'04:00'})
     plan.pop('work_times')
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    publish_saved(setup)
     loaded=setup.client.get('/api/production/month-plan',params={'month':'2026-10','process_code':'LT'}).json()
     rows={r['work_date']:r for r in loaded['schedules'][str(equipment)]}
     assert rows['2026-10-16']['end_time']=='05:00' and rows['2026-10-13']['end_time']=='08:00'
@@ -188,6 +207,7 @@ def test_existing_plan_time_migration_preserves_past_friday_and_is_idempotent(se
     from models.production_plan_time_migration import ensure_production_plan_work_times
     _,item,equipment,_=initialize(setup,monkeypatch)
     assert setup.client.put('/api/production/month-plan',json=value(item,equipment)).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:
         db.query(ProductionPlanWorkTime).delete();db.commit()
         engine=db.get_bind()
@@ -210,6 +230,7 @@ def test_explicit_row_delete_removes_plan_days_but_keeps_performance_and_other_r
     plan=value(item,equipment)
     plan['lines'].append(plan['lines'][0]|{'equipment_id':other})
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:
         doomed=db.query(ProductionMonthPlanLine).filter_by(equipment_id=equipment).one().id
         remaining=db.query(ProductionMonthPlanLine).filter_by(equipment_id=other).one().id
@@ -217,9 +238,11 @@ def test_explicit_row_delete_removes_plan_days_but_keeps_performance_and_other_r
     # Omitted rows alone are never deleted (older clients retain their behavior).
     partial=plan|{'lines':[plan['lines'][1]]}
     assert setup.client.put('/api/production/month-plan',json=partial).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:assert db.query(ProductionMonthPlanLine).count()==2
     deletion=partial|{'deleted_line_ids':[doomed]}
     assert setup.client.put('/api/production/month-plan',json=deletion).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:
         assert db.get(ProductionMonthPlanLine,doomed) is None
         assert db.get(ProductionMonthPlanLine,remaining) is not None
@@ -231,6 +254,7 @@ def test_explicit_row_delete_removes_plan_days_but_keeps_performance_and_other_r
     report=setup.client.get('/api/production/month-plan/status',params={'start_date':'2026-10-01','end_date':'2026-10-31'}).json()
     assert report['total']==200 and len(report['rows'])==1
     assert setup.client.put('/api/production/month-plan',json=partial|{'lines':[],'deleted_line_ids':[remaining]}).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:assert db.query(ProductionMonthPlanDay).count()==0
 
 
@@ -239,6 +263,7 @@ def test_delete_scope_validation_and_invalid_save_are_atomic(setup,monkeypatch):
     _,item,equipment,_=initialize(setup,monkeypatch)
     plan=value(item,equipment)
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:line_id=db.query(ProductionMonthPlanLine).one().id
     for bad in [plan|{'month':'2026-11','lines':[],'deleted_line_ids':[line_id]},plan|{'process_code':'TP','lines':[],'deleted_line_ids':[line_id]},plan|{'lines':[],'deleted_line_ids':[line_id+100]}]:
         assert setup.client.put('/api/production/month-plan',json=bad).status_code==422
@@ -269,6 +294,7 @@ def test_tapping_planned_exclusion_updates_capacity_and_oee_without_changing_shi
         equip_id=equipment.id
     plan=value(item,equip_id)|{'process_code':'TP'}
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    publish_saved(setup)
     loaded=setup.client.get('/api/production/month-plan',params={'month':'2026-10','process_code':'TP'}).json()
     day=next(d for d in loaded['schedules'][str(equip_id)] if d['work_date']=='2026-10-12')
     assert day['start_time']==day['end_time']=='08:00' and day['next_day'] and day['excluded_minutes']==210
@@ -282,6 +308,7 @@ def test_tapping_planned_exclusion_updates_capacity_and_oee_without_changing_shi
         assert partial['planned_seconds']==pytest.approx(12300)
     plan['work_times']=[dict(equipment_id=equip_id,work_date='2026-10-12',start_time='08:00',end_time='08:00',next_day=True,excluded_minutes=60)]
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    publish_saved(setup)
     with setup.sessions() as db:
         assert db.query(ProductionPlanWorkTime).filter_by(equipment_id=equip_id,work_date='2026-10-12').one().excluded_minutes==60
         assert calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,14),process_code='TP')['planned_seconds']==23*3600
@@ -293,6 +320,7 @@ def test_tapping_planned_exclusion_updates_capacity_and_oee_without_changing_shi
     with setup.sessions() as db:assert db.query(ProductionPlanWorkTime).filter_by(equipment_id=equip_id,work_date='2026-10-12').one().excluded_minutes==60
     plan['work_times'][0]|={'excluded_minutes':90,'next_day':True,'end_time':'08:00'}
     assert setup.client.put('/api/production/month-plan',json=plan).status_code==200
+    publish_saved(setup)
     two_days=setup.client.get('/api/production/month-plan/status',params={'start_date':'2026-10-01','end_date':'2026-10-31','process_code':'TP'}).json()['rows'][0]
     assert two_days['upm_full']==4902 and two_days['upm_day']==2460
 

@@ -1,0 +1,162 @@
+"""Immutable monthly plan revisions; live plan tables remain the editable draft."""
+import json
+from datetime import datetime
+from types import SimpleNamespace as Object
+from zoneinfo import ZoneInfo
+from dataclasses import dataclass
+from fastapi import HTTPException
+from sqlalchemy import update, func
+from sqlalchemy.exc import IntegrityError
+from models.production_month_plan import ProductionMonthPlanLine, ProductionMonthPlanDay, ProductionPlanWorkTime
+from models.production_plan_revision import ProductionPlanRevisionState as State, ProductionPlanRevision as Revision, ProductionPlanRevisionReference as Reference, ProductionPlanRevisionApplication as Application
+
+
+def label(number):return f'Rev.{number:02d}'
+def actor(user):return str(getattr(user,'username','') or 'unknown')
+def timestamp(value):return value.replace(tzinfo=ZoneInfo('UTC')).astimezone(ZoneInfo('Asia/Seoul')).strftime('%Y-%m-%d %H:%M:%S') if value else ''
+
+
+def capture(db,month):
+    from models.equipment import EquipmentMaster
+    from services.oee_schedule import month_days,default_excluded_minutes
+    lines=db.query(ProductionMonthPlanLine).filter_by(month=month).order_by(ProductionMonthPlanLine.equipment_id,ProductionMonthPlanLine.item_id).all()
+    times={(r.equipment_id,r.work_date):{'equipment_id':r.equipment_id,'work_date':r.work_date,'start_time':r.start_time,
+        'end_time':r.end_time,'next_day':r.next_day,'excluded_minutes':r.excluded_minutes}
+        for r in db.query(ProductionPlanWorkTime).filter(ProductionPlanWorkTime.work_date.like(month+'-%'))}
+    equipment={e.id:e for e in db.query(EquipmentMaster)}
+    for line in lines:
+        for day in month_days(month):
+            key=(line.equipment_id,day.isoformat())
+            times.setdefault(key,{'equipment_id':key[0],'work_date':key[1],'start_time':'08:00','end_time':'08:00',
+                'next_day':True,'excluded_minutes':default_excluded_minutes(equipment[key[0]].process_code)})
+    return {'month':month,'lines':[{'equipment_id':r.equipment_id,'item_id':r.item_id,'cycle_seconds':r.cycle_seconds,
+        'expected_oee':r.expected_oee,'days':[{'work_date':d.work_date,'quantity':d.quantity,'cycle_seconds':d.cycle_seconds,
+        'expected_oee':d.expected_oee} for d in sorted(r.days,key=lambda d:d.work_date)]} for r in lines],
+        'times':[times[key] for key in sorted(times)]}
+
+
+def encoded(data):return json.dumps(data,ensure_ascii=False,sort_keys=True,separators=(',',':'))
+
+
+def add_revision(db,month,number,snapshot,reason,username):
+    revision=Revision(month=month,number=number,snapshot_json=encoded(snapshot),reason=reason,created_by=username)
+    db.add(revision);db.flush()
+    db.add_all([Reference(revision_id=revision.id,item_id=r['item_id'],equipment_id=r['equipment_id']) for r in snapshot['lines']])
+    return revision
+
+
+def ensure(db,month):
+    state=db.get(State,month)
+    if state is None:
+        state=State(month=month,applied_revision=0,generation=0)
+        db.add(state)
+        try:
+            db.flush()
+            revision=add_revision(db,month,0,capture(db,month),'기존 생산계획 최초 보존','system')
+            db.add(Application(month=month,revision_id=revision.id,reason='기존 적용 계획 보존',applied_by='system'))
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+        state=db.get(State,month)
+        if state is None:raise HTTPException(409,'계획 버전을 초기화하지 못했습니다. 다시 불러오세요.')
+    return state
+
+
+def lock(db,month,generation=None):
+    state=ensure(db,month)
+    expected=state.generation if generation is None else generation
+    result=db.execute(update(State).where(State.month==month,State.generation==expected).values(generation=State.generation+1))
+    if result.rowcount!=1:
+        db.rollback();raise HTTPException(409,'다른 사용자가 해당 월 계획을 변경했습니다. 다시 불러온 뒤 저장하세요.')
+    db.refresh(state)
+    return state
+
+
+def snapshot(db,month,number):
+    revision=db.query(Revision).filter_by(month=month,number=number).first()
+    if revision is None:raise HTTPException(404,'해당 월의 Revision을 찾을 수 없습니다.')
+    return json.loads(revision.snapshot_json)|{'_revision_number':number}
+
+
+def details(db,month):
+    state=ensure(db,month)
+    revisions=db.query(Revision).filter_by(month=month).order_by(Revision.number.desc()).all()
+    applied=next(r for r in revisions if r.number==state.applied_revision)
+    return {'month':month,'generation':state.generation,'applied_revision':state.applied_revision,
+        'applied_label':label(state.applied_revision),'dirty':encoded(capture(db,month))!=applied.snapshot_json,
+        'saved_by':state.saved_by or '', 'saved_at':timestamp(state.saved_at),
+        'revisions':[{'number':r.number,'label':label(r.number),'reason':r.reason,'created_by':r.created_by,
+                      'created_at':timestamp(r.created_at)} for r in revisions],
+        'applications':[{'revision':db.get(Revision,a.revision_id).number,'reason':a.reason,'applied_by':a.applied_by,
+                         'applied_at':timestamp(a.applied_at)} for a in db.query(Application).filter_by(month=month).order_by(Application.id.desc()).limit(100)]}
+
+
+def publish(db,month,reason,user,generation):
+    state=lock(db,month,generation)
+    data=capture(db,month)
+    latest=db.query(Revision).filter_by(month=month).order_by(Revision.number.desc()).first()
+    if encoded(data)==latest.snapshot_json:
+        db.rollback();raise HTTPException(409,'최신 Revision과 작업본이 같습니다. 기존 Rev를 선택해 적용하세요.')
+    revision=add_revision(db,month,latest.number+1,data,reason,actor(user))
+    state.applied_revision=revision.number
+    db.add(Application(month=month,revision_id=revision.id,reason=reason,applied_by=actor(user)))
+    db.commit()
+    return details(db,month)
+
+
+def apply(db,month,number,reason,user,generation):
+    state=lock(db,month,generation)
+    revision=db.query(Revision).filter_by(month=month,number=number).first()
+    if revision is None:db.rollback();raise HTTPException(404,'해당 월의 Revision이 없습니다.')
+    state.applied_revision=number
+    db.add(Application(month=month,revision_id=revision.id,reason=reason,applied_by=actor(user)))
+    db.commit()
+    return details(db,month)
+
+
+def applied_snapshots(db,first,last):
+    return {s.month:json.loads(r.snapshot_json)|{'_revision_number':r.number} for s,r in db.query(State,Revision).join(Revision,
+        (Revision.month==State.month)&(Revision.number==State.applied_revision)).filter(
+        State.month>=first.strftime('%Y-%m'),State.month<=last.strftime('%Y-%m'))}
+
+
+@dataclass
+class PlanData:
+    rows:list
+    times:dict
+    revisions:list
+    def __iter__(self):return iter((self.rows,self.times))
+    def __getitem__(self,index):return (self.rows,self.times)[index]
+
+
+def plan_data(db,first,last,applied=True,selected=None):
+    """Return day/line pairs and saved hours using one consistent plan source."""
+    snapshots=({selected['month']:selected} if selected is not None else applied_snapshots(db,first,last) if applied else {})
+    query=db.query(ProductionMonthPlanDay,ProductionMonthPlanLine).join(ProductionMonthPlanLine,
+        ProductionMonthPlanLine.id==ProductionMonthPlanDay.line_id).filter(
+        ProductionMonthPlanDay.work_date>=str(first),ProductionMonthPlanDay.work_date<=str(last))
+    rows=[]
+    if selected is None:
+        if snapshots:query=query.filter(ProductionMonthPlanLine.month.notin_(list(snapshots)))
+        rows=list(query)
+    times={}
+    if selected is None:
+        query_times=db.query(ProductionPlanWorkTime).filter(ProductionPlanWorkTime.work_date>=str(first),ProductionPlanWorkTime.work_date<=str(last))
+        if snapshots:query_times=query_times.filter(func.substr(ProductionPlanWorkTime.work_date,1,7).notin_(list(snapshots)))
+        times={(r.equipment_id,r.work_date):r for r in query_times}
+    for month,data in snapshots.items():
+        for line in data['lines']:
+            obj=Object(**{k:v for k,v in line.items() if k!='days'},month=month)
+            rows.extend((Object(**day),obj) for day in line['days'] if str(first)<=day['work_date']<=str(last))
+        for r in data['times']:
+            if str(first)<=r['work_date']<=str(last):times[r['equipment_id'],r['work_date']]=Object(**r)
+    if applied and selected is None:
+        # A switch during initial data loading must never mix two applied plans.
+        latest=applied_snapshots(db,first,last)
+        if {m:d['_revision_number'] for m,d in snapshots.items()}!={m:d['_revision_number'] for m,d in latest.items()}:
+            raise HTTPException(409,'적용 생산계획이 변경되었습니다. 다시 조회하세요.')
+    months={line.month for _,line in rows}|set(snapshots)
+    info=[{'month':m,'number':snapshots.get(m,{}).get('_revision_number',0),
+           'label':label(snapshots.get(m,{}).get('_revision_number',0))} for m in sorted(months)]
+    return PlanData(rows,times,info)
+

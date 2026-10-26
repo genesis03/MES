@@ -94,7 +94,7 @@ def performance_window(day,shift,start,end,now):
     return a,min(b,now)
 
 
-def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=False,equipment_id=None):
+def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=False,equipment_id=None,plan_context=None):
     now=now or datetime.now(ZoneInfo('Asia/Seoul')).replace(tzinfo=None)
     start=datetime.combine(start_day,time());end=min(datetime.combine(end_day+timedelta(days=1),time()),now)
     processes={p.process_code:p for p in db.query(ProcessModel)}
@@ -103,7 +103,9 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
     equipment_query=db.query(EquipmentMaster).filter(EquipmentMaster.process_code.in_(codes))
     if equipment_id is not None:equipment_query=equipment_query.filter(EquipmentMaster.id==equipment_id)
     equipment={e.id:e for e in equipment_query}
-    plan_rows=db.query(ProductionMonthPlanDay,ProductionMonthPlanLine).join(ProductionMonthPlanLine,ProductionMonthPlanLine.id==ProductionMonthPlanDay.line_id).filter(ProductionMonthPlanDay.work_date>=start_day.isoformat(),ProductionMonthPlanDay.work_date<=end_day.isoformat()).all()
+    from services.production_plan_revisions import plan_data
+    plan_context=plan_context if plan_context is not None else plan_data(db,start_day,end_day)
+    plan_rows=[(day,line) for day,line in plan_context[0] if str(start_day)<=day.work_date<=str(end_day)]
     plan_quantities={}
     for day,line in plan_rows:plan_quantities[line.equipment_id]=plan_quantities.get(line.equipment_id,0)+float(day.quantity)
     machines={}
@@ -117,7 +119,7 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
     def group(key):
         if key not in groups:
             e=equipment.get(int(key)) if key.isdigit() else None
-            segments,_=workday_segments(db,e.process_code,start_day,end_day,now,e.id) if e else ([],[])
+            segments,_=workday_segments(db,e.process_code,start_day,end_day,now,e.id,plan_context=plan_context) if e else ([],[])
             periods=merge_intervals([(a,b) for a,b,_ in segments])
             groups[key]=dict(segments=segments,intervals=periods,shift_days={},process_code=e.process_code if e else key.split(':')[1],planned_stop_seconds=0,planned_break_seconds=weighted_seconds([(a,b,1-weight) for a,b,weight in segments]),key=key,equipment_name=e.equipment_name if e else key.split(':',1)[1]+' (호기 연결 미확인)',planned_seconds=weighted_seconds(segments),planned_qty=plan_quantities.get(e.id,0) if e else 0,good_qty=0,total_qty=0,defect_qty=0,setup_qty=0,ideal_seconds=0,ideal_good_seconds=0,ideal_defect_seconds=0,ideal_setup_seconds=0,downtime_intervals=[],planned_stop_intervals=[],observed_intervals=[],issues=[],parts={},missing=set(),excluded_records=0,excluded_total_qty=0,excluded_good_qty=0,excluded_parts=set())
         return groups[key]
@@ -223,7 +225,7 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
         result.append(g)
     name=processes[process_code].process_name+' 종합' if process_code in processes else '전체 종합 (복합선반·탭핑)'
     summary=summarize(result,name)
-    return dict(summary=summary,exclude_unplanned=exclude_unplanned,items=sorted(result,key=lambda x:x['equipment_name']),planned_seconds=sum(g['planned_seconds'] for g in result),process_code=process_code or '')
+    return dict(summary=summary,exclude_unplanned=exclude_unplanned,items=sorted(result,key=lambda x:x['equipment_name']),planned_seconds=sum(g['planned_seconds'] for g in result),process_code=process_code or '',plan_revisions=[r for r in plan_context.revisions if start_day.strftime('%Y-%m')<=r['month']<=end_day.strftime('%Y-%m')])
 
 
 def summarize(rows,name):
