@@ -8,7 +8,7 @@ from routers.packing import router as packing_router
 from routers.purchase import api_router,get_purchase_db
 
 
-def test_registered_process_controls_all_contextual_part_searches(setup,monkeypatch):
+def test_registered_process_controls_contextual_searches_with_finished_packing_exception(setup,monkeypatch):
     initialize(setup,monkeypatch)
     setup.app.include_router(packing_router);setup.app.include_router(api_router)
     setup.app.dependency_overrides[get_purchase_db]=setup.app.dependency_overrides[get_db]
@@ -16,6 +16,7 @@ def test_registered_process_controls_all_contextual_part_searches(setup,monkeypa
         registered={code:add_item(db,part=part,code=code) for code,part in [
             ('LT','REGTEST-LATHE-Ag'),('TP','REGTEST-TAPPING-A'),('PL','REGTEST-PLATING-B'),
             ('ASSY','REGTEST-ASSEMBLY'),('PACK','REGTEST-PACKING-C')]}
+        db.get(ItemMasterModel,registered['PACK']).material_type='FINISHED'
         orphan=add_item(db,part='REGTEST-ORPHAN-B',code='')
         inactive=add_item(db,part='REGTEST-INACTIVE-B',code='TP')
         db.get(ItemMasterModel,inactive).is_active='N'

@@ -12,7 +12,7 @@ from core.database import get_db
 from core.security import get_current_user
 from models.lot_consumption import LotConsumptionModel
 from models.lot_relation import LotRelationModel
-from models.models import ItemBomModel, ItemMasterModel, ProcessModel, ShippingMasterModel
+from models.models import ItemBomModel, ItemMasterModel, ShippingMasterModel
 from models.packing import PackingBox, PackingLotAllocation, PackingMaster
 from models.packing_sync import ExternalPackingRecord
 from models.production_lot import ProductionLotModel
@@ -345,28 +345,34 @@ def packing_status(
             **packing_summaries(items,sort_by or [],subtotal_by or [],limit)}
 
 
+def _packing_items(db: Session):
+    return db.query(ItemMasterModel).filter(
+        ItemMasterModel.is_active == 'Y', ItemMasterModel.material_type == 'FINISHED')
+
+
+def _packing_item(db: Session, part_no: str):
+    item = _packing_items(db).filter(ItemMasterModel.part_no == part_no.strip()).first()
+    if not item:
+        raise HTTPException(404, '사용 중인 완제품 품번을 선택하세요.')
+    return item
+
+
 @router.get("/api/packing/items")
 def packing_items(
     q: Optional[str] = Query(None, max_length=80),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    packing_processes = db.query(ProcessModel.process_code).filter(
-        ProcessModel.is_active == 'Y', func.trim(ProcessModel.process_name) == '포장')
-    query = db.query(ItemMasterModel).filter(ItemMasterModel.is_active == "Y",
-        ItemMasterModel.production_loc.in_(packing_processes))
+    query = _packing_items(db)
     if q and q.strip():
         query = query.filter(ItemMasterModel.part_no.contains(q.strip(), autoescape=True))
-    rows = query.order_by(ItemMasterModel.part_no.asc()).limit(50).all()
+    rows = query.order_by(ItemMasterModel.part_no.asc()).all()
     return [{"item_id": x.id, "part_no": x.part_no, "part_name": x.part_name, "moq": int(x.moq or 0), "snp": int(x.snp or 0)} for x in rows]
 
 
 @router.get("/api/packing/item/{part_no}")
 def packing_item(part_no: str, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no, ItemMasterModel.is_active == "Y").first()
-    if not item:
-        raise HTTPException(404, "품목을 찾을 수 없습니다.")
-
+    item = _packing_item(db, part_no)
     source_item_ids = _packing_source_item_ids(db, item.id)
     source_parts = [
         x.part_no for x in db.query(ItemMasterModel)
@@ -402,9 +408,7 @@ def packing_item(part_no: str, db: Session = Depends(get_db), current_user=Depen
 
 @router.post("/api/packing/scan")
 def packing_scan(payload: PackingScanInput, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == payload.part_no.strip(), ItemMasterModel.is_active == "Y").first()
-    if not item:
-        raise HTTPException(404, "품목을 찾을 수 없습니다.")
+    item = _packing_item(db, payload.part_no)
     allocations, remaining = _preview(db, item.id, payload.lot_no.strip(), payload.target_qty)
     return {
         "allocations": allocations,
@@ -416,9 +420,7 @@ def packing_scan(payload: PackingScanInput, db: Session = Depends(get_db), curre
 
 @router.post("/api/packing")
 def create_packing(payload: PackingCreateInput, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == payload.part_no.strip(), ItemMasterModel.is_active == "Y").first()
-    if not item:
-        raise HTTPException(404, "품목을 찾을 수 없습니다.")
+    item = _packing_item(db, payload.part_no)
     target_qty = float(payload.box_count) * float(payload.box_qty)
     supplied_total = sum(float(x.qty) for x in payload.allocations)
     if abs(target_qty - supplied_total) > 1e-6:
