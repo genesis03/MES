@@ -22,7 +22,7 @@ def initialize(setup,monkeypatch):
 
 
 def value(item,equipment,ct=30):
-    return dict(month='2026-10',process_code='LT',ct_effective_date='2026-10-12',lines=[dict(item_id=item,equipment_id=equipment,cycle_seconds=ct,expected_oee=.95,quantities={f'2026-10-{i:02d}':100 if i in (6,12) else 0 for i in range(1,32)})])
+    return dict(month='2026-10',process_code='LT',lines=[dict(item_id=item,equipment_id=equipment,cycle_seconds=ct,expected_oee=.95,quantities={f'2026-10-{i:02d}':100 if i in (6,12) else 0 for i in range(1,32)})])
 
 
 def test_excel_matches_saved_status_and_rejects_invalid_range(setup,monkeypatch):
@@ -47,13 +47,13 @@ def test_excel_matches_saved_status_and_rejects_invalid_range(setup,monkeypatch)
     assert setup.client.get('/api/production/month-plan/excel',params=params).status_code==422
 
 
-def test_plan_ct_is_date_scoped_and_master_changes_do_not_rewrite_oee(setup,monkeypatch):
+def test_plan_ct_updates_whole_month_and_can_be_restored_without_changing_master(setup,monkeypatch):
     order,item,equipment,_=initialize(setup,monkeypatch)
     response=setup.client.put('/api/production/month-plan',json=value(item,equipment));assert response.status_code==200,response.text
     response=setup.client.put('/api/production/month-plan',json=value(item,equipment,40));assert response.status_code==200,response.text
     with setup.sessions() as db:
         rows={d.work_date:d for d in db.query(ProductionMonthPlanDay)}
-        assert rows['2026-10-06'].cycle_seconds==30
+        assert rows['2026-10-06'].cycle_seconds==40
         assert rows['2026-10-12'].cycle_seconds==40
         db.add(ProductionCycleTime(item_id=item,seconds=80))
         db.add(ProductionPerformance(work_order_id=order,performance_date='2026-10-06',process_code='LT',shift_type='DAY',equipment_id=equipment,good_qty=100,defect_qty=0,setup_qty=0));db.commit()
@@ -63,17 +63,14 @@ def test_plan_ct_is_date_scoped_and_master_changes_do_not_rewrite_oee(setup,monk
         target=lambda r:next(g for g in r['items'] if g['key']==str(equipment))
         assert target(before)['oee'] is not None
         assert target(before)['oee']==target(after)['oee']
-        assert target(after)['parts'][0]['cycle_seconds']==30
-    # Quantity-only save must not overwrite earlier C/T even if an earlier date is supplied.
-    same=value(item,equipment,40)|{'ct_effective_date':'2026-10-01'}
-    assert setup.client.put('/api/production/month-plan',json=same).status_code==200
-    bad=value(item,equipment,50)|{'ct_effective_date':'2026-09-30'}
-    assert setup.client.put('/api/production/month-plan',json=bad).status_code==422
-    with setup.sessions() as db:assert db.query(ProductionMonthPlanDay).filter_by(work_date='2026-10-06').one().cycle_seconds==30
+        assert target(after)['parts'][0]['cycle_seconds']==40
+    # Restoring the original C/T rewrites all dates, with no effective-date requirement.
+    assert setup.client.put('/api/production/month-plan',json=value(item,equipment,30)).status_code==200
+    with setup.sessions() as db:
+        assert {d.cycle_seconds for d in db.query(ProductionMonthPlanDay)}=={30}
     report=setup.client.get('/api/production/month-plan/status',params={'start_date':'2026-10-01','end_date':'2026-10-31'}).json()
-    assert report['total']==200 and len(report['rows'])==2
-    assert {r['cycle_seconds'] for r in report['rows']}=={30,40}
-    assert sum(r['total'] for r in report['rows'])==200
+    assert report['total']==200 and len(report['rows'])==1
+    assert report['rows'][0]['cycle_seconds']==30
 
 
 def test_detail_quantities_determine_each_equipment_workdays(setup,monkeypatch):

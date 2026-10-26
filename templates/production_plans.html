@@ -11,7 +11,7 @@
 <div class="pp-tools"><label>입력 월 <input type="month" id="ppMonth"></label><label>공정 <select id="ppProcess"></select></label><button class="pp-btn" id="ppLoad">불러오기</button><button class="pp-btn" id="ppSave">생산계획 저장</button></div>
 <div class="pp-tools" style="margin-top:10px"><label>조회 Rev <select id="ppRevision"><option value="">불러오는 중</option></select></label><span id="ppRevisionInfo" class="pp-help"></span><button class="pp-btn" id="ppPublish" type="button">새 개정 만들기</button><button class="pp-btn" id="ppApplyRevision" type="button" disabled>선택 Rev 적용</button><button class="pp-btn" id="ppHistory" type="button">개정 이력</button></div>
 <p class="pp-help">선택한 Rev를 직접 수정·저장하며 번호는 유지됩니다. 새 개정 만들기는 선택한 Rev의 모든 공정 계획을 다음 번호로 복사합니다. OEE 기준은 선택 Rev 적용으로 지정하며, 적용 중인 Rev를 수정·저장하면 OEE에도 반영됩니다.</p>
-<p class="pp-help">C/T는 호기·품번 행마다 월 1회 입력합니다. 기본 일정은 매일 08:00~익일 08:00입니다. 복합선반은 24시간, 탭핑은 계획 차감시간 210분을 제외한 20시간 30분으로 계산합니다. 호기 옆 가동시간 버튼에서 날짜별로 수정하고 생산계획을 저장하세요. 같은 호기의 모든 품번 수량이 0이면 비가동입니다. 주말·공휴일도 수량을 입력하면 가동일이 됩니다.</p><details class="pp-help"><summary>C/T 변경 적용일 설정 (과거 날짜 수정 가능)</summary><label>C/T 변경 적용일 <input type="date" id="ppCtDate"></label><span>적용일 이전 값은 유지합니다. 월 전체를 변경하려면 1일을 선택하세요.</span></details>
+<p class="pp-help">C/T와 목표 OEE는 호기·품번 행마다 입력하며, 저장하면 선택한 Rev의 해당 월 전체에 적용됩니다. 기본 일정은 매일 08:00~익일 08:00입니다. 복합선반은 24시간, 탭핑은 계획 차감시간 210분을 제외한 20시간 30분으로 계산합니다. 호기 옆 가동시간 버튼에서 날짜별로 수정하고 생산계획을 저장하세요. 같은 호기의 모든 품번 수량이 0이면 비가동입니다. 주말·공휴일도 수량을 입력하면 가동일이 됩니다.</p>
 <div class="pp-tools"><label>생산호기 <select id="ppAddEquipment"></select></label><label>MES 품번 <input id="ppAddItem" placeholder="품번 입력 후 Enter" list="ppItemSuggestions"><datalist id="ppItemSuggestions"></datalist></label><button class="pp-btn" id="ppItemSearch">품번 조회</button><select id="ppItemMatches" hidden aria-label="품번 검색 결과"></select><button class="pp-btn" id="ppAdd">품번 행 추가</button></div>
 <div id="ppMessage" class="pp-message" role="status"></div>
 <div class="pp-scroll" style="margin-top:12px"><table class="pp-table"><thead id="ppEditHead"></thead><tbody id="ppEditRows"></tbody></table></div>
@@ -20,7 +20,7 @@
 <p class="pp-help"><label>조회·엑셀 Rev <select id="ppStatusRevision"><option value="">불러오는 중</option></select></label> · 여러 월을 조회할 때는 각 월의 적용 Rev 기준입니다.</p>
 <div id="ppStatusMessage" class="pp-message" role="status"></div>
 <div class="pp-section">1. 종합현황</div><div class="pp-scroll"><table class="pp-table" id="ppSummary"></table></div>
-<div class="pp-section">2. 세부내용</div><p class="pp-help">UPH = 내림[3,600 ÷ (C/T × (2 − 목표 OEE))], UPD는 12시간 일정 기준이며, UPD·월 생산성에는 계획 차감시간을 제외합니다. 탭핑 기본 차감은 주간 100분·야간 110분으로 하루 210분입니다. 같은 기간에 C/T가 바뀌면 적용값별로 행을 나눠 표시합니다.</p><div class="pp-scroll"><table class="pp-table" id="ppStatus"></table></div>
+<div class="pp-section">2. 세부내용</div><p class="pp-help">UPH = 내림[3,600 ÷ (C/T × (2 − 목표 OEE))], UPD는 12시간 일정 기준이며, UPD·월 생산성에는 계획 차감시간을 제외합니다. 탭핑 기본 차감은 주간 100분·야간 110분으로 하루 210분입니다. C/T를 수정·저장하면 해당 호기·품번의 월 전체 값과 하단 세부내용에 반영됩니다.</p><div class="pp-scroll"><table class="pp-table" id="ppStatus"></table></div>
 </div>
 <dialog id="ppTimeDialog" style="width:min(760px,90vw);border:1px solid #cbd5e1;border-radius:8px;padding:20px">
 <h2 id="ppTimeTitle">호기별 가동시간</h2><p class="pp-help">선택한 날짜에 시간을 일괄 적용합니다. 계획수량이 없는 날은 시간 설정과 관계없이 비가동입니다. 탭핑 기본 계획 차감은 하루 210분이며 날짜별 수정이 가능합니다. 변경 후 생산계획을 저장하세요.</p>
@@ -30,4 +30,4 @@
 <dialog id="ppRevisionAction" style="width:min(560px,90vw)"><form id="ppRevisionForm"><h2 id="ppRevisionActionTitle">개정 반영</h2><p id="ppRevisionActionHelp" class="pp-help"></p><label>변경 사유<textarea id="ppRevisionReason" required maxlength="1000" rows="4" style="display:block;width:100%;box-sizing:border-box"></textarea></label><p id="ppRevisionError" class="pp-message" role="status"></p><p class="pp-tools"><button class="pp-btn" type="submit">반영</button><button class="pp-btn" id="ppRevisionCancel" type="button">닫기</button></p></form></dialog>
 <dialog id="ppHistoryDialog" style="width:min(920px,90vw)"><h2>월별 생산계획 개정 이력</h2><div id="ppHistoryContent" class="pp-scroll"></div><p><button class="pp-btn" id="ppHistoryClose" type="button">닫기</button></p></dialog>
 {% endblock %}
-{% block extra_script %}<script src="/static/production_month_plan.js?v=20261026-4"></script>{% endblock %}
+{% block extra_script %}<script src="/static/production_month_plan.js?v=20261026-5"></script>{% endblock %}

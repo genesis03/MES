@@ -58,8 +58,7 @@ def test_copy_edit_and_apply_keep_other_revisions_and_frozen_reports_intact(setu
         assert response.status_code==200,response.text
         assert response.json()['created_revision']==source+1 and response.json()['applied_revision']==0
     original=load(setup,2)['lines']
-    body=value(item,equipment,60)|{'ct_effective_date':'2026-10-01',
-        'work_times':[{'equipment_id':equipment,'work_date':'2026-10-12','start_time':'08:00','end_time':'20:00','next_day':False}]}
+    body=value(item,equipment,60)|{'work_times':[{'equipment_id':equipment,'work_date':'2026-10-12','start_time':'08:00','end_time':'20:00','next_day':False}]}
     body['lines'][0]['quantities']['2026-10-12']=500
     assert edit(setup,3,body).status_code==200
     assert load(setup,2)['lines']==original and load(setup)['view_revision']==0
@@ -88,7 +87,7 @@ def test_same_revision_save_keeps_identity_and_audit_before_after(setup,monkeypa
         revision=db.query(ProductionPlanRevision).one()
         identity=(revision.id,revision.number,revision.created_at,revision.created_by,revision.reason)
         before=revision.snapshot_json
-    body=value(item,equipment,60)|{'ct_effective_date':'2026-10-01'}
+    body=value(item,equipment,60)
     assert edit(setup,0,body).status_code==200
     with setup.sessions() as db:
         revision=db.query(ProductionPlanRevision).one()
@@ -218,3 +217,31 @@ def test_direct_mutation_preserves_unmigrated_legacy_data_before_switching(setup
     assert meta(setup)['applied_revision']==0
     assert apply(setup,1).status_code==200
     assert load(setup,2)['lines'][0]['cycle_seconds']==88
+
+
+def test_save_unifies_legacy_daily_ct_even_when_restoring_same_header_value(setup,monkeypatch):
+    from services.production_plan_revisions import encoded
+    _,item,equipment,_=initialize(setup,monkeypatch)
+    body=value(item,equipment,30)
+    assert setup.client.put(BASE,json=body).status_code==200
+    # Reproduce an old date-based change: header was restored to 30 but some days stayed at 60.
+    with setup.sessions() as db:
+        revision=db.query(ProductionPlanRevision).one()
+        data=json.loads(revision.snapshot_json)
+        for day in data['lines'][0]['days']:
+            if day['work_date']>='2026-10-12':day['cycle_seconds']=60
+        revision.snapshot_json=encoded(data);db.commit()
+    assert copy(setup,0).status_code==200
+    original=load(setup,1)['lines']
+    params={'start_date':'2026-10-01','end_date':'2026-10-31','revision':0}
+    assert len(setup.client.get(BASE+'/status',params=params).json()['rows'])==2
+    assert edit(setup,0,body).status_code==200
+    report=setup.client.get(BASE+'/status',params=params).json()
+    assert len(report['rows'])==1 and report['rows'][0]['cycle_seconds']==30 and report['total']==200
+    assert load(setup,0)['lines'][0]['cycle_history']==[30]
+    assert load(setup,1)['lines']==original
+    with setup.sessions() as db:
+        result=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20))
+        assert next(r for r in result['items'] if r['key']==str(equipment))['planned_qty']==100
+    workbook=load_workbook(BytesIO(setup.client.get(BASE+'/excel',params=params).content))
+    assert workbook.worksheets[1]['K3'].value==200

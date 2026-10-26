@@ -99,7 +99,6 @@ class WorkTimeInput(BaseModel):
 class MonthInput(BaseModel):
     month:str
     process_code:str
-    ct_effective_date:date
     lines:list[LineInput]=Field(max_length=200)
     work_times:list[WorkTimeInput]=Field(default_factory=list,max_length=6200)
     deleted_line_ids:list[int]=Field(default_factory=list,max_length=200)
@@ -133,9 +132,6 @@ def edit_revision(number:int,payload:RevisionEditInput,db:Session=Depends(get_db
             validate_equipment(db,payload.process_code,value.equipment_id)
             if value.item_id not in allowed:raise HTTPException(422,'선택한 공정의 품번을 선택하세요.')
         if set(value.quantities)!=date_keys:raise HTTPException(422,'해당 월의 일별 계획수량을 모두 입력하세요.')
-        row=scoped.get(key)
-        if row and (row['cycle_seconds']!=value.cycle_seconds or row['expected_oee']!=value.expected_oee):
-            if not dates[0]<=payload.ct_effective_date<=dates[-1]:raise HTTPException(422,'C/T·목표 OEE 변경 적용일은 선택한 월 안에서 지정하세요.')
     equipment_ids={key[0] for key in scoped}|{v.equipment_id for v in payload.lines}
     times={(r['equipment_id'],r['work_date']):r for r in data['times']}
     overrides={}
@@ -152,13 +148,10 @@ def edit_revision(number:int,payload:RevisionEditInput,db:Session=Depends(get_db
     lines={(r['equipment_id'],r['item_id']):r for r in data['lines'] if (r['equipment_id'],r['item_id']) not in deleted}
     for value in payload.lines:
         key=(value.equipment_id,value.item_id);row=lines.get(key)
-        new=row is None
-        changed=new or row['cycle_seconds']!=value.cycle_seconds or row['expected_oee']!=value.expected_oee
         by_date={d['work_date']:d for d in row['days']} if row else {}
         for day in sorted(date_keys):
             saved=by_date.setdefault(day,{'work_date':day,'cycle_seconds':value.cycle_seconds,'expected_oee':value.expected_oee})
-            if new or (changed and date.fromisoformat(day)>=payload.ct_effective_date):
-                saved.update(cycle_seconds=value.cycle_seconds,expected_oee=value.expected_oee)
+            saved.update(cycle_seconds=value.cycle_seconds,expected_oee=value.expected_oee)
             saved['quantity']=value.quantities[day]
         lines[key]={'equipment_id':key[0],'item_id':key[1],'cycle_seconds':value.cycle_seconds,
                     'expected_oee':value.expected_oee,'days':[by_date[d] for d in sorted(by_date)]}
