@@ -58,3 +58,15 @@ class ProductionPlanRevisionMigration(Base):
     __tablename__='production_plan_revision_migrations'
     month=Column(String(7),ForeignKey('production_plan_revision_states.month'),primary_key=True)
     migrated_at=Column(DateTime,nullable=False,default=datetime.utcnow)
+
+
+class ProductionPlanRevisionDeletion(Base):
+    __tablename__='production_plan_revision_deletions'
+    id=Column(Integer,primary_key=True)
+    month=Column(String(7),nullable=False,index=True)
+    number=Column(Integer,nullable=False)
+    source_revision_id=Column(Integer,nullable=False)
+    payload_json=Column(Text,nullable=False)
+    reason=Column(Text,nullable=False)
+    deleted_by=Column(String(100),nullable=False)
+    deleted_at=Column(DateTime,nullable=False,default=datetime.utcnow)

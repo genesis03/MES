@@ -251,3 +251,9 @@ def create_revision(payload:RevisionAction,db:Session=Depends(get_db),user=Depen
 def apply_revision(payload:ApplyRevision,db:Session=Depends(get_db),user=Depends(get_current_user)):
     require_access(user,'/production/plans','WRITE');month_days(payload.month)
     return revisions.apply(db,payload.month,payload.number,payload.reason,user,payload.generation)
+
+
+@router.delete('/revisions/{number}')
+def delete_revision(number:int,payload:RevisionAction,db:Session=Depends(get_db),user=Depends(get_current_user)):
+    require_access(user,'/production/plans','WRITE');month_days(payload.month)
+    return revisions.delete_revision(db,payload.month,number,payload.reason,user,payload.generation)

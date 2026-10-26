@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import update, func
 from sqlalchemy.exc import IntegrityError
 from models.production_month_plan import ProductionMonthPlanLine, ProductionMonthPlanDay, ProductionPlanWorkTime
-from models.production_plan_revision import ProductionPlanRevisionState as State, ProductionPlanRevision as Revision, ProductionPlanRevisionReference as Reference, ProductionPlanRevisionApplication as Application, ProductionPlanRevisionEdit as Edit, ProductionPlanRevisionMigration as Migration
+from models.production_plan_revision import ProductionPlanRevisionState as State, ProductionPlanRevision as Revision, ProductionPlanRevisionReference as Reference, ProductionPlanRevisionApplication as Application, ProductionPlanRevisionEdit as Edit, ProductionPlanRevisionMigration as Migration, ProductionPlanRevisionDeletion as Deletion
 
 
 def label(number):return f'Rev.{number:02d}'
@@ -110,6 +110,9 @@ def details(db,month):
                   'edited_at':timestamp(e.edited_at),'reason':e.reason}
                  for e,number in db.query(Edit,Revision.number).join(Revision,Revision.id==Edit.revision_id)
                  .filter(Revision.month==month).order_by(Edit.id.desc()).limit(100)],
+        'deletions':[{'number':d.number,'reason':d.reason,'deleted_by':d.deleted_by,
+                      'deleted_at':timestamp(d.deleted_at)} for d in db.query(Deletion)
+                     .filter_by(month=month).order_by(Deletion.id.desc()).limit(100)],
         'applications':[{'revision':db.get(Revision,a.revision_id).number,'reason':a.reason,'applied_by':a.applied_by,
                          'applied_at':timestamp(a.applied_at)} for a in db.query(Application).filter_by(month=month).order_by(Application.id.desc()).limit(100)]}
 
@@ -233,3 +236,24 @@ def plan_data(db,first,last,applied=True,selected=None):
            'label':label(snapshots.get(m,{}).get('_revision_number',0))} for m in sorted(months)]
     return PlanData(rows,times,info)
 
+
+
+def delete_revision(db,month,number,reason,user,generation):
+    state=lock(db,month,generation)
+    if number==0 or state.applied_revision==number:
+        db.rollback();raise HTTPException(409,'Rev.00과 현재 적용 중인 Rev는 삭제할 수 없습니다.')
+    revision=db.query(Revision).filter_by(month=month,number=number).first()
+    if revision is None:db.rollback();raise HTTPException(404,'삭제할 Revision을 찾을 수 없습니다.')
+    def values(row):
+        return {column.name:(value.isoformat() if isinstance(value,datetime) else value)
+                for column in row.__table__.columns for value in [getattr(row,column.name)]}
+    payload={'revision':values(revision)}
+    for model,key in ((Edit,'edits'),(Application,'applications'),(Reference,'references')):
+        payload[key]=[values(row) for row in db.query(model).filter_by(revision_id=revision.id)]
+    db.add(Deletion(month=month,number=number,source_revision_id=revision.id,
+                    payload_json=encoded(payload),reason=reason,deleted_by=actor(user)))
+    for model in (Edit,Application,Reference):
+        db.query(model).filter_by(revision_id=revision.id).delete(synchronize_session=False)
+    db.delete(revision)
+    db.commit()
+    return details(db,month)|{'deleted_revision':number}
