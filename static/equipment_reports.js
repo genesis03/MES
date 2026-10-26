@@ -29,7 +29,7 @@
         const maximum=Math.max(1,...data.months.map(m=>m.summary.oee||0));
         $('eqChart').innerHTML=data.months.map(m=>`<div class="eq-chart-column ${m.month===data.month?'selected':''}"><span>${percent(m.summary.oee)}</span><div class="eq-chart-track"><div class="eq-chart-bar" style="height:${Math.max(0,(m.summary.oee||0)/maximum*100)}%"></div></div><button type="button" class="eq-chart-label" data-month="${m.month}" aria-label="${m.month}월 현황 조회">${m.month}월</button></div>`).join('');
         $('eqChart').querySelectorAll('[data-month]').forEach(button=>button.onclick=()=>{$('eqMonth').value=button.dataset.month;load();});
-        $('eqAnnualRows').innerHTML=[['OEE','oee'],['가동률','availability'],['성능률','performance'],['양품률','quality']].map(([label,key])=>`<tr><th scope="row">${label}</th><td><strong>${percent(data.annual[key])}</strong></td>${data.months.map(m=>`<td>${percent(m.summary[key])}</td>`).join('')}</tr>`).join('');
+        $('eqAnnualRows').innerHTML=[['OEE','oee'],['가동률','availability'],['성능효율','performance'],['양품률','quality']].map(([label,key])=>`<tr><th scope="row">${label}</th><td><strong>${percent(data.annual[key])}</strong></td>${data.months.map(m=>`<td>${percent(m.summary[key])}</td>`).join('')}</tr>`).join('');
         let rows='';
         for(const subtotal of data.process_summaries){
             for(const row of data.equipment.filter(r=>r.process_code===subtotal.process_code))rows+=`<tr><td>${esc(row.process_name)}</td><th scope="row">${dailyLink(row,data)}</th>${productionCells(row)}<td>${notes(row.issues)}</td></tr>`;
@@ -53,7 +53,7 @@
         function row(label,key,format,cellClass=''){
             return `<tr><th scope="row">${label}</th><td class="${cellClass}">${format(data.total[key])}</td>${data.days.map(d=>`<td class="${cellClass} ${d.has_activity?'':'inactive'}">${d.has_activity?format(d[key]):''}</td>`).join('')}</tr>`;
         }
-        $('eqDailyRates').innerHTML=[['OEE','oee'],['가동률','availability'],['성능률','performance'],['양품률','quality']].map(([label,key])=>row(label,key,percent)).join('');
+        $('eqDailyRates').innerHTML=[['OEE','oee'],['가동률','availability'],['성능효율','performance'],['양품률','quality']].map(([label,key])=>row(label,key,percent)).join('');
         const times=[['생산계획시간','schedule_seconds'],['계획정지','planned_stop_seconds'],['기본시간','planned_seconds'],['비가동','downtime_seconds'],['실제 가동시간','runtime_seconds'],['표준생산시간','standard_production_seconds'],['양품 표준시간','standard_good_seconds'],['품질손실 표준시간','quality_loss_seconds']];
         const quantities=[['생산계획','planned_qty'],['총생산','total_qty'],['양품','good_qty'],['불량','defect_qty'],['셋업','setup_qty']];
         let values=times.map(([label,key])=>row(label+' (분)',key,minutes)).join('')+quantities.map(([label,key])=>row(label+' (EA)',key,number)).join('');

@@ -9,11 +9,11 @@
 
 <p class="oee-help">전체 조회는 복합선반·탭핑만 포함합니다. 기본시간은 생산계획 가동시간에서 등록된 계획정지를 제외한 시간입니다. 탭핑의 기본 휴게 차감은 이미 반영되어 있으며 계획정지 열에 다시 합산하지 않습니다. 계획정지는 등록 내역 중 ‘계획정지’ 유형만, 비가동은 툴교환·청소·고장 등 나머지 등록 내역만 집계합니다. 겹치는 정지 구간은 한 번만 계산하며 계획정지를 우선합니다. 실제 가동시간은 실적 건수로 계산한 시간에서 해당 가동 구간의 등록 정지시간을 뺀 값입니다. 복합선반은 주간·야간 각각 12시간, 탭핑은 주간 10시간 20분·야간 10시간 10분입니다. 계획시간에는 조회 시점까지 경과한 시간이 포함됩니다. 계획시간과 실적 기준 시간의 차이는 비가동에 합산하지 않습니다.</p>
 <div class="oee-panel oee-toolbar"><label>가공 공정 <select id="oeeProcess" style="padding:7px;border:1px solid #cbd5e1;border-radius:4px"></select></label><label>조회 월 <input type="month" id="oeeQueryMonth"></label><label>시작일 <input type="date" id="oeeStart"></label><label>종료일 <input type="date" id="oeeEnd"></label><label><input type="checkbox" id="oeeExcludeUnplanned"> 미등록 실적 제외</label><button class="oee-btn" id="oeeLoad">조회</button><a href="/production/plans">생산계획 · 스케줄/C/T 입력</a></div>
-<p class="oee-help">가동률 = 실제 가동시간 ÷ 기본 시간 · 성능률 = 표준 생산시간 ÷ 실제 가동시간 · 양품률 = 양품 ÷ 총생산 · OEE = 가동률 × 성능률 × 양품률. 총생산은 양품·불량·셋업의 합계입니다. 미등록 제외 조건은 해당 설비·품번·실적일에 생산계획 C/T가 없는 실적의 수량과 가동시간을 제외합니다. 기본시간은 등록된 생산계획 기준을 유지합니다. 종합 지표는 합산한 시간·수량으로 계산합니다.</p>
+<p class="oee-help">가동률 = 실제 가동시간 ÷ 기본 시간 · 성능효율 = 표준 생산시간 ÷ 실제 가동시간 · 양품률 = 양품 ÷ 총생산 · OEE = 가동률 × 성능효율 × 양품률. 총생산은 양품·불량·셋업의 합계입니다. 미등록 제외 조건은 해당 설비·품번·실적일에 생산계획 C/T가 없는 실적의 수량과 가동시간을 제외합니다. 기본시간은 등록된 생산계획 기준을 유지합니다. 종합 지표는 합산한 시간·수량으로 계산합니다.</p>
 <div id="oeeMessage" role="status"></div>
-<h2>1. 종합현황</h2><div class="oee-panel oee-scroll"><table class="oee-table"><thead><tr><th>구분</th><th>기본 시간(h)</th><th>계획정지(h)</th><th>비가동(h)</th><th>실제 가동(h)</th><th>총생산</th><th>양품</th><th>가동률</th><th>성능률</th><th>양품률</th><th>OEE</th></tr></thead><tbody id="oeeSummary"></tbody></table><div class="oee-help" id="oeeExclusionSummary"></div></div>
+<h2>1. 종합현황</h2><div class="oee-panel oee-scroll"><table class="oee-table"><thead><tr><th>구분</th><th>기본 시간(h)</th><th>계획정지(h)</th><th>비가동(h)</th><th>실제 가동(h)</th><th>총생산</th><th>양품</th><th>가동률</th><th>성능효율</th><th>양품률</th><th>OEE</th></tr></thead><tbody id="oeeSummary"></tbody></table><div class="oee-help" id="oeeExclusionSummary"></div></div>
 <h2>2. 설비별 현황</h2>
-<div class="oee-panel oee-scroll"><table class="oee-table oee-equipment-table"><thead><tr><th>생산호기</th><th>기본 시간(h)</th><th>계획정지(h)</th><th>비가동(h)</th><th>실제 가동(h)</th><th>총생산</th><th>양품</th><th>가동률</th><th>성능률</th><th>양품률</th><th>OEE</th><th>확인사항 / 품번별 내역</th></tr></thead><tbody id="oeeRows"></tbody></table></div>
+<div class="oee-panel oee-scroll"><table class="oee-table oee-equipment-table"><thead><tr><th>생산호기</th><th>기본 시간(h)</th><th>계획정지(h)</th><th>비가동(h)</th><th>실제 가동(h)</th><th>총생산</th><th>양품</th><th>가동률</th><th>성능효율</th><th>양품률</th><th>OEE</th><th>확인사항 / 품번별 내역</th></tr></thead><tbody id="oeeRows"></tbody></table></div>
 
 {% endblock %}
 {% block extra_script %}<script src="/static/equipment_oee.js?v=20261013-9"></script>{% endblock %}

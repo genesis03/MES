@@ -216,7 +216,7 @@ def calculate(db,start_day,end_day,now=None,process_code=None,exclude_unplanned=
         quality=g['good_qty']/g['total_qty'] if g['total_qty'] and not any('총생산수량' in x for x in g['issues']) else None
         oee=availability*performance*quality if None not in (availability,performance,quality) else (0 if planned and not g['total_qty'] else None)
         g.update(registered_downtime_seconds=registered_downtime,downtime_seconds=downtime,runtime_seconds=runtime,availability=availability,performance=performance,quality=quality,oee=oee,standard_time_complete=not missing and not any('총생산수량' in issue for issue in g['issues']))
-        if performance is not None and performance>1:g['issues'].append('성능률 100% 초과: 사이클타임·실적·비가동 기록 확인')
+        if performance is not None and performance>1:g['issues'].append('성능효율 100% 초과: 사이클타임·실적·비가동 기록 확인')
         g['excluded_parts']=sorted(g['excluded_parts'])
         g['parts']=list(g['parts'].values())
         for p in g['parts']:p['sources']=sorted(p['sources'])
