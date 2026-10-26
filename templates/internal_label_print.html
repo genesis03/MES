@@ -8,8 +8,8 @@
 .internal-print-toolbar button{border:0;border-radius:4px;padding:9px 16px;font-weight:800;cursor:pointer}.ip-primary{background:#2563eb;color:#fff}.ip-light{background:#e2e8f0;color:#334155}
 .internal-label-page{width:80mm;height:80mm;margin:0 auto 14px;background:#fff;padding:2.5mm;box-sizing:border-box;page-break-after:always}
 .internal-label-box{width:75mm;height:75mm;border:2px solid #111;display:flex;flex-direction:column;background:#fff;overflow:hidden}
-.internal-label-title{text-align:center;font-size:13pt;font-weight:900;border-bottom:2px solid #111;padding:1.35mm 1mm}
-.internal-label-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9pt}
+.internal-label-title{text-align:center;font-size:11.5pt;line-height:1;font-weight:900;border-bottom:1px solid #111;padding:.65mm 1mm;height:5.6mm;box-sizing:border-box;flex:0 0 5.6mm}
+.internal-label-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9pt;flex-shrink:0}
 .internal-label-table td{border-bottom:1px solid #111;border-right:1px solid #111;padding:.85mm 1mm;vertical-align:middle;height:5.4mm;box-sizing:border-box}
 .internal-label-table td:last-child{border-right:0}
 .internal-label-table tbody tr:last-child td{border-bottom:0}
@@ -33,22 +33,20 @@
 .internal-barcode .barcode-svg{width:100%;height:15mm;display:block;shape-rendering:crispEdges;margin:0 auto}
 .internal-lot-text{font-family:Consolas,monospace;font-weight:900;font-size:8pt;margin-top:.35mm;letter-spacing:.2px;line-height:1}
 .internal-company{text-align:center;font-size:8.5pt;font-weight:900;margin-top:.5mm;padding:.35mm 0 .65mm;line-height:1}
-.internal-label-box:not(.production-label) .internal-label-title{padding:1mm 1mm}
 .internal-label-box:not(.production-label) .internal-label-table{flex:1 1 auto;height:auto}
 .internal-label-box:not(.production-label) .internal-label-table tbody{height:100%}
 .internal-label-box:not(.production-label) .internal-label-table tr{height:20%}
 .internal-label-box:not(.production-label) .internal-label-table td{height:auto;padding:.7mm 1mm}
 .internal-label-box:not(.production-label) .internal-label-table .storage-row td{height:auto;padding:.7mm 1mm}
-.internal-label-box.production-label .internal-label-title{padding:1mm 1mm}
 .internal-label-box.production-label .internal-label-table td{height:5.6mm;padding:.75mm .7mm}
 .internal-label-box.production-label .internal-label-table .storage-row{display:none}
-.internal-label-box.production-label .production-worker-row td{padding:0;height:5.6mm}
+.internal-label-box.production-label .production-worker-row td{padding:0;height:5.6mm;border-bottom:0}
 .internal-label-box.production-label .production-worker-grid{display:grid;grid-template-columns:14% 21% 12% 21% 12% 20%;height:100%}
 .internal-label-box.production-label .production-worker-grid span{display:flex;align-items:center;padding:0 .55mm;border-right:1px solid #111;overflow:hidden;white-space:nowrap;font-size:8.2pt}
 .internal-label-box.production-label .production-worker-grid span:nth-child(odd){font-weight:900;justify-content:center}
 .internal-label-box.production-label .production-worker-grid span:last-child{border-right:0}
-.internal-label-box.production-label .internal-extra{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,minmax(0,1fr));flex:1 1 10mm;min-height:0;border-top:1px solid #111}
-.internal-label-box.production-label .internal-extra .extra-label,.internal-label-box.production-label .internal-extra .extra-value{padding:0 .3mm;font-size:7.8pt;border-right:1px solid #111}
+.internal-label-box.production-label .internal-extra{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(2,minmax(0,1fr));flex:1 1 10mm;min-height:0;border-top:1px solid #111;overflow:hidden}
+.internal-label-box.production-label .internal-extra .extra-label,.internal-label-box.production-label .internal-extra .extra-value{padding:0 .3mm;font-size:7.8pt;line-height:1;min-height:0;box-sizing:border-box;border-right:1px solid #111}
 .internal-label-box.production-label .internal-extra .extra-value{font-size:8.8pt;font-weight:900;border-top:1px solid #111}
 .internal-label-box.production-label .internal-extra div:nth-child(4n){border-right:0}
 .internal-label-box.production-label .internal-barcode{margin-top:0}
