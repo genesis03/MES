@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from core.config import BASE_DIR
-from core.database import SessionLocal
+from core.database import SessionLocal, engine
 import models  # 기존 테이블 자동 생성 트리거
 import models.partner  # 신규 거래처 테이블 자동 생성 트리거
 from models.models import UserModel
@@ -20,6 +20,7 @@ from services.purchase_lot_format import install_purchase_lot_format
 from services.production_lot_service import ensure_production_output_lots
 from services.subcontract_reservation_repair import repair_cancelled_subcontract_reservations
 from services.subcontract_inbound_repair import repair_subcontract_inbound_sample_stock
+from services.production_plan_revision_backfill import ensure_existing_plan_revisions
 from services.audit_log import (
     install_audit_logging,
     reset_audit_context,
@@ -45,6 +46,8 @@ ensure_production_output_lots()
 repair_cancelled_subcontract_reservations()
 # 외주입고 LOT는 최초수량을 유지하고 샘플수량은 사용수량으로 계산하도록 과거 데이터를 보정합니다.
 repair_subcontract_inbound_sample_stock()
+# 조회 여부와 관계없이 저장된 모든 월의 기존 생산계획을 Rev.00으로 보존합니다.
+ensure_existing_plan_revisions(engine)
 
 # 사용자 업무행위 감사로그는 초기 보정 작업 이후부터 기록합니다.
 install_audit_logging()
