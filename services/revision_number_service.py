@@ -16,3 +16,13 @@ def revision_key(value: str) -> str:
     raw = str(value or "").strip()
     match = _REVISION_NUMBER.fullmatch(raw)
     return ("number:" + (match.group(1).lstrip("0") or "0")) if match else "legacy:" + raw.casefold()
+
+
+def display_revision_code(value) -> str:
+    """Use a minimum of two digits without rewriting stored identities or legacy codes."""
+    raw = str(value if value is not None else '').strip()
+    match = _REVISION_NUMBER.fullmatch(raw)
+    if not match:
+        return raw
+    digits = match.group(1).lstrip('0') or '0'
+    return 'Rev.' + digits.zfill(2)

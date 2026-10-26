@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from core.config import BASE_DIR
 from core.database import get_db
 from services.document_correction_service import validate_correction, record_correction
-from services.revision_number_service import normalize_revision_code, revision_key
+from services.revision_number_service import normalize_revision_code, revision_key, display_revision_code
 from services.fmea_excel_import import FmeaImportError, MAX_FILE_BYTES, parse_company_fmea
 from core.security import get_current_user, get_current_user_optional
 from models.document import ItemRevision
@@ -28,6 +28,7 @@ from services.fmea_service import (
 
 router = APIRouter(tags=["Process FMEA"])
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.filters["revision_display"] = display_revision_code
 
 
 class HeaderPayload(BaseModel):

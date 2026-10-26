@@ -14,7 +14,7 @@ async function loadDocumentList(){
  const body=$('cpDocumentList');body.replaceChildren();
  for(const entry of documents){
   const tr=document.createElement('tr');
-  for(const value of [entry.part_no,entry.part_name,entry.document_no,entry.revision_code,statusText(entry.status),entry.current_revision,entry.created_by+' / '+entry.created_at]){
+  for(const value of [entry.part_no,entry.part_name,entry.document_no,MesRevisionNumber.display(entry.revision_code),statusText(entry.status),MesRevisionNumber.display(entry.current_revision),entry.created_by+' / '+entry.created_at]){
    const td=document.createElement('td');td.textContent=value||'';tr.append(td);
   }
   const td=document.createElement('td'),button=document.createElement('button');button.type='button';button.className='cp-list-button';button.textContent='선택';
@@ -101,12 +101,12 @@ function render(){
 function sortRows(){const order=new Map(flow.steps.map((s,i)=>[s.id,i]));rows.sort((a,b)=>order.get(a.flow_step_id)-order.get(b.flow_step_id));}
 async function loadLists(){
  const id=Number($('cpItem').value);if(!id){flows=[];revisions=[];}else [flows,revisions]=await Promise.all([api('/items/'+id+'/flows'),api('/revisions?item_id='+id)]);
- addOptions($('cpFlow'),flows,'공정흐름도 선택',x=>x.revision_code+' · '+statusText(x.status));
- addOptions($('cpRevision'),revisions,'새 문서',x=>x.document_no+' · '+x.revision_code+' · '+statusText(x.status));
+ addOptions($('cpFlow'),flows,'공정흐름도 선택',x=>MesRevisionNumber.display(x.revision_code)+' · '+statusText(x.status));
+ addOptions($('cpRevision'),revisions,'새 문서',x=>x.document_no+' · '+MesRevisionNumber.display(x.revision_code)+' · '+statusText(x.status));
 }
 function newDocument(){showEditor('신규 관리계획서');current=null;correction?.reset();dirty=false;fillHeader(items.find(x=>x.id===Number($('cpItem').value))||{});$('cpDocumentNo').value='';MesRevisionNumber.setInput($('cpRevisionCode'),'REV.0',true);$('cpRevision').value='';flow=flows.find(x=>x.status==='CURRENT')||flows[0]||null;$('cpFlow').value=flow?flow.id:'';rows=flow?flow.steps.map(emptyRow):[];render();message(flow?'공정 순서에 맞춰 관리항목을 입력하거나 회사 엑셀 파일을 불러오세요.':!$('cpItem').value?'완제품 품목을 조회하여 선택하세요.':'먼저 해당 완제품의 공정흐름도를 적용해 주세요.');}
-function display(data){showEditor(($('cpItemPartNo').value||'')+' · '+data.document_no+' · '+data.revision_code+' · '+statusText(data.status));current=data;correction?.reset();flow=data.flow;rows=data.rows;fillHeader(data.header);$('cpDocumentNo').value=data.document_no;MesRevisionNumber.setInput($('cpRevisionCode'),data.revision_code,true);$('cpRevision').value=data.id;
- if(!Array.from($('cpFlow').options).some(x=>x.value===String(flow.id)))$('cpFlow').add(new Option(flow.revision_code,flow.id));$('cpFlow').value=flow.id;dirty=false;render();}
+function display(data){showEditor(($('cpItemPartNo').value||'')+' · '+data.document_no+' · '+MesRevisionNumber.display(data.revision_code)+' · '+statusText(data.status));current=data;correction?.reset();flow=data.flow;rows=data.rows;fillHeader(data.header);$('cpDocumentNo').value=data.document_no;MesRevisionNumber.setInput($('cpRevisionCode'),data.revision_code,true);$('cpRevision').value=data.id;
+ if(!Array.from($('cpFlow').options).some(x=>x.value===String(flow.id)))$('cpFlow').add(new Option(MesRevisionNumber.display(flow.revision_code),flow.id));$('cpFlow').value=flow.id;dirty=false;render();}
 async function run(action){if(busy)return;busy=true;refreshControls();try{await action();}catch(error){message(error.message,true);}finally{busy=false;refreshControls();}}
 $('cpSearchForm').onsubmit=event=>{event.preventDefault();run(loadDocumentList);};
 $('cpReset').onclick=()=>{if(busy)return;$('cpKeyword').value='';$('cpState').value='';run(loadDocumentList);};

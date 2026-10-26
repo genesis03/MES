@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>공정 FMEA · {{ fmea.document_no }} · {{ fmea.revision_code }}</title>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>공정 FMEA · {{ fmea.document_no }} · {{ fmea.revision_code|revision_display }}</title>
 <style>
 body{font-family:"Malgun Gothic",sans-serif;color:#111;margin:0;padding:18px;font-size:11px}h1{text-align:center;font-size:22px;margin:0 0 10px}.tools{display:flex;gap:12px;margin-bottom:12px}.tools button{background:#2563eb;color:#fff;border:0;border-radius:4px;padding:8px 16px;cursor:pointer}.header-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;margin:8px 0 12px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #888;padding:5px;vertical-align:middle;white-space:pre-wrap;overflow-wrap:anywhere}.header-grid th{background:#fed7aa}.header-grid td{text-align:center}.note{white-space:pre-wrap;margin:8px 0;color:#475569}.table-wrap{overflow:auto}.analysis{min-width:2050px;font-size:10px;table-layout:fixed}.analysis th{background:#333;color:#fff;text-align:center}.analysis td{vertical-align:top}.analysis .score{width:34px;text-align:center}.stage{text-align:center;vertical-align:middle!important;width:110px}.stage strong{display:block;margin-bottom:8px}.row-date{display:block;margin-top:6px}.history{font-size:10px}.history td:nth-child(3){text-align:left}
 @page{size:A4 landscape;margin:10mm}@media print{body{padding:0}.tools{display:none}.table-wrap{overflow:visible}.analysis{min-width:0;font-size:7px;width:100%}th,td{padding:3px}.analysis .score{width:18px}.analysis .stage{width:58px}thead{display:table-header-group}tr{break-inside:avoid}h1{font-size:18px}.header-grid{font-size:10px}}
@@ -12,12 +12,12 @@ body{font-family:"Malgun Gothic",sans-serif;color:#111;margin:0;padding:18px;fon
 <tr><th>적용차종</th><td>{{ fmea.vehicle_model_snapshot }}</td><th>완료예정일</th><td>{{ fmea.completion_due_date or '' }}</td></tr>
 <tr><th>양산적용일</th><td>{{ fmea.mass_production_date or '' }}</td><th>상호기능팀원</th><td rowspan="3">{{ fmea.team }}</td></tr>
 <tr><th>품번</th><td colspan="2">{{ fmea.part_no_snapshot }}</td></tr><tr><th>품명</th><td colspan="2">{{ fmea.part_name_snapshot }}</td></tr>
-<tr><th>기준 공정흐름도</th><td>{{ fmea.flow_revision_code or '미연결' }}</td><th>기준 도면</th><td>{{ fmea.basis_revision_snapshot or '미연결' }}</td></tr>
+<tr><th>기준 공정흐름도</th><td>{{ fmea.flow_revision_code|revision_display or '미연결' }}</td><th>기준 도면</th><td>{{ fmea.basis_revision_snapshot|revision_display or '미연결' }}</td></tr>
 </tbody></table>
 <table class="history"><thead><tr><th>개정</th><th>일자</th><th>주요 개정 내용</th><th>작성자</th><th>검토</th><th>승인</th></tr></thead><tbody>
-{% for revision in history %}<tr><td>{{ revision.revision_code }}</td><td>{{ revision.date_prepared }}</td><td>{{ revision.change_reason or ('미기록' if revision.previous_revision_id else '최초 작성') }}</td><td>{{ revision.prepared_by }}</td><td>—</td><td>—</td></tr>{% endfor %}
+{% for revision in history %}<tr><td>{{ revision.revision_code|revision_display }}</td><td>{{ revision.date_prepared }}</td><td>{{ revision.change_reason or ('미기록' if revision.previous_revision_id else '최초 작성') }}</td><td>{{ revision.prepared_by }}</td><td>—</td><td>—</td></tr>{% endfor %}
 </tbody></table></div>
-<p class="note">선택 개정: {{ fmea.revision_code }} · {{ status_label }}. 검토·승인 결재는 미구현이며 현재 사용 적용은 승인 서명을 의미하지 않습니다.</p>
+<p class="note">선택 개정: {{ fmea.revision_code|revision_display }} · {{ status_label }}. 검토·승인 결재는 미구현이며 현재 사용 적용은 승인 서명을 의미하지 않습니다.</p>
 {% if fmea.model_year %}<p class="note">기존 모델연도 정보: {{ fmea.model_year }}</p>{% endif %}
 {% if fmea.note %}<p class="note">비고: {{ fmea.note }}</p>{% endif %}{% if fmea.retire_reason %}<p class="note">폐기 사유: {{ fmea.retire_reason }}</p>{% endif %}
 <div class="table-wrap"><table class="analysis"><thead><tr>

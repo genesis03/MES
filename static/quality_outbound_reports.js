@@ -40,7 +40,7 @@
       if(id!==requestId) return;
       loadedPart=data.part_no;standards=data.items;
       $('qrPartName').textContent=data.part_name;
-      $('qrStandard').replaceChildren(new Option('기준서를 선택해 주세요',''), ...standards.map(s=>new Option(`${s.management_no || '최종검사'} / ${s.revision}`,s.id)));
+      $('qrStandard').replaceChildren(new Option('기준서를 선택해 주세요',''), ...standards.map(s=>new Option(`${s.management_no || '최종검사'} / ${MesRevisionNumber.display(s.revision)}`,s.id)));
       if(standards.length===1) $('qrStandard').value=standards[0].id;
       render();message(standards.length?'':'현행 최종검사 기준서가 없습니다.',!standards.length);
     } catch(e) {message(e.message,true);}
@@ -59,7 +59,7 @@
   async function list() {
     const params=new URLSearchParams(); if($('qrFindPart').value.trim())params.set('part_no',$('qrFindPart').value.trim()); if($('qrStart').value)params.set('start_date',$('qrStart').value);if($('qrEnd').value)params.set('end_date',$('qrEnd').value);
     try {const data=await api('/api/quality/outbound-reports?'+params);$('qrCount').textContent=`전체 ${data.total}건 중 ${data.items.length}건 표시`;
-      $('qrList').innerHTML=data.items.map(r=>`<tr><td>${esc(r.report_no)}</td><td>${esc(r.inspection_date)}</td><td>${esc(r.part_no)}</td><td>${esc(r.lot_no)}</td><td>${esc(r.inspector_name)}</td><td>${esc(r.standard_revision)}</td><td>${r.sample_qty}</td><td>${labels[r.judgment]}</td><td><div class="qp-links"><a href="/api/quality/outbound-reports/${r.id}/excel">엑셀</a><a href="/api/quality/outbound-reports/${r.id}/print" target="_blank" rel="noopener">상세·인쇄</a></div></td></tr>`).join('') || '<tr><td colspan="9">조회된 성적서가 없습니다.</td></tr>';
+      $('qrList').innerHTML=data.items.map(r=>`<tr><td>${esc(r.report_no)}</td><td>${esc(r.inspection_date)}</td><td>${esc(r.part_no)}</td><td>${esc(r.lot_no)}</td><td>${esc(r.inspector_name)}</td><td>${esc(MesRevisionNumber.display(r.standard_revision))}</td><td>${r.sample_qty}</td><td>${labels[r.judgment]}</td><td><div class="qp-links"><a href="/api/quality/outbound-reports/${r.id}/excel">엑셀</a><a href="/api/quality/outbound-reports/${r.id}/print" target="_blank" rel="noopener">상세·인쇄</a></div></td></tr>`).join('') || '<tr><td colspan="9">조회된 성적서가 없습니다.</td></tr>';
     }catch(e){message(e.message,true);}
   }
   $('qrFind').onclick=list;list();

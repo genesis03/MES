@@ -11,10 +11,12 @@ from core.security import get_current_user, check_admin_permission, parse_user_p
 from models.models import ItemMasterModel
 from models.inspection_standard import InspectionStandard
 from models.quality_report import InspectionReportMaster, InspectionReportItem
+from services.revision_number_service import display_revision_code
 from services.quality_report_service import evaluate, report_dict, build_report_excel
 
 router = APIRouter(tags=['Inspection reports'])
 templates = Jinja2Templates(directory='templates')
+templates.env.filters['revision_display'] = display_revision_code
 MENU = '/quality/outbound-reports'
 
 

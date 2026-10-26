@@ -49,7 +49,7 @@ function registrantId(selectId){
  return id;
 }
 function printSummary(){
- el('flowPrintSummary').innerHTML=selected?'<tr><td>'+esc(selected.part_no_snapshot)+'</td><td>'+esc(selected.part_name_snapshot)+'</td><td>'+esc(selected.revision_code)+'</td><td>'+esc(label[selected.status])+'</td><td>'+esc(selected.change_reason||'최초 등록')+'</td><td>'+esc(selected.created_by)+' / '+esc(selected.created_at)+'</td></tr>':'';
+ el('flowPrintSummary').innerHTML=selected?'<tr><td>'+esc(selected.part_no_snapshot)+'</td><td>'+esc(selected.part_name_snapshot)+'</td><td>'+esc(MesRevisionNumber.display(selected.revision_code))+'</td><td>'+esc(label[selected.status])+'</td><td>'+esc(selected.change_reason||'최초 등록')+'</td><td>'+esc(selected.created_by)+' / '+esc(selected.created_at)+'</td></tr>':'';
 }
 function controls(){
  const edit=editable()&&!busy;
@@ -102,7 +102,7 @@ function diagram(){
  const item=items.find(x=>x.id===Number(el('flowItem').value));
  const number=selected?.part_no_snapshot||item?.part_no||'',name=selected?.part_name_snapshot||item?.part_name||'';
  el('flowDiagramTitle').textContent=[number,name].filter(Boolean).join(' · ')||'공정흐름도';
- el('flowDiagramRevision').textContent='공정흐름도 개정번호: '+(selected?.revision_code||(el('flowCode').value.trim()?'REV.'+el('flowCode').value.trim():'미입력'))+' · '+(selected?label[selected.status]:'작성 중');
+ el('flowDiagramRevision').textContent='공정흐름도 개정번호: '+(selected?MesRevisionNumber.display(selected.revision_code):(el('flowCode').value.trim()?MesRevisionNumber.display(el('flowCode').value.trim()):'미입력'))+' · '+(selected?label[selected.status]:'작성 중');
  el('flowDiagram').innerHTML=steps.length?steps.map(s=>'<div class="flow-diagram-row"><div class="flow-symbol-cell">'+symbolSvg(s.symbol_shape,s.symbol_name)+'</div><div class="flow-diagram-number">'+esc(s.step_no||'미입력')+'</div><div class="flow-diagram-name">'+esc(s.step_name||'공정명 미입력')+(!s.symbol_code?'<small class="flow-note">기호 미지정</small>':'')+'</div></div>').join(''):'<p class="flow-note">공정을 등록해 주세요.</p>';
 }
 function symbolOptions(step){
@@ -127,12 +127,12 @@ function revealActiveStep(){
  });
 }
 function renderList(){
- el('flowList').innerHTML=records.length?records.map(x=>'<tr><td>'+esc(x.part_no)+'</td><td>'+esc(x.part_name)+'</td><td>'+esc(x.revision_code)+'</td><td>'+esc(label[x.status])+'</td><td>'+esc(x.change_reason||'최초 등록')+'</td><td>'+esc(x.created_by)+' / '+esc(x.created_at)+'</td><td><button class="flow-btn light" data-flow-id="'+x.id+'">선택</button></td></tr>').join(''):'<tr><td colspan="7">등록된 공정흐름도가 없습니다.</td></tr>';controls();
+ el('flowList').innerHTML=records.length?records.map(x=>'<tr><td>'+esc(x.part_no)+'</td><td>'+esc(x.part_name)+'</td><td>'+esc(MesRevisionNumber.display(x.revision_code))+'</td><td>'+esc(label[x.status])+'</td><td>'+esc(x.change_reason||'최초 등록')+'</td><td>'+esc(x.created_by)+' / '+esc(x.created_at)+'</td><td><button class="flow-btn light" data-flow-id="'+x.id+'">선택</button></td></tr>').join(''):'<tr><td colspan="7">등록된 공정흐름도가 없습니다.</td></tr>';controls();
 }
 async function list(){records=await request('/api/process-flows?keyword='+encodeURIComponent(el('flowKeyword').value));renderList();}
 async function history(itemId){
  const all=await request('/api/process-flows'),revs=all.filter(x=>x.item_id===itemId);
- el('flowHistory').innerHTML=revs.map(x=>'<tr><td>'+esc(x.revision_code)+'</td><td>'+esc(x.created_at)+'</td><td>'+esc(x.activated_at||'미적용')+'</td><td>'+esc(x.change_reason||'최초 등록')+'</td><td>'+esc(x.created_by)+'</td><td>'+esc(label[x.status])+'</td><td class="no-print"><button class="flow-btn light" data-flow-id="'+x.id+'">조회</button></td></tr>').join('');
+ el('flowHistory').innerHTML=revs.map(x=>'<tr><td>'+esc(MesRevisionNumber.display(x.revision_code))+'</td><td>'+esc(x.created_at)+'</td><td>'+esc(x.activated_at||'미적용')+'</td><td>'+esc(x.change_reason||'최초 등록')+'</td><td>'+esc(x.created_by)+'</td><td>'+esc(label[x.status])+'</td><td class="no-print"><button class="flow-btn light" data-flow-id="'+x.id+'">조회</button></td></tr>').join('');
 }
 function historyValue(change,value){
  if(/공정 추가|공정 삭제/.test(change.field)&&value){
@@ -164,7 +164,7 @@ function fill(x){
  el('flowItemDisplay').textContent=x.part_no+' · '+x.part_name+(x.item_selectable?'':' · 기존 이력 조회 전용');
  el('flowItemResults').hidden=true;el('flowItemResults').innerHTML='';
  selectedSteps.clear();activeStep=null;selected=x;setRegistrant('flowRegistrant','flowRegistrantName',x);printSummary();steps=x.steps;dirty=false;correcting=false;el('flowCorrectionReason').value='';el('flowEditor').hidden=false;
- el('flowTitle').textContent=x.part_no+' · '+x.part_name+' · '+x.revision_code+' · '+label[x.status];
+ el('flowTitle').textContent=x.part_no+' · '+x.part_name+' · '+MesRevisionNumber.display(x.revision_code)+' · '+label[x.status];
  el('flowItem').value=x.item_id;MesRevisionNumber.setInput(el('flowCode'),x.revision_code);el('flowNote').value=x.note;
  el('flowMeta').textContent='당시 품목: '+x.part_no_snapshot+' · '+x.part_name_snapshot+' | 등록: '+x.created_by+' · '+x.created_at+(x.retire_reason?' | 폐기 사유: '+x.retire_reason:'')+(x.item_selectable?'':' | 완제품 선택 대상이 아닙니다. 기존 이력은 조회 전용이며 폐기만 가능합니다.');
  renderSteps();

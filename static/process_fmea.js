@@ -89,28 +89,28 @@ function renderRows(){
 async function flowOptions(itemId,detail=null){
  flowChoices=itemId?await request('/api/process-fmea/items/'+itemId+'/flows'):[];
  if(detail?.flow&&!flowChoices.some(x=>x.id===detail.flow.id))flowChoices.push(detail.flow);
- el('fmeaFlow').innerHTML='<option value="">공정흐름도 선택</option>'+flowChoices.map(x=>'<option value="'+x.id+'">'+esc(x.revision_code+' · '+labels[x.status])+'</option>').join('');
+ el('fmeaFlow').innerHTML='<option value="">공정흐름도 선택</option>'+flowChoices.map(x=>'<option value="'+x.id+'">'+esc(MesRevisionNumber.display(x.revision_code)+' · '+labels[x.status])+'</option>').join('');
  el('fmeaFlow').value=detail?.flow_revision_id||'';
 }
 function flowWarning(){
  if(selected&&!selected.item_selectable){el('fmeaFlowWarning').textContent='완제품 선택 대상이 아닙니다. 기존 이력은 조회 전용이며 폐기만 가능합니다.';return;}
- el('fmeaFlowWarning').textContent=!currentFlow?'공정흐름도를 먼저 등록·적용한 뒤 선택해 주세요. 기존 분석행은 공정번호를 추정해 연결하지 않습니다.':selected&&selected.status!=='DRAFT'&&selected.flow_current_match===false?'기준 공정흐름도 내용이 수정되었습니다. 이 FMEA는 당시 공정번호·명칭·기호·순서를 보존합니다. 새 개정에서 최신 공정과의 일치 여부를 검토해 주세요.':currentFlow.status!=='CURRENT'?'현재 사용 공정흐름도와 다릅니다. 기존 문서는 보존하며 새 개정에서 기준 공정을 검토해 주세요.':'기준 공정흐름도 '+currentFlow.revision_code+' · 공정번호·공정명·순서 일치';
+ el('fmeaFlowWarning').textContent=!currentFlow?'공정흐름도를 먼저 등록·적용한 뒤 선택해 주세요. 기존 분석행은 공정번호를 추정해 연결하지 않습니다.':selected&&selected.status!=='DRAFT'&&selected.flow_current_match===false?'기준 공정흐름도 내용이 수정되었습니다. 이 FMEA는 당시 공정번호·명칭·기호·순서를 보존합니다. 새 개정에서 최신 공정과의 일치 여부를 검토해 주세요.':currentFlow.status!=='CURRENT'?'현재 사용 공정흐름도와 다릅니다. 기존 문서는 보존하며 새 개정에서 기준 공정을 검토해 주세요.':'기준 공정흐름도 '+MesRevisionNumber.display(currentFlow.revision_code)+' · 공정번호·공정명·순서 일치';
 }
 async function historyAndChanges(detail,revisions){
- el('fmeaHistory').innerHTML=revisions.map(r=>'<tr><td>'+esc(r.revision_code)+'</td><td>'+esc(r.created_at)+'<br>'+esc(r.activated_at||'미적용')+'</td><td>'+esc(r.change_reason||(r.previous_revision_id?'미기록':'최초 작성'))+'</td><td>'+esc(r.prepared_by)+' / '+esc(r.created_by)+'</td><td>미구현</td><td>미구현</td><td>'+esc(labels[r.status])+'</td><td><button class="pf-btn light" data-history-revision="'+r.id+'">조회</button></td></tr>').join('');
+ el('fmeaHistory').innerHTML=revisions.map(r=>'<tr><td>'+esc(MesRevisionNumber.display(r.revision_code))+'</td><td>'+esc(r.created_at)+'<br>'+esc(r.activated_at||'미적용')+'</td><td>'+esc(r.change_reason||(r.previous_revision_id?'미기록':'최초 작성'))+'</td><td>'+esc(r.prepared_by)+' / '+esc(r.created_by)+'</td><td>미구현</td><td>미구현</td><td>'+esc(labels[r.status])+'</td><td><button class="pf-btn light" data-history-revision="'+r.id+'">조회</button></td></tr>').join('');
  const difference=await request('/api/process-fmea/revisions/'+detail.id+'/changes');
- el('fmeaDiffWarning').textContent=difference.warning|| (difference.previous_revision?'비교 기준: '+difference.previous_revision:'최초 작성');
+ el('fmeaDiffWarning').textContent=difference.warning|| (difference.previous_revision?'비교 기준: '+MesRevisionNumber.display(difference.previous_revision):'최초 작성');
  el('fmeaDiffRows').innerHTML=difference.changes.length?difference.changes.map(x=>'<tr><td>'+esc(x.kind)+'</td><td>'+esc(x.process)+'</td><td>'+esc(x.field)+'</td><td>'+esc(x.before)+'</td><td>'+esc(x.after)+'</td></tr>').join(''):'<tr><td colspan="5">확인 가능한 변경 내역이 없습니다.</td></tr>';
 }
 async function basisOptions(itemId, value=null, snapshot=''){
   const revisions=itemId?await request('/api/process-fmea/items/'+itemId+'/drawing-revisions'):[];
-  el('fmeaBasis').innerHTML='<option value="">연결하지 않음</option>'+revisions.map(r=>'<option value="'+r.id+'">'+esc(r.revision_code+' · '+labels[r.status])+'</option>').join('');
+  el('fmeaBasis').innerHTML='<option value="">연결하지 않음</option>'+revisions.map(r=>'<option value="'+r.id+'">'+esc(MesRevisionNumber.display(r.revision_code)+' · '+labels[r.status])+'</option>').join('');
   if(value&&!revisions.some(r=>r.id===value))el('fmeaBasis').insertAdjacentHTML('beforeend','<option value="'+Number(value)+'">'+esc(snapshot||'기준 도면')+' · 폐기/연결 확인 필요</option>');
   el('fmeaBasis').value=value||'';
 }
 async function list(){
   const result=await request('/api/process-fmea/documents?keyword='+encodeURIComponent(el('fmeaKeyword').value)+'&status='+encodeURIComponent(el('fmeaState').value));
-  el('fmeaList').innerHTML=result.length?result.map(x=>'<tr><td>'+esc(x.part_no)+'</td><td>'+esc(x.part_name)+'</td><td>'+esc(x.document_no)+'</td><td>'+esc(x.revision_code)+'</td><td>'+esc(labels[x.status])+'</td><td>'+esc(x.current_revision||'없음')+'</td><td>'+esc(x.prepared_by)+'</td><td>'+esc(x.created_at)+'</td><td><button class="pf-btn light" data-select-document="'+x.id+'" data-revision-id="'+x.revision_id+'">선택</button></td></tr>').join(''):'<tr><td colspan="9">등록된 공정 FMEA가 없습니다.</td></tr>';
+  el('fmeaList').innerHTML=result.length?result.map(x=>'<tr><td>'+esc(x.part_no)+'</td><td>'+esc(x.part_name)+'</td><td>'+esc(x.document_no)+'</td><td>'+esc(MesRevisionNumber.display(x.revision_code))+'</td><td>'+esc(labels[x.status])+'</td><td>'+esc(MesRevisionNumber.display(x.current_revision)||'없음')+'</td><td>'+esc(x.prepared_by)+'</td><td>'+esc(x.created_at)+'</td><td><button class="pf-btn light" data-select-document="'+x.id+'" data-revision-id="'+x.revision_id+'">선택</button></td></tr>').join(''):'<tr><td colspan="9">등록된 공정 FMEA가 없습니다.</td></tr>';
   updateControls();
 }
 function fill(detail){
@@ -138,7 +138,7 @@ async function selectRevision(revisionId){
   await basisOptions(detail.item_id,detail.basis_item_revision_id,detail.basis_revision_snapshot);
   await flowOptions(detail.item_id,detail);
   fill(detail);
-  el('fmeaRevisionSelect').innerHTML=revisions.map(r=>'<option value="'+r.id+'">'+esc(r.revision_code+' · '+labels[r.status])+'</option>').join('');
+  el('fmeaRevisionSelect').innerHTML=revisions.map(r=>'<option value="'+r.id+'">'+esc(MesRevisionNumber.display(r.revision_code)+' · '+labels[r.status])+'</option>').join('');
   el('fmeaRevisionSelect').value=detail.id;
   await historyAndChanges(detail,revisions);
 }

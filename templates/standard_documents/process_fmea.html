@@ -17,7 +17,7 @@
         <div class="pf-item-query"><input id="fmeaItemKeyword" placeholder="품번 입력" autocomplete="off" aria-controls="fmeaItemResults"><button type="button" id="fmeaItemSearch" class="pf-btn primary">조회</button></div>
         <input id="fmeaItem" type="hidden"><p id="fmeaItemDisplay" class="pf-item-display" aria-live="polite">선택된 품목 없음</p>
         <div id="fmeaItemResults" class="pf-item-results" hidden></div>
-      </div><label>FMEA 번호 *<input id="fmeaNumber" maxlength="100"></label><label>개정번호 *<span class="revision-number-field"><span class="revision-number-prefix">REV.</span><input id="fmeaCode" inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력" aria-label="공정 FMEA 개정번호 숫자"></span></label><label>공정책임<input id="fmeaOwner" maxlength="100"></label>
+      </div><label>FMEA 번호 *<input id="fmeaNumber" maxlength="100"></label><label>개정번호 *<span class="revision-number-field"><span class="revision-number-prefix">Rev.</span><input id="fmeaCode" inputmode="numeric" pattern="[0-9]+" maxlength="46" placeholder="숫자 입력" aria-label="공정 FMEA 개정번호 숫자"></span></label><label>공정책임<input id="fmeaOwner" maxlength="100"></label>
       <label>회사명<input id="fmeaCompany" maxlength="200"></label><label>적용차종 · 품목마스터<input id="fmeaVehicle" readonly></label><label>완료예정일<input id="fmeaDue" type="date"></label><label>양산적용일<input id="fmeaMassDate" type="date"></label>
       <label>작성자 *<input id="fmeaAuthor" maxlength="100"></label><label>작성일 *<input id="fmeaDate" type="date"></label><label>기준 공정흐름도 개정<select id="fmeaFlow"><option value="">공정흐름도 선택</option></select></label><label>기준 도면 Revision<select id="fmeaBasis"><option value="">연결하지 않음</option></select></label>
       <label class="pf-full">상호기능팀원<textarea id="fmeaTeam" maxlength="200" placeholder="참여 부서와 담당자"></textarea></label><label class="pf-full">모델연도 · 기존 정보 유지<input id="fmeaModelYear" maxlength="100"></label>
@@ -45,4 +45,4 @@
 </div>
 {% endblock %}
 {% block extra_script %}<script src="/static/wide_table_scroll.js?v=1" defer></script><script src="/static/document_correction.js?v=2"></script>
-<script src="/static/process_fmea.js?v=part-enter-20261009" defer></script>{% endblock %}
+<script src="/static/process_fmea.js?v=revision-display-20261027" defer></script>{% endblock %}

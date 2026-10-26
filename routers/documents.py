@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from core import config
 from core.database import get_db
 from services.document_correction_service import validate_correction, record_correction, correction_history
-from services.revision_number_service import normalize_revision_code, revision_key
+from services.revision_number_service import normalize_revision_code, revision_key, display_revision_code
 from core.security import get_current_user, get_current_user_optional
 from models.document import DocumentFile, ItemDocument, ItemRevision
 from models.document_migration import DRAWING_TYPE
@@ -25,6 +25,7 @@ from services.document_service import (
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(config.BASE_DIR / "templates"))
+templates.env.filters["revision_display"] = display_revision_code
 
 
 class RevisionPayload(BaseModel):

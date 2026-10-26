@@ -53,12 +53,12 @@
             <tr class="${state.item?.item_id === item.item_id ? 'selected' : ''}"><td>
                 <button type="button" class="drawing-item-button" data-item-id="${item.item_id}">${escape(item.part_no)}
                 <span class="drawing-item-name">${escape(item.part_name)}${item.is_active !== 'Y' ? ' · 사용중지' : ''}</span></button></td>
-                <td>${item.drawing_count ? `<span class="drawing-badge current">${escape(item.current_revision)}</span><small> ${item.drawing_count}건</small>` : '없음'}</td></tr>`).join('')
+                <td>${item.drawing_count ? `<span class="drawing-badge current">${escape(MesRevisionNumber.display(item.current_revision))}</span><small> ${item.drawing_count}건</small>` : '없음'}</td></tr>`).join('')
             : '<tr><td colspan="2">조회된 품목이 없습니다.</td></tr>';
     }
 
     function renderRevisionHistory() {
-        $('drawingRevisionHistory').innerHTML = state.revisions.length ? state.revisions.map(row => `<tr class="${row.id === state.revision?.id ? 'selected' : ''}"><td>${escape(row.revision_code)}</td><td>${escape(row.created_at)}</td><td>${escape(row.activated_at || '—')}</td><td>${escape(row.change_reason || (row.previous_revision_id ? '미기록' : '최초 등록'))}${row.retire_reason ? '<br>폐기: ' + escape(row.retire_reason) : ''}</td><td>${escape(row.eco_no||'')}</td><td>${escape(row.created_by)}</td><td>${escape(statusName[row.status])}</td><td><button type="button" class="secondary" data-view-revision="${row.id}" ${state.busy ? 'disabled' : ''}>조회</button></td></tr>`).join('') : '<tr><td colspan="8">등록 이력이 없습니다.</td></tr>';
+        $('drawingRevisionHistory').innerHTML = state.revisions.length ? state.revisions.map(row => `<tr class="${row.id === state.revision?.id ? 'selected' : ''}"><td>${escape(MesRevisionNumber.display(row.revision_code))}</td><td>${escape(row.created_at)}</td><td>${escape(row.activated_at || '—')}</td><td>${escape(row.change_reason || (row.previous_revision_id ? '미기록' : '최초 등록'))}${row.retire_reason ? '<br>폐기: ' + escape(row.retire_reason) : ''}</td><td>${escape(row.eco_no||'')}</td><td>${escape(row.created_by)}</td><td>${escape(statusName[row.status])}</td><td><button type="button" class="secondary" data-view-revision="${row.id}" ${state.busy ? 'disabled' : ''}>조회</button></td></tr>`).join('') : '<tr><td colspan="8">등록 이력이 없습니다.</td></tr>';
     }
 
     async function loadItems(preferredId = state.item?.item_id) {
@@ -87,12 +87,12 @@
         $('drawingUpload').reset();
         $('drawingDetail').hidden = false; $('drawingEmpty').hidden = true;
         $('drawingItemTitle').textContent = `${state.item.part_no} · ${state.item.part_name}`;
-        $('drawingItemMeta').textContent = `품목 ID ${itemId} · ${state.item.current_revision ? `현재 사용 ${state.item.current_revision}` : '현재 사용 도면 개정 없음'}${state.item.is_active !== 'Y' ? ' · 사용중지' : ''}`;
+        $('drawingItemMeta').textContent = `품목 ID ${itemId} · ${state.item.current_revision ? `현재 사용 ${MesRevisionNumber.display(state.item.current_revision)}` : '현재 사용 도면 개정 없음'}${state.item.is_active !== 'Y' ? ' · 사용중지' : ''}`;
         renderItems(); updateActions();
         const rows = await api(`/api/documents/items/${itemId}/revisions`);
         if (request !== state.itemRequest) return;
         state.revisions = rows;
-        $('drawingRevision').innerHTML = rows.length ? rows.map(row => `<option value="${row.id}">${escape(row.revision_code)} · ${statusName[row.status]}</option>`).join('') : '<option value="">등록 이력 없음</option>';
+        $('drawingRevision').innerHTML = rows.length ? rows.map(row => `<option value="${row.id}">${escape(MesRevisionNumber.display(row.revision_code))} · ${statusName[row.status]}</option>`).join('') : '<option value="">등록 이력 없음</option>';
         const selected = rows.find(row => row.status === 'CURRENT') || rows[0];
         if (selected) {
             $('drawingRevision').value = String(selected.id);
@@ -126,7 +126,7 @@
         $('drawingDocuments').innerHTML = documents.length ? documents.map(document => `
             <article class="drawing-document ${document.retired_at ? 'retired' : ''}">
                 <h3>${escape(document.title)} ${document.retired_at ? '<span class="drawing-badge">폐기</span>' : ''}</h3>
-                <p class="drawing-muted">${escape(document.document_type_name)} · 도면번호 ${escape(document.document_no || '미입력')} · 도면 개정번호 ${escape(row.revision_code)}${document.document_revision && document.document_revision !== row.revision_code ? ` · 기존 파일 표기 개정번호 ${escape(document.document_revision)}` : ''}</p>
+                <p class="drawing-muted">${escape(document.document_type_name)} · 도면번호 ${escape(document.document_no || '미입력')} · 도면 개정번호 ${escape(MesRevisionNumber.display(row.revision_code))}${document.document_revision && MesRevisionNumber.display(document.document_revision) !== MesRevisionNumber.display(row.revision_code) ? ` · 기존 파일 표기 개정번호 ${escape(MesRevisionNumber.display(document.document_revision))}` : ''}</p>
                 <p class="drawing-muted">등록 ${escape(document.created_by)} · ${escape(document.created_at)}${document.note ? ` · ${escape(document.note)}` : ''}${document.retire_reason ? ` · 폐기 사유: ${escape(document.retire_reason)}` : ''}</p>
                 ${document.files.map(file => `<div class="drawing-file"><span class="drawing-file-name">${escape(file.original_name)}<br><small>${(file.size_bytes / 1024).toFixed(1)} KB · ${escape(file.extension.toUpperCase())}</small></span>
                     ${file.can_preview ? `<a class="drawing-view-link" href="${escape(file.preview_url)}" target="_blank" rel="noopener noreferrer" title="도면 보기" aria-label="도면 보기">도면 보기</a>` : ''}
@@ -234,7 +234,7 @@
         });
     });
     $('drawingActivate').addEventListener('click', () => {
-        if (!confirm(`[${state.revision.revision_code}]을 현재 사용으로 적용하시겠습니까? 기존 현재 사용 도면 개정은 구버전으로 전환됩니다.`)) return;
+        if (!confirm(`[${MesRevisionNumber.display(state.revision.revision_code)}]을 현재 사용으로 적용하시겠습니까? 기존 현재 사용 도면 개정은 구버전으로 전환됩니다.`)) return;
         run(async () => { await jsonPost(`/api/documents/revisions/${state.revision.id}/activate`, {}); await loadItems(); message('현재 사용 도면 개정을 적용했습니다. 품목 정보와 다른 문서의 개정번호는 변경하지 않습니다.'); });
     });
     $('drawingRetire').addEventListener('click', () => {
