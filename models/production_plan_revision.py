@@ -40,3 +40,15 @@ class ProductionPlanRevisionApplication(Base):
     reason=Column(Text,nullable=False)
     applied_by=Column(String(100),nullable=False)
     applied_at=Column(DateTime,nullable=False,default=datetime.utcnow)
+
+
+class ProductionPlanRevisionEdit(Base):
+    __tablename__='production_plan_revision_edits'
+    id=Column(Integer,primary_key=True)
+    revision_id=Column(Integer,ForeignKey('production_plan_revisions.id'),nullable=False,index=True)
+    process_code=Column(String(100),nullable=False)
+    before_json=Column(Text,nullable=False)
+    after_json=Column(Text,nullable=False)
+    reason=Column(Text,nullable=False)
+    edited_by=Column(String(100),nullable=False)
+    edited_at=Column(DateTime,nullable=False,default=datetime.utcnow)

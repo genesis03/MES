@@ -105,6 +105,74 @@ class MonthInput(BaseModel):
     generation:int|None=Field(default=None,ge=0)
 
 
+class RevisionEditInput(MonthInput):
+    generation:int=Field(ge=0)
+    deleted_line_keys:list[tuple[int,int]]=Field(default_factory=list,max_length=200)
+    reason:str=Field(default='',max_length=1000)
+
+
+@router.put('/revisions/{number}')
+def edit_revision(number:int,payload:RevisionEditInput,db:Session=Depends(get_db),user=Depends(get_current_user)):
+    require_access(user,'/production/plans','WRITE');validate_process(db,payload.process_code)
+    dates=month_days(payload.month);date_keys={d.isoformat() for d in dates}
+    data=revisions.snapshot(db,payload.month,number);data.pop('_revision_number',None)
+    equipment={e.id:e for e in db.query(EquipmentMaster)}
+    scoped={(r['equipment_id'],r['item_id']):r for r in data['lines']
+            if r['equipment_id'] in equipment and equipment[r['equipment_id']].process_code==payload.process_code}
+    deleted=set(payload.deleted_line_keys)
+    if payload.deleted_line_ids or len(deleted)!=len(payload.deleted_line_keys) or not deleted<=scoped.keys():
+        raise HTTPException(422,'삭제할 행이 선택한 Rev·공정에 없습니다. 다시 불러오세요.')
+    allowed={i['id'] for i in options_data(db)['items'] if payload.process_code in i['process_codes']}
+    seen=set()
+    for value in payload.lines:
+        key=(value.equipment_id,value.item_id)
+        if key in seen or key in deleted:raise HTTPException(422,'같은 호기·품번의 중복 또는 삭제 지정이 잘못되었습니다.')
+        seen.add(key)
+        if key not in scoped:
+            validate_equipment(db,payload.process_code,value.equipment_id)
+            if value.item_id not in allowed:raise HTTPException(422,'선택한 공정의 품번을 선택하세요.')
+        if set(value.quantities)!=date_keys:raise HTTPException(422,'해당 월의 일별 계획수량을 모두 입력하세요.')
+        row=scoped.get(key)
+        if row and (row['cycle_seconds']!=value.cycle_seconds or row['expected_oee']!=value.expected_oee):
+            if not dates[0]<=payload.ct_effective_date<=dates[-1]:raise HTTPException(422,'C/T·목표 OEE 변경 적용일은 선택한 월 안에서 지정하세요.')
+    equipment_ids={key[0] for key in scoped}|{v.equipment_id for v in payload.lines}
+    times={(r['equipment_id'],r['work_date']):r for r in data['times']}
+    overrides={}
+    for value in payload.work_times:
+        key=(value.equipment_id,value.work_date.isoformat())
+        if value.equipment_id not in equipment_ids or key[1] not in date_keys or key in overrides:
+            raise HTTPException(422,'가동시간의 호기·날짜가 선택한 Rev·공정과 일치하지 않거나 중복되었습니다.')
+        previous=times.get(key)
+        excluded=value.excluded_minutes if value.excluded_minutes is not None else previous['excluded_minutes'] if previous else default_excluded_minutes(payload.process_code)
+        period=bounds(dict(work_date=key[1],working=True,start_time=value.start_time,end_time=value.end_time,next_day=value.next_day))
+        if excluded*60>=(period[1]-period[0]).total_seconds():raise HTTPException(422,'계획 차감시간은 시작·종료시간 사이보다 짧아야 합니다.')
+        overrides[key]={'equipment_id':key[0],'work_date':key[1],'start_time':value.start_time,
+                        'end_time':value.end_time,'next_day':value.next_day,'excluded_minutes':excluded}
+    lines={(r['equipment_id'],r['item_id']):r for r in data['lines'] if (r['equipment_id'],r['item_id']) not in deleted}
+    for value in payload.lines:
+        key=(value.equipment_id,value.item_id);row=lines.get(key)
+        new=row is None
+        changed=new or row['cycle_seconds']!=value.cycle_seconds or row['expected_oee']!=value.expected_oee
+        by_date={d['work_date']:d for d in row['days']} if row else {}
+        for day in sorted(date_keys):
+            saved=by_date.setdefault(day,{'work_date':day,'cycle_seconds':value.cycle_seconds,'expected_oee':value.expected_oee})
+            if new or (changed and date.fromisoformat(day)>=payload.ct_effective_date):
+                saved.update(cycle_seconds=value.cycle_seconds,expected_oee=value.expected_oee)
+            saved['quantity']=value.quantities[day]
+        lines[key]={'equipment_id':key[0],'item_id':key[1],'cycle_seconds':value.cycle_seconds,
+                    'expected_oee':value.expected_oee,'days':[by_date[d] for d in sorted(by_date)]}
+    for equipment_id in equipment_ids:
+        for day in sorted(date_keys):
+            key=(equipment_id,day)
+            times.setdefault(key,{'equipment_id':equipment_id,'work_date':day,'start_time':'08:00',
+                'end_time':'08:00','next_day':True,'excluded_minutes':default_excluded_minutes(payload.process_code)})
+    times.update(overrides)
+    data.update(lines=[lines[key] for key in sorted(lines)],times=[times[key] for key in sorted(times)])
+    result=revisions.edit_revision(db,payload.month,number,data,payload.process_code,user,payload.generation,payload.reason)
+    return {'message':f'{revisions.label(number)} 내용을 수정했습니다. Rev 번호는 유지됩니다.',
+            'generation':result['generation'],'applied_revision':result['applied_revision']}
+
+
 @router.put('')
 def save(payload:MonthInput,db:Session=Depends(get_db),user=Depends(get_current_user)):
     require_access(user,'/production/plans','WRITE');validate_process(db,payload.process_code)

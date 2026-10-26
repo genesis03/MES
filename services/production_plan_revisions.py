@@ -1,4 +1,5 @@
-"""Immutable monthly plan revisions; live plan tables remain the editable draft."""
+"""Monthly plan versions with independent drafts and audited same-Rev edits."""
+import hashlib
 import json
 from datetime import datetime
 from types import SimpleNamespace as Object
@@ -8,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import update, func
 from sqlalchemy.exc import IntegrityError
 from models.production_month_plan import ProductionMonthPlanLine, ProductionMonthPlanDay, ProductionPlanWorkTime
-from models.production_plan_revision import ProductionPlanRevisionState as State, ProductionPlanRevision as Revision, ProductionPlanRevisionReference as Reference, ProductionPlanRevisionApplication as Application
+from models.production_plan_revision import ProductionPlanRevisionState as State, ProductionPlanRevision as Revision, ProductionPlanRevisionReference as Reference, ProductionPlanRevisionApplication as Application, ProductionPlanRevisionEdit as Edit
 
 
 def label(number):return f'Rev.{number:02d}'
@@ -87,6 +88,10 @@ def details(db,month):
         'saved_by':state.saved_by or '', 'saved_at':timestamp(state.saved_at),
         'revisions':[{'number':r.number,'label':label(r.number),'reason':r.reason,'created_by':r.created_by,
                       'created_at':timestamp(r.created_at)} for r in revisions],
+        'edits':[{'id':e.id,'number':number,'process_code':e.process_code,'edited_by':e.edited_by,
+                  'edited_at':timestamp(e.edited_at),'reason':e.reason}
+                 for e,number in db.query(Edit,Revision.number).join(Revision,Revision.id==Edit.revision_id)
+                 .filter(Revision.month==month).order_by(Edit.id.desc()).limit(100)],
         'applications':[{'revision':db.get(Revision,a.revision_id).number,'reason':a.reason,'applied_by':a.applied_by,
                          'applied_at':timestamp(a.applied_at)} for a in db.query(Application).filter_by(month=month).order_by(Application.id.desc()).limit(100)]}
 
@@ -114,8 +119,28 @@ def apply(db,month,number,reason,user,generation):
     return details(db,month)
 
 
+def edit_revision(db,month,number,data,process_code,user,generation,reason=''):
+    state=lock(db,month,generation)
+    revision=db.query(Revision).filter_by(month=month,number=number).first()
+    if revision is None:db.rollback();raise HTTPException(404,'해당 월의 Revision이 없습니다.')
+    after=encoded(data)
+    if after==revision.snapshot_json:
+        db.rollback();return details(db,month)
+    db.add(Edit(revision_id=revision.id,process_code=process_code,before_json=revision.snapshot_json,
+                after_json=after,reason=reason.strip() or label(number)+' 직접 수정',edited_by=actor(user)))
+    revision.snapshot_json=after
+    # Keep old references too: before-images remain part of the audit history.
+    refs={(r.item_id,r.equipment_id) for r in db.query(Reference).filter_by(revision_id=revision.id)}
+    for line in data['lines']:
+        key=(line['item_id'],line['equipment_id'])
+        if key not in refs:
+            db.add(Reference(revision_id=revision.id,item_id=key[0],equipment_id=key[1]));refs.add(key)
+    db.commit()
+    return details(db,month)
+
+
 def applied_snapshots(db,first,last):
-    return {s.month:json.loads(r.snapshot_json)|{'_revision_number':r.number} for s,r in db.query(State,Revision).join(Revision,
+    return {s.month:json.loads(r.snapshot_json)|{'_revision_number':r.number,'_snapshot_hash':hashlib.sha256(r.snapshot_json.encode()).hexdigest()} for s,r in db.query(State,Revision).join(Revision,
         (Revision.month==State.month)&(Revision.number==State.applied_revision)).filter(
         State.month>=first.strftime('%Y-%m'),State.month<=last.strftime('%Y-%m'))}
 
@@ -153,7 +178,7 @@ def plan_data(db,first,last,applied=True,selected=None):
     if applied and selected is None:
         # A switch during initial data loading must never mix two applied plans.
         latest=applied_snapshots(db,first,last)
-        if {m:d['_revision_number'] for m,d in snapshots.items()}!={m:d['_revision_number'] for m,d in latest.items()}:
+        if {m:(d['_revision_number'],d['_snapshot_hash']) for m,d in snapshots.items()}!={m:(d['_revision_number'],d['_snapshot_hash']) for m,d in latest.items()}:
             raise HTTPException(409,'적용 생산계획이 변경되었습니다. 다시 조회하세요.')
     months={line.month for _,line in rows}|set(snapshots)
     info=[{'month':m,'number':snapshots.get(m,{}).get('_revision_number',0),

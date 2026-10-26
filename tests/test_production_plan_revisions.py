@@ -120,3 +120,116 @@ def test_rev_zero_preserves_existing_plan_and_revision_references_protect_items(
         monkeypatch.setattr(oee_schedule,'default_excluded_minutes',lambda _:60)
         after=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20))
         assert before['planned_seconds']==after['planned_seconds']==86400
+
+
+def test_direct_rev_zero_edit_preserves_number_draft_and_audit(setup,monkeypatch):
+    from test_equipment_oee import plan_ct
+    from models.production_plan_revision import ProductionPlanRevisionEdit
+    from models.production_month_plan import ProductionMonthPlanLine
+    _,item,equipment,_=initialize(setup,monkeypatch)
+    with setup.sessions() as db:
+        plan_ct(db,equipment,item,'2026-10-12',30);db.commit()
+    initial=meta(setup)
+    with setup.sessions() as db:
+        revision=db.query(ProductionPlanRevision).one()
+        identity=(revision.id,revision.created_at,revision.created_by,revision.reason)
+        before=revision.snapshot_json
+        frozen=plan_data(db,date(2026,10,1),date(2026,10,31))
+    body=value(item,equipment,60)|{'generation':initial['generation'],'ct_effective_date':'2026-10-01',
+        'work_times':[{'equipment_id':equipment,'work_date':'2026-10-12','start_time':'08:00','end_time':'20:00','next_day':False}]}
+    body['lines'][0]['quantities']['2026-10-12']=500
+    response=setup.client.put(BASE+'/revisions/0',json=body)
+    assert response.status_code==200,response.text
+    assert response.json()['applied_revision']==0
+    assert len(meta(setup)['revisions'])==1
+    with setup.sessions() as db:
+        revision=db.query(ProductionPlanRevision).one()
+        assert (revision.id,revision.created_at,revision.created_by,revision.reason)==identity
+        assert db.query(ProductionMonthPlanLine).one().cycle_seconds==30
+        edit=db.query(ProductionPlanRevisionEdit).one()
+        assert edit.before_json==before and edit.after_json==revision.snapshot_json and edit.edited_by
+        current=plan_data(db,date(2026,10,1),date(2026,10,31))
+        assert next(d.quantity for d,l in current.rows if d.work_date=='2026-10-12')==500
+        assert next(d.cycle_seconds for d,l in current.rows if d.work_date=='2026-10-12')==60
+        assert next(d.cycle_seconds for d,l in frozen.rows if d.work_date=='2026-10-12')==30
+        oee=calculate(db,date(2026,10,12),date(2026,10,12),now=datetime(2026,10,20))
+        assert oee['summary']['planned_qty']==500 and oee['planned_seconds']==43200
+        assert oee['plan_revisions'][0]['number']==0
+    assert len(meta(setup)['edits'])==1
+    assert setup.client.put(BASE+'/revisions/0',json=body).status_code==409
+    body['generation']=meta(setup)['generation']
+    assert setup.client.put(BASE+'/revisions/0',json=body).status_code==200
+    assert len(meta(setup)['edits'])==1
+    assert setup.client.put(BASE+'/revisions/99',json=body).status_code==404
+    setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='reader',role='USER',permissions=json.dumps({'menu_access':{'/production/plans':'READ'}}))
+    assert setup.client.put(BASE+'/revisions/0',json=body).status_code==403
+
+
+def test_edit_unapplied_revision_keeps_active_plan_and_validates_deletion(setup,monkeypatch):
+    _,item,equipment,_=initialize(setup,monkeypatch)
+    assert setup.client.put(BASE,json=value(item,equipment)).status_code==200
+    assert publish(setup)['applied_revision']==1
+    body=value(item,equipment,75)|{'generation':meta(setup)['generation']}
+    response=setup.client.put(BASE+'/revisions/0',json=body)
+    assert response.status_code==200,response.text
+    assert meta(setup)['applied_revision']==1
+    with setup.sessions() as db:
+        active=plan_data(db,date(2026,10,1),date(2026,10,31))
+        assert next(d.cycle_seconds for d,l in active.rows if d.work_date=='2026-10-12')==30
+    body['generation']=meta(setup)['generation']
+    body['deleted_line_keys']=[[equipment,item+9999]]
+    assert setup.client.put(BASE+'/revisions/0',json=body).status_code==422
+    body['deleted_line_keys']=[[equipment,item]];body['lines']=[]
+    assert setup.client.put(BASE+'/revisions/0',json=body).status_code==200
+    params={'month':'2026-10','process_code':'LT'}
+    assert setup.client.get(BASE,params=params|{'revision':0}).json()['lines']==[]
+    assert len(setup.client.get(BASE,params=params|{'revision':1}).json()['lines'])==1
+    assert len(setup.client.get(BASE,params=params).json()['lines'])==1
+
+
+def test_same_number_change_during_report_loading_is_detected(setup,monkeypatch):
+    from fastapi import HTTPException
+    from services import production_plan_revisions as revisions
+    _,item,equipment,_=initialize(setup,monkeypatch)
+    assert setup.client.put(BASE,json=value(item,equipment)).status_code==200
+    publish(setup)
+    original=revisions.applied_snapshots
+    calls=0
+    def changing(db,first,last):
+        nonlocal calls
+        data=original(db,first,last);calls+=1
+        if calls==2:data['2026-10']['_snapshot_hash']='changed-content-with-same-revision-number'
+        return data
+    monkeypatch.setattr(revisions,'applied_snapshots',changing)
+    with setup.sessions() as db:
+        with pytest.raises(HTTPException) as error:plan_data(db,date(2026,10,1),date(2026,10,31))
+        assert error.value.status_code==409
+
+
+def test_revision_edit_keeps_other_process_content_and_old_references(setup,monkeypatch):
+    from copy import deepcopy
+    from models.equipment import EquipmentMaster
+    from models.production_plan_revision import ProductionPlanRevisionReference
+    from services.production_plan_revisions import encoded
+    _,item,equipment,other=initialize(setup,monkeypatch)
+    assert setup.client.put(BASE,json=value(item,equipment)).status_code==200
+    publish(setup)
+    with setup.sessions() as db:
+        db.get(EquipmentMaster,other).process_code='TP'
+        revision=db.query(ProductionPlanRevision).filter_by(number=1).one()
+        data=json.loads(revision.snapshot_json)
+        other_line=deepcopy(data['lines'][0]);other_line['equipment_id']=other
+        other_times=[dict(t,equipment_id=other) for t in data['times']]
+        data['lines'].append(other_line);data['times'].extend(other_times)
+        revision.snapshot_json=encoded(data);db.commit()
+        revision_id=revision.id
+    body=value(item,equipment,40)|{'generation':meta(setup)['generation']}
+    assert setup.client.put(BASE+'/revisions/1',json=body).status_code==200
+    with setup.sessions() as db:
+        data=json.loads(db.get(ProductionPlanRevision,revision_id).snapshot_json)
+        assert next(r for r in data['lines'] if r['equipment_id']==other)==other_line
+        assert [r for r in data['times'] if r['equipment_id']==other]==other_times
+    body.update(generation=meta(setup)['generation'],lines=[],deleted_line_keys=[[equipment,item]])
+    assert setup.client.put(BASE+'/revisions/1',json=body).status_code==200
+    with setup.sessions() as db:
+        assert db.query(ProductionPlanRevisionReference).filter_by(revision_id=revision_id,item_id=item,equipment_id=equipment).count()==1
