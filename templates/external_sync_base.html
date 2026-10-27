@@ -24,17 +24,17 @@
 <label><span><input id="exEnabled" type="checkbox"> 자동 동기화 사용</span></label>
 <label>조회 간격(분)<input id="exInterval" type="number" min="5" max="1440" required></label>
 <label>최근 조회 일수<input id="exLookback" type="number" min="1" max="90" required></label>
-{% for key,label in [('production','생산실적'),('subcontract','외주불량'),('packing','포장현황')] %}
+{% for key,label in [('production','생산실적'),('subcontract','외주불량'),('packing','포장현황'),('shipment','출고이력')] %}
 <label><span><input type="checkbox" data-sync-target="{{key}}"> {{label}}</span></label>
 {% endfor %}
 <button class="es-btn" type="submit">공통 설정 저장</button>
 </form><p id="exMessage" role="status" class="es-result"></p><div id="exStatus" class="ex-status"></div>
 </section>
-<section class="es-card"><form id="exRunAll" class="es-line"><label>시작일<br><input id="exStart" type="date" required></label><label>종료일<br><input id="exEnd" type="date" required></label><button class="es-btn" type="submit">선택 대상 전체 가져오기</button></form><p class="es-muted">위에서 체크한 대상을 생산실적 → 외주불량 → 포장현황 순서로 가져옵니다. 개별 실패 시 나머지 대상은 계속 실행됩니다.</p><p id="exBatch" class="es-result" role="status"></p></section>
+<section class="es-card"><form id="exRunAll" class="es-line"><label>시작일<br><input id="exStart" type="date" required></label><label>종료일<br><input id="exEnd" type="date" required></label><button class="es-btn" type="submit">선택 대상 전체 가져오기</button></form><p class="es-muted">위에서 체크한 대상을 생산실적 → 외주불량 → 포장현황 → 출고이력 순서로 가져옵니다. 개별 실패 시 나머지 대상은 계속 실행됩니다.</p><p id="exBatch" class="es-result" role="status"></p></section>
 <nav class="ex-tabs" aria-label="외부 연동 자료">
-{% for key,label in [('production','생산실적'),('subcontract','외주불량'),('packing','포장현황'),('history','연동 이력')] %}
+{% for key,label in [('production','생산실적'),('subcontract','외주불량'),('packing','포장현황'),('shipment','출고이력'),('history','연동 이력')] %}
 <a href="/admin/external-sync?tab={{key}}" {% if active_sync|default('production') == key %}aria-current="page"{% endif %}>{{label}}</a>
 {% endfor %}</nav>
 {% block sync_content %}{% endblock %}
-</div><script src="/static/external_sync.js?v=auto-key-20261027" defer></script>
+</div><script src="/static/external_sync.js?v=shipments-20261027" defer></script>
 {% endblock %}

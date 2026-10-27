@@ -144,7 +144,11 @@ def source_shipments(
                 for item in row.items
             ],
         })
-    return {"items": result}
+    from services.shipment_sync_view import external_shipments
+    result.extend(external_shipments(db, start_date=start_date, end_date=end_date,
+        shipment_no=shipment_no, customer_name=customer_name, printable_only=True))
+    result.sort(key=lambda row: (row["shipment_date"], row["shipment_no"]), reverse=True)
+    return {"items": result[:1000]}
 
 
 @router.post("/shipping/from-shipments")

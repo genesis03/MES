@@ -15,18 +15,18 @@ def test_common_settings_preserve_existing_values_until_explicit_save(setup):
             state=sync.state(db,kind); state.enabled=True;state.interval_minutes=60*(index+1);db.commit()
     data=setup.client.get(BASE+'/settings').json()
     assert data['interval_minutes'] is None
-    assert [s['interval_minutes'] for s in data['states']]==[60,120,180]
+    assert [s['interval_minutes'] for s in data['states']]==[60,120,180,240]
     response=setup.client.put(BASE+'/settings',json={'enabled':True,'interval_minutes':240,'lookback_days':3,'targets':['production','subcontract']})
     assert response.status_code==200,response.text
     states=setup.client.get(BASE+'/settings').json()['states']
-    assert [s['enabled'] for s in states]==[True,True,False]
-    assert [s['interval_minutes'] for s in states]==[240,240,180]
+    assert [s['enabled'] for s in states]==[True,True,False,False]
+    assert [s['interval_minutes'] for s in states]==[240,240,180,240]
     assert setup.client.put(BASE+'/settings',json={'enabled':True,'interval_minutes':240,'lookback_days':3,'targets':[]}).status_code==422
     setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='worker',role='USER',permissions=None)
     assert setup.client.get(BASE+'/settings').status_code==403
 
 
-@pytest.mark.parametrize('tab,marker',[('production','esRows'),('subcontract','sfRows'),('packing','pkRows'),('history','exRuns')])
+@pytest.mark.parametrize('tab,marker',[('production','esRows'),('subcontract','sfRows'),('packing','pkRows'),('shipment','출고이력'),('history','exRuns')])
 def test_tabs_share_one_settings_form_and_navigation(setup,tab,marker):
     page=setup.client.get('/admin/external-sync',params={'tab':tab})
     assert page.status_code==200,page.text
@@ -46,7 +46,7 @@ def test_batch_order_and_failure_does_not_stop_remaining_targets(setup,monkeypat
         def __init__(self,**kw): captured.append(kw)
         def start(self): pass
     monkeypatch.setattr(module.threading,'Thread',Thread)
-    response=setup.client.post(BASE+'/run',json={'start_date':DAY.isoformat(),'end_date':DAY.isoformat(),'targets':['packing','subcontract','production']})
+    response=setup.client.post(BASE+'/run',json={'start_date':DAY.isoformat(),'end_date':DAY.isoformat(),'targets':list(reversed(KINDS))})
     assert response.status_code==202,response.text
     assert [r['kind'] for r in response.json()['results']]==list(KINDS)
     calls=[]

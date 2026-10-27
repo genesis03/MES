@@ -1,0 +1,8 @@
+{% extends 'external_sync_base.html' %}
+{% block sync_content %}
+<section class="es-card"><h2>출고이력</h2>
+<p>출고전표·품번별 수량·BOX별 LOT 배정 내역을 함께 가져옵니다. 포장이력과 별도로 보관하며 내부 재고와 수주 출고량을 변경하지 않습니다.</p>
+<p><a href="/shipping/inquiry">출고 내역 조회</a>에서 외부 출고의 상세 LOT를 확인할 수 있습니다. LOT 수량과 박스 수가 일치하는 완료 전표는 기존 인쇄 및 <a href="/shipping/history">출고 내역 및 LOT 계산</a> 양식으로 연결됩니다.</p>
+<p class="es-muted">위에서 출고이력을 선택하고 기간을 지정해 가져오세요. 자동 동기화도 같은 설정을 사용합니다. 원본에서 사라진 전표는 재조회한 날짜의 목록에서 제외하며 수신 원본은 보존합니다.</p>
+</section>
+{% endblock %}

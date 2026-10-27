@@ -11,16 +11,16 @@ from services import production_sync_service as sync
 from services.production_sync_client import SyncError
 
 router = APIRouter(prefix='/api/admin/external-sync', tags=['External synchronization'])
-KINDS = ('production', 'subcontract', 'packing')
-NAMES = dict(zip(KINDS, ('생산실적','외주불량','포장현황')))
+KINDS = ('production', 'subcontract', 'packing', 'shipment')
+NAMES = dict(zip(KINDS, ('생산실적','외주불량','포장현황','출고이력')))
 
 
 class CommonSettings(Settings):
-    targets: list[Literal['production','subcontract','packing']] = Field(min_length=1, max_length=3)
+    targets: list[Literal['production','subcontract','packing','shipment']] = Field(min_length=1, max_length=4)
 
 
 class GroupRun(Run):
-    targets: list[Literal['production','subcontract','packing']] = Field(min_length=1, max_length=3)
+    targets: list[Literal['production','subcontract','packing','shipment']] = Field(min_length=1, max_length=4)
 
 
 @router.get('/settings')

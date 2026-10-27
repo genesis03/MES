@@ -40,10 +40,10 @@ def page(request: Request, user=Depends(get_current_user)):
 
 
 @router.get('/admin/external-sync', response_class=HTMLResponse)
-def integrated_page(request: Request, tab: Literal['production','subcontract','packing','history'] = 'production', user=Depends(get_current_user)):
+def integrated_page(request: Request, tab: Literal['production','subcontract','packing','shipment','history'] = 'production', user=Depends(get_current_user)):
     access(user)
     names = {'production':'production_external.html', 'subcontract':'subcontract_fault_external.html',
-             'packing':'packing_external.html', 'history':'external_sync_history.html'}
+             'packing':'packing_external.html', 'shipment':'shipment_external.html', 'history':'external_sync_history.html'}
     return templates.TemplateResponse(request=request, name=names[tab],
         context={'user':user, 'can_manage':True, 'active_sync':tab})
 
@@ -85,16 +85,25 @@ class ProtocolKeyInput(BaseModel):
     encrypt_key:str=Field(pattern=r'^[0-9]{1,8}$')
 
 
+def lock_shared_settings(db, message):
+    from services.production_sync_service import backend
+    kinds = ('production', 'packing', 'subcontract', 'shipment')
+    for kind in kinds:
+        state(db, kind)
+    instant = now()
+    for kind in kinds:
+        model = backend(kind)[0]
+        changed = db.execute(update(model).where(model.id == 1,
+            or_(model.lease_until.is_(None), model.lease_until < instant)).values(last_error=None))
+        if changed.rowcount != 1:
+            db.rollback()
+            raise HTTPException(409, message)
+
+
 @router.put('/api/production/external-sync/protocol-key')
 def update_protocol_key(payload:ProtocolKeyInput,db:Session=Depends(get_db),user=Depends(get_current_user)):
     access(user)
-    state(db);state(db,'packing')
-    instant=now()
-    for model in (ProductionSyncState,PackingSyncState):
-        changed=db.execute(update(model).where(model.id==1,or_(model.lease_until.is_(None),model.lease_until<instant)).values(last_error=None))
-        if changed.rowcount!=1:
-            db.rollback()
-            raise HTTPException(409,'동기화 실행 중에는 접속키를 변경할 수 없습니다.')
+    lock_shared_settings(db, '동기화 실행 중에는 접속키를 변경할 수 없습니다.')
     save_protocol_key(db,payload.encrypt_key)
     return {'message':'접속키를 저장했습니다. 로그인 확인을 눌러 주세요.','encrypt_key':payload.encrypt_key}
 
@@ -127,21 +136,7 @@ def update_credentials(payload: Credentials, db: Session = Depends(get_db), user
         diagnostic=getattr(exc.__cause__,'diagnostic',None)
         if diagnostic:return JSONResponse(status_code=exc.status_code,content={'detail':exc.detail,'diagnostic':diagnostic})
         raise
-    state(db)
-    state(db, 'packing')
-    instant = now()
-    changed = db.execute(update(ProductionSyncState).where(
-        ProductionSyncState.id == 1, or_(ProductionSyncState.lease_until.is_(None), ProductionSyncState.lease_until < instant)
-    ).values(last_error=None))
-    if changed.rowcount != 1:
-        db.rollback()
-        raise HTTPException(409, '동기화 실행 중에는 연동 계정을 변경할 수 없습니다.')
-    packing_lock = db.execute(update(PackingSyncState).where(
-        PackingSyncState.id == 1, or_(PackingSyncState.lease_until.is_(None), PackingSyncState.lease_until < instant)
-    ).values(last_error=None))
-    if packing_lock.rowcount != 1:
-        db.rollback()
-        raise HTTPException(409, '포장 동기화 실행 중에는 연동 계정을 변경할 수 없습니다.')
+    lock_shared_settings(db, '동기화 실행 중에는 연동 계정을 변경할 수 없습니다.')
     try:
         save_credentials(db, username, password)
     except CredentialError as exc:
@@ -316,6 +311,9 @@ def item_maps(db: Session = Depends(get_db), user=Depends(get_current_user)):
     pairs = set(db.query(ExternalProductionRecord.part_no, ExternalProductionRecord.process_name).distinct().all())
     pairs.update((part, '포장') for (part,) in db.query(ExternalPackingRecord.part_no).distinct())
     pairs.update(db.query(ExternalSubcontractFault.part_no, ExternalSubcontractFault.process_name).distinct().all())
+    from models.shipment_sync import ExternalShipment
+    for (raw,) in db.query(ExternalShipment.raw_json):
+        pairs.update((item['ITEM_NUM'], '출고') for item in json.loads(raw)['items'])
     connections = ItemConnections(db)
     result = []
     for part, process in sorted(pairs):

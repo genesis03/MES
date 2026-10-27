@@ -55,6 +55,8 @@ from models.production_cycle_time import ProductionCycleTime
 from models.oee_schedule import OeeScheduleDay
 from models.production_month_plan import ProductionEquipmentSchedule, ProductionMonthPlanLine, ProductionMonthPlanDay, ProductionPlanWorkTime
 
+from models.shipment_sync import ShipmentSyncState, ShipmentSyncRun, ExternalShipment, ExternalShipmentLot
+
 Base.metadata.create_all(bind=engine)
 from models.production_plan_time_migration import ensure_production_plan_work_times
 ensure_production_plan_work_times(engine)

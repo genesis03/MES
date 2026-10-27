@@ -1,3 +1,4 @@
+from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from fastapi.responses import HTMLResponse
@@ -151,6 +152,7 @@ def shipping_inquiry(
     item_id: list[int] | None = Query(None),
     shipment_no: str | None = Query(None, max_length=30),
     limit: int = Query(1000, ge=1, le=2000),
+    source: Literal["ALL", "INTERNAL", "EXTERNAL"] = "ALL",
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -178,12 +180,27 @@ def shipping_inquiry(
         .limit(limit)
         .all()
     )
-    result = [_serialize_shipment(db, row) for row in rows]
+    result = [_serialize_shipment(db, row) for row in rows] if source != "EXTERNAL" else []
+    if source != "INTERNAL":
+        from services.shipment_sync_view import external_shipments
+        result.extend(external_shipments(db, start_date=start_date, end_date=end_date,
+            shipment_no=shipment_no, customer_name=customer_name, customer_id=customer_id,
+            item_ids=selected_item_ids, limit=limit))
+    result.sort(key=lambda row: (row["shipment_date"], row["shipment_no"]), reverse=True)
+    result = result[:limit]
     return {"items": result, "total": len(result)}
 
 
 @router.get("/api/shipping/inquiry/{shipment_id}")
 def shipping_inquiry_detail(shipment_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    if shipment_id < 0:
+        from models.shipment_sync import ExternalShipment
+        from services.shipment_sync_view import shipment_view
+        from services.production_sync_mapping import ItemConnections
+        external = db.get(ExternalShipment, -shipment_id)
+        if external is None:
+            raise HTTPException(404, "외부 출고 내역을 찾을 수 없습니다.")
+        return shipment_view(external, ItemConnections(db), detail=True)
     row = db.get(ShipmentMaster, shipment_id)
     if not row:
         raise HTTPException(404, "출고 내역을 찾을 수 없습니다.")
@@ -197,6 +214,8 @@ def update_shipment(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    if shipment_id < 0:
+        raise HTTPException(409, "외부 출고는 읽기 전용입니다. 원본 수정 후 다시 가져오세요.")
     shipment = db.get(ShipmentMaster, shipment_id)
     if not shipment:
         raise HTTPException(404, "출고 내역을 찾을 수 없습니다.")
@@ -245,6 +264,8 @@ def update_shipment(
 
 @router.delete("/api/shipping/inquiry/{shipment_id}")
 def delete_shipment(shipment_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    if shipment_id < 0:
+        raise HTTPException(409, "외부 출고는 읽기 전용입니다. 원본 수정 후 다시 가져오세요.")
     shipment = db.get(ShipmentMaster, shipment_id)
     if not shipment:
         raise HTTPException(404, "출고 내역을 찾을 수 없습니다.")

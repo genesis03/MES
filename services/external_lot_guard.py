@@ -11,7 +11,10 @@ def external_lot_numbers(db, prefix, item_id=None):
     production = db.query(ExternalProductionRecord.part_no, ExternalProductionRecord.process_name,
                           ExternalProductionRecord.lot_no).filter(
         func.upper(func.trim(ExternalProductionRecord.lot_no)).like(prefix.upper() + '%')).all()
-    candidates = [(part, '포장', lot) for part, lot in packing] + list(production)
+    from models.shipment_sync import ExternalShipmentLot
+    shipments = db.query(ExternalShipmentLot.part_no, ExternalShipmentLot.lot_no).filter(
+        func.upper(func.trim(ExternalShipmentLot.lot_no)).like(prefix.upper() + '%')).all()
+    candidates = [(part, '포장', lot) for part, lot in packing] + list(production) + [(part, '출고', lot) for part, lot in shipments]
     if item_id is None:
         return {lot.strip().upper() for _, _, lot in candidates}
     connections = ItemConnections(db)

@@ -185,7 +185,7 @@ def test_settings_routes_permissions_and_shared_credential_lock(setup,monkeypatc
     assert not setup.client.get('/api/production/external-sync/settings').json()['enabled']
     sync.claim(DAY,DAY,'MANUAL','packing')
     from routers import production_sync as api
-    monkeypatch.setattr(api,'validate_login',lambda *_:('test-user','test-pass'))
+    monkeypatch.setattr(api,'validate_login',lambda *_:('test-user','test-pass','initialization'))
     assert setup.client.put('/api/production/external-sync/credentials',json={'username':'test-user','password':'test-pass'}).status_code==409
     setup.app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='viewer',role='USER',permissions=None)
     for path in ('/admin/packing-sync','/api/packing/external-sync/settings','/api/packing/external-sync/records','/api/packing/external-sync/runs'):

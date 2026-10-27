@@ -74,9 +74,10 @@ def build_shipping_analysis_rows(db: Session, shipment_ids: list[int]) -> list[d
 
     양산은 포장 BOX의 포장 LOT(=출고 LOT)를 사용하고,
     샘플/개발은 직출고 시 생성된 BOX별 포장 LOT(=출고 LOT)를 사용합니다.
+    양수 참조는 내부 출고, 음수 참조는 별도 보관한 외부 출고 원본입니다.
     """
     ids = list(dict.fromkeys(int(x) for x in shipment_ids if int(x) > 0))
-    if not ids:
+    if not ids and not any(int(x) < 0 for x in shipment_ids):
         return []
 
     shipments = (
@@ -127,4 +128,7 @@ def build_shipping_analysis_rows(db: Session, shipment_ids: list[int]) -> list[d
                     )
                 )
 
+    if any(int(x) < 0 for x in shipment_ids):
+        from services.shipment_sync_view import external_analysis_rows
+        result.extend(external_analysis_rows(db, [-int(x) for x in shipment_ids if int(x) < 0]))
     return result

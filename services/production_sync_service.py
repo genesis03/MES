@@ -41,6 +41,10 @@ def backend(kind):
         from models.subcontract_fault_sync import SubcontractFaultSyncState, SubcontractFaultSyncRun, ExternalSubcontractFault
         from services.subcontract_fault_client import SubcontractFaultClient
         return SubcontractFaultSyncState, SubcontractFaultSyncRun, ExternalSubcontractFault, SubcontractFaultClient
+    if kind == 'shipment':
+        from models.shipment_sync import ShipmentSyncState, ShipmentSyncRun, ExternalShipment
+        from services.shipment_sync_client import ShipmentClient
+        return ShipmentSyncState, ShipmentSyncRun, ExternalShipment, ShipmentClient
     if kind == 'packing':
         from models.packing_sync import PackingSyncState, PackingSyncRun, ExternalPackingRecord
         from services.packing_sync_client import PackingClient
@@ -101,6 +105,9 @@ def key_for(row, kind='production'):
 
 
 def save_day(rows, token, kind='production', queried_day=None):
+    if kind == 'shipment':
+        from services.shipment_sync_store import save_day as save_shipments
+        return save_shipments(rows, token, queried_day)
     if kind == 'subcontract':
         from services.subcontract_fault_store import save_day as save_subcontract_day
         return save_subcontract_day(rows, token, queried_day)
@@ -184,7 +191,7 @@ def execute(start, end, token, run_id, kind='production'):
         password = ''
         client.on_query_progress=lambda:renew_query_lease(State,token)
         days = {start + timedelta(days=offset) for offset in range((end - start).days + 1)}
-        if kind in ('packing', 'subcontract'):
+        if kind in ('packing', 'subcontract', 'shipment'):
             with SessionLocal() as db:
                 run = db.get(Run, run_id)
                 if run and run.trigger == 'AUTO':
@@ -192,7 +199,8 @@ def execute(start, end, token, run_id, kind='production'):
                     # Revisit all known dates, including previously shipped lots:
                     # a later shipment cancellation can restore old stock too.
                     # Subcontract inspection cancellations also change old dates.
-                    date_column = Record.packing_date if kind == 'packing' else Record.confirm_date
+                    date_column = (Record.packing_date if kind == 'packing' else
+                                   Record.shipment_date if kind == 'shipment' else Record.confirm_date)
                     for (packing_date,) in db.query(date_column).filter(
                             date_column < start.isoformat()).distinct():
                         days.add(datetime.strptime(packing_date, '%Y-%m-%d').date())
@@ -281,7 +289,7 @@ def loop():
     while not _stop.wait(30):
         if not credentials_ready():
             continue
-        for kind in ('production', 'packing', 'subcontract'):
+        for kind in ('production', 'packing', 'subcontract', 'shipment'):
             try:
                 schedule_cycle(kind)
             except Exception:

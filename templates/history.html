@@ -118,7 +118,7 @@
         body.innerHTML = result.items?.length ? result.items.map(row => `
             <tr>
                 <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;"><input type="checkbox" class="source-check" value="${row.id}"></td>
-                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.shipment_no)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.shipment_no)}${row.source==='EXTERNAL'?' (외부)':''}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.shipment_date)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.customer_name)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;">${esc((row.part_nos || []).join(', '))}</td>

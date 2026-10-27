@@ -1,8 +1,8 @@
 (() => {
  'use strict';
  const $=id=>document.getElementById(id),base='/api/production/external-sync';
- const paths={production:'/api/production/external-sync',subcontract:'/api/subcontract/fault-sync',packing:'/api/packing/external-sync'};
- const names={production:'생산실적',subcontract:'외주불량',packing:'포장현황'};
+ const paths={production:'/api/production/external-sync',subcontract:'/api/subcontract/fault-sync',packing:'/api/packing/external-sync',shipment:'/api/shipping/external-sync'};
+ const names={production:'생산실적',subcontract:'외주불량',packing:'포장현황',shipment:'출고이력'};
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  let dirty=false,busy=false,polling=false,initialized=false;
  async function fetchData(path,method='GET',data){const response=await fetch(path,{method,headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined});const extra=!response.ok&&path.includes('/credentials')?await response.clone().json().catch(()=>null):null;try{return await MesResponse.read(response);}catch(error){if(extra?.diagnostic)error.diagnostic=extra.diagnostic;throw error;}}

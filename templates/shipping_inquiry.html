@@ -2,7 +2,7 @@
 {% block title %}출고 내역 조회{% endblock %}
 {% block extra_head %}
 <style>
-.page{font-size:13px}.page h1{font-size:21px;margin:0 0 16px}.filters{display:grid;grid-template-columns:150px 150px 180px 220px 180px auto;gap:10px;align-items:end;background:#fff;border:1px solid #dbe3ec;border-radius:6px;padding:14px;margin-bottom:14px}.field label{display:block;font-weight:700;margin-bottom:5px}.field input,.field select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;background:#fff}.btn{border:0;border-radius:4px;padding:8px 15px;font-weight:800;cursor:pointer}.btn-sm{padding:5px 10px}.blue{background:#2563eb;color:white}.red{background:#dc2626;color:white}.gray{background:#e2e8f0;color:#334155}.table-wrap{background:#fff;border:1px solid #dbe3ec;border-radius:6px;overflow:auto}.tbl{width:100%;border-collapse:collapse}.tbl th,.tbl td{border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;padding:8px;text-align:center;white-space:nowrap}.tbl th{background:#f8fafc}.tbl tbody tr:hover{background:#eff6ff}.num{text-align:right!important}.left{text-align:left!important}.empty{padding:50px!important;color:#94a3b8}.summary{padding:9px 12px;background:#f8fafc;font-weight:700}.msg{margin:8px 0;min-height:18px}.ok{color:#15803d}.err{color:#b91c1c}.toolbar{display:flex;justify-content:flex-end;gap:8px;margin:10px 0}.doc-link{color:#1d4ed8;font-weight:800;text-decoration:underline}.row-check{width:15px;height:15px;cursor:pointer}.flag{display:inline-block;padding:2px 7px;border-radius:999px;background:#fff7ed;color:#c2410c;font-size:11px;font-weight:800}.part-picker{position:relative}.picker-box{min-height:34px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:3px 7px}.picker-box:focus-within{border-color:#2563eb;box-shadow:0 0 0 1px #2563eb}.picker-box input{border:0;outline:0;height:26px;min-width:100px;flex:1;padding:0}.chip{display:inline-flex;align-items:center;gap:5px;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:14px;padding:3px 8px;font-size:12px;font-weight:700}.chip button{border:0;background:transparent;color:#64748b;cursor:pointer;font-size:14px;line-height:1;padding:0}.suggestions{position:absolute;z-index:50;left:0;right:0;top:38px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;box-shadow:0 6px 18px rgba(15,23,42,.12);max-height:260px;overflow:auto;display:none}.suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12.5px}.suggestion:hover,.suggestion.active{background:#eff6ff}.suggestion .pn{font-weight:800;color:#1e3a8a}.suggestion .name{margin-left:10px;color:#64748b}
+.page{font-size:13px}.page h1{font-size:21px;margin:0 0 16px}.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;align-items:end;background:#fff;border:1px solid #dbe3ec;border-radius:6px;padding:14px;margin-bottom:14px}.field label{display:block;font-weight:700;margin-bottom:5px}.field input,.field select{width:100%;height:34px;border:1px solid #cbd5e1;border-radius:4px;padding:0 8px;background:#fff}.btn{white-space:nowrap;border:0;border-radius:4px;padding:8px 15px;font-weight:800;cursor:pointer}.btn-sm{padding:5px 10px}.blue{background:#2563eb;color:white}.red{background:#dc2626;color:white}.gray{background:#e2e8f0;color:#334155}.table-wrap{background:#fff;border:1px solid #dbe3ec;border-radius:6px;overflow:auto}.tbl{width:100%;border-collapse:collapse}.tbl th,.tbl td{border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;padding:8px;text-align:center;white-space:nowrap}.tbl th{background:#f8fafc}.tbl tbody tr:hover{background:#eff6ff}.num{text-align:right!important}.left{text-align:left!important}.empty{padding:50px!important;color:#94a3b8}.summary{padding:9px 12px;background:#f8fafc;font-weight:700}.msg{margin:8px 0;min-height:18px}.ok{color:#15803d}.err{color:#b91c1c}.toolbar{display:flex;justify-content:flex-end;gap:8px;margin:10px 0}.doc-link{color:#1d4ed8;font-weight:800;text-decoration:underline}.row-check{width:15px;height:15px;cursor:pointer}.flag{display:inline-block;padding:2px 7px;border-radius:999px;background:#fff7ed;color:#c2410c;font-size:11px;font-weight:800}.part-picker{position:relative}.picker-box{min-height:34px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:3px 7px}.picker-box:focus-within{border-color:#2563eb;box-shadow:0 0 0 1px #2563eb}.picker-box input{border:0;outline:0;height:26px;min-width:100px;flex:1;padding:0}.chip{display:inline-flex;align-items:center;gap:5px;background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:14px;padding:3px 8px;font-size:12px;font-weight:700}.chip button{border:0;background:transparent;color:#64748b;cursor:pointer;font-size:14px;line-height:1;padding:0}.suggestions{position:absolute;z-index:50;left:0;right:0;top:38px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;box-shadow:0 6px 18px rgba(15,23,42,.12);max-height:260px;overflow:auto;display:none}.suggestion{padding:8px 10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12.5px}.suggestion:hover,.suggestion.active{background:#eff6ff}.suggestion .pn{font-weight:800;color:#1e3a8a}.suggestion .name{margin-left:10px;color:#64748b}
 </style>
 {% endblock %}
 {% block content %}
@@ -14,8 +14,10 @@
     <div class="field"><label>판매처</label><select id="customerId"><option value="">전체</option></select></div>
     <div class="field"><label>품번</label><div class="part-picker"><div class="picker-box"><div id="chips" style="display:contents"></div><input id="partSearch" placeholder="품번 / 품명 검색" autocomplete="off"></div><div id="suggestions" class="suggestions"></div></div></div>
     <div class="field"><label>출고번호</label><input id="shipmentNo" placeholder="출고번호"></div>
+    <div class="field"><label>자료 구분</label><select id="source"><option value="ALL">전체</option><option value="INTERNAL">내부 출고</option><option value="EXTERNAL">외부 출고</option></select></div>
     <div style="display:flex;gap:6px"><button class="btn blue" onclick="loadRows()">조회</button><button class="btn gray" onclick="resetFilters()">초기화</button></div>
   </div>
+  <dialog id="externalDetail" style="width:min(1000px,95vw);max-height:85vh;overflow:auto;border:1px solid #cbd5e1;border-radius:6px"><h2 id="externalTitle"></h2><p>외부 출고이력 · 읽기 전용</p><div id="externalContent"></div><p><button class="btn gray" onclick="document.getElementById('externalDetail').close()">닫기</button></p></dialog>
   <div id="msg" class="msg"></div>
   <div class="toolbar"><button id="deleteSelectedBtn" class="btn red" onclick="deleteSelected()" disabled>선택삭제 (0)</button></div>
   <div class="table-wrap">
@@ -65,7 +67,7 @@ async function searchParts(autoSelect=false){
 }
 function qs(){
   const p=new URLSearchParams();
-  [['start_date','startDate'],['end_date','endDate'],['shipment_no','shipmentNo'],['customer_id','customerId']].forEach(([k,id])=>{const v=$(id).value.trim();if(v)p.set(k,v)});
+  [['start_date','startDate'],['end_date','endDate'],['shipment_no','shipmentNo'],['customer_id','customerId'],['source','source']].forEach(([k,id])=>{const v=$(id).value.trim();if(v)p.set(k,v)});
   selectedParts.forEach(x=>p.append('item_id',String(x.item_id)));
   return p.toString();
 }
@@ -77,21 +79,27 @@ function updateSelection(){
 function toggleSelected(id){selectedIds.has(id)?selectedIds.delete(id):selectedIds.add(id);updateSelection();}
 function localDate(offsetDays=0){const d=new Date();d.setDate(d.getDate()+offsetDays);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
 function resetFilters(){
-  $('startDate').value=localDate(-30);$('endDate').value=localDate(0);$('customerId').value='';$('shipmentNo').value='';$('partSearch').value='';
+  $('startDate').value=localDate(-30);$('endDate').value=localDate(0);$('customerId').value='';$('shipmentNo').value='';$('source').value='ALL';$('partSearch').value='';
   selectedParts=[];candidateRows=[];activeIndex=-1;renderChips();hideSuggestions();loadRows();
 }
 async function loadRows(){try{const d=await jf('/api/shipping/inquiry?'+qs());rows=d.items||[];selectedIds.clear();render();updateSelection();showMsg('');}catch(e){showMsg(e.message)}}
 function render(){
   if(!rows.length){$('body').innerHTML='<tr><td colspan="10" class="empty">조회할 출고 내역이 없습니다.</td></tr>';$('summary').textContent='건수: 0';return;}
   $('body').innerHTML=rows.map((x,i)=>`<tr data-id="${x.id}">
-    <td><input type="checkbox" class="row-check" value="${x.id}" onclick="toggleSelected(${x.id})"></td>
+    <td><input type="checkbox" class="row-check" value="${x.id}" ${x.source==='EXTERNAL'?'disabled title="외부 출고는 원본에서 관리합니다."':''} onclick="toggleSelected(${x.id})"></td>
     <td>${i+1}</td>
-    <td><a class="doc-link" href="/sales/shipping?shipment_id=${encodeURIComponent(x.id)}">${esc(x.shipment_no)}</a></td>
+    <td>${x.source==='EXTERNAL'?`<button class="btn btn-sm gray doc-link" onclick="showExternal(${x.id})">${esc(x.shipment_no)}</button>`:`<a class="doc-link" href="/sales/shipping?shipment_id=${encodeURIComponent(x.id)}">${esc(x.shipment_no)}</a>`}</td>
     <td>${esc(x.shipment_date)}</td><td>${esc(x.customer_name)}</td><td>${esc(x.part_summary||'')}</td>
     <td class="num">${n(x.total_qty).toLocaleString()}</td><td class="num">${n(x.total_boxes).toLocaleString()}</td><td class="left">${esc(x.note||'')}${x.shipment_mode==='DIRECT'?' <span class="flag">직출고</span>':(x.fifo_exception?' <span class="flag">FIFO 예외</span>':'')}</td>
-    <td>${x.shipment_mode==='DIRECT'?'<button class="btn btn-sm gray" disabled title="샘플/개발 직출고 LOT는 기존 출하 바코드 엔진과 분리되어 있습니다.">-</button>':`<button class="btn btn-sm blue" onclick="printShipment(${x.id})">인쇄</button>`}</td></tr>`).join('');
+    <td>${(x.shipment_mode==='DIRECT'||x.printable===false)?'<button class="btn btn-sm gray" disabled title="출력 가능한 완료 상태와 LOT 배정 내역을 확인해 주세요.">-</button>':`<button class="btn btn-sm blue" onclick="printShipment(${x.id})">인쇄</button>`}</td></tr>`).join('');
   $('summary').textContent=`건수: ${rows.length}   총 출고수량: ${rows.reduce((s,x)=>s+n(x.total_qty),0).toLocaleString()}   총 박스수: ${rows.reduce((s,x)=>s+n(x.total_boxes),0).toLocaleString()}`;
 }
+async function showExternal(id){try{
+  const data=await jf('/api/shipping/inquiry/'+id);
+  $('externalTitle').textContent=data.shipment_no+' · '+data.shipment_date+' · '+data.customer_name;
+  $('externalContent').innerHTML='<p>'+esc(data.note)+'</p><div class="table-wrap"><table class="tbl"><thead><tr><th>품번</th><th>품명</th><th>수주번호</th><th>품번 출고수량</th><th>출고 LOT</th><th>LOT 수량</th><th>배정수량</th></tr></thead><tbody>'+data.items.flatMap(item=>(item.boxes.length?item.boxes:[{}]).map(lot=>'<tr>'+[item.part_no,item.part_name,item.order_no,n(item.shipped_qty).toLocaleString(),lot.waiting_lot_no||'미배정',lot.lot_qty==null?'':n(lot.lot_qty).toLocaleString(),lot.shipped_qty==null?'':n(lot.shipped_qty).toLocaleString()].map(v=>'<td>'+esc(v)+'</td>').join('')+'</tr>')).join('')+'</tbody></table></div>';
+  $('externalDetail').showModal();
+}catch(e){showMsg(e.message);}}
 async function printShipment(id){try{showMsg('인쇄 데이터를 준비하고 있습니다...');await jf('/api/shipping/from-shipments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({shipment_ids:[id]})});location.href='/shipping/print';}catch(e){showMsg(e.message)}}
 async function deleteSelected(){
   if(!selectedIds.size){showMsg('삭제할 출고 내역을 선택하세요.');return;}
