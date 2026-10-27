@@ -429,16 +429,19 @@ async function loadShipmentDetail(shipmentId){
   editShipmentMode = requestedEditShipmentId > 0 && Number(shipmentId) === requestedEditShipmentId;
   setEntryMode(true);
 
-  const items = (detail.items || []).map(row => {
+  const items = (detail.items || []).map((row, index) => {
+    // External history has no native sales-order row ID. Give each read-only
+    // row its own numeric UI key; never round the source's long string IDs.
+    const itemId = detail.source === 'EXTERNAL' ? -(index + 1) : row.sales_order_item_id;
     const boxes = (row.boxes || []).map(box => ({
       id: box.packing_box_id,
       package_lot_no: box.waiting_lot_no,
       box_qty: num(box.shipped_qty),
       packing_date: ''
     }));
-    allocations.set(row.sales_order_item_id, boxes);
+    allocations.set(itemId, boxes);
     return {
-      id: row.sales_order_item_id,
+      id: itemId,
       order_id: row.sales_order_id,
       order_no: row.order_no || '',
       part_no: row.part_no,
