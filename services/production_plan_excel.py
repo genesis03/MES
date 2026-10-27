@@ -17,7 +17,7 @@ def build_plan_excel(data, start, end):
     summary.append(['합계', '', '', *[sum(r['by_process'].get(p['code'], 0) for r in data['summary']) for p in processes], data['total']])
     detail = book.create_sheet('일자별 생산계획')
     detail.append(['생산계획', f'{start} ~ {end}', data.get('revision_context','작업본')])
-    detail.append(['설비', '공정', '품번', '품명', 'C/T(초)', '목표 OEE', 'UPH', 'UPD(12H)',
+    detail.append(['설비', '공정', '품번', '품명', 'C/T(초)', 'OEE', 'UPH', 'UPD(12H)',
                    '기간 생산성(주간)', '기간 생산성(주/야)', '합계', *data['dates']])
     for row in data['rows']:
         detail.append([row['equipment_name'], row['process_name'], row['part_no'], row['part_name'],
