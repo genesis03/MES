@@ -28,8 +28,17 @@ def columns(values, prefix, fields, count, optional=()):
     for field in fields:
         raw = scalar(values, prefix + field)
         cells = raw.split(',') if raw else [''] * count
-        if len(cells) != count or (field not in optional and any(not v.strip() for v in cells)):
-            raise SyncError(f'출고 {field} 항목의 건수 또는 필수값이 일치하지 않습니다.')
+        if len(cells) != count:
+            raise SyncError(
+                f'출고 {field} 항목 개수 불일치: 상세 기준 {count}건, 수신 {len(cells)}개. '
+                '쉼표 구분 응답이므로 값 내부의 쉼표 또는 누락 여부 확인이 필요합니다.',
+                {'field': prefix + field, 'expected_count': count, 'received_count': len(cells),
+                 'reason': 'column_count_mismatch'})
+        missing = [i + 1 for i, value in enumerate(cells) if not value.strip()]
+        if field not in optional and missing:
+            raise SyncError(f'출고 {field} 필수값 누락: {len(missing)}개 행.',
+                {'field': prefix + field, 'expected_count': count, 'received_count': len(cells),
+                 'reason': 'missing_required_value', 'empty_rows': missing})
         for row, value in zip(rows, cells):
             row[field] = value.strip()
     declared = scalar(values, prefix + 'ROW_COUNT')
@@ -130,6 +139,7 @@ def parse_detail(values, header):
 
 class ShipmentClient(ProductionClient):
     def fetch_day(self, day):
+        self.query_errors = []
         # Pad bounds like existing adapters; keep only the requested day.
         start, end = day - timedelta(days=1), day + timedelta(days=1)
         payload = client_common(self) | self.context
@@ -149,6 +159,14 @@ class ShipmentClient(ProductionClient):
                 'IS_FORWARD','LAST_DATE','MY_COMP_NO','PO_NUM','ROW_COUNT','RUN_DATE','STAT_CODE','STAT_CODE_NM',
                 'TR_COMP_NM','TR_COMP_NO','WARE_NM','WARE_NO')})
             detail_payload.update({HEADER+k:header[k] for k in ('RULE_NO','OUT_NUM','OUT_DATE')})
-            record, notes = parse_detail(query_with_retry(self.opener, detail_payload), header)
+            try:
+                record, notes = parse_detail(query_with_retry(self.opener, detail_payload), header)
+            except SyncError as exc:
+                # Keep the rest of the day; the caller must not treat this as a full snapshot.
+                self.query_errors.append({'date': day.isoformat(), 'shipment_no': header['OUT_NUM'],
+                    'error': f"{day.isoformat()} 출고 {header['OUT_NUM']}: {exc}",
+                    'diagnostic': {k: v for k, v in (exc.diagnostic or {}).items()
+                        if k in ('field', 'expected_count', 'received_count', 'reason', 'empty_rows')}})
+                continue
             records.append(record); warnings.extend(notes)
         return records, sorted(set(warnings))

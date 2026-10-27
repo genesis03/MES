@@ -31,7 +31,13 @@
    const errors=results.filter(r=>r.status==='rejected');
    if(errors.length)message('일부 연동 이력을 조회하지 못했습니다.',true);
    const rows=results.filter(r=>r.status==='fulfilled').flatMap(r=>r.value).sort((a,b)=>b.started_at.localeCompare(a.started_at));
-   $('exRuns').innerHTML=rows.map(r=>'<tr>'+[names[r.kind],r.started_at,`${r.start_date} ~ ${r.end_date}`,{INITIAL:'최초',AUTO:'자동',MANUAL:'수동'}[r.trigger]||r.trigger,{SUCCESS:'완료',FAILED:'실패',RUNNING:'진행 중'}[r.status]||r.status,['received','inserted','updated','unchanged'].map(k=>r.counts[k]||0).join(' / '),[r.error,...(r.counts.warnings||[])].filter(Boolean).join(' / ')].map(v=>`<td>${esc(v)}</td>`).join('')+'</tr>').join('')||'<tr><td colspan="7">연동 이력이 없습니다.</td></tr>';
+   $('exRuns').innerHTML=rows.map(r=>{
+     const errors=r.kind==='shipment'?(r.counts.errors||[]):[];
+     const note=errors.length?`오류 ${errors.length}건 · 정상 전표는 저장됩니다.`:[r.error,...(r.counts.warnings||[])].filter(Boolean).join(' / ');
+     const details=errors.length?'<details><summary>오류 상세 보기</summary><div style="white-space:pre-wrap;max-width:650px">'+errors.map(e=>esc(e.error)+(e.diagnostic?.field?'\n필드: '+esc(e.diagnostic.field):'')).join('\n\n')+'</div></details>':'';
+     const cells=[names[r.kind],r.started_at,`${r.start_date} ~ ${r.end_date}`,{INITIAL:'최초',AUTO:'자동',MANUAL:'수동'}[r.trigger]||r.trigger,{SUCCESS:'완료',FAILED:'실패',PARTIAL:'일부 오류',RUNNING:'진행 중'}[r.status]||r.status,['received','inserted','updated','unchanged'].map(k=>r.counts[k]||0).join(' / ')];
+     return '<tr>'+cells.map(v=>`<td>${esc(v)}</td>`).join('')+'<td>'+esc(note)+details+'</td></tr>';
+   }).join('')||'<tr><td colspan="7">연동 이력이 없습니다.</td></tr>';
  }
  $('exSettings').oninput=()=>dirty=true;
  $('exSettings').onsubmit=guard(async event=>{event.preventDefault();const selected=targets();if(!selected.length)throw Error('연동 대상을 하나 이상 선택해 주세요.');busy=true;const b=event.target.querySelector('button');b.disabled=true;try{const data=await common('/settings','PUT',{enabled:$('exEnabled').checked,targets:selected,interval_minutes:Number($('exInterval').value),lookback_days:Number($('exLookback').value)});dirty=false;message(data.message);}finally{busy=false;b.disabled=false;}await state();});

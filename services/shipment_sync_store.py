@@ -7,7 +7,7 @@ from models.shipment_sync import ShipmentSyncState, ExternalShipment, ExternalSh
 from services.production_sync_client import SyncError
 
 
-def save_day(rows, token, queried_day):
+def save_day(rows, token, queried_day, complete_day=True):
     from services import production_sync_service as sync
     keys = [r['header']['RULE_NO'] for r in rows]
     if len(keys) != len(set(keys)) or any(r['header']['OUT_DATE'] != queried_day.isoformat() for r in rows):
@@ -46,8 +46,9 @@ def save_day(rows, token, queried_day):
                         source_lot_key=lot['RULE_NO'], part_no=item['ITEM_NUM'], lot_no=lot['LOT_NUM'],
                         allocated_qty=lot['JOB_QTY']))
         # Only a fully fetched day can mark disappeared/cancelled source rows absent.
-        for record in db.query(ExternalShipment).filter(ExternalShipment.shipment_date == queried_day.isoformat()):
-            if record.source_key not in keys:
-                record.present = False
+        if complete_day:
+            for record in db.query(ExternalShipment).filter(ExternalShipment.shipment_date == queried_day.isoformat()):
+                if record.source_key not in keys:
+                    record.present = False
         db.commit()
     return counts

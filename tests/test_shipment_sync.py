@@ -277,3 +277,79 @@ def test_external_shipment_item_mapping_uses_shared_mapping_and_current_master_n
     with setup.sessions() as db:
         from services.external_lot_guard import external_lot_numbers
         assert '26101401004' in external_lot_numbers(db,'261014',item_id)
+
+
+def test_column_mismatch_reports_counts_without_echoing_values():
+    values=capture()
+    values[DETAIL+'PRODUCT_NM']=['Name,with,commas,EXTRA']
+    with pytest.raises(SyncError) as caught:
+        client.parse_detail(values,header())
+    assert caught.value.diagnostic=={'field':DETAIL+'PRODUCT_NM','expected_count':3,
+        'received_count':4,'reason':'column_count_mismatch'}
+    assert '3건' in str(caught.value) and '4개' in str(caught.value)
+    assert 'EXTRA' not in str(caught.value)
+
+
+def test_fetch_day_continues_after_bad_document(monkeypatch):
+    c=client.ShipmentClient.__new__(client.ShipmentClient)
+    c.encrypt_key='939';c.context={};c.opener=object()
+    bad_header=header()|{'RULE_NO':'BAD','OUT_NUM':'BAD-DOC'}
+    good_header=header()
+    def query(_,payload):
+        if payload['jump.form.code']=='SEARCH':return listing([bad_header,good_header])
+        if payload[HEADER+'RULE_NO']=='BAD':
+            values=capture()
+            values[HEADER+'RULE_NO']=['BAD'];values[HEADER+'OUT_NUM']=['BAD-DOC']
+            values[DETAIL+'PRODUCT_NM']=['A,B,C,D']
+            return values
+        return capture()
+    monkeypatch.setattr(client,'query_with_retry',query)
+    rows,_=c.fetch_day(DAY)
+    assert len(rows)==1 and rows[0]['header']['RULE_NO']==header()['RULE_NO']
+    assert c.query_errors[0]['shipment_no']=='BAD-DOC'
+    assert c.query_errors[0]['diagnostic']['received_count']==4
+
+
+def test_partial_day_keeps_failed_and_unseen_existing_documents(setup):
+    token,_=save(setup)
+    good=record();good['header']=good['header']|{'RULE_NO':'OTHER','OUT_NUM':'OTHER-DOC'}
+    sync.save_day([good],token,'shipment',DAY,complete_day=False)
+    with setup.sessions() as db:
+        assert db.query(ExternalShipment).count()==2
+        assert all(r.present for r in db.query(ExternalShipment))
+        assert db.query(ExternalShipmentLot).count()==40
+
+
+def test_execute_continues_failed_days_and_records_partial_diagnostics(setup,monkeypatch):
+    end=DAY+timedelta(days=2)
+    with setup.sessions() as db:
+        settings=sync.state(db,'shipment');settings.enabled=True;db.commit()
+    token,run_id=sync.claim(DAY,end,'INITIAL','shipment')
+    calls=[]
+    class Client:
+        def __init__(self,*_):pass
+        def fetch_day(self,day):
+            calls.append(day)
+            if day==DAY:
+                raise SyncError('출고 PRODUCT_NM 개수 불일치',{'field':DETAIL+'PRODUCT_NM',
+                    'expected_count':3,'received_count':4,'reason':'column_count_mismatch',
+                    'UNSAFE':'must not persist'})
+            if day==DAY+timedelta(days=1):
+                self.query_errors=[{'date':day.isoformat(),'shipment_no':'BAD-DOC',
+                    'error':'일부 전표 오류','diagnostic':{'field':DETAIL+'PRODUCT_NM'}}]
+            source=record();source['header']=source['header']|{'OUT_DATE':day.isoformat(),
+                'RULE_NO':day.isoformat(),'OUT_NUM':day.isoformat()}
+            return [source],[]
+    monkeypatch.setattr(client,'ShipmentClient',Client)
+    sync.execute(DAY,end,token,run_id,'shipment')
+    assert calls==[DAY,DAY+timedelta(days=1),end]
+    with setup.sessions() as db:
+        run=db.get(ShipmentSyncRun,run_id)
+        assert run.status=='PARTIAL'
+        counts=json.loads(run.counts_json)
+        assert counts['inserted']==2 and counts['failed_queries']==2 and counts['completed_days']==1
+        assert counts['errors'][0]['diagnostic']['received_count']==4
+        assert 'UNSAFE' not in run.counts_json
+        assert db.query(ExternalShipment).count()==2
+        assert db.get(ShipmentSyncState,1).initial_completed_at is None
+        assert db.get(ShipmentSyncState,1).lease_token is None

@@ -104,10 +104,10 @@ def key_for(row, kind='production'):
     return hashlib.sha256(json.dumps(identity, ensure_ascii=False).encode()).hexdigest()
 
 
-def save_day(rows, token, kind='production', queried_day=None):
+def save_day(rows, token, kind='production', queried_day=None, complete_day=True):
     if kind == 'shipment':
         from services.shipment_sync_store import save_day as save_shipments
-        return save_shipments(rows, token, queried_day)
+        return save_shipments(rows, token, queried_day, complete_day=complete_day)
     if kind == 'subcontract':
         from services.subcontract_fault_store import save_day as save_subcontract_day
         return save_subcontract_day(rows, token, queried_day)
@@ -206,25 +206,36 @@ def execute(start, end, token, run_id, kind='production'):
                         days.add(datetime.strptime(packing_date, '%Y-%m-%d').date())
         for day in sorted(days):
             querying_day = day
-            if kind=='production':
+            if kind in ('production', 'shipment'):
                 client.query_errors=[]
+            if kind=='production':
                 client.review_items=[]
             try:
                 rows, warnings = client.fetch_day(day)
-                result = save_day(rows, token) if kind == 'production' else save_day(rows, token, kind, queried_day=day)
+                if kind == 'shipment':
+                    result = save_day(rows, token, kind, queried_day=day,
+                                      complete_day=not client.query_errors)
+                else:
+                    result = save_day(rows, token) if kind == 'production' else save_day(rows, token, kind, queried_day=day)
             except SyncError as exc:
-                if kind!='production':raise
+                if kind not in ('production', 'shipment'):raise
                 renew_query_lease(State,token)
                 partial_errors.append(f'{day.isoformat()} 조회: {exc}')
+                if kind == 'shipment':
+                    counts.setdefault('errors', []).append({'date': day.isoformat(),
+                        'error': partial_errors[-1], 'diagnostic': {k: v for k, v in (exc.diagnostic or {}).items()
+                            if k in ('field', 'expected_count', 'received_count', 'reason', 'empty_rows')}})
                 failure_data=failure_data or getattr(exc,'failure_data',None)
                 continue
             if kind=='production' and getattr(client,'review_items',[]):
                 counts.setdefault('review_items',[]).extend(client.review_items)
             for key in result:
                 counts[key] += result[key]
-            query_errors=getattr(client,'query_errors',[]) if kind=='production' else []
+            query_errors=getattr(client,'query_errors',[]) if kind in ('production', 'shipment') else []
             for failed in query_errors:
                 partial_errors.append(failed['error'])
+                if kind == 'shipment':
+                    counts.setdefault('errors', []).append(failed)
                 failure_data=failure_data or failed.get('failure_data')
             if not query_errors:counts['completed_days'] += 1
             counts['warnings'] = sorted(set(counts['warnings'] + warnings))
@@ -256,6 +267,8 @@ def execute(start, end, token, run_id, kind='production'):
                 State.id == 1, State.lease_token == token).values(**values))
             if run and run.status == 'RUNNING':
                 run.finished_at = instant; run.status = 'FAILED' if error else 'SUCCESS'
+                if kind == 'shipment' and partial_errors and (counts['received'] or counts['completed_days']):
+                    run.status = 'PARTIAL'
                 run.error = error; run.counts_json = json.dumps(counts, ensure_ascii=False)
                 if failure_data:
                     saved=db.get(ProductionSyncFailureData,run_id)
