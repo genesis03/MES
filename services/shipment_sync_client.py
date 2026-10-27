@@ -92,8 +92,10 @@ def parse_detail(values, header):
     raw = scalar(values, DETAIL + 'RULE_NO')
     count = len(raw.split(',')) if raw else 0
     items = columns(values, DETAIL, ('RULE_NO', 'OUT_NO', 'ITEM_NUM', 'TR_QTY', 'BOX_QTY',
-                    'IS_LOT', 'ORDER_NUM', 'CUS_RULE_NO', 'PRODUCT_NM'), count,
-                    optional=('BOX_QTY', 'ORDER_NUM', 'CUS_RULE_NO', 'PRODUCT_NM', 'IS_LOT'))
+                    'IS_LOT', 'ORDER_NUM', 'CUS_RULE_NO'), count,
+                    optional=('BOX_QTY', 'ORDER_NUM', 'CUS_RULE_NO', 'IS_LOT'))
+    # PRODUCT_NM is not a key or a shipment validation field. Names come from
+    # the MES item master; comma-delimited source names cannot be split safely.
     if not items:
         raise SyncError('출고 상세 품목이 없어 완전한 전표인지 확인할 수 없습니다.')
     by_key = {}
@@ -102,9 +104,7 @@ def parse_detail(values, header):
             raise SyncError('출고 상세행 식별값 또는 전표 연결이 올바르지 않습니다.')
         number(item['TR_QTY'])
         if item['BOX_QTY']:
-            boxes = number(item['BOX_QTY'])
-            if boxes != boxes.to_integral_value():
-                raise SyncError('출고 박스 수가 정수가 아닙니다.')
+            number(item['BOX_QTY'])  # Preserve fractional source values for partial/sample shipments.
         item['lots'] = []
         by_key[item['RULE_NO']] = item
     raw = scalar(values, LOT + 'RULE_NO')
@@ -130,10 +130,8 @@ def parse_detail(values, header):
         if qty > number(item['TR_QTY']):
             raise SyncError('LOT 배정수량 합계가 품번 출고수량을 초과합니다.')
         item['lot_complete'] = qty == number(item['TR_QTY']) and bool(item['lots'])
-        if item['BOX_QTY'] and len(item['lots']) != number(item['BOX_QTY']):
-            item['lot_complete'] = False
         if not item['lot_complete']:
-            warnings.append('LOT 미배정 또는 박스 수·배정수량 불일치 전표는 조회만 가능하며 LOT 출력에서 제외됩니다.')
+            warnings.append('LOT 미배정 또는 배정수량 불일치 전표는 조회만 가능하며 LOT 출력에서 제외됩니다.')
     return {'header': header, 'items': items}, warnings
 
 

@@ -281,10 +281,10 @@ def test_external_shipment_item_mapping_uses_shared_mapping_and_current_master_n
 
 def test_column_mismatch_reports_counts_without_echoing_values():
     values=capture()
-    values[DETAIL+'PRODUCT_NM']=['Name,with,commas,EXTRA']
+    values[DETAIL+'TR_QTY']=['Name,with,commas,EXTRA']
     with pytest.raises(SyncError) as caught:
         client.parse_detail(values,header())
-    assert caught.value.diagnostic=={'field':DETAIL+'PRODUCT_NM','expected_count':3,
+    assert caught.value.diagnostic=={'field':DETAIL+'TR_QTY','expected_count':3,
         'received_count':4,'reason':'column_count_mismatch'}
     assert '3건' in str(caught.value) and '4개' in str(caught.value)
     assert 'EXTRA' not in str(caught.value)
@@ -300,7 +300,7 @@ def test_fetch_day_continues_after_bad_document(monkeypatch):
         if payload[HEADER+'RULE_NO']=='BAD':
             values=capture()
             values[HEADER+'RULE_NO']=['BAD'];values[HEADER+'OUT_NUM']=['BAD-DOC']
-            values[DETAIL+'PRODUCT_NM']=['A,B,C,D']
+            values[DETAIL+'TR_QTY']=['A,B,C,D']
             return values
         return capture()
     monkeypatch.setattr(client,'query_with_retry',query)
@@ -331,12 +331,12 @@ def test_execute_continues_failed_days_and_records_partial_diagnostics(setup,mon
         def fetch_day(self,day):
             calls.append(day)
             if day==DAY:
-                raise SyncError('출고 PRODUCT_NM 개수 불일치',{'field':DETAIL+'PRODUCT_NM',
+                raise SyncError('출고 TR_QTY 개수 불일치',{'field':DETAIL+'TR_QTY',
                     'expected_count':3,'received_count':4,'reason':'column_count_mismatch',
                     'UNSAFE':'must not persist'})
             if day==DAY+timedelta(days=1):
                 self.query_errors=[{'date':day.isoformat(),'shipment_no':'BAD-DOC',
-                    'error':'일부 전표 오류','diagnostic':{'field':DETAIL+'PRODUCT_NM'}}]
+                    'error':'일부 전표 오류','diagnostic':{'field':DETAIL+'TR_QTY'}}]
             source=record();source['header']=source['header']|{'OUT_DATE':day.isoformat(),
                 'RULE_NO':day.isoformat(),'OUT_NUM':day.isoformat()}
             return [source],[]
@@ -353,3 +353,63 @@ def test_execute_continues_failed_days_and_records_partial_diagnostics(setup,mon
         assert db.query(ExternalShipment).count()==2
         assert db.get(ShipmentSyncState,1).initial_completed_at is None
         assert db.get(ShipmentSyncState,1).lease_token is None
+
+
+@pytest.mark.parametrize('source_names',[None,'Name,with,commas,EXTRA','Name,with,extra,commas,again,extra'])
+def test_source_product_names_are_not_parsed_or_required(source_names):
+    values=capture()
+    if source_names is None:
+        values.pop(DETAIL+'PRODUCT_NM')
+    else:
+        values[DETAIL+'PRODUCT_NM']=[source_names]
+    data,warnings=client.parse_detail(values,header())
+    assert not warnings
+    assert len(data['items'])==3 and sum(len(i['lots']) for i in data['items'])==20
+    assert all('PRODUCT_NM' not in item for item in data['items'])
+
+
+@pytest.mark.parametrize('source_boxes',['16.5','16'])
+def test_partial_box_shipments_use_allocated_lots_for_counts_and_output(setup,source_boxes):
+    register(setup)
+    values=capture()
+    values[DETAIL+'PRODUCT_NM']=['TERMINAL, ASSY,OTHER,EXTRA']
+    values[DETAIL+'BOX_QTY']=[source_boxes+',1,2']
+    quantities=values[LOT+'JOB_QTY'][0].split(',');quantities[0]='60'
+    values[LOT+'JOB_QTY']=[','.join(quantities)]
+    values[DETAIL+'TR_QTY']=['1980,280,720']
+    data,warnings=client.parse_detail(values,header())
+    assert not warnings and all(i['lot_complete'] for i in data['items'])
+    assert data['items'][0]['BOX_QTY']==source_boxes
+    save(setup,data)
+    detail=setup.client.get('/api/shipping/inquiry/-1').json()
+    assert detail['printable'] and detail['total_boxes']==20 and detail['total_qty']==2980
+    assert detail['items'][0]['box_count']==17
+    assert detail['items'][0]['part_name']=='' and not detail['items'][0]['linked']
+    assert '품번 미연결' in detail['note']
+    result=setup.client.post('/api/shipping/from-shipments',json={'shipment_ids':[-1]})
+    assert result.status_code==200,result.text
+    output=result.json()['data']
+    assert len(output)==20 and sum(float(r['textBox11']) for r in output)==2980
+    assert output[0]['barcode1']=='P310194-1Q60S26101401004110657'
+    with setup.sessions() as db:
+        stored=json.loads(db.query(ExternalShipment).one().raw_json)
+        assert stored['items'][0]['BOX_QTY']==source_boxes
+        assert db.query(ShipmentMaster).count()==db.query(SalesOrderMaster).count()==0
+
+
+def test_legacy_external_names_are_never_used_as_display_fallback(setup):
+    source=record();source['items'][0]['PRODUCT_NM']='외부 품명 사용 금지'
+    save(setup,source)
+    with setup.sessions() as db:
+        view=shipment_view(db.query(ExternalShipment).one(),ItemConnections(db),detail=True)
+        assert view['items'][0]['part_name']==''
+        assert view['items'][0]['source_part_name']=='외부 품명 사용 금지'
+        assert not view['items'][0]['linked']
+
+
+def test_allocated_quantity_must_still_match_for_fractional_box_output():
+    values=capture();values[DETAIL+'BOX_QTY']=['16.5,1,2']
+    quantities=values[LOT+'JOB_QTY'][0].split(',');quantities[0]='60'
+    values[LOT+'JOB_QTY']=[','.join(quantities)]
+    data,warnings=client.parse_detail(values,header())
+    assert warnings and not data['items'][0]['lot_complete']
