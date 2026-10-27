@@ -19,7 +19,7 @@
 
 </details>
 <section class="es-card"><h2>자동 동기화</h2>
-<p class="es-muted">기존 대상별 설정은 공통 설정을 저장하기 전까지 유지됩니다. 저장하면 선택한 대상에 같은 조회 간격과 최근 조회 일수를 적용합니다.</p>
+<p class="es-muted">기존 대상별 설정은 공통 설정을 저장하기 전까지 유지됩니다. 저장하면 선택한 대상에 같은 조회 간격과 최근 조회 일수를 적용합니다. 출고이력은 내일 출고 예정분도 함께 조회합니다.</p>
 <form id="exSettings" class="es-line ex-settings">
 <label><span><input id="exEnabled" type="checkbox"> 자동 동기화 사용</span></label>
 <label>조회 간격(분)<input id="exInterval" type="number" min="5" max="1440" required></label>
@@ -30,11 +30,11 @@
 <button class="es-btn" type="submit">공통 설정 저장</button>
 </form><p id="exMessage" role="status" class="es-result"></p><div id="exStatus" class="ex-status"></div>
 </section>
-<section class="es-card"><form id="exRunAll" class="es-line"><label>시작일<br><input id="exStart" type="date" required></label><label>종료일<br><input id="exEnd" type="date" required></label><button class="es-btn" type="submit">선택 대상 전체 가져오기</button></form><p class="es-muted">위에서 체크한 대상을 생산실적 → 외주불량 → 포장현황 → 출고이력 순서로 가져옵니다. 개별 실패 시 나머지 대상은 계속 실행됩니다.</p><p id="exBatch" class="es-result" role="status"></p></section>
+<section class="es-card"><form id="exRunAll" class="es-line"><label>시작일<br><input id="exStart" type="date" required></label><label>종료일<br><input id="exEnd" type="date" required></label><button class="es-btn" type="submit">선택 대상 전체 가져오기</button></form><p class="es-muted">위에서 체크한 대상을 생산실적 → 외주불량 → 포장현황 → 출고이력 순서로 가져옵니다. 출고이력은 미래 날짜도 가져올 수 있으며, 다른 대상은 오늘까지 가져옵니다. 개별 실패 시 나머지 대상은 계속 실행됩니다.</p><p id="exBatch" class="es-result" role="status"></p></section>
 <nav class="ex-tabs" aria-label="외부 연동 자료">
 {% for key,label in [('production','생산실적'),('subcontract','외주불량'),('packing','포장현황'),('shipment','출고이력'),('history','연동 이력')] %}
 <a href="/admin/external-sync?tab={{key}}" {% if active_sync|default('production') == key %}aria-current="page"{% endif %}>{{label}}</a>
 {% endfor %}</nav>
 {% block sync_content %}{% endblock %}
-</div><script src="/static/external_sync.js?v=shipment-errors-20261027" defer></script>
+</div><script src="/static/external_sync.js?v=future-shipments-20261027" defer></script>
 {% endblock %}

@@ -4,12 +4,13 @@
  const paths={production:'/api/production/external-sync',subcontract:'/api/subcontract/fault-sync',packing:'/api/packing/external-sync',shipment:'/api/shipping/external-sync'};
  const names={production:'생산실적',subcontract:'외주불량',packing:'포장현황',shipment:'출고이력'};
  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- let dirty=false,busy=false,polling=false,initialized=false;
+ let dirty=false,busy=false,polling=false,initialized=false,runEndEdited=false;
  async function fetchData(path,method='GET',data){const response=await fetch(path,{method,headers:data?{'Content-Type':'application/json'}:{},body:data?JSON.stringify(data):undefined});const extra=!response.ok&&path.includes('/credentials')?await response.clone().json().catch(()=>null):null;try{return await MesResponse.read(response);}catch(error){if(extra?.diagnostic)error.diagnostic=extra.diagnostic;throw error;}}
  const api=(path,method='GET',data)=>fetchData(base+path,method,data);
  const common=(path,method='GET',data)=>fetchData('/api/admin/external-sync'+path,method,data);
  const message=(text,error=false)=>{$('exMessage').textContent=text;$('exMessage').classList.toggle('es-error',error);};
  const targets=()=>Array.from(document.querySelectorAll('[data-sync-target]:checked')).map(e=>e.dataset.syncTarget);
+ function defaultRunEnd(){if(runEndEdited)return;const day=new Date(MesLocalDate.today()+'T12:00:00');if(targets().includes('shipment'))day.setDate(day.getDate()+1);$('exEnd').value=MesLocalDate.format(day);}
  const guard=fn=>async event=>{try{await fn(event);}catch(error){message(error.message,true);}};
  async function state(){
    const data=await common('/settings');
@@ -21,6 +22,7 @@
      data.states.forEach(s=>document.querySelector(`[data-sync-target="${s.kind}"]`).checked=any?s.enabled:true);
      initialized=true;
    }
+   defaultRunEnd();
    const mixed=data.interval_minutes==null||data.lookback_days==null;
    if(!dirty&&!busy&&mixed)message('기존 대상별 설정이 다릅니다. 적용할 공통 조회 간격과 일수를 입력해 저장하세요.');
    $('exRunAll').querySelector('button').disabled=!data.credentials_ready||busy;
@@ -39,9 +41,11 @@
      return '<tr>'+cells.map(v=>`<td>${esc(v)}</td>`).join('')+'<td>'+esc(note)+details+'</td></tr>';
    }).join('')||'<tr><td colspan="7">연동 이력이 없습니다.</td></tr>';
  }
- $('exSettings').oninput=()=>dirty=true;
+ $('exSettings').oninput=event=>{dirty=true;if(event.target.hasAttribute('data-sync-target'))defaultRunEnd();};
+ $('exEnd').addEventListener('input',()=>runEndEdited=true);
+ $('exEnd').addEventListener('change',()=>runEndEdited=true);
  $('exSettings').onsubmit=guard(async event=>{event.preventDefault();const selected=targets();if(!selected.length)throw Error('연동 대상을 하나 이상 선택해 주세요.');busy=true;const b=event.target.querySelector('button');b.disabled=true;try{const data=await common('/settings','PUT',{enabled:$('exEnabled').checked,targets:selected,interval_minutes:Number($('exInterval').value),lookback_days:Number($('exLookback').value)});dirty=false;message(data.message);}finally{busy=false;b.disabled=false;}await state();});
- $('exRunAll').onsubmit=guard(async event=>{event.preventDefault();const selected=targets();if(!selected.length)throw Error('가져올 대상을 하나 이상 선택해 주세요.');busy=true;const b=event.target.querySelector('button');b.disabled=true;try{const data=await common('/run','POST',{start_date:$('exStart').value,end_date:$('exEnd').value,targets:selected});$('exBatch').textContent=data.results.map(r=>`${r.name}: ${r.status==='QUEUED'?'가져오기 접수':r.error}`).join('\n');}finally{busy=false;b.disabled=false;}await state();await history();});
+ $('exRunAll').onsubmit=guard(async event=>{event.preventDefault();const selected=targets();if(!selected.length)throw Error('가져올 대상을 하나 이상 선택해 주세요.');busy=true;const b=event.target.querySelector('button');b.disabled=true;try{const data=await common('/run','POST',{start_date:$('exStart').value,end_date:$('exEnd').value,targets:selected});$('exBatch').textContent=data.results.map(r=>`${r.name}: ${r.status==='QUEUED'?`가져오기 접수 (${r.start_date} ~ ${r.end_date})`:r.error}`).join('\n');}finally{busy=false;b.disabled=false;}await state();await history();});
  const end=MesLocalDate.today(),start=new Date(end+'T12:00:00');start.setDate(start.getDate()-6);$('exStart').value=MesLocalDate.format(start);$('exEnd').value=end;
     async function credentials(){
         const c=await api('/credentials');

@@ -413,3 +413,41 @@ def test_allocated_quantity_must_still_match_for_fractional_box_output():
     values[LOT+'JOB_QTY']=[','.join(quantities)]
     data,warnings=client.parse_detail(values,header())
     assert warnings and not data['items'][0]['lot_complete']
+
+
+@pytest.mark.parametrize('anchor',[date(2026,10,27),date(2026,12,31)])
+@pytest.mark.parametrize('initial',[False,True])
+def test_scheduled_shipment_includes_tomorrow_without_shifting_lookback(setup,monkeypatch,anchor,initial):
+    monkeypatch.setattr(sync,'today',lambda:anchor)
+    with setup.sessions() as db:
+        settings=sync.state(db,'shipment');settings.enabled=True;settings.lookback_days=4
+        settings.initial_completed_at=None if initial else sync.now();db.commit()
+    calls=[]
+    monkeypatch.setattr(sync,'claim',lambda start,end,trigger,kind:calls.append((start,end,trigger,kind)))
+    sync.schedule_cycle('shipment')
+    expected_start=anchor.replace(month=1,day=1) if initial else anchor-timedelta(days=3)
+    assert calls==[(expected_start,anchor+timedelta(days=1),'INITIAL' if initial else 'AUTO','shipment')]
+
+
+def test_other_scheduled_import_still_ends_today(setup,monkeypatch):
+    with setup.sessions() as db:
+        settings=sync.state(db,'packing');settings.enabled=True
+        settings.lookback_days=4;settings.initial_completed_at=sync.now();db.commit()
+    calls=[]
+    monkeypatch.setattr(sync,'claim',lambda start,end,trigger,kind:calls.append((start,end,kind)))
+    sync.schedule_cycle('packing')
+    assert calls==[(sync.today()-timedelta(days=3),sync.today(),'packing')]
+
+
+def test_tomorrow_shipment_can_be_stored_and_queried_with_future_end_date(setup):
+    register(setup)
+    future=DAY+timedelta(days=1)
+    source=record();source['header']['OUT_DATE']=future.isoformat()
+    token,_=sync.claim(DAY,future,'MANUAL','shipment')
+    sync.save_day([source],token,'shipment',queried_day=future)
+    assert setup.client.get('/api/shipping/inquiry',params={'end_date':DAY.isoformat()}).json()['items']==[]
+    result=setup.client.get('/api/shipping/inquiry',params={'end_date':future.isoformat()})
+    assert result.status_code==200,result.text
+    assert result.json()['items'][0]['shipment_date']==future.isoformat()
+    result=setup.client.get('/api/shipping/source-shipments',params={'end_date':future.isoformat()})
+    assert len(result.json()['items'])==1

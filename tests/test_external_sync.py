@@ -60,3 +60,45 @@ def test_batch_order_and_failure_does_not_stop_remaining_targets(setup,monkeypat
         State,Run,_,_=sync.backend('production')
         assert db.query(Run).one().status=='FAILED'
         assert db.get(State,1).lease_token is None
+
+
+def test_future_shipment_range_and_mixed_targets_use_each_recorded_range(setup,monkeypatch):
+    from datetime import timedelta
+    import routers.external_sync as module
+    setup.app.include_router(router)
+    captured=[]
+    class Thread:
+        def __init__(self,**kw):captured.append(kw)
+        def start(self):pass
+    monkeypatch.setattr(module.threading,'Thread',Thread)
+    tomorrow=DAY+timedelta(days=1)
+    payload={'start_date':DAY.isoformat(),'end_date':tomorrow.isoformat(),'targets':['production','shipment']}
+    result=setup.client.post(BASE+'/run',json=payload)
+    assert result.status_code==202,result.text
+    queued={r['kind']:r for r in result.json()['results']}
+    assert queued['production']['end_date']==DAY.isoformat()
+    assert queued['shipment']['end_date']==tomorrow.isoformat()
+    calls=[]
+    monkeypatch.setattr(sync,'execute',lambda start,end,token,run_id,kind:calls.append((kind,start,end)))
+    _execute_group(*captured[0]['args'])
+    assert calls==[('production',DAY,DAY),('shipment',DAY,tomorrow)]
+
+
+def test_future_only_shipment_allowed_but_other_targets_keep_today_limit(setup,monkeypatch):
+    from datetime import timedelta
+    import routers.external_sync as module
+    setup.app.include_router(router)
+    class Thread:
+        def __init__(self,**kw):pass
+        def start(self):pass
+    monkeypatch.setattr(module.threading,'Thread',Thread)
+    future=(DAY+timedelta(days=7)).isoformat()
+    payload={'start_date':future,'end_date':future,'targets':['production']}
+    assert setup.client.post(BASE+'/run',json=payload).status_code==422
+    payload['targets']=['production','shipment']
+    result=setup.client.post(BASE+'/run',json=payload)
+    assert result.status_code==202,result.text
+    assert [(r['kind'],r['status']) for r in result.json()['results']]==[
+        ('production','SKIPPED'),('shipment','QUEUED')]
+    assert setup.client.post(BASE+'/run',json={'start_date':DAY.isoformat(),
+        'end_date':(DAY+timedelta(days=366)).isoformat(),'targets':['shipment']}).status_code==422

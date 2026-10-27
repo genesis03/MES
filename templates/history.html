@@ -92,6 +92,7 @@
         const end = new Date();
         const start = new Date();
         start.setDate(start.getDate() - 30);
+        end.setDate(end.getDate() + 1);
         document.getElementById('sourceEndDate').value = MesLocalDate.format(end);
         document.getElementById('sourceStartDate').value = MesLocalDate.format(start);
     }

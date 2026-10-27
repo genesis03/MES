@@ -291,8 +291,9 @@ def schedule_cycle(kind='production'):
             return
         days = settings.lookback_days
         initial = settings.initial_completed_at is None
-    end = today()
-    start = end.replace(month=1, day=1) if initial else end - timedelta(days=days - 1)
+    anchor = today()
+    start = anchor.replace(month=1, day=1) if initial else anchor - timedelta(days=days - 1)
+    end = anchor + timedelta(days=1) if kind == 'shipment' else anchor
     lease = claim(start, end, 'INITIAL' if initial else 'AUTO', kind)
     if lease:
         execute(start, end, *lease, kind)

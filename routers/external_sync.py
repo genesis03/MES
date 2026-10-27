@@ -1,5 +1,6 @@
 """Common controls over independent production, subcontract and packing imports."""
 import threading
+from datetime import date
 from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import Field
@@ -90,9 +91,14 @@ def _execute_group(start, end, leases):
             if changed.rowcount != 1:
                 db.rollback()
                 continue
+            run = db.get(RunModel, run_id)
+            if run is None:
+                db.rollback()
+                continue
+            run_start, run_end = date.fromisoformat(run.start_date), date.fromisoformat(run.end_date)
             db.commit()
         try:
-            sync.execute(start,end,token,run_id,kind)
+            sync.execute(run_start,run_end,token,run_id,kind)
         except Exception:
             # Normally execute records errors itself; do not stop later targets.
             with sync.SessionLocal() as db:
@@ -106,18 +112,24 @@ def _execute_group(start, end, leases):
 @router.post('/run',status_code=202)
 def run(payload: GroupRun, user=Depends(get_current_user)):
     access(user)
-    if payload.start_date > payload.end_date or (payload.end_date-payload.start_date).days>=366 or payload.end_date>sync.today():
-        raise HTTPException(422,'오늘까지의 기간 중 최대 366일을 선택해 주세요.')
+    if payload.start_date > payload.end_date or (payload.end_date-payload.start_date).days>=366:
+        raise HTTPException(422,'시작일과 종료일을 확인하고 최대 366일을 선택해 주세요.')
+    if payload.end_date > sync.today() and 'shipment' not in payload.targets:
+        raise HTTPException(422,'출고이력 외의 대상은 오늘까지의 기간만 선택할 수 있습니다.')
     leases, results = [], []
     for kind in KINDS:
         if kind not in payload.targets:
             continue
         try:
-            lease=sync.claim(payload.start_date,payload.end_date,'MANUAL',kind)
+            target_end = payload.end_date if kind == 'shipment' else min(payload.end_date, sync.today())
+            if payload.start_date > target_end:
+                raise SyncError('이 대상은 오늘까지의 자료만 가져올 수 있어 제외했습니다.')
+            lease=sync.claim(payload.start_date,target_end,'MANUAL',kind)
             if lease is None:
                 raise SyncError('이미 가져오기가 진행 중입니다.')
             leases.append((kind,*lease))
-            results.append({'kind':kind,'name':NAMES[kind],'run_id':lease[1],'status':'QUEUED'})
+            results.append({'kind':kind,'name':NAMES[kind],'run_id':lease[1],'status':'QUEUED',
+                            'start_date':payload.start_date.isoformat(),'end_date':target_end.isoformat()})
         except SyncError as exc:
             results.append({'kind':kind,'name':NAMES[kind],'status':'SKIPPED','error':str(exc)})
     if leases:
