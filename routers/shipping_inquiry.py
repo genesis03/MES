@@ -61,7 +61,7 @@ def _serialize_shipment(db: Session, row: ShipmentMaster, detail: bool = False):
             "id": item.id,
             "item_id": item.item_id,
             "part_no": current_part_no,
-            "part_name": sales_item.part_name if sales_item else "",
+            "part_name": (master_item.part_name or "") if master_item else (sales_item.part_name if sales_item else ""),
             "shipped_qty": qty,
             "unit": item.unit or "EA",
             "order_qty": float(sales_item.order_qty or 0) if sales_item else 0.0,
@@ -153,6 +153,7 @@ def shipping_inquiry(
     shipment_no: str | None = Query(None, max_length=30),
     limit: int = Query(1000, ge=1, le=2000),
     source: Literal["ALL", "INTERNAL", "EXTERNAL"] = "ALL",
+    view: Literal["documents", "parts"] = "documents",
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -175,18 +176,18 @@ def shipping_inquiry(
             ShipmentMaster.items.any(ShipmentItem.item_id.in_(selected_item_ids))
         )
 
-    rows = (
-        query.order_by(ShipmentMaster.shipment_date.desc(), ShipmentMaster.id.desc())
-        .limit(limit)
-        .all()
-    )
-    result = [_serialize_shipment(db, row) for row in rows] if source != "EXTERNAL" else []
+    query = query.order_by(ShipmentMaster.shipment_date.desc(), ShipmentMaster.id.desc())
+    rows = [] if source == "EXTERNAL" else (query.all() if view == "parts" else query.limit(limit).all())
+    result = [_serialize_shipment(db, row, detail=view == "parts") for row in rows] if source != "EXTERNAL" else []
     if source != "INTERNAL":
         from services.shipment_sync_view import external_shipments
         result.extend(external_shipments(db, start_date=start_date, end_date=end_date,
             shipment_no=shipment_no, customer_name=customer_name, customer_id=customer_id,
-            item_ids=selected_item_ids, limit=limit))
+            item_ids=selected_item_ids, limit=None if view == "parts" else limit, detail=view == "parts"))
     result.sort(key=lambda row: (row["shipment_date"], row["shipment_no"]), reverse=True)
+    if view == "parts":
+        from services.shipping_inquiry_parts import build_part_report
+        return build_part_report(result, selected_item_ids, limit)
     result = result[:limit]
     return {"items": result, "total": len(result)}
 

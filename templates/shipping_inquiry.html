@@ -19,10 +19,11 @@
   </div>
   <dialog id="externalDetail" style="width:min(1000px,95vw);max-height:85vh;overflow:auto;border:1px solid #cbd5e1;border-radius:6px"><h2 id="externalTitle"></h2><p>외부 출고이력 · 읽기 전용</p><div id="externalContent"></div><p><button class="btn gray" onclick="document.getElementById('externalDetail').close()">닫기</button></p></dialog>
   <div id="msg" class="msg"></div>
-  <div class="toolbar"><button id="deleteSelectedBtn" class="btn red" onclick="deleteSelected()" disabled>선택삭제 (0)</button></div>
+  <h2 style="font-size:16px">품번별 기간 합계</h2><div class="table-wrap"><table class="tbl"><thead><tr><th>품번</th><th>품명</th><th>출고수량</th><th>박스 수</th><th>출고전표 수</th></tr></thead><tbody id="partSummary"></tbody></table></div>
+  <div class="toolbar"><button id="deleteSelectedBtn" class="btn red" onclick="deleteSelected()" disabled>선택 전표 삭제 (0)</button></div>
   <div class="table-wrap">
     <table class="tbl">
-      <thead><tr><th style="width:46px"></th><th style="width:58px">No.</th><th>출고번호</th><th>일자</th><th>판매처</th><th>품번(요약)</th><th>수량</th><th>박스수</th><th>비고</th><th style="width:80px">인쇄</th></tr></thead>
+      <thead><tr><th style="width:46px"></th><th style="width:58px">No.</th><th>출고번호</th><th>일자</th><th>판매처</th><th>품번</th><th>품명</th><th>출고수량</th><th>박스수</th><th>비고</th><th style="width:100px">전표 인쇄</th></tr></thead>
       <tbody id="body"></tbody>
     </table>
     <div id="summary" class="summary"></div>
@@ -32,7 +33,7 @@
 {% endblock %}
 {% block extra_script %}
 <script>
-let rows=[], selectedIds=new Set(), selectedParts=[], candidateRows=[], activeIndex=-1, searchTimer=null;
+let report=null, rows=[], selectedIds=new Set(), selectedParts=[], candidateRows=[], activeIndex=-1, searchTimer=null;
 const $=id=>document.getElementById(id);const n=v=>Number(v||0);
 function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
 function showMsg(t,ok=false){$('msg').textContent=t||'';$('msg').className='msg '+(ok?'ok':'err');}
@@ -66,7 +67,7 @@ async function searchParts(autoSelect=false){
   }catch(e){$('suggestions').innerHTML=`<div class="suggestion" style="color:#b91c1c">${esc(e.message)}</div>`;$('suggestions').style.display='block';}
 }
 function qs(){
-  const p=new URLSearchParams();
+  const p=new URLSearchParams({view:"parts"});
   [['start_date','startDate'],['end_date','endDate'],['shipment_no','shipmentNo'],['customer_id','customerId'],['source','source']].forEach(([k,id])=>{const v=$(id).value.trim();if(v)p.set(k,v)});
   selectedParts.forEach(x=>p.append('item_id',String(x.item_id)));
   return p.toString();
@@ -74,7 +75,7 @@ function qs(){
 function updateSelection(){
   document.querySelectorAll('.row-check').forEach(ch=>ch.checked=selectedIds.has(Number(ch.value)));
   $('deleteSelectedBtn').disabled=selectedIds.size===0;
-  $('deleteSelectedBtn').textContent=`선택삭제 (${selectedIds.size})`;
+  $('deleteSelectedBtn').textContent=`선택 전표 삭제 (${selectedIds.size})`;
 }
 function toggleSelected(id){selectedIds.has(id)?selectedIds.delete(id):selectedIds.add(id);updateSelection();}
 function localDate(offsetDays=0){const d=new Date();d.setDate(d.getDate()+offsetDays);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;}
@@ -82,17 +83,19 @@ function resetFilters(){
   $('startDate').value=localDate(-30);$('endDate').value=localDate(1);$('customerId').value='';$('shipmentNo').value='';$('source').value='ALL';$('partSearch').value='';
   selectedParts=[];candidateRows=[];activeIndex=-1;renderChips();hideSuggestions();loadRows();
 }
-async function loadRows(){try{const d=await jf('/api/shipping/inquiry?'+qs());rows=d.items||[];selectedIds.clear();render();updateSelection();showMsg('');}catch(e){showMsg(e.message)}}
+async function loadRows(){try{const d=await jf('/api/shipping/inquiry?'+qs());report=d;rows=d.items||[];selectedIds.clear();render();updateSelection();showMsg(d.truncated?`상세는 ${rows.length}행까지 표시합니다. 품번별 합계는 조회기간 전체 ${d.total}행 기준입니다.`:'');}catch(e){showMsg(e.message)}}
 function render(){
-  if(!rows.length){$('body').innerHTML='<tr><td colspan="10" class="empty">조회할 출고 내역이 없습니다.</td></tr>';$('summary').textContent='건수: 0';return;}
+  const totals=report?.totals||{};
+  $('partSummary').innerHTML=(report?.summary||[]).map(x=>'<tr><td>'+esc(x.part_no)+'</td><td class="left">'+esc(x.part_name)+'</td><td class="num">'+n(x.shipped_qty).toLocaleString()+'</td><td>'+n(x.box_count).toLocaleString()+'</td><td>'+n(x.shipment_count).toLocaleString()+'</td></tr>').join('')||'<tr><td colspan="5" class="empty">조회할 출고 내역이 없습니다.</td></tr>';
+  if(!rows.length){$('body').innerHTML='<tr><td colspan="11" class="empty">조회할 출고 내역이 없습니다.</td></tr>';$('summary').textContent='건수: 0';return;}
   $('body').innerHTML=rows.map((x,i)=>`<tr data-id="${x.id}">
     <td><input type="checkbox" class="row-check" value="${x.id}" ${x.source==='EXTERNAL'?'disabled title="외부 출고는 원본에서 관리합니다."':''} onclick="toggleSelected(${x.id})"></td>
     <td>${i+1}</td>
     <td>${x.source==='EXTERNAL'?`<button class="btn btn-sm gray doc-link" onclick="showExternal(${x.id})">${esc(x.shipment_no)}</button>`:`<a class="doc-link" href="/sales/shipping?shipment_id=${encodeURIComponent(x.id)}">${esc(x.shipment_no)}</a>`}</td>
-    <td>${esc(x.shipment_date)}</td><td>${esc(x.customer_name)}</td><td>${esc(x.part_summary||'')}</td>
+    <td>${esc(x.shipment_date)}</td><td>${esc(x.customer_name)}</td><td>${esc(x.part_no||'')}</td><td class="left">${esc(x.part_name||'')}</td>
     <td class="num">${n(x.total_qty).toLocaleString()}</td><td class="num">${n(x.total_boxes).toLocaleString()}</td><td class="left">${esc(x.note||'')}${x.shipment_mode==='DIRECT'?' <span class="flag">직출고</span>':(x.fifo_exception?' <span class="flag">FIFO 예외</span>':'')}</td>
-    <td>${(x.shipment_mode==='DIRECT'||x.printable===false)?'<button class="btn btn-sm gray" disabled title="출력 가능한 완료 상태와 LOT 배정 내역을 확인해 주세요.">-</button>':`<button class="btn btn-sm blue" onclick="printShipment(${x.id})">인쇄</button>`}</td></tr>`).join('');
-  $('summary').textContent=`건수: ${rows.length}   총 출고수량: ${rows.reduce((s,x)=>s+n(x.total_qty),0).toLocaleString()}   총 박스수: ${rows.reduce((s,x)=>s+n(x.total_boxes),0).toLocaleString()}`;
+    <td>${(x.shipment_mode==='DIRECT'||x.printable===false)?'<button class="btn btn-sm gray" disabled title="출력 가능한 완료 상태와 LOT 배정 내역을 확인해 주세요.">-</button>':`<button class="btn btn-sm blue" onclick="printShipment(${x.id})" title="전표 전체 품목을 인쇄합니다.">전표 인쇄</button>`}</td></tr>`).join('');
+  $('summary').textContent=`전표: ${n(totals.shipment_count)}건 · 품번: ${(report?.summary||[]).length}개 · 총 출고수량: ${n(totals.shipped_qty).toLocaleString()} · 총 박스수: ${n(totals.box_count).toLocaleString()}`;
 }
 async function showExternal(id){try{
   const data=await jf('/api/shipping/inquiry/'+id);
@@ -103,8 +106,8 @@ async function showExternal(id){try{
 async function printShipment(id){try{showMsg('인쇄 데이터를 준비하고 있습니다...');await jf('/api/shipping/from-shipments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({shipment_ids:[id]})});location.href='/shipping/print';}catch(e){showMsg(e.message)}}
 async function deleteSelected(){
   if(!selectedIds.size){showMsg('삭제할 출고 내역을 선택하세요.');return;}
-  const selectedRows=rows.filter(x=>selectedIds.has(x.id));
-  if(!confirm(`${selectedRows.length}건의 출고 내역을 삭제하시겠습니까?\n연결된 수주의 출고수량과 LOT 사용상태가 복원됩니다.`))return;
+  const selectedRows=[...new Map(rows.filter(x=>selectedIds.has(x.id)).map(x=>[x.id,x])).values()];
+  if(!confirm(`${selectedRows.length}건의 출고전표 전체를 삭제하시겠습니까?\n현재 품번 필터에 표시되지 않은 품목도 함께 삭제됩니다.\n연결된 수주의 출고수량과 LOT 사용상태가 복원됩니다.`))return;
   try{for(const row of selectedRows){await jf('/api/shipping/inquiry/'+row.id,{method:'DELETE'});}showMsg(`${selectedRows.length}건의 출고 내역을 삭제했습니다.`,true);await loadRows();}catch(e){showMsg(e.message)}
 }
 document.addEventListener('DOMContentLoaded',async()=>{

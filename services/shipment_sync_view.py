@@ -45,7 +45,7 @@ def shipment_view(record, connections, detail=False):
 
 
 def external_shipments(db, start_date=None, end_date=None, shipment_no=None, customer_name=None,
-                       customer_id=None, item_ids=None, limit=1000, printable_only=False):
+                       customer_id=None, item_ids=None, limit=1000, printable_only=False, detail=False):
     query = db.query(ExternalShipment).filter(ExternalShipment.present.is_(True))
     if start_date:
         query = query.filter(ExternalShipment.shipment_date >= start_date)
@@ -63,13 +63,13 @@ def external_shipments(db, start_date=None, end_date=None, shipment_no=None, cus
     connections = ItemConnections(db)
     result = []
     for record in query.order_by(ExternalShipment.shipment_date.desc(), ExternalShipment.id.desc()):
-        row = shipment_view(record, connections)
+        row = shipment_view(record, connections, detail=detail)
         if item_ids and not any(i['item_id'] in item_ids for i in row['items']):
             continue
         if printable_only and not row['printable']:
             continue
         result.append(row)
-        if len(result) >= limit:
+        if limit is not None and len(result) >= limit:
             break
     return result
 
