@@ -100,7 +100,8 @@ def test_api_access_and_page(context,monkeypatch):
     app.dependency_overrides[get_current_user]=lambda:user
     client=TestClient(app)
     assert client.get('/api/production/pipeline-data').json()['items'][0]['shipping_ready_rate']==20
-    assert client.get('/production/pipeline-dashboard').status_code==200
+    response=client.get('/production/pipeline-dashboard',follow_redirects=False)
+    assert response.status_code==303 and response.headers['location']=='/'
     monkeypatch.setattr(routes,'DEV_BYPASS_AUTH',False)
     user.role='USER';user.permissions='{}'
     assert client.get('/api/production/pipeline-data').status_code==403
@@ -112,3 +113,32 @@ def test_pure_fifo_stable_order_and_item_isolation():
     result=fifo_allocate(orders,supplies)
     assert [r['shipping_ready_rate'] for r in result]==[100,30,50]
     assert supplies[0]['qty']==15
+
+
+def test_home_replaces_old_dashboard_and_removes_sidebar_duplicate(context,monkeypatch):
+    from routers import pages
+    db,item,master,user=context
+    app=FastAPI();app.include_router(pages.router);app.include_router(routes.router)
+    app.dependency_overrides[get_db]=lambda:db
+    app.dependency_overrides[get_current_user]=lambda:user
+    monkeypatch.setattr(pages,'get_current_user_optional',lambda *args:user)
+    monkeypatch.setattr(routes,'DEV_BYPASS_AUTH',False)
+    client=TestClient(app)
+    response=client.get('/')
+    assert response.status_code==200
+    assert 'id="ppTable"' in response.text and 'id="dashboardCards"' not in response.text
+    assert 'id="nav-production-pipeline"' not in response.text
+    assert 'aria-label="통합 공정 현황으로 이동"' in response.text
+    assert client.get('/shipping').status_code==200
+    assert client.get('/production/pipeline-dashboard').status_code==200
+    user.role='USER';user.permissions='{}'
+    response=client.get('/')
+    assert response.status_code==200 and '조회 권한이 없습니다' in response.text
+    assert 'production_pipeline_dashboard.js?' not in response.text
+    assert client.get('/api/production/pipeline-data').status_code==403
+    user.permissions='{"menu_access":{"/production/pipeline-dashboard":"READ"}}'
+    assert 'id="ppTable"' in client.get('/').text
+    assert client.get('/api/production/pipeline-data').status_code==200
+    monkeypatch.setattr(pages,'get_current_user_optional',lambda *args:None)
+    response=client.get('/',follow_redirects=False)
+    assert response.status_code==303 and response.headers['location']=='/login'

@@ -148,9 +148,9 @@
         </div>
 
         <div id="permissionConfigArea" class="form-group">
-            <label>사이드바 메뉴별 접근 권한</label>
+            <label>대문·메뉴별 접근 권한</label>
             <div style="font-size:11px;color:#64748b;margin:0 0 6px;">
-                현재 사이드바 메뉴를 기준으로 자동 생성됩니다. 새 메뉴는 기존 계정에서 기본 차단됩니다.
+                대문과 현재 사이드바 메뉴를 기준으로 구성됩니다. 새 메뉴는 기존 계정에서 기본 차단됩니다.
             </div>
             <div class="perm-tree-box" id="dynamicPermissionTree"></div>
         </div>
@@ -254,7 +254,7 @@
     }
 
     function sidebarPermissionModel() {
-        return Array.from(document.querySelectorAll('.sidebar-menu > .menu-item[data-perm-key]'))
+        const sidebarGroups = Array.from(document.querySelectorAll('.sidebar-menu > .menu-item[data-perm-key]'))
             .filter(menu => menu.dataset.permKey && menu.dataset.permKey !== 'admin')
             .map(menu => {
                 const title = menu.querySelector('.menu-title span');
@@ -271,6 +271,8 @@
                 };
             })
             .filter(group => group.items.length);
+        // Keep the existing permission key after moving the screen to the home page.
+        return [{key:'home',label:'대문',items:[{path:'/production/pipeline-dashboard',label:'통합 공정 현황'}]},...sidebarGroups];
     }
 
     function legacyMenuLevel(group, item, permissions) {

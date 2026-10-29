@@ -39,11 +39,12 @@ async def dispatch_entry_point(request: Request, db: Session = Depends(get_db)):
     if not user:
         return RedirectResponse(url="/login", status_code=303)
 
-    # base.html의 권한 필터가 적용된 후 실제 사이드바의 첫 메뉴로 이동합니다.
+    # The common landing page hosts the pipeline; keep its existing data permission.
+    from routers.production_pipeline import can_read_pipeline
     return templates.TemplateResponse(
         request=request,
         name="entry.html",
-        context={"user": user},
+        context={"user": user, "can_view_pipeline": can_read_pipeline(user)},
     )
 
 # ==============================================================================
