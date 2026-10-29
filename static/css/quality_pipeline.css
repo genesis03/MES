@@ -2,3 +2,7 @@
 
 /* Pipeline quantity comparison and shipment readiness, with exact values retained. */
 .qp-meter{position:relative;min-width:92px;height:26px;background:#f1f5f9;border:1px solid #dbe3ee;border-radius:4px;overflow:hidden;display:inline-block;vertical-align:middle;width:100%}.qp-meter-fill{position:absolute;inset:0 auto 0 0;background:#bfdbfe}.qp-meter-value{position:relative;z-index:1;display:block;padding:3px 8px;color:#0f172a;font-weight:600;text-align:center;line-height:18px}.qp-meter-ready .qp-meter-fill{background:#bbf7d0}.qp-meter-needed .qp-meter-fill{background:#fed7aa}.qp-meter-missing{color:#64748b}.qp-cards .qp-meter{width:140px;min-width:0}
+
+/* Fit the pipeline overview to the available content width only. */
+#ppTable{table-layout:fixed;width:100%;font-size:12px}#ppTable .pp-part-column{width:100px}#ppTable th,#ppTable td{padding:6px 4px;white-space:normal;overflow-wrap:anywhere}#ppTable th{line-height:1.4}#ppTable .qp-meter{min-width:0;min-height:24px;height:auto}#ppTable .qp-meter-value{padding:3px 1px;line-height:16px;white-space:normal;overflow-wrap:anywhere}#ppTable [hidden]{display:none}
+@media(max-width:1400px){#ppTable{font-size:11px}#ppTable th,#ppTable td{padding:5px 3px}}
