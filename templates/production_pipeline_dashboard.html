@@ -4,6 +4,5 @@
 <h1>통합 공정 현황</h1><p class="qp-help">미출하 수주를 기준으로 현재 재고와 공정별 수량을 조회합니다. 수주일 순서로 기존 재고를 먼저 배정하고, 부족분을 신규 생산 필요량으로 표시합니다.</p>
 <div class="qp-panel qp-toolbar"><label>품번<input id="ppPart" maxlength="100"></label><button id="ppLoad" class="qp-button">조회</button><span id="ppMessage" role="status"></span></div>
 <section class="qp-panel"><h2>품번별 공정 현황</h2><p class="qp-help">수량 막대는 품번별 최대 수량 기준이며, 출하 준비율은 100% 기준입니다. 막대 안 숫자는 실제 수량·비율입니다.</p><div class="qp-scroll"><table class="qp-table" id="ppTable"><colgroup><col class="pp-part-column"><col span="12"></colgroup><thead><tr><th rowspan="2">품번 / 품명</th><th colspan="8" id="ppStageHeading">수주 → 계획 → 지시 → 가공 → 외주도금 → 검사 → 조립 → 포장</th><th colspan="4">출하 준비</th></tr><tr><th>미출하 수주</th><th>계획량</th><th>지시 잔량</th><th>가공 재고</th><th>외주도금 중</th><th>검사 대기</th><th>조립 재고</th><th data-pipeline-vision hidden>비전</th><th>포장 재고</th><th>완제품 재고 배정</th><th>포장 재고 배정</th><th>신규 생산 필요</th><th>출하 준비율</th></tr></thead><tbody id="ppRows"></tbody></table></div><div id="ppNotes" class="qp-help"></div></section>
-<section class="qp-panel"><h2>수주별 FIFO 예정 배정 / 실제 출고 LOT</h2><div id="ppOrders" class="qp-cards"></div></section>
-<script src="/static/production_pipeline_dashboard.js?v=pipeline-fit-20261029"></script>
+<script src="/static/production_pipeline_dashboard.js?v=remove-order-cards-20261030"></script>
 {% else %}<h1>통합 공정 현황</h1><p class="qp-help">통합 공정 현황 조회 권한이 없습니다. 왼쪽의 사용 가능한 메뉴를 이용하거나 관리자에게 권한을 요청하세요.</p>{% endif %}{% endblock %}
