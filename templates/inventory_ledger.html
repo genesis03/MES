@@ -10,6 +10,11 @@
 #ilRows td { padding:7px 5px; }
 #ilRows .il-part { text-align:left;min-width:130px; }
 #ilHead ~ tbody td { min-width:58px; }
+.il-cell-input{display:block;width:90px;max-width:100%;padding:5px!important;background:white;text-align:right}
+.il-cell-input.is-dirty{background:#fff4c2;border-color:#d69b14!important}
+.il-saved{display:block;font-size:10px;color:#64748b;white-space:nowrap;margin-top:3px}
+.il-bulk{border-bottom:1px solid #d6e0ec;padding-bottom:12px;margin-bottom:12px}
+.il-bulk label{display:flex;flex-direction:column;gap:4px;font-size:12px}.il-bulk .il-checkbox{flex-direction:row;align-items:center}
 </style>
 {% endblock %}
 {% block content %}
@@ -26,7 +31,13 @@
 <div id="ilWarnings"></div>
 <section class="il-panel">
 <div class="il-actions"><strong>월간 수불·실사 집계</strong></div>
-<p class="il-help">품번을 누르면 일별 수불과 전표·LOT를, 기초·실재고를 누르면 입력창을 엽니다. 입고·출고는 총합이며 불량·Setup·LOSS·샘플은 차감수량입니다. 차이 = 실사수량 + 실사 이월수량 − 실사일 기준 장부재고. EA와 kg 등 서로 다른 단위는 합산하지 않습니다.</p>
+{% if can_write %}<div class="il-toolbar il-bulk" style="margin-top:12px">
+<label>공통 실사일<input type="date" id="ilBulkDate"></label><label>공통 변경 사유<input id="ilBulkNote" maxlength="1000" value="일괄 입력"></label>
+<button class="il-btn" id="ilBulkSave" disabled>입력 내용 저장</button>
+<button class="il-btn secondary" id="ilCarryAll">전월 마감재고 일괄 불러오기</button>
+<label class="il-checkbox"><input type="checkbox" id="ilCarryOverwrite">기존 기초재고도 불러오기</label>
+<span id="ilBulkStatus" class="il-status" role="status"></span></div>{% endif %}
+<p class="il-help">품번을 누르면 일별 수불과 전표·LOT를 확인합니다. 입력칸은 빈칸으로 시작하며 아래에 기존 저장값을 표시합니다. 빈칸은 기존 값 유지, 0은 재고 0으로 저장합니다. 계산재고와 차이는 저장 후 갱신됩니다. Enter는 아래 행, Tab은 다음 입력칸으로 이동하며 엑셀의 여러 셀을 붙여넣을 수도 있습니다. 입고·출고는 총합이며 불량·Setup·LOSS·샘플은 차감수량입니다. 차이 = 실사수량 + 실사 이월수량 − 실사일 기준 장부재고. EA와 kg 등 서로 다른 단위는 합산하지 않습니다.</p>
 <div class="il-scroll"><table class="il-table"><thead id="ilHead"></thead><tbody id="ilRows"></tbody></table></div>
 </section>
 <section class="il-panel" id="ilDetail" hidden>
@@ -51,5 +62,5 @@
 <label>전표번호<input id="ilDocument" maxlength="100"></label><label>LOT<input id="ilLot" maxlength="100"></label><label class="wide">보완 사유<textarea id="ilReason" required maxlength="1000"></textarea></label></div>
 <div class="il-actions" style="margin-top:12px"><button class="il-btn" id="ilSaveEntry">등록</button><button type="button" class="il-btn secondary" data-close="ilEntryDialog">닫기</button></div><p class="il-status" id="ilEntryMessage"></p></form></dialog>
 <script>window.inventoryLedgerCanWrite={{ can_write|tojson }};</script>
-<script src="/static/inventory_ledger.js?v=20261030-fixed-1"></script>
+<script src="/static/inventory_ledger.js?v=20261030-bulk-1"></script>
 {% endblock %}

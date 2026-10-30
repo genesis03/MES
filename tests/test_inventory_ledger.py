@@ -265,3 +265,67 @@ def test_count_carry_quantity_matches_workbook_difference(env):
     baseline(env,opening_qty='100',actual_qty='80',count_carry_qty='15',count_date='2026-10-31')
     assert Decimal(row(env)['difference'])==-5
     assert Decimal(row(env)['closing_qty'])==100
+
+
+def batch(env,rows,**changes):
+    return env.client.put('/api/inventory/ledger/balances',json={'month':'2026-10','source':'mes','note':'여러 품번 입력','rows':rows}|changes)
+
+
+def test_bulk_only_entered_fields_change_and_zero_is_saved(env):
+    baseline(env,opening_qty='100',actual_qty='50',count_carry_qty='3',count_date='2026-10-15')
+    response=batch(env,[{'item_id':2,'version':1,'opening_qty':'0'}, {'item_id':3,'version':0,'actual_qty':'0'}],count_date='2026-10-31')
+    assert response.status_code==200,response.text
+    assert response.json()['saved']==2
+    value=row(env)
+    assert Decimal(value['opening_qty'])==0
+    assert Decimal(value['actual_qty'])==50 and Decimal(value['count_carry_qty'])==3
+    assert value['count_date']=='2026-10-15'  # Opening-only edits do not replace the previous inspection date.
+    value=row(env,3)
+    assert value['opening_qty'] is None and Decimal(value['actual_qty'])==0
+    assert value['count_date']=='2026-10-31'
+    assert env.db.query(InventoryLedgerAudit).count()==3
+    assert row(env,2,'external')['opening_qty'] is None
+
+
+def test_bulk_conflict_rolls_back_every_part_and_audit(env):
+    baseline(env,item=2,opening_qty='10');baseline(env,item=3,opening_qty='20')
+    response=batch(env,[{'item_id':2,'version':1,'opening_qty':'100'}, {'item_id':3,'version':0,'opening_qty':'200'}])
+    assert response.status_code==409
+    assert Decimal(row(env,2)['opening_qty'])==10
+    assert Decimal(row(env,3)['opening_qty'])==20
+    assert env.db.query(InventoryLedgerAudit).count()==2
+
+
+def test_bulk_bad_merged_carry_rolls_back_previous_rows(env):
+    baseline(env,item=2,opening_qty='10')
+    response=batch(env,[{'item_id':2,'version':1,'opening_qty':'100'}, {'item_id':3,'version':0,'count_carry_qty':'5'}])
+    assert response.status_code==422
+    assert Decimal(row(env,2)['opening_qty'])==10
+    assert env.db.query(InventoryLedgerBalance).count()==1
+    assert env.db.query(InventoryLedgerAudit).count()==1
+
+
+@pytest.mark.parametrize('rows,extra',[
+    ([{'item_id':2,'version':0}],{}),
+    ([{'item_id':2,'version':0,'opening_qty':None}],{}),
+    ([{'item_id':2,'version':0,'actual_qty':'1'}],{}),
+    ([{'item_id':2,'version':0,'actual_qty':'1'}],{'count_date':'2026-09-30'}),
+    ([{'item_id':2,'version':0,'opening_qty':'NaN'}],{}),
+    ([{'item_id':2,'version':0,'opening_qty':'1'},{'item_id':2,'version':0,'opening_qty':'2'}],{}),
+])
+def test_invalid_bulk_requests_do_not_write(env,rows,extra):
+    assert batch(env,rows,**extra).status_code==422
+    assert env.db.query(InventoryLedgerBalance).count()==0
+    assert env.db.query(InventoryLedgerAudit).count()==0
+
+
+def test_bulk_permissions_are_checked_without_relying_on_page_header(env):
+    env.state.user=SimpleNamespace(username='reader',role='USER',permissions=json.dumps({'menu_access':{'/inventory/ledger':'READ'}}))
+    assert batch(env,[{'item_id':2,'version':0,'opening_qty':'1'}]).status_code==403
+
+
+def test_bulk_unknown_part_does_not_save_valid_preceding_part(env):
+    response=batch(env,[{'item_id':2,'version':0,'opening_qty':'1'},{'item_id':999,'version':0,'opening_qty':'2'}])
+    assert response.status_code==404
+    assert env.db.query(InventoryLedgerBalance).count()==0
+    assert env.db.query(InventoryLedgerAudit).count()==0

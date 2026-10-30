@@ -69,6 +69,34 @@ class BalanceInput(Filter):
         return self
 
 
+class BalancePatch(BaseModel):
+    item_id:int=Field(gt=0)
+    version:int=Field(ge=0)
+    opening_qty:Decimal|None=Field(default=None,ge=0,max_digits=20,decimal_places=6,allow_inf_nan=False)
+    actual_qty:Decimal|None=Field(default=None,ge=0,max_digits=20,decimal_places=6,allow_inf_nan=False)
+    count_carry_qty:Decimal|None=Field(default=None,ge=0,max_digits=20,decimal_places=6,allow_inf_nan=False)
+    @model_validator(mode='after')
+    def changed_fields(self):
+        fields=self.model_fields_set & {'opening_qty','actual_qty','count_carry_qty'}
+        if not fields or any(getattr(self,key) is None for key in fields):
+            raise ValueError('숫자를 입력한 항목만 전송하세요. 빈칸은 기존 값을 유지합니다.')
+        return self
+
+
+class BalanceBatchInput(Filter):
+    rows:list[BalancePatch]=Field(min_length=1,max_length=5000)
+    note:str=Field(min_length=1,max_length=1000)
+    count_date:date|None=None
+    @model_validator(mode='after')
+    def validate_rows(self):
+        if not self.note.strip():raise ValueError('변경 사유를 입력하세요.')
+        if len({row.item_id for row in self.rows})!=len(self.rows):raise ValueError('같은 품번을 중복 저장할 수 없습니다.')
+        if self.count_date and self.count_date.strftime('%Y-%m')!=self.month:raise ValueError('실사일은 조회 월 안의 날짜여야 합니다.')
+        if any('actual_qty' in row.model_fields_set for row in self.rows) and not self.count_date:
+            raise ValueError('실재고 입력 시 공통 실사일을 선택하세요.')
+        return self
+
+
 class EntryInput(BaseModel):
     source:Source
     entry_date:date
@@ -135,26 +163,58 @@ def get_detail(filters:Filter=Depends(ledger_filters),item_id:int|None=Query(Non
     return result
 
 
-@router.put('/api/inventory/ledger/balance')
-def save_balance(payload:BalanceInput,db:Session=Depends(get_db),user=Depends(get_current_user)):
-    permission(user,True);item_required(db,payload.item_id)
+def write_balance(payload,db,user):
+    item_required(db,payload.item_id)
     row=db.query(InventoryLedgerBalance).filter_by(month=payload.month,source=payload.source,item_id=payload.item_id).one_or_none()
     before={k:getattr(row,k) for k in ('opening_qty','actual_qty','count_carry_qty','count_date','note','version')} if row else {}
     values=payload.model_dump(exclude={'month','source','item_id','version'})
     values['count_date']=payload.count_date.isoformat() if payload.count_date else None
     values.update(version=payload.version+1,updated_at=datetime.now(),updated_by=user.username)
+    if row:
+        result=db.execute(update(InventoryLedgerBalance).where(InventoryLedgerBalance.id==row.id,InventoryLedgerBalance.version==payload.version).values(**values))
+        if result.rowcount!=1:raise HTTPException(409,'다른 사용자가 수정했습니다. 다시 조회 후 저장하세요.')
+    else:
+        if payload.version!=0:raise HTTPException(409,'이력이 변경되었습니다. 다시 조회하세요.')
+        db.add(InventoryLedgerBalance(month=payload.month,source=payload.source,item_id=payload.item_id,**values))
+    audit(db,payload.month,payload.source,payload.item_id,'BALANCE',before,values,user)
+
+
+@router.put('/api/inventory/ledger/balance')
+def save_balance(payload:BalanceInput,db:Session=Depends(get_db),user=Depends(get_current_user)):
+    permission(user,True)
     try:
-        if row:
-            result=db.execute(update(InventoryLedgerBalance).where(InventoryLedgerBalance.id==row.id,InventoryLedgerBalance.version==payload.version).values(**values))
-            if result.rowcount!=1:raise HTTPException(409,'다른 사용자가 수정했습니다. 다시 조회 후 저장하세요.')
-        else:
-            if payload.version!=0:raise HTTPException(409,'이력이 변경되었습니다. 다시 조회하세요.')
-            db.add(InventoryLedgerBalance(month=payload.month,source=payload.source,item_id=payload.item_id,**values))
-        audit(db,payload.month,payload.source,payload.item_id,'BALANCE',before,values,user)
-        db.commit()
+        write_balance(payload,db,user);db.commit()
     except IntegrityError:
         db.rollback();raise HTTPException(409,'다른 사용자가 저장했습니다. 다시 조회하세요.')
+    except Exception:
+        db.rollback();raise
     return {'status':'success','version':payload.version+1}
+
+
+@router.put('/api/inventory/ledger/balances')
+def save_balances(payload:BalanceBatchInput,db:Session=Depends(get_db),user=Depends(get_current_user)):
+    permission(user,True)
+    try:
+        for patch in payload.rows:
+            existing=db.query(InventoryLedgerBalance).filter_by(month=payload.month,source=payload.source,item_id=patch.item_id).one_or_none()
+            values={key:getattr(existing,key) if existing else default for key,default in
+                    [('opening_qty',None),('actual_qty',None),('count_carry_qty',Decimal(0)),('count_date',None)]}
+            fields=patch.model_fields_set & {'opening_qty','actual_qty','count_carry_qty'}
+            values.update({key:getattr(patch,key) for key in fields})
+            if payload.count_date and fields & {'actual_qty','count_carry_qty'}:values['count_date']=payload.count_date
+            try:
+                merged=BalanceInput(month=payload.month,source=payload.source,item_id=patch.item_id,
+                                    version=patch.version,note=payload.note,**values)
+            except ValueError:
+                part=item_required(db,patch.item_id).part_no
+                raise HTTPException(422,f'{part}: 실재고·이월수량·실사일을 확인하세요. 전체 저장을 취소했습니다.')
+            write_balance(merged,db,user)
+        db.commit()
+    except IntegrityError:
+        db.rollback();raise HTTPException(409,'다른 사용자가 저장했습니다. 입력값을 보관한 뒤 다시 조회하세요. 전체 저장을 취소했습니다.')
+    except Exception:
+        db.rollback();raise
+    return {'status':'success','saved':len(payload.rows)}
 
 
 @router.post('/api/inventory/ledger/entries')
