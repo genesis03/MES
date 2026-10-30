@@ -54,6 +54,40 @@
         font-size: 13px;
     }
     .btn-back:hover { background: #e2e8f0; }
+    @media screen {
+        #labelsContainer {
+            --shipment-label-scale: 1;
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            gap: 22px 16px;
+        }
+        #labelsContainer > p { grid-column: 1 / -1; }
+        .shipment-label-preview {
+            position: relative;
+            min-width: 0;
+            height: calc(80mm * var(--shipment-label-scale));
+            padding-left: 20px;
+        }
+        .shipment-label-preview .label-page {
+            margin: 0;
+            transform: scale(var(--shipment-label-scale));
+            transform-origin: top left;
+        }
+        .shipment-label-number {
+            position: absolute;
+            left: 0;
+            top: calc(2.5mm * var(--shipment-label-scale));
+            font-size: 11px;
+            font-weight: 600;
+            color: #64748b;
+        }
+    }
+    @media print {
+        #labelsContainer { display: block; }
+        .shipment-label-preview { display: contents; }
+        .shipment-label-number { display: none !important; }
+    }
+
 </style>
 {% endblock %}
 
@@ -200,6 +234,8 @@
         let htmlBuffer = "";
         targetList.forEach(row => {
             const cols = Object.values(row);
+            const number = RAW_DATA.indexOf(row) + 1;
+            htmlBuffer += `<div class="shipment-label-preview"><span class="shipment-label-number">${number}</span>`;
             htmlBuffer += LabelTemplates.renderShipmentLabel({
                 barcode: String(cols[2] || '').trim(),
                 customer: String(cols[3] || '').trim(),
@@ -209,11 +245,21 @@
                 qty: String(cols[13] || '').trim(),
                 serial: String(cols[14] || '').trim()
             });
+            htmlBuffer += '</div>';
         });
 
         container.innerHTML = htmlBuffer;
     }
 
+    // Fit exactly five previews without changing the physical print dimensions.
+    const previewContainer = document.getElementById('labelsContainer');
+    function resizeLabelPreviews() {
+        const cellWidth = (previewContainer.clientWidth - 4 * 16) / 5;
+        const scale = Math.min(1, Math.max(0, (cellWidth - 20) / (80 * 96 / 25.4)));
+        previewContainer.style.setProperty('--shipment-label-scale', scale);
+    }
+    new ResizeObserver(resizeLabelPreviews).observe(previewContainer);
+    resizeLabelPreviews();
     initData();
 </script>
 {% endblock %}
