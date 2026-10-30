@@ -41,7 +41,7 @@ def enable_routes(setup):
 def test_parser_preserves_cross_part_same_lot_and_source_date():
     rows = [row(), row(part='OTHER', JOB_QTY='80.0000', CONFIRM_DATE='20260326', APPLY_COMP_NM='Customer')]
     parsed, warnings = source.parse_response(response(rows), DAY, DAY)
-    assert parsed == rows and not warnings
+    assert parsed == [{k: v for k, v in r.items() if k != 'PRODUCT_NM'} for r in rows] and not warnings
     assert sum(Decimal(r['LOT_QTY']) for r in parsed) == 480
     assert sum(Decimal(r['JOB_QTY']) for r in parsed) == 80
 
@@ -77,7 +77,7 @@ def test_padded_query_uses_packlist_and_only_keeps_requested_day(monkeypatch):
         captured.append(payload)
         return response([row(day=DAY-timedelta(days=1)), row(), row(day=DAY+timedelta(days=1))])
     monkeypatch.setattr(source,'query_with_retry',query)
-    assert client.fetch_day(DAY) == ([row()],[])
+    assert client.fetch_day(DAY) == ([{k: v for k, v in row().items() if k != 'PRODUCT_NM'}],[])
     assert captured[0]['run.object.name']=='MES.Stock.PackList.PackListObj'
     assert captured[0]['MES.Product.Set.JobCondSet.JOB_DATE1']==(DAY-timedelta(days=1)).isoformat()
     assert captured[0]['MES.Product.Set.JobCondSet.JOB_DATE2']==(DAY+timedelta(days=1)).isoformat()
@@ -323,3 +323,33 @@ def test_missing_source_lot_excluded_then_recovers_without_duplicate(setup):
 def test_shipment_exceeding_packing_is_rejected():
     with pytest.raises(SyncError,match='초과'):
         source.parse_response(response([row(JOB_QTY='241')]),DAY,DAY)
+
+
+def test_external_product_names_are_ignored_even_with_commas():
+    data = response([row(PRODUCT_NM='TERMINAL, LEFT', APPLY_COMP_NM='(주)유라'),
+                     row(part='OTHER', PRODUCT_NM='TERMINAL RIGHT', APPLY_COMP_NM='거래처 2')])
+    parsed, warnings = source.parse_response(data, DAY, DAY)
+    assert not warnings
+    assert all('PRODUCT_NM' not in r for r in parsed)
+    assert [r['APPLY_COMP_NM'] for r in parsed] == ['(주)유라', '거래처 2']
+
+
+def test_single_customer_with_comma_is_preserved_verbatim():
+    parsed, warnings = source.parse_response(response([row(APPLY_COMP_NM='Example, Inc.')]), DAY, DAY)
+    assert parsed[0]['APPLY_COMP_NM'] == 'Example, Inc.'
+    assert not warnings
+
+
+def test_empty_customers_do_not_produce_ambiguity_warning():
+    data = response([row(), row(part='OTHER')])
+    data[source.PREFIX + 'APPLY_COMP_NM'] = ['']
+    parsed, warnings = source.parse_response(data, DAY, DAY)
+    assert [r['APPLY_COMP_NM'] for r in parsed] == ['', '']
+    assert not warnings
+
+
+def test_customer_count_error_is_not_silently_replaced_with_blanks():
+    data = response([row(), row(part='OTHER')])
+    data[source.PREFIX + 'APPLY_COMP_NM'] = ['One, Inc.,Two']
+    with pytest.raises(SyncError, match='거래처 항목별 건수'):
+        source.parse_response(data, DAY, DAY)

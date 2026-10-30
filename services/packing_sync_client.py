@@ -30,13 +30,18 @@ def parse_response(result, start, end):
         raise SyncError('포장 항목별 건수가 일치하지 않아 저장을 중단했습니다.')
     if declared and (not declared.isdecimal() or int(declared) != count):
         raise SyncError('포장 서버 표시 건수와 수신 건수가 다릅니다. 페이지 처리를 확인해 주세요.')
+    # Names are resolved by part number from the MES item master, not imported.
     warnings = []
-    for key in ('PRODUCT_NM', 'APPLY_COMP_NM'):
-        values = result.get(PREFIX + key, [''])[0].split(',')
-        if len(values) != count:
-            values = [''] * count
-            warnings.append('품명 또는 거래처 구분자가 모호한 항목은 원본 문자열 대신 공란으로 표시합니다.')
-        arrays[key] = values
+    customer_text = result.get(PREFIX + 'APPLY_COMP_NM', [''])[0]
+    if count == 1:
+        customers = [customer_text]
+    elif not customer_text:
+        customers = [''] * count
+    else:
+        customers = customer_text.split(',')
+        if len(customers) != count:
+            raise SyncError('포장 거래처 항목별 건수가 일치하지 않아 저장을 중단했습니다. 외부 거래처 원본 응답을 확인해 주세요.')
+    arrays['APPLY_COMP_NM'] = customers
     rows = []
     for i in range(count):
         row = {key: values[i] for key, values in arrays.items()}
