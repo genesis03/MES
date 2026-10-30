@@ -13,9 +13,19 @@
   function query(extra={}){return new URLSearchParams({month:loaded.month,source:loaded.source,...extra});}
   function showRows(){
     const kindColumns=types?[...new Set(loaded.rows.flatMap(r=>Object.keys(r.totals)))].sort():[];
-    const columns=['품번','품명','구분','단위','기초',...(types?kindColumns:['입고','출고']),'계산재고','실사일','실사수량','실사 이월수량','실사일 장부재고','차이','관리'];
-    $('ilHead').innerHTML='<tr>'+columns.map(c=>`<th>${esc(c)}</th>`).join('')+'</tr>';
-    $('ilRows').innerHTML=loaded.rows.map((r,i)=>`<tr data-row="${i}" class="${selected?.key===r.key?'selected':''}"><td><button data-detail="${i}">${esc(r.part_no)}</button>${r.linked?'':'<br>품번 미연결 / '+esc(r.process)}</td><td class="left">${esc(r.part_name)}</td><td>${esc(r.category_name)}</td><td>${esc(r.unit)}</td><td>${r.opening_qty==null?'기초 미입력':fmt(r.opening_qty)}</td>${(types?kindColumns.map(k=>r.totals[k]??'0'):[r.in_qty,r.out_qty]).map(v=>`<td>${fmt(v)}</td>`).join('')}<td class="${r.closing_qty!=null&&Number(r.closing_qty)<0?'il-negative':''}">${fmt(r.closing_qty)}</td><td>${esc(r.count_date)}</td><td>${fmt(r.actual_qty)}</td><td>${fmt(r.count_carry_qty)}</td><td>${fmt(r.expected_at_count)}</td><td class="${r.difference!=null&&Number(r.difference)!==0?'il-negative':''}">${fmt(r.difference)}</td><td>${canWrite&&r.linked?`<button data-edit="${i}">입력</button>`:''}</td></tr>`).join('')||`<tr><td colspan="${columns.length}">조회 결과가 없습니다.</td></tr>`;
+    const stageColumns=['production_qty','production_defect_qty','setup_qty','subcontract_in_qty','subcontract_defect_qty','loss_qty','sample_qty','packing_qty','raw_in_qty'];
+    const columns=['구분','품번','단위','기초','입고',...(types?kindColumns:stageColumns),'출고','기말(산출)','실재고','이월수량','차이'];
+    $('ilHead').classList.toggle('il-grouped-head',!types);
+    if(types){
+      $('ilHead').innerHTML='<tr>'+columns.map(c=>`<th>${esc(c)}</th>`).join('')+'</tr>';
+    }else{
+      $('ilHead').innerHTML=`<tr><th rowspan="3" scope="col">구분</th><th rowspan="3" scope="col">품번</th><th rowspan="3" scope="col">단위</th><th rowspan="3" scope="col">기초</th><th rowspan="3" scope="col">입고</th><th colspan="9" scope="colgroup" aria-label="공정별 내역"></th><th rowspan="3" scope="col">출고</th><th rowspan="3" scope="col">기말(산출)</th><th colspan="2" scope="colgroup">재고실사</th><th rowspan="3" scope="col">차이<br>(실사-산출)</th></tr><tr><th colspan="3" scope="colgroup" class="il-stage">생산</th><th colspan="4" scope="colgroup" class="il-stage">외주가공</th><th rowspan="2" scope="col" class="il-stage">포장</th><th rowspan="2" scope="col" class="il-stage">원재료</th><th rowspan="2" scope="col">실재고</th><th rowspan="2" scope="col">이월수량</th></tr><tr><th scope="col">생산</th><th scope="col">불량</th><th scope="col">Setup</th><th scope="col">입고</th><th scope="col">불량</th><th scope="col">LOSS</th><th scope="col">샘플</th></tr>`;
+    }
+    $('ilRows').innerHTML=loaded.rows.map((r,i)=>{
+      const actual=r.actual_qty==null?'—':fmt(r.actual_qty);
+      const title=`실사일: ${r.count_date||'미입력'} / 해당 일 장부재고: ${fmt(r.expected_at_count)}`;
+      return `<tr data-row="${i}" class="${selected?.key===r.key?'selected':''}"><td>${esc(r.category_name)}</td><td class="il-part" title="${esc(r.part_name)}"><button data-detail="${i}">${esc(r.part_no)}</button>${r.linked?'':'<br>품번 미연결 / '+esc(r.process)}</td><td>${esc(r.unit)}</td><td>${canWrite&&r.linked?`<button data-edit="${i}" title="기초·실사 입력">${r.opening_qty==null?'입력':fmt(r.opening_qty)}</button>`:(r.opening_qty==null?'기초 미입력':fmt(r.opening_qty))}</td><td>${fmt(r.in_qty)}</td>${(types?kindColumns.map(k=>r.totals[k]??'0'):stageColumns.map(k=>r[k])).map(v=>`<td>${fmt(v)}</td>`).join('')}<td>${fmt(r.out_qty)}</td><td class="${r.closing_qty!=null&&Number(r.closing_qty)<0?'il-negative':''}">${fmt(r.closing_qty)}</td><td title="${esc(title)}">${canWrite&&r.linked?`<button data-edit="${i}" title="기초·실사 입력">${r.actual_qty==null?'입력':actual}</button>`:actual}</td><td>${fmt(r.count_carry_qty)}</td><td title="${esc(title)}" class="${r.difference!=null&&Number(r.difference)!==0?'il-negative':''}">${fmt(r.difference)}</td></tr>`;
+    }).join('')||`<tr><td colspan="${columns.length}">조회 결과가 없습니다.</td></tr>`;
     document.querySelectorAll('[data-detail]').forEach(el=>el.onclick=()=>openDetail(loaded.rows[Number(el.dataset.detail)]));
     document.querySelectorAll('[data-edit]').forEach(el=>el.onclick=()=>openBalance(loaded.rows[Number(el.dataset.edit)]));
   }

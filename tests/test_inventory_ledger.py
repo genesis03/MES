@@ -183,11 +183,16 @@ def test_export_filters_and_formula_injection_and_numeric_quantities(env):
     response=env.client.get('/api/inventory/ledger/export?month=2026-10&part_no=SEMI-A')
     assert response.status_code==200
     book=load_workbook(BytesIO(response.content))
-    assert book.worksheets[0].max_row==2
-    assert book.worksheets[0]['B2'].data_type=='s'
-    assert book.worksheets[0]['E2'].value==12.5
-    assert book.worksheets[1]['G2'].data_type=='s'
-    assert book.worksheets[0]['N2'].data_type=='s'
+    assert book.worksheets[0].max_row==4
+    assert book['실사 상세']['B2'].data_type=='s'
+    assert book.worksheets[0]['D4'].value==12.5
+    assert book['수불 상세']['G2'].data_type=='s'
+    assert book['실사 상세']['I2'].data_type=='s'
+    assert 'F2:H2' in book.worksheets[0].merged_cells
+    assert book.worksheets[0].max_column==19
+    assert book.worksheets[0]['P1'].value=='기말(산출)'
+    assert book.worksheets[0]['Q1'].value=='재고실사'
+    assert all(cell.value!='기말(전산)' for row in book.worksheets[0] for cell in row)
     assert book['일별 수불'].max_row==32
     assert book['일별 수불']['G32'].value==22.5
     assert '유형별 집계' in book.sheetnames
@@ -206,6 +211,11 @@ def test_external_production_and_subcontract_losses_are_separate_events(env):
     assert Decimal(value['in_qty'])==154
     assert Decimal(value['out_qty'])==34
     assert Decimal(value['closing_qty'])==120
+    assert Decimal(value['production_qty'])==65
+    assert Decimal(value['production_defect_qty'])==3
+    assert Decimal(value['setup_qty'])==2
+    assert Decimal(value['subcontract_in_qty'])==89
+    assert Decimal(value['subcontract_defect_qty'])==25
     categories={e['category'] for e in detail(db,'2026-10','external',2)['events']}
     assert {'생산','생산불량','SET-UP','외주입고','외주불량','킵업'}<=categories
     assert report(db,'2026-10','external')[0]['warnings']

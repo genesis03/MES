@@ -45,7 +45,12 @@ def report(db, month, source, part_no='', category=''):
         for e in evidence:
             col=e['category']+' / '+('입고' if e['direction']=='IN' else '출고')
             totals[col]=totals.get(col,Decimal(0))+e['qty']
-        rows.append(dict(item_id=item.id if item else None,key=str(key),part_no=part,
+        stage_values = {field:text_qty(totals.get(label,Decimal(0))) for field,label in {
+            'production_qty':'생산 / 입고','production_defect_qty':'생산불량 / 출고',
+            'setup_qty':'SET-UP / 출고','subcontract_in_qty':'외주입고 / 입고',
+            'subcontract_defect_qty':'외주불량 / 출고','loss_qty':'LOSS / 출고',
+            'sample_qty':'샘플 / 출고','packing_qty':'포장 / 입고','raw_in_qty':'구매입고 / 입고'}.items()}
+        rows.append(dict(**stage_values,item_id=item.id if item else None,key=str(key),part_no=part,
                          part_name=(item.part_name or '') if item else '',category=kind,
                          category_name={'RAW':'원소재','SEMI':'재공품','FINISHED':'완제품','PART':'부품','PACKAGING':'포장재'}.get(kind,kind),
                          process='' if item else key[1],unit=(item.unit or 'EA') if item else '미확인',

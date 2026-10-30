@@ -192,11 +192,35 @@ def export(filters:Filter=Depends(ledger_filters),part_no:str=Query('',max_lengt
     from openpyxl import Workbook
     data,events=report(db,filters.month,filters.source,part_no,category)
     book=Workbook();sheet=book.active;sheet.title='월간 수불·실사'
-    columns=[('품번','part_no'),('품명','part_name'),('구분','category_name'),('단위','unit'),('기초','opening_qty'),('입고','in_qty'),('출고','out_qty'),('계산재고','closing_qty'),('실사일','count_date'),('실사수량','actual_qty'),('실사 이월수량','count_carry_qty'),('실사일 장부재고','expected_at_count'),('차이','difference'),('사유','note')]
-    sheet.append([c[0] for c in columns])
+    from openpyxl.comments import Comment
+    from openpyxl.styles import Alignment, Border, Side, PatternFill
+    from openpyxl.utils import get_column_letter
+    columns=[('구분','category_name'),('품번','part_no'),('단위','unit'),('기초','opening_qty'),('입고','in_qty'),
+             ('생산','production_qty'),('불량','production_defect_qty'),('Setup','setup_qty'),
+             ('입고','subcontract_in_qty'),('불량','subcontract_defect_qty'),('LOSS','loss_qty'),('샘플','sample_qty'),
+             ('포장','packing_qty'),('원재료','raw_in_qty'),('출고','out_qty'),('기말(산출)','closing_qty'),
+             ('실재고','actual_qty'),('이월수량','count_carry_qty'),('차이 (실사-산출)','difference')]
+    for column in [1,2,3,4,5,15,16,19]:
+        sheet.cell(1,column,columns[column-1][0]);sheet.merge_cells(start_row=1,start_column=column,end_row=3,end_column=column)
+    sheet.merge_cells('F1:N1');sheet.merge_cells('F2:H2');sheet['F2']='생산'
+    sheet.merge_cells('I2:L2');sheet['I2']='외주가공'
+    for column in (13,14):
+        sheet.cell(2,column,columns[column-1][0]);sheet.merge_cells(start_row=2,start_column=column,end_row=3,end_column=column)
+    sheet.merge_cells('Q1:R1');sheet['Q1']='재고실사'
+    for column in (17,18):
+        sheet.cell(2,column,columns[column-1][0]);sheet.merge_cells(start_row=2,start_column=column,end_row=3,end_column=column)
+    for column in range(6,13):sheet.cell(3,column,columns[column-1][0])
     def safe(v):return "'"+v if isinstance(v,str) and v.startswith(('=','+','-','@')) else v
+    numeric={key for _,key in columns if key not in ('category_name','part_no','unit')}
     for row in data['rows']:
-        sheet.append([safe(row[key]) if key not in {'opening_qty','in_qty','out_qty','closing_qty','actual_qty','count_carry_qty','expected_at_count','difference'} else (Decimal(row[key]) if row[key] is not None else None) for _,key in columns])
+        sheet.append([safe(row[key]) if key not in numeric else (Decimal(row[key]) if row[key] is not None else None) for _,key in columns])
+        sheet.cell(sheet.max_row,2).comment=Comment(f"품명: {row['part_name']}\n실사일: {row['count_date'] or '미입력'}\n실사일 장부재고: {row['expected_at_count']}\n사유: {row['note']}",'MES')
+    # Preserve name/date/memo details without adding columns to the requested form.
+    survey=book.create_sheet('실사 상세')
+    survey_columns=[('품번','part_no'),('품명','part_name'),('단위','unit'),('실사일','count_date'),('실재고','actual_qty'),('이월수량','count_carry_qty'),('실사일 장부재고','expected_at_count'),('차이','difference'),('사유','note')]
+    survey.append([label for label,_ in survey_columns])
+    for row in data['rows']:
+        survey.append([(Decimal(row[key]) if row[key] is not None else None) if key in numeric or key=='expected_at_count' else safe(row[key]) for _,key in survey_columns])
     evidence=book.create_sheet('수불 상세');evidence.append(['일자','품번','공정','구분','입출고','수량','전표','LOT','비고'])
     ids={r['item_id'] for r in data['rows'] if r['linked']};rawkeys={(r['part_no'],r['process']) for r in data['rows'] if not r['linked']}
     master={r['item_id']:r['part_no'] for r in data['rows'] if r['linked']}
@@ -227,6 +251,15 @@ def export(filters:Filter=Depends(ledger_filters),part_no:str=Query('',max_lengt
     for warning in data['warnings']:notes.append([warning])
     for ws in book:
         ws.freeze_panes='A2';ws.auto_filter.ref=ws.dimensions
-        for column in ws.columns:ws.column_dimensions[column[0].column_letter].width=20
+        for column in range(1,ws.max_column+1):ws.column_dimensions[get_column_letter(column)].width=20
+    sheet.freeze_panes='E4';sheet.auto_filter.ref=None
+    for row in sheet.iter_rows():
+        for cell in row:
+            cell.alignment=Alignment(horizontal='center' if cell.row<=3 else 'right',vertical='center',wrap_text=cell.row<=3)
+            cell.border=Border(left=Side(style='thin',color='94A3B8'),right=Side(style='thin',color='94A3B8'),top=Side(style='thin',color='94A3B8'),bottom=Side(style='thin',color='94A3B8'))
+            if cell.row<=3:cell.fill=PatternFill('solid',fgColor='D9D9D9' if cell.row==2 and 6<=cell.column<=14 else 'BDDFE7')
+    for index in (1,2,3):sheet.row_dimensions[index].height=22
+    for column in range(1,20):sheet.column_dimensions[get_column_letter(column)].width=12
+    sheet.column_dimensions['B'].width=22;sheet.column_dimensions['S'].width=18
     stream=BytesIO();book.save(stream);stream.seek(0)
     return StreamingResponse(stream,media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':f'attachment; filename="inventory-ledger-{filters.month}-{filters.source}.xlsx"'})

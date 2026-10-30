@@ -3,6 +3,13 @@
 {% block extra_head %}
 <style>
 .il-panel{background:white;border:1px solid #d6e0ec;border-radius:6px;padding:16px;margin:14px 0}.il-toolbar,.il-actions{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.il-toolbar label,.il-form label{display:flex;flex-direction:column;gap:5px;font-size:13px}.il-panel input,.il-panel select,.il-form input,.il-form select,.il-form textarea{padding:7px;border:1px solid #cbd5e1;border-radius:4px;min-width:0}.il-btn{padding:8px 14px;border:0;border-radius:4px;background:#2563eb;color:white;cursor:pointer}.il-btn.secondary{background:#e2e8f0;color:#1e293b}.il-btn:disabled{opacity:.5;cursor:default}.il-help{font-size:12px;color:#64748b;line-height:1.6}.il-warning{color:#92400e;background:#fffbeb;padding:10px;line-height:1.6;font-size:13px}.il-scroll{overflow:auto;max-height:65vh}.il-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}.il-table th,.il-table td{padding:8px;border:1px solid #d6e0ec;text-align:right}.il-table th{background:#eff4fa;position:sticky;top:0;z-index:1}.il-table td:first-child,.il-table th:first-child{text-align:left}.il-table .left{text-align:left;white-space:normal;min-width:140px}.il-table button{border:0;background:none;color:#2563eb;cursor:pointer;text-decoration:underline}.il-negative{color:#dc2626;font-weight:bold}.il-table tr.selected{background:#eff6ff}.il-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}.il-form .wide{grid-column:1/-1}.il-dialog{margin:auto;width:min(580px,95vw);max-height:90vh;overflow:auto;padding:20px;border:1px solid #cbd5e1;border-radius:8px}.il-dialog::backdrop{background:#0006}.il-status{font-size:13px;color:#475569}.il-categories{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;margin:12px 0}.il-categories span{padding:6px 10px;background:#f1f5f9;border-radius:4px}
+#ilHead { position:sticky;top:0;z-index:2; }
+#ilHead th { position:static;text-align:center;vertical-align:middle; }
+#ilHead.il-grouped-head th { background:#bddfe7;border-color:#64748b; }
+#ilHead.il-grouped-head .il-stage { background:#d9d9d9; }
+#ilRows td { padding:7px 5px; }
+#ilRows .il-part { text-align:left;min-width:130px; }
+#ilHead ~ tbody td { min-width:58px; }
 </style>
 {% endblock %}
 {% block content %}
@@ -19,7 +26,7 @@
 <div id="ilWarnings"></div>
 <section class="il-panel">
 <div class="il-actions"><strong>월간 수불·실사 집계</strong><button id="ilView" class="il-btn secondary">유형별 수량 보기</button></div>
-<p class="il-help">품번을 누르면 일별 수불과 전표·LOT를 확인합니다. 차이 = 실사수량 + 실사 이월수량 − 실사일 기준 장부재고. EA와 kg 등 서로 다른 단위는 합산하지 않습니다.</p>
+<p class="il-help">품번을 누르면 일별 수불과 전표·LOT를, 기초·실재고를 누르면 입력창을 엽니다. 입고·출고는 총합이며 불량·Setup·LOSS·샘플은 차감수량입니다. 차이 = 실사수량 + 실사 이월수량 − 실사일 기준 장부재고. EA와 kg 등 서로 다른 단위는 합산하지 않습니다.</p>
 <div class="il-scroll"><table class="il-table"><thead id="ilHead"></thead><tbody id="ilRows"></tbody></table></div>
 </section>
 <section class="il-panel" id="ilDetail" hidden>
@@ -44,5 +51,5 @@
 <label>전표번호<input id="ilDocument" maxlength="100"></label><label>LOT<input id="ilLot" maxlength="100"></label><label class="wide">보완 사유<textarea id="ilReason" required maxlength="1000"></textarea></label></div>
 <div class="il-actions" style="margin-top:12px"><button class="il-btn" id="ilSaveEntry">등록</button><button type="button" class="il-btn secondary" data-close="ilEntryDialog">닫기</button></div><p class="il-status" id="ilEntryMessage"></p></form></dialog>
 <script>window.inventoryLedgerCanWrite={{ can_write|tojson }};</script>
-<script src="/static/inventory_ledger.js?v=20261030-1"></script>
+<script src="/static/inventory_ledger.js?v=20261030-grouped-1"></script>
 {% endblock %}
