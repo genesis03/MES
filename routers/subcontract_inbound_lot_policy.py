@@ -74,6 +74,9 @@ def create_inbound_with_lot_policy(
             raise HTTPException(422, f"{source_lot.lot_no}의 공급사 외주 LOT를 입력해 주세요.")
         validated.append((row, source_item, source_lot, allocated, received, inbound_qty))
 
+    from services.subcontract_fifo import validate_inbound_selection
+    validate_inbound_selection(db, outbound, {row.outbound_lot_id: row.inbound_qty for row in payload.lot_results})
+
     inbound_no = _next_inbound_no(db, payload.inbound_date)
     master = SubcontractInboundMaster(
         inbound_no=inbound_no,

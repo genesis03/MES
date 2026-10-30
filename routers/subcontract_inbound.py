@@ -361,6 +361,9 @@ def create_inbound(
             raise HTTPException(422, f"{source_lot.lot_no}의 공급사 외주 LOT를 입력해 주세요.")
         validated.append((row, source_item, source_lot, allocated, received, inbound_qty))
 
+    from services.subcontract_fifo import validate_inbound_selection
+    validate_inbound_selection(db, outbound, {row.outbound_lot_id: row.inbound_qty for row in payload.lot_results})
+
     inbound_no = _next_inbound_no(db, payload.inbound_date)
     master = SubcontractInboundMaster(
         inbound_no=inbound_no,
@@ -478,6 +481,9 @@ def cancel_inbound(
         raise HTTPException(404, "외주가공 입고 내역을 찾을 수 없습니다.")
     if master.status == "CANCELLED":
         return _serialize(master)
+
+    from services.subcontract_fifo import validate_receipt_reduction
+    validate_receipt_reduction(db, master, {})
 
     split_lots = [
         lot.child_lot_no

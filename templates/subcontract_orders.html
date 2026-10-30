@@ -55,10 +55,10 @@
 
 <div id="so-lot-modal" class="so-modal-backdrop mes-popup-backdrop" hidden>
   <div class="so-modal mes-popup" role="dialog" aria-modal="true" aria-labelledby="so-lot-title">
-    <div class="so-modal-head mes-popup-head"><div><strong id="so-lot-title">LOT 배정</strong><div class="so-hint">출고 LOT는 쪼개지 않고 LOT 전체수량을 배정합니다.</div></div><button type="button" class="so-btn" id="so-lot-close">닫기</button></div>
+    <div class="so-modal-head mes-popup-head"><div><strong id="so-lot-title">LOT 배정</strong><div class="so-hint">먼저 생산한 LOT부터 순서대로 전체수량을 배정합니다. 구매 자재는 입고일 기준입니다.</div></div><button type="button" class="so-btn" id="so-lot-close">닫기</button></div>
     <div class="so-modal-body mes-popup-body">
       <div class="so-modal-summary"><div class="so-card">이전 품번<br><strong id="so-lot-part">-</strong></div><div class="so-card">발주수량<br><strong id="so-lot-required">0</strong></div><div class="so-card">선택 LOT 합계<br><strong id="so-lot-selected">0</strong></div><div class="so-card">차이<br><strong id="so-lot-balance">0</strong></div></div>
-      <div class="so-lot-scan"><label for="so-lot-scan-input">LOT 스캔/입력</label><input id="so-lot-scan-input" type="text" autocomplete="off" placeholder="바코드를 스캔하거나 LOT 번호 입력 후 Enter"><span id="so-lot-scan-message" class="so-hint">스캔하면 해당 LOT가 자동 선택됩니다.</span></div>
+      <div class="so-lot-scan"><label for="so-lot-scan-input">LOT 스캔/입력</label><input id="so-lot-scan-input" type="text" autocomplete="off" placeholder="바코드를 스캔하거나 LOT 번호 입력 후 Enter"><span id="so-lot-scan-message" class="so-hint">스캔하면 해당 LOT와 앞선 LOT가 함께 선택됩니다.</span></div>
       <div id="so-lot-source-note" class="so-hint" style="margin-bottom:8px"></div>
       <table class="so-lot-table"><thead><tr><th style="width:50px">선택</th><th>LOT NO</th><th>LOT 전체수량</th><th>저장위치</th></tr></thead><tbody id="so-lot-body"><tr><td colspan="4">조회 중...</td></tr></tbody></table>
     </div>
@@ -67,7 +67,7 @@
 </div>
 {% endblock %}
 {% block extra_script %}
-<script src="/static/subcontract_orders.js?v=registered-process-20261026"></script>
+<script src="/static/subcontract_orders.js?v=fifo-20261030"></script>
 <script>
 (() => {
   'use strict';
@@ -98,7 +98,7 @@
     } else {
       target.checked = true;
       target.dispatchEvent(new Event('change', {bubbles:true}));
-      setScanMessage(`${target.value} : LOT 선택 완료`, true);
+      setScanMessage(`${target.value} : 선행 LOT를 포함해 선택 완료`, true);
       target.closest('tr')?.scrollIntoView({block:'nearest'});
     }
     scanInput.value = '';
@@ -114,7 +114,7 @@
   new MutationObserver(() => {
     if (!modal.hidden) {
       scanInput.value = '';
-      scanMessage.textContent = '스캔하면 해당 LOT가 자동 선택됩니다.';
+      scanMessage.textContent = '스캔하면 해당 LOT와 앞선 LOT가 함께 선택됩니다.';
       scanMessage.className = 'so-hint';
       setTimeout(() => scanInput.focus(), 0);
     }

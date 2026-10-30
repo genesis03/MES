@@ -16,7 +16,7 @@ from models.production_lot import ProductionLotModel
 from models.production_run import ProductionRun, ProductionRunLotAllocation, ProductionRunMaterial
 from models.subcontract import SubcontractLotAllocation, SubcontractOrderItem, SubcontractOrderMaster
 from models.subcontract_inbound import SubcontractInboundLot, SubcontractInboundMaster
-from models.subcontract_outbound import SubcontractOutboundLot
+from models.subcontract_outbound import SubcontractOutboundLot, SubcontractOutboundMaster
 
 router = APIRouter(tags=["Subcontract Inbound Edit"])
 templates = Jinja2Templates(directory="templates")
@@ -207,6 +207,12 @@ def update_inbound(
             409,
             "후공정에서 이미 사용된 입고 LOT가 있어 수정할 수 없습니다: " + ", ".join(used_lots),
         )
+
+    from services.subcontract_fifo import validate_inbound_selection, validate_receipt_reduction
+    validate_receipt_reduction(db, master, {row.id: row.inbound_qty for row in payload.lots})
+    outbound = db.get(SubcontractOutboundMaster, master.outbound_id)
+    if any(abs(row.inbound_qty - float(existing_by_id[row.id].good_qty or 0)) > 1e-9 for row in payload.lots):
+        validate_inbound_selection(db, outbound, {existing_by_id[row.id].outbound_lot_id: row.inbound_qty for row in payload.lots}, exclude_inbound_id=master.id)
 
     for row in payload.lots:
         lot = existing_by_id[row.id]

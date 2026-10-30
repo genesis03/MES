@@ -116,6 +116,7 @@ def _available_qty(
     base_qty: float,
     current_item_id: int | None = None,
     source_item_id: int | None = None,
+    ignore_pending_reservations: bool = False,
 ) -> float:
     consumed_relation = (
         db.query(func.coalesce(func.sum(LotRelationModel.consumed_qty), 0.0))
@@ -138,6 +139,12 @@ def _available_qty(
             SubcontractOrderMaster.status.in_(["DRAFT", "LOT_ALLOCATING", "ORDERED"]),
         )
     )
+    if ignore_pending_reservations:
+        from models.subcontract_outbound import SubcontractOutboundMaster
+        reserved_query = reserved_query.filter(db.query(SubcontractOutboundMaster.id).filter(
+            SubcontractOutboundMaster.order_id == SubcontractOrderMaster.id,
+            SubcontractOutboundMaster.status == "OUTBOUND",
+        ).exists())
     if source_item_id:
         reserved_query = reserved_query.filter(SubcontractOrderItem.previous_item_id == source_item_id)
     if current_item_id:
@@ -160,7 +167,7 @@ def _production_lot_is_valid(db: Session, lot: ProductionLotModel) -> bool:
     return db.get(ProductionPerformance, performance_id) is not None
 
 
-def _available_lots(db: Session, source_item_id: int, current_order_item_id: int | None = None):
+def _available_lots(db: Session, source_item_id: int, current_order_item_id: int | None = None, *, ignore_pending_reservations: bool = False):
     """구매 LOT + 생산 LOT 중 현재 외주발주에 사용할 수 있는 LOT를 item_id 기준으로 반환합니다."""
     result = []
     item = db.get(ItemMasterModel, source_item_id) if source_item_id else None
@@ -180,7 +187,7 @@ def _available_lots(db: Session, source_item_id: int, current_order_item_id: int
         .all()
     )
     for row in purchase_rows:
-        available = _available_qty(db, row.internal_lot_no, row.inbound_qty, current_order_item_id, row.item_id)
+        available = _available_qty(db, row.internal_lot_no, row.inbound_qty, current_order_item_id, row.item_id, ignore_pending_reservations)
         if available > 0:
             result.append({
                 "lot_no": row.internal_lot_no,
@@ -203,7 +210,7 @@ def _available_lots(db: Session, source_item_id: int, current_order_item_id: int
     for row in production_rows:
         if not _production_lot_is_valid(db, row):
             continue
-        available = _available_qty(db, row.lot_no, row.lot_qty, current_order_item_id, row.item_id)
+        available = _available_qty(db, row.lot_no, row.lot_qty, current_order_item_id, row.item_id, ignore_pending_reservations)
         if available > 0:
             result.append({
                 "lot_no": row.lot_no,
@@ -214,7 +221,8 @@ def _available_lots(db: Session, source_item_id: int, current_order_item_id: int
                 "source": "PRODUCTION",
             })
 
-    return result
+    from services.subcontract_fifo import sort_source_lots
+    return sort_source_lots(db, result)
 
 
 def _serialize_order(master: SubcontractOrderMaster):
@@ -361,7 +369,7 @@ def subcontract_stock(
         "part_no": part_no,
         "stock_qty": sum(float(row["lot_qty"]) for row in lots),
         "lots": lots,
-        "source_note": "구매입고 LOT와 생산 LOT의 현재 사용가능 수량입니다.",
+        "source_note": "생산 LOT는 생산일, 구매 자재는 입고일 순서입니다. 앞 LOT부터 전체수량을 배정하세요.",
     }
 
 
@@ -590,10 +598,15 @@ def set_subcontract_lots(
     if missing:
         raise HTTPException(409, "현재 사용 가능한 LOT이 아닙니다: " + ", ".join(missing))
 
+    from services.subcontract_fifo import validate_outbound_selection
+    validate_outbound_selection(list(available.values()), requested)
+
     item.allocations.clear()
     db.flush()
     total = 0.0
-    for lot_no in requested:
+    for lot_no in available:
+        if lot_no not in requested:
+            continue
         lot = available[lot_no]
         lot_qty = float(lot["lot_qty"])
         total += lot_qty
@@ -637,6 +650,8 @@ def confirm_subcontract_order(
             raise HTTPException(409, "외주 출고 LOT는 LOT 전체수량을 사용해야 합니다.")
 
         available = {row["lot_no"]: row for row in _available_lots(db, item.previous_item_id, item.id)}
+        from services.subcontract_fifo import validate_outbound_selection
+        validate_outbound_selection(list(available.values()), [row.lot_no for row in item.allocations])
         invalid = []
         for allocation in item.allocations:
             source = available.get(allocation.lot_no)

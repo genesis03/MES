@@ -313,6 +313,7 @@ def create_outbound(
         raise HTTPException(422, "출고할 발주 품목이 없습니다.")
 
     invalid_lots = []
+    fifo_selections = {}
     for item in order.items:
         if not item.allocations:
             raise HTTPException(409, f"{item.order_part_no}의 LOT 배정이 없습니다.")
@@ -323,10 +324,17 @@ def create_outbound(
             raise HTTPException(409, f"{item.order_part_no}의 출고 LOT는 LOT 전체수량을 사용해야 합니다.")
 
         available = {row["lot_no"]: row for row in _available_lots(db, item.previous_item_id, item.id)}
+        fifo_selections.setdefault(item.previous_item_id, []).extend(row.lot_no for row in item.allocations)
         for allocation in item.allocations:
             source = available.get(allocation.lot_no)
             if source is None or float(source["lot_qty"]) + 1e-9 < float(allocation.allocated_qty or 0):
                 invalid_lots.append(allocation.lot_no)
+
+    from services.subcontract_fifo import validate_outbound_selection
+    for source_item_id, selected in fifo_selections.items():
+        validate_outbound_selection(
+            _available_lots(db, source_item_id, ignore_pending_reservations=True), selected,
+        )
 
     if invalid_lots:
         raise HTTPException(

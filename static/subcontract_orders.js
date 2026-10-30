@@ -344,8 +344,16 @@
       lotCandidates = data.lots || []; $('so-lot-source-note').textContent = data.source_note || '';
       if (!lotCandidates.length) { $('so-lot-body').innerHTML = '<tr><td colspan="4">사용 가능한 LOT이 없습니다. 생산/재고 LOT 원장 연동 상태를 확인하세요.</td></tr>'; return; }
       const selected = new Set((row.allocations || []).map(x => x.lot_no));
-      $('so-lot-body').innerHTML = lotCandidates.map(lot => `<tr><td><input type="checkbox" value="${escapeHtml(lot.lot_no)}" ${selected.has(lot.lot_no)?'checked':''}></td><td>${escapeHtml(lot.lot_no)}</td><td>${fmt(lot.lot_qty)}</td><td>${escapeHtml(lot.storage_location||'')}</td></tr>`).join('');
-      document.querySelectorAll('#so-lot-body input[type=checkbox]').forEach(box => box.addEventListener('change', refreshLotSummary)); refreshLotSummary();
+      $('so-lot-body').innerHTML = lotCandidates.map(lot => `<tr><td><input type="checkbox" value="${escapeHtml(lot.lot_no)}" ${selected.has(lot.lot_no)?'checked':''}></td><td title="${escapeHtml(lot.fifo_date||'')}">${escapeHtml(lot.lot_no)}</td><td>${fmt(lot.lot_qty)}</td><td>${escapeHtml(lot.storage_location||'')}</td></tr>`).join('');
+      const boxes = [...document.querySelectorAll('#so-lot-body input[type=checkbox]')];
+      boxes.forEach((box, index) => box.addEventListener('change', () => {
+        boxes.forEach((entry, i) => {
+          if (box.checked && i < index) entry.checked = true;
+          else if (!box.checked && i > index) entry.checked = false;
+        });
+        refreshLotSummary();
+      }));
+      refreshLotSummary();
     } catch (error) { $('so-lot-body').innerHTML = `<tr><td colspan="4" class="so-error">${escapeHtml(error.message)}</td></tr>`; }
   }
   function escapeHtml(value) { const span=document.createElement('span'); span.textContent=value??''; return span.innerHTML; }
