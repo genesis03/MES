@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}재고 수불·실사{% endblock %}
+{% block extra_head %}
+<style>
+.il-panel{background:white;border:1px solid #d6e0ec;border-radius:6px;padding:16px;margin:14px 0}.il-toolbar,.il-actions{display:flex;gap:12px;align-items:end;flex-wrap:wrap}.il-toolbar label,.il-form label{display:flex;flex-direction:column;gap:5px;font-size:13px}.il-panel input,.il-panel select,.il-form input,.il-form select,.il-form textarea{padding:7px;border:1px solid #cbd5e1;border-radius:4px;min-width:0}.il-btn{padding:8px 14px;border:0;border-radius:4px;background:#2563eb;color:white;cursor:pointer}.il-btn.secondary{background:#e2e8f0;color:#1e293b}.il-btn:disabled{opacity:.5;cursor:default}.il-help{font-size:12px;color:#64748b;line-height:1.6}.il-warning{color:#92400e;background:#fffbeb;padding:10px;line-height:1.6;font-size:13px}.il-scroll{overflow:auto;max-height:65vh}.il-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}.il-table th,.il-table td{padding:8px;border:1px solid #d6e0ec;text-align:right}.il-table th{background:#eff4fa;position:sticky;top:0;z-index:1}.il-table td:first-child,.il-table th:first-child{text-align:left}.il-table .left{text-align:left;white-space:normal;min-width:140px}.il-table button{border:0;background:none;color:#2563eb;cursor:pointer;text-decoration:underline}.il-negative{color:#dc2626;font-weight:bold}.il-table tr.selected{background:#eff6ff}.il-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}.il-form .wide{grid-column:1/-1}.il-dialog{margin:auto;width:min(580px,95vw);max-height:90vh;overflow:auto;padding:20px;border:1px solid #cbd5e1;border-radius:8px}.il-dialog::backdrop{background:#0006}.il-status{font-size:13px;color:#475569}.il-categories{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;margin:12px 0}.il-categories span{padding:6px 10px;background:#f1f5f9;border-radius:4px}
+</style>
+{% endblock %}
+{% block content %}
+<h1>재고 수불·실사</h1>
+<p class="il-help">품번별 월간 수불·일별 상세·재고실사를 함께 관리합니다. 기초와 실사수량은 이 화면의 검토 자료이며, 저장해도 실제 LOT 재고를 바꾸지 않습니다.</p>
+<section class="il-panel il-toolbar">
+<label>조회 월<input type="month" id="ilMonth"></label>
+<label>자료 구분<select id="ilSource"><option value="external">외부 연동</option><option value="mes">내부 MES</option></select></label>
+<label>품번 / 품명<input id="ilPart" placeholder="품번 또는 품명"></label>
+<label>품목 구분<select id="ilCategory"><option value="">전체</option></select></label>
+<button class="il-btn" id="ilLoad">조회</button><button class="il-btn secondary" id="ilExport">엑셀 다운로드</button>
+<span id="ilStatus" class="il-status" role="status"></span>
+</section>
+<div id="ilWarnings"></div>
+<section class="il-panel">
+<div class="il-actions"><strong>월간 수불·실사 집계</strong><button id="ilView" class="il-btn secondary">유형별 수량 보기</button></div>
+<p class="il-help">품번을 누르면 일별 수불과 전표·LOT를 확인합니다. 차이 = 실사수량 + 실사 이월수량 − 실사일 기준 장부재고. EA와 kg 등 서로 다른 단위는 합산하지 않습니다.</p>
+<div class="il-scroll"><table class="il-table"><thead id="ilHead"></thead><tbody id="ilRows"></tbody></table></div>
+</section>
+<section class="il-panel" id="ilDetail" hidden>
+<div class="il-actions"><strong id="ilDetailTitle"></strong><button id="ilEdit" class="il-btn" {% if not can_write %}hidden{% endif %}>기초·실사 입력</button><button id="ilEntry" class="il-btn secondary" {% if not can_write %}hidden{% endif %}>수불 보완 입력</button><button id="ilHistory" class="il-btn secondary">수정 이력</button></div>
+<div class="il-categories" id="ilTotals"></div>
+<p class="il-help">일별 행을 누르면 해당 일자의 전표와 LOT만 표시합니다. 아래 ‘전체 상세’로 월 전체를 다시 볼 수 있습니다.</p>
+<div class="il-scroll"><table class="il-table"><thead><tr><th>일자</th><th>입고</th><th>출고</th><th>일 마감 계산재고</th></tr></thead><tbody id="ilDays"></tbody></table></div>
+<div class="il-actions" style="margin:12px 0"><strong id="ilEvidenceTitle">전체 상세</strong><button id="ilAllEvents" class="il-btn secondary">전체 상세</button></div>
+<div class="il-scroll"><table class="il-table"><thead><tr><th>일자</th><th>유형</th><th>입출고</th><th>수량</th><th>전표</th><th>LOT</th><th>비고</th><th>관리</th></tr></thead><tbody id="ilEvents"></tbody></table></div>
+<div id="ilAudit"></div>
+</section>
+<dialog class="il-dialog" id="ilBalanceDialog"><form id="ilBalanceForm"><h2>기초·실사 입력</h2><p id="ilBalancePart" class="il-help"></p><div class="il-form">
+<label>기초재고<input type="number" min="0" step="0.000001" id="ilOpening"></label><div><button type="button" class="il-btn secondary" id="ilCarry">전월 기말 불러오기</button></div>
+<label>실사일<input type="date" id="ilCountDate"></label><label>실사수량<input type="number" min="0" step="0.000001" id="ilActual"></label>
+<label>실사 이월수량<input type="number" min="0" step="0.000001" id="ilCountCarry" value="0"></label><p class="il-help">실사수량에 합산할 별도 이월수량입니다. 해당 없으면 0으로 두세요.</p>
+<label class="wide">변경 사유 / 실사 메모<textarea id="ilNote" required maxlength="1000"></textarea></label></div>
+<p class="il-help">빈칸은 미입력, 0은 실제 0입니다. 실제 재고 조정은 <a href="/inventory/adjustments">재고 조정</a>에서 따로 처리하세요.</p>
+<div class="il-actions"><button class="il-btn" id="ilSaveBalance">저장</button><button type="button" class="il-btn secondary" data-close="ilBalanceDialog">닫기</button></div><p class="il-status" id="ilBalanceMessage"></p></form></dialog>
+<dialog class="il-dialog" id="ilEntryDialog"><form id="ilEntryForm"><h2>수불 보완 입력</h2><p class="il-help">자동 집계에 없는 거래만 추가하세요. 이미 집계된 전표를 추가하면 중복 계산됩니다. 실제 LOT 재고는 변경되지 않습니다.</p><div class="il-form">
+<label>일자<input type="date" id="ilEntryDate" required></label><label>입출고<select id="ilDirection"><option value="IN">입고</option><option value="OUT">출고</option></select></label>
+<label>유형<select id="ilEntryCategory">{% for kind in ['구매입고','외주출고','외주입고','공정투입','포장투입','외주불량','LOSS','샘플','킵업','기타'] %}<option>{{kind}}</option>{% endfor %}</select></label><label>수량<input type="number" min="0.000001" step="0.000001" id="ilEntryQty" required></label>
+<label>전표번호<input id="ilDocument" maxlength="100"></label><label>LOT<input id="ilLot" maxlength="100"></label><label class="wide">보완 사유<textarea id="ilReason" required maxlength="1000"></textarea></label></div>
+<div class="il-actions" style="margin-top:12px"><button class="il-btn" id="ilSaveEntry">등록</button><button type="button" class="il-btn secondary" data-close="ilEntryDialog">닫기</button></div><p class="il-status" id="ilEntryMessage"></p></form></dialog>
+<script>window.inventoryLedgerCanWrite={{ can_write|tojson }};</script>
+<script src="/static/inventory_ledger.js?v=20261030-1"></script>
+{% endblock %}

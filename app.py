@@ -288,6 +288,8 @@ app.include_router(daily_job_report.router)
 # LOT 재고 현황은 외주 출고/입고 이력까지 반영한 현재 저장위치 API를 우선 사용합니다.
 app.include_router(inventory_lot_location.router)
 app.include_router(inventory.router)
+from routers import inventory_ledger
+app.include_router(inventory_ledger.router)
 app.include_router(inventory_lot_trace.router)
 app.include_router(inventory_lot_usage_trace.router)
 app.include_router(inventory_lot_trace_tree.router)
