@@ -21,11 +21,11 @@
       </div>
       <div id="selectedCustomer" class="selected-customer"></div>
     </div>
-    <div class="field"><label>수주구분</label><select id="orderType"><option value="NORMAL">양산</option><option value="SAMPLE">샘플</option><option value="DEVELOPMENT">개발</option></select></div>
+    <div class="field"><label>수주구분</label><select id="orderType"><option value="NORMAL">양산</option><option value="SAMPLE">샘플</option><option value="DEVELOPMENT">개발</option><option value="REPLACEMENT">대체품</option></select></div>
     <div class="field"><label>거래구분</label><select id="transactionType"><option value="PAID">유상</option><option value="FREE">무상</option></select></div>
     <div class="field"><label>담당자</label><input id="managerName" maxlength="50"></div>
   </div>
-  <div class="policy-hint">※ 양산 수주는 포장 → 출고대기 LOT → FIFO 출고를 사용합니다. 샘플/개발 수주는 포장을 생략하고 미포장 생산 LOT에서 직접 출고할 수 있습니다. 유상/무상 여부는 출고방식과 분리하여 관리합니다.</div>
+  <div class="policy-hint">※ 양산 수주는 포장 → 출고대기 LOT → FIFO 출고를 사용합니다. 샘플/개발/대체품 수주는 포장을 생략하고 미포장 생산 LOT에서 직접 출고할 수 있습니다. 유상/무상 여부는 출고방식과 분리하여 관리합니다.</div>
   <div class="field" style="margin-top:12px"><label>PO No.</label><input id="poNo" maxlength="100" placeholder="고객 PO No. (선택)"></div>
   <div class="field" style="margin-top:12px"><label>비고</label><textarea id="note" rows="2"></textarea></div>
 </div>
@@ -56,5 +56,5 @@
     <div class="lookup-foot mes-popup-foot"><button type="button" class="btn btn-primary" id="lookupApplyBtn" disabled>적용</button><button type="button" class="btn btn-light" id="lookupClose2">닫기</button></div>
   </div>
 </div>
-<script src="/static/sales_orders.js?v=part-enter-20261009"></script>
+<script src="/static/sales_orders.js?v=replacement-20261102"></script>
 {% endblock %}

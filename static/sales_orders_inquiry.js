@@ -22,7 +22,7 @@ function statusText(v) {
   return {ORDERED:'수주', PARTIAL:'부분출고', COMPLETED:'출고완료', CANCELLED:'취소', WAITING:'대기'}[v] || v || '';
 }
 function orderTypeText(v) {
-  return {NORMAL:'양산', SAMPLE:'샘플', DEVELOPMENT:'개발'}[v] || v || '';
+  return {NORMAL:'양산', SAMPLE:'샘플', DEVELOPMENT:'개발', REPLACEMENT:'대체품'}[v] || v || '';
 }
 function transactionTypeText(v) {
   return {PAID:'유상', FREE:'무상'}[v] || v || '';

@@ -1,5 +1,5 @@
 (() => {
-  const directType = item => ['SAMPLE','DEVELOPMENT'].includes(String(item?.order_type || '').toUpperCase());
+  const directType = item => ['SAMPLE','DEVELOPMENT','REPLACEMENT'].includes(String(item?.order_type || '').toUpperCase());
   const targetQty = item => Number(item?.requested_qty ?? item?.remaining_qty ?? 0);
 
   const baseRenderItems = renderItems;
@@ -32,7 +32,7 @@
       const outboundLots = [...new Set(rows.map(x => x.package_lot_no).filter(Boolean))];
       document.getElementById('modalWaitingBoxes').textContent = `${outboundLots.length || rows.length} BOX`;
       document.getElementById('modalWaitingQty').textContent = fmt(itemAllocatedQty(item.id));
-      document.getElementById('modalHelp').innerHTML = '※ 샘플/개발도 BOX별로 포장 LOT(=출고 LOT)가 부여됩니다. 원 생산 LOT 계보는 출고 내역 조회에서 확인할 수 있습니다.';
+      document.getElementById('modalHelp').innerHTML = '※ 샘플/개발/대체품도 BOX별로 포장 LOT(=출고 LOT)가 부여됩니다. 원 생산 LOT 계보는 출고 내역 조회에서 확인할 수 있습니다.';
       return;
     }
     try{
@@ -41,7 +41,7 @@
       const expectedBoxes = standard > 0 ? Math.ceil(targetQty(item) / standard) : 1;
       document.getElementById('modalWaitingBoxes').textContent = `${expectedBoxes} BOX 예정`;
       document.getElementById('modalWaitingQty').textContent = fmt(rows.reduce((s,x)=>s+Number(x.available_qty||0),0));
-      document.getElementById('modalHelp').innerHTML = `※ ${item.order_type === 'SAMPLE' ? '샘플' : '개발'} 수주는 포장 공정을 생략하지만 출고 시 BOX 단위로 포장 LOT(=출고 LOT)를 생성합니다.<br>※ 금회 출고 지정수량: <strong>${fmt(targetQty(item))} ${esc(item.unit || 'EA')}</strong><br>※ 기준 BOX 수량: <strong>${fmt(standard || targetQty(item))}</strong> / 예상 BOX: <strong>${expectedBoxes}</strong><br>※ 출고 확정 시 BOX마다 YYMMDD+01+3자리 순번의 LOT가 자동 발번됩니다.`;
+      document.getElementById('modalHelp').innerHTML = `※ ${({SAMPLE:'샘플',DEVELOPMENT:'개발',REPLACEMENT:'대체품'}[item.order_type]||'직출고')} 수주는 포장 공정을 생략하지만 출고 시 BOX 단위로 포장 LOT(=출고 LOT)를 생성합니다.<br>※ 금회 출고 지정수량: <strong>${fmt(targetQty(item))} ${esc(item.unit || 'EA')}</strong><br>※ 기준 BOX 수량: <strong>${fmt(standard || targetQty(item))}</strong> / 예상 BOX: <strong>${expectedBoxes}</strong><br>※ 출고 확정 시 BOX마다 YYMMDD+01+3자리 순번의 LOT가 자동 발번됩니다.`;
     }catch(e){
       document.getElementById('scanMessage').textContent = e.message;
       document.getElementById('scanMessage').className = 'scan-msg error';
@@ -101,7 +101,7 @@
     const directItems = targetItems.filter(directType);
     if(!directItems.length) return baseConfirmShipment();
     if(directItems.length !== targetItems.length){
-      return alert('양산 수주와 샘플/개발 직출고 수주는 한 출고전표에 혼합할 수 없습니다. 출고전표를 나누어 처리해 주세요.');
+      return alert('양산 수주와 샘플/개발/대체품 직출고 수주는 한 출고전표에 혼합할 수 없습니다. 출고전표를 나누어 처리해 주세요.');
     }
     const notReady = directItems.find(item => Math.abs(itemAllocatedQty(item.id) - targetQty(item)) > 1e-9);
     if(notReady){
@@ -113,7 +113,7 @@
       direct_lots:allocationFor(item.id).map(x=>({production_lot_id:Number(x.production_lot_id || x.id), qty:Number(x.box_qty || 0)}))
     }));
     const total = directItems.reduce((s,item)=>s+targetQty(item),0);
-    if(!confirm(`샘플/개발 생산 LOT 직출고 ${items.length}품목 / 총 ${fmt(total)}을 처리하시겠습니까?`)) return;
+    if(!confirm(`샘플/개발/대체품 생산 LOT 직출고 ${items.length}품목 / 총 ${fmt(total)}을 처리하시겠습니까?`)) return;
     document.getElementById('confirmBtn').disabled = true;
     try{
       const data = await getJson('/api/sales/shipping-entry/direct-confirm', {
@@ -188,7 +188,7 @@
     document.getElementById('shipmentDate').value = detail.shipment_date || '';
     if(editShipmentMode){
       document.getElementById('shipmentDate').disabled = true;
-      document.getElementById('shipmentDate').title = '샘플/개발 직출고는 출고 LOT 번호에 일자가 포함되어 있어 일자를 변경할 수 없습니다.';
+      document.getElementById('shipmentDate').title = '샘플/개발/대체품 직출고는 출고 LOT 번호에 일자가 포함되어 있어 일자를 변경할 수 없습니다.';
     }
     document.getElementById('customerName').value = detail.customer_name || '';
     document.getElementById('deliveryDueDate').value = currentOrder.delivery_due_date || '';
@@ -208,6 +208,6 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     const help = document.getElementById('shippingHelp');
-    if(help) help.innerHTML += '<br>※ 샘플/개발 수주는 포장 공정을 생략하지만 출고 시 BOX마다 포장 LOT(=출고 LOT)가 자동 발번됩니다.';
+    if(help) help.innerHTML += '<br>※ 샘플/개발/대체품 수주는 포장 공정을 생략하지만 출고 시 BOX마다 포장 LOT(=출고 LOT)가 자동 발번됩니다.';
   });
 })();

@@ -16,7 +16,7 @@ from services.shipping_lot_service import next_shipping_lot_no
 
 router = APIRouter(tags=["Sales Shipping Direct"])
 
-DIRECT_ORDER_TYPES = {"SAMPLE", "DEVELOPMENT"}
+DIRECT_ORDER_TYPES = {"SAMPLE", "DEVELOPMENT", "REPLACEMENT"}
 
 
 class DirectLotSelection(BaseModel):
@@ -271,7 +271,7 @@ def direct_confirm(
         customer_name=customer_name,
         status="CONFIRMED",
         fifo_exception="Y",
-        fifo_exception_reason="샘플/개발 수주 포장 생략 생산 LOT 직출고",
+        fifo_exception_reason="샘플/개발/대체품 수주 포장 생략 생산 LOT 직출고",
         note=(payload.note or "").strip() or None,
         created_by=_username(current_user),
     )
@@ -357,5 +357,5 @@ def direct_confirm(
         "outbound_lots": outbound_lots,
         "box_count": len(outbound_lots),
         "shipment_mode": "DIRECT",
-        "message": "샘플/개발 직출고 처리가 완료되고 BOX별 포장(출고) LOT가 발번되었습니다.",
+        "message": "샘플/개발/대체품 직출고 처리가 완료되고 BOX별 포장(출고) LOT가 발번되었습니다.",
     }

@@ -93,12 +93,12 @@ def confirm_shipment_with_requested_qty(
         waiting_ids = [box.id for box, _ in waiting if box.id not in used_box_ids]
         expected_ids = waiting_ids[:len(box_ids)]
         is_fifo = set(box_ids) == set(expected_ids)
-        if order_type == "NORMAL" and not is_fifo:
+        if order_type not in ("SAMPLE", "DEVELOPMENT", "REPLACEMENT") and not is_fifo:
             first_expected = next((box.package_lot_no for box, _ in waiting if box.id not in used_box_ids), "없음")
-            raise HTTPException(409, f"{order.order_no} / {sales_item.part_no}: 정상 수주는 선입 LOT {first_expected}부터 출고해야 합니다.")
-        if order_type in ("SAMPLE", "DEVELOPMENT") and not is_fifo:
+            raise HTTPException(409, f"{order.order_no} / {sales_item.part_no}: 양산 수주는 선입 LOT {first_expected}부터 출고해야 합니다.")
+        if order_type in ("SAMPLE", "DEVELOPMENT", "REPLACEMENT") and not is_fifo:
             selected_lots = ", ".join(str(box.package_lot_no) for box, _ in selected_rows)
-            label = "샘플" if order_type == "SAMPLE" else "개발"
+            label = {"SAMPLE":"샘플", "DEVELOPMENT":"개발", "REPLACEMENT":"대체품"}[order_type]
             fifo_exception_reasons.append(f"{order.order_no}/{sales_item.part_no} {label} 출고: {selected_lots}")
 
         used_box_ids.update(box_ids)

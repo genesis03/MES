@@ -60,11 +60,11 @@ def scan_waiting_lot_auto(
         raise HTTPException(409, f"금회 출고수량 {target_qty:g}은 미출고 잔량 {remaining_qty:g}보다 클 수 없습니다.")
 
     order_type = str(getattr(item.order, "order_type", None) or "NORMAL").upper()
-    fifo_exception_allowed = order_type in ("SAMPLE", "DEVELOPMENT")
+    fifo_exception_allowed = order_type in ("SAMPLE", "DEVELOPMENT", "REPLACEMENT")
     reserved_set = set(reserved_ids)
     selected_set = set(selected_ids)
 
-    # 샘플/개발 수주는 필요한 소량 포장 LOT를 직접 선택할 수 있다.
+    # 샘플/개발/대체품 수주는 필요한 소량 포장 LOT를 직접 선택할 수 있다.
     # MOQ가 아니라 실제 PackingBox.box_qty 합계가 금회 출고수량과 맞아야 한다.
     if fifo_exception_allowed:
         scanned_box, scanned_master = waiting[scanned_index]

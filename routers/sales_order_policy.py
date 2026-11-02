@@ -14,7 +14,7 @@ from routers.sales_shipping_entry import _next_no, _username
 
 router = APIRouter(tags=["Sales Order Policy"])
 
-ORDER_TYPES = {"NORMAL", "SAMPLE", "DEVELOPMENT"}
+ORDER_TYPES = {"NORMAL", "SAMPLE", "DEVELOPMENT", "REPLACEMENT"}
 TRANSACTION_TYPES = {"PAID", "FREE"}
 ORDER_STATUSES = {"ORDERED", "PARTIAL", "COMPLETED", "CANCELLED"}
 
@@ -100,7 +100,7 @@ def _validate_order_payload(db: Session, payload: SalesOrderCreateInput):
     transaction_type = payload.transaction_type.strip().upper()
 
     if order_type not in ORDER_TYPES:
-        raise HTTPException(409, "수주구분은 양산/샘플/개발 중에서 선택해 주세요.")
+        raise HTTPException(409, "수주구분은 양산/샘플/개발/대체품 중에서 선택해 주세요.")
     if transaction_type not in TRANSACTION_TYPES:
         raise HTTPException(409, "거래구분은 유상/무상 중에서 선택해 주세요.")
 

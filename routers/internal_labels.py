@@ -214,7 +214,7 @@ def _direct_shipment_labels(db: Session, shipment_id: int) -> list[dict]:
         sales_item = item_row.sales_order_item
         sales_order = sales_item.order if sales_item else None
         order_type = str(getattr(sales_order, "order_type", "") or "").upper()
-        process = "샘플 직출고" if order_type == "SAMPLE" else ("개발 직출고" if order_type == "DEVELOPMENT" else "직출고")
+        process = "샘플 직출고" if order_type == "SAMPLE" else ("개발 직출고" if order_type == "DEVELOPMENT" else ("대체품 직출고" if order_type == "REPLACEMENT" else "직출고"))
         grouped: dict[tuple[int, str], float] = {}
         for row in direct_rows:
             key = (int(getattr(row, "box_no", 0) or 0), str(row.outbound_lot_no or "").strip())

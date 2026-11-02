@@ -320,7 +320,7 @@ function validateOrder(items) {
   const orderDate = $('orderDate').value;
   const dueDate = $('deliveryDueDate').value;
   if (!orderDate || !$('customerId').value) return '수주일자와 판매처를 입력해 주세요.';
-  if (!['NORMAL','SAMPLE','DEVELOPMENT'].includes($('orderType').value)) return '수주구분을 선택해 주세요.';
+  if (!['NORMAL','SAMPLE','DEVELOPMENT','REPLACEMENT'].includes($('orderType').value)) return '수주구분을 선택해 주세요.';
   if (!['PAID','FREE'].includes($('transactionType').value)) return '거래구분을 선택해 주세요.';
   if (dueDate && dueDate < orderDate) return '납기예정일은 수주일자보다 빠를 수 없습니다.';
   if (!items.length) return '수주 품목을 입력해 주세요.';

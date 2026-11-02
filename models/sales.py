@@ -18,7 +18,7 @@ class SalesOrderMaster(Base):
     customer_name = Column(String(100), nullable=False)
     status = Column(String(20), nullable=False, default="ORDERED", index=True)
     # 내부 코드 NORMAL은 기존 데이터 호환을 위해 유지하고 화면에서는 '양산'으로 표시한다.
-    order_type = Column(String(20), nullable=False, default="NORMAL", index=True)  # NORMAL/SAMPLE/DEVELOPMENT
+    order_type = Column(String(20), nullable=False, default="NORMAL", index=True)  # NORMAL/SAMPLE/DEVELOPMENT/REPLACEMENT
     transaction_type = Column(String(20), nullable=False, default="PAID", index=True)  # PAID/FREE
     manager_name = Column(String(50), nullable=True)
     po_no = Column(String(100), nullable=True, index=True)
@@ -102,7 +102,7 @@ class ShipmentBox(Base):
 
 
 class ShipmentDirectLot(Base):
-    """샘플/개발 수주의 포장 생략 생산 LOT 직출고 추적.
+    """샘플/개발/대체품 수주의 포장 생략 생산 LOT 직출고 추적.
 
     포장 공정을 생략하더라도 출고 시 BOX 단위를 만들고, BOX마다 포장 LOT(=출고 LOT)를 부여합니다.
     """
