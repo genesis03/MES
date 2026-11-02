@@ -291,7 +291,7 @@
 {% block extra_script %}
 <script src="/static/js/barcode_engine.js"></script>
 <script src="/static/js/label_templates.js"></script>
-<script src="/static/js/manual_item_name.js?v=20261015-1" defer></script>
+<script src="/static/js/manual_item_name.js?v=partial-part-20261102" defer></script>
 
 <script>
     let MANUAL_DATA = [];
@@ -361,6 +361,7 @@
             body: JSON.stringify(payload)
         });
         const result = await res.json();
+        if (!res.ok) { alert(typeof result.detail === 'string' ? result.detail : '품번과 입력값을 확인하세요.'); return; }
 
         if (result.status === 'success') {
             document.getElementById('inPartNo').value = '';

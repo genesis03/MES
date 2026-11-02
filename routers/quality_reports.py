@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session, selectinload
 from core.database import get_db
 from core.security import get_current_user, check_admin_permission, parse_user_permissions, DEV_BYPASS_AUTH
+from services.part_search_service import unique_part
 from models.models import ItemMasterModel
 from models.inspection_standard import InspectionStandard
 from models.quality_report import InspectionReportMaster, InspectionReportItem
@@ -62,7 +63,7 @@ def page(request: Request, user=Depends(get_current_user)):
 @router.get('/api/quality/outbound-reports/standards')
 def standards(part_no: str, db: Session = Depends(get_db), user=Depends(get_current_user)):
     menu_access(user)
-    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no.strip()).first()
+    item = unique_part(db.query(ItemMasterModel),part_no)
     if not item:
         raise HTTPException(404, '등록된 품번이 없습니다.')
     rows = db.query(InspectionStandard).options(selectinload(InspectionStandard.items)).filter(
@@ -81,7 +82,7 @@ def listing(part_no: str = '', start_date: date | None = None, end_date: date | 
     menu_access(user)
     query = db.query(InspectionReportMaster).filter(InspectionReportMaster.report_type == 'SHIPPING')
     if part_no.strip():
-        query = query.filter(InspectionReportMaster.part_no == part_no.strip())
+        query = query.filter(InspectionReportMaster.part_no.contains(part_no.strip(),autoescape=True))
     if start_date:
         query = query.filter(InspectionReportMaster.inspection_date >= start_date.isoformat())
     if end_date:

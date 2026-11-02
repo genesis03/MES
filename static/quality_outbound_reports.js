@@ -38,7 +38,7 @@
     try {
       const data = await api('/api/quality/outbound-reports/standards?'+new URLSearchParams({part_no:part}));
       if(id!==requestId) return;
-      loadedPart=data.part_no;standards=data.items;
+      loadedPart=data.part_no;$('qrPart').value=data.part_no;standards=data.items;
       $('qrPartName').textContent=data.part_name;
       $('qrStandard').replaceChildren(new Option('기준서를 선택해 주세요',''), ...standards.map(s=>new Option(`${s.management_no || '최종검사'} / ${MesRevisionNumber.display(s.revision)}`,s.id)));
       if(standards.length===1) $('qrStandard').value=standards[0].id;

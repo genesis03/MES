@@ -1,6 +1,6 @@
 from datetime import datetime
 from urllib.parse import quote
-from fastapi import APIRouter, Request, Response, HTTPException, Depends
+from fastapi import APIRouter, Request, Response, HTTPException, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -9,6 +9,7 @@ from core.database import get_db
 from models.models import ItemMasterModel, ManualLabelModel, UserModel
 from core.security import require_permission
 from services.excel_service import create_manual_history_excel
+from services.part_search_service import matching_parts, ordered_parts, unique_part
 
 router = APIRouter(prefix="/api/manual", tags=["Manual Labels"])
 
@@ -18,8 +19,17 @@ async def get_manual_item(
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(require_permission("shipping", "manual", "READ")),
 ):
-    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no.strip()).first()
+    item = unique_part(db.query(ItemMasterModel), part_no, ambiguous_error=False)
     return {"part_name": item.part_name if item else None}
+
+@router.get('/items')
+def search_manual_items(q:str=Query('',max_length=100),db:Session=Depends(get_db),
+                        current_user:UserModel=Depends(require_permission('shipping','manual','READ'))):
+    if not q.strip():return {'items':[],'total':0}
+    query=matching_parts(db.query(ItemMasterModel),q)
+    total=query.count()
+    rows=ordered_parts(query,q).limit(30).all()
+    return {'items':[{'id':item.id,'part_no':item.part_no,'part_name':item.part_name or ''} for item in rows], 'total':total}
 
 @router.get("/data")
 async def get_manual_data(
@@ -57,7 +67,8 @@ async def add_manual_data(
     delivery_date = str(body.get("delivery_date", "")).strip()
     part_no = str(body.get("part_no", "")).strip()
     part_name = str(body.get("part_name", "")).strip()
-    item = db.query(ItemMasterModel).filter(ItemMasterModel.part_no == part_no).first()
+    entered_part_no = part_no
+    item = unique_part(db.query(ItemMasterModel), part_no)
     if item:
         part_no = item.part_no
         part_name = part_name or item.part_name
@@ -68,6 +79,8 @@ async def add_manual_data(
     barcode = str(body.get("barcode", "")).strip()
     if not barcode:
         barcode = f"P{part_no}Q{qty}S{serial}"
+    elif part_no != entered_part_no and barcode.startswith(f'P{entered_part_no}Q'):
+        barcode = f'P{part_no}Q' + barcode[len(f'P{entered_part_no}Q'):]
         
     try:
         new_record = ManualLabelModel(
