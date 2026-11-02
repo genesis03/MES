@@ -83,3 +83,49 @@ def test_packed_fifo_exception_is_only_for_special_order_types(env,kind):
     shipment=db.query(ShipmentMaster).one()
     assert shipment.fifo_exception==('N' if kind=='NORMAL' else 'Y')
     if kind=='REPLACEMENT':assert '대체품' in shipment.fifo_exception_reason
+
+
+@pytest.mark.parametrize('kind',['NORMAL','REPLACEMENT'])
+def test_same_part_and_date_rows_remain_separate_on_create_and_update(env,kind):
+    env.client.app.include_router(orders.router)
+    partner=Partner(partner_code='C',partner_name='고객',partner_type='CUSTOMER',is_active='Y');env.db.add(partner);env.db.commit()
+    payload={'order_date':'2026-11-02','delivery_due_date':'2026-11-06','customer_id':partner.id,'order_type':kind,'transaction_type':'FREE',
+             'items':[{'part_no':'FIN','order_qty':10,'delivery_date':'2026-11-06'},{'part_no':'FIN','order_qty':28,'delivery_date':'2026-11-06'}]}
+    response=env.client.post('/api/sales/orders',json=payload);assert response.status_code==200,response.text
+    order_id=response.json()['id']
+    detail=env.client.get(f'/api/sales/orders/{order_id}').json()
+    assert [r['order_qty'] for r in detail['items']]==[10,28]
+    assert len({r['id'] for r in detail['items']})==2
+    response=env.client.put(f'/api/sales/orders/{order_id}',json=payload);assert response.status_code==200,response.text
+    detail=env.client.get(f'/api/sales/orders/{order_id}').json()
+    assert [r['order_qty'] for r in detail['items']]==[10,28]
+    assert len({r['id'] for r in detail['items']})==2
+
+
+def test_duplicate_replacement_rows_can_share_source_lot_without_overconsumption(env):
+    db=env.db;order=make_order(env,'REPLACEMENT')
+    order.items[0].order_qty=10;order.items[0].delivery_date='2026-11-06'
+    order.items.append(SalesOrderItem(item_id=3,part_no='FIN',order_qty=28,delivery_date='2026-11-06',status='WAITING'))
+    db.add(ItemBomModel(parent_item_id=3,child_item_id=2,parent_part_no='FIN',child_part_no='SEMI-A',bom_type='FINAL',created_at='2026-11-02'))
+    lot=ProductionLotModel(lot_no='LX20261101001',item_id=2,part_no='SEMI-A',lot_qty=100,status='ACTIVE');db.add(lot);db.commit()
+    allocations=[{'sales_order_item_id':item.id,'requested_qty':qty,'direct_lots':[{'production_lot_id':lot.id,'qty':qty}]} for item,qty in zip(order.items,[10,28])]
+    direct.direct_confirm(direct.DirectShipmentCreateInput(shipment_date='2026-11-06',items=allocations),db,env.state.user)
+    assert _lot_available(db,lot)==62
+    assert [item.shipped_qty for item in order.items]==[10,28]
+    assert order.status=='COMPLETED'
+    # Shipping history must still prohibit editing/rebuilding these line IDs.
+    with pytest.raises(HTTPException):orders.update_sales_order_with_policy(order.id,orders.SalesOrderCreateInput(order_date='2026-11-02',customer_id=1,items=[{'part_no':'FIN','order_qty':38}]),db,env.state.user)
+
+
+def test_duplicate_normal_rows_ship_distinct_fifo_boxes(env):
+    db=env.db;order=make_order(env,'NORMAL');order.items[0].order_qty=10
+    order.items.append(SalesOrderItem(item_id=3,part_no='FIN',order_qty=28,status='WAITING'))
+    packs=[]
+    for n,qty in enumerate([10,28],1):
+        master=PackingMaster(packing_no=f'P{n}',packing_date=f'2026-11-0{n}',item_id=3,part_no='FIN',box_count=1,box_qty=qty,total_qty=qty)
+        master.boxes=[PackingBox(box_no=1,package_lot_no=f'26110{n}01001',box_qty=qty)];packs.append(master);db.add(master)
+    db.commit()
+    payload=packed.ShipmentOrderCreateInput(shipment_date='2026-11-06',items=[{'sales_order_item_id':item.id,'packing_box_ids':[master.boxes[0].id],'requested_qty':qty} for item,master,qty in zip(order.items,packs,[10,28])])
+    packed.confirm_shipment_with_requested_qty(payload,db,env.state.user)
+    assert [item.shipped_qty for item in order.items]==[10,28]
+    assert db.query(ShipmentMaster).one().fifo_exception=='N'
