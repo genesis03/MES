@@ -290,6 +290,8 @@ app.include_router(inventory_lot_location.router)
 app.include_router(inventory.router)
 from routers import inventory_ledger
 app.include_router(inventory_ledger.router)
+from routers import material_usage
+app.include_router(material_usage.router)
 app.include_router(inventory_lot_trace.router)
 app.include_router(inventory_lot_usage_trace.router)
 app.include_router(inventory_lot_trace_tree.router)

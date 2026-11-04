@@ -30,6 +30,7 @@ from models.packing import PackingMaster, PackingLotAllocation, PackingBox
 from models.sales import SalesOrderMaster, SalesOrderItem, ShipmentMaster, ShipmentItem, ShipmentBox, ShipmentDirectLot
 from models.shipping_lot import ShippingLotRegistry
 from models.audit_log import AuditLogModel
+from models.material_usage import MaterialUsageRecord, MaterialUsageAudit
 from models.inventory_ledger import InventoryLedgerBalance, InventoryLedgerEntry, InventoryLedgerAudit
 from models.inventory_adjustment import InventoryAdjustmentModel
 from models.inventory_movement import InventoryMovementModel
