@@ -51,7 +51,7 @@ def test_multiple_lots_grouped_case_insensitively(manual):
 def test_workbook_unexplained_difference(manual):
     rows=[dict(part_no='91012',issued_qty=str(i),used_qty=str(u),scrap_qty='0',remaining_qty='0') for i,u in [(500,500),(1000,1000),(1000,980)]]
     r=save(manual,materials=rows)
-    assert set(r['flags'])=={'수불 불일치','필요수량 미입력'}
+    assert set(r['flags'])=={'수불 불일치','과다 투입','과다 사용'}
     assert r['materials'][-1]['balance_difference']=='20'
 
 @pytest.mark.parametrize('qty',['-1','NaN','0.0000001'])
@@ -86,3 +86,31 @@ def test_filters_export_and_permissions(manual):
     assert manual.client.post(API,json=payload(request_key='denied')).status_code==403
     manual.state.user.permissions='{}'
     assert manual.client.get(API+'/export'+query).status_code==403
+
+
+def test_three_issues_against_total_production(manual):
+    rows=[dict(part_no='CAP',issued_qty=str(q)) for q in (500,500,1000)]
+    r=save(manual,materials=rows)
+    assert r['flags']==['정상(기록 기준)']
+    group=r['summary'][0]
+    assert group['expected_qty']=='2000'
+    assert group['issued_qty']=='2000'
+    assert group['issued_rate']=='100'
+    assert group['used_qty'] is None
+    assert group['issued_difference']=='0'
+    rows[-1]['issued_qty']='900'
+    r=save(manual,request_key='short',materials=rows)
+    assert '투입 부족' in r['flags']
+    assert r['summary'][0]['issued_difference']=='-100'
+
+def test_unit_usage_and_distinct_materials(manual):
+    rows=[dict(part_no='CAP',unit_usage='2',issued_qty='1000'),dict(part_no='CAP',issued_qty='3000'),dict(part_no='BODY',issued_qty='2000')]
+    r=save(manual,materials=rows)
+    assert r['flags']==['정상(기록 기준)']
+    assert [g['expected_qty'] for g in r['summary']]==['4000','2000']
+    rows[1]['unit_usage']='2'
+    assert manual.client.post(API,json=payload(request_key='invalid',materials=rows)).status_code==422
+
+def test_zero_production_rate_is_unknown(manual):
+    r=save(manual,production_qty='0',materials=[dict(part_no='CAP',issued_qty='0')])
+    assert r['summary'][0]['issued_rate'] is None

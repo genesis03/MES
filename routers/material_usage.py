@@ -31,6 +31,7 @@ class Material(Input):
     part_no:Text
     lot_no:str=Field(default='',max_length=100)
     unit:Text='EA'
+    unit_usage:Qty|None=None
     expected_qty:Qty|None=None
     issued_qty:Qty|None=None
     used_qty:Qty|None=None
@@ -49,9 +50,12 @@ class RecordInput(Input):
     materials:list[Material]=Field(default_factory=list,max_length=500)
     @model_validator(mode='after')
     def unique_requirement(self):
-        seen=set()
+        seen=set();us_seen=set()
         for row in self.materials:
             key=(row.part_no.casefold(),row.unit.casefold())
+            if row.unit_usage is not None:
+                if key in us_seen:raise ValueError('같은 자재의 개당 소요량은 한 행에만 입력하세요.')
+                us_seen.add(key)
             if row.expected_qty is not None:
                 if key in seen:raise ValueError('같은 자재의 총 필요수량은 한 행에만 입력하세요.')
                 seen.add(key)
@@ -133,7 +137,14 @@ def export(start:date,end:date,part_no:str=Query('',max_length=100),worker:str=Q
             sheet.append([safe(v) for v in values+[' / '.join(row['flags']),row['note']+(' / '+m['note'] if m and m['note'] else ''),'취소' if row['cancelled'] else '유효']])
     sheet.freeze_panes='F2';sheet.auto_filter.ref=sheet.dimensions
     for column in sheet.columns:sheet.column_dimensions[column[0].column_letter].width=18
-    info=book.create_sheet('검증 기준');info.append(['전체 수기 기록이며 재고·생산실적·BOM·LOT를 생성하거나 변경하지 않습니다.']);info.append(['입력한 자재행만 비교합니다. 기록 자체가 누락된 자재나 실제 조립 여부를 자동 확정하지 않습니다.']);info.append(['필요수량은 같은 자재·단위의 전체 필요수량을 한 행에만 입력하며 사용량은 LOT별로 합산합니다.'])
+    info=book.create_sheet('검증 기준');info.append(['전체 수기 기록이며 재고·생산실적·BOM·LOT를 생성하거나 변경하지 않습니다.']);info.append(['입력한 자재행만 비교합니다. 기록 자체가 누락된 자재나 실제 조립 여부를 자동 확정하지 않습니다.']);info.append(['필요수량은 총 생산수량(양품+불량+셋업) × 개당 소요량(기본 1)입니다. 자재별 여러 투입을 합산하여 비교합니다. 기존 수기 필요수량은 우선 적용합니다.'])
+    summary=book.create_sheet('생산 대비 투입 검증')
+    summary.append(['일자','생산품번','총 생산수량(양품+불량+셋업)','자재품번','단위','개당 소요량','필요수량','투입 합계','투입 차이','투입률(%)'])
+    for record in query_records(db,start,end,part_no,worker,include_cancelled):
+        row=serialize(record)
+        if flag and flag not in row['flags']:continue
+        for group in row['summary']:
+            summary.append([safe(row['work_date']),safe(row['part_no']),qty(row['production_qty']),safe(group['part_no']),safe(group['unit'])]+[qty(group[k]) for k in ['unit_usage','expected_qty','issued_qty','issued_difference','issued_rate']])
     stream=BytesIO();book.save(stream);stream.seek(0)
     return StreamingResponse(stream,media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':'attachment; filename="material-usage.xlsx"'})
 
