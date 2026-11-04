@@ -26,12 +26,12 @@ def _process_map(db: Session) -> dict[str, str]:
     }
 
 
-def _node(db: Session, lot_no: str, process_map: dict[str, str]) -> dict:
+def _node(db: Session, lot_no: str, process_map: dict[str, str], part_no: str = "") -> dict:
     direct = (
         db.query(ShipmentDirectLot, ShipmentItem, ShipmentMaster)
         .join(ShipmentItem, ShipmentItem.id == ShipmentDirectLot.shipment_item_id)
         .join(ShipmentMaster, ShipmentMaster.id == ShipmentItem.shipment_id)
-        .filter(ShipmentDirectLot.outbound_lot_no == lot_no, ShipmentMaster.status == "CONFIRMED")
+        .filter(ShipmentDirectLot.outbound_lot_no == lot_no, ShipmentMaster.status == "CONFIRMED", ShipmentItem.part_no == part_no if part_no else True)
         .order_by(ShipmentMaster.id.desc(), ShipmentDirectLot.id.desc())
         .first()
     )
@@ -49,7 +49,7 @@ def _node(db: Session, lot_no: str, process_map: dict[str, str]) -> dict:
     packing = (
         db.query(PackingBox, PackingMaster)
         .join(PackingMaster, PackingMaster.id == PackingBox.packing_id)
-        .filter(PackingBox.package_lot_no == lot_no, PackingMaster.status == "PACKED")
+        .filter(PackingBox.package_lot_no == lot_no, PackingMaster.status == "PACKED", PackingMaster.part_no == part_no if part_no else True)
         .order_by(PackingMaster.id.desc(), PackingBox.id.desc())
         .first()
     )
@@ -75,7 +75,7 @@ def _node(db: Session, lot_no: str, process_map: dict[str, str]) -> dict:
     purchase = (
         db.query(PurchaseInboundItem, PurchaseInboundMaster)
         .join(PurchaseInboundMaster, PurchaseInboundMaster.id == PurchaseInboundItem.inbound_id)
-        .filter(PurchaseInboundItem.internal_lot_no == lot_no, PurchaseInboundMaster.status == "CONFIRMED")
+        .filter(PurchaseInboundItem.internal_lot_no == lot_no, PurchaseInboundMaster.status == "CONFIRMED", PurchaseInboundItem.part_no == part_no if part_no else True)
         .first()
     )
     if purchase:
@@ -94,7 +94,7 @@ def _node(db: Session, lot_no: str, process_map: dict[str, str]) -> dict:
         db.query(SubcontractInboundLot, SubcontractInboundItem, SubcontractInboundMaster)
         .join(SubcontractInboundItem, SubcontractInboundItem.id == SubcontractInboundLot.inbound_item_id)
         .join(SubcontractInboundMaster, SubcontractInboundMaster.id == SubcontractInboundItem.inbound_id)
-        .filter(SubcontractInboundMaster.status == "RECEIVED", SubcontractInboundLot.child_lot_no == lot_no)
+        .filter(SubcontractInboundMaster.status == "RECEIVED", SubcontractInboundLot.child_lot_no == lot_no, SubcontractInboundItem.part_no == part_no if part_no else True)
         .order_by(SubcontractInboundMaster.id.desc())
         .first()
     )
@@ -110,7 +110,7 @@ def _node(db: Session, lot_no: str, process_map: dict[str, str]) -> dict:
             "external_lot_no": lot.supplier_lot_no or "",
         }
 
-    production = db.query(ProductionLotModel).filter(ProductionLotModel.lot_no == lot_no).first()
+    production = db.query(ProductionLotModel).filter(ProductionLotModel.lot_no == lot_no, ProductionLotModel.part_no == part_no if part_no else True).first()
     if production:
         process_name = "공정"
         perf_id = performance_id_from_lot_note(production.note)
@@ -309,10 +309,15 @@ def _external_lot_for_state(db: Session, lot_no: str, item_id: int | None) -> st
 @router.get("/api/inventory/lot-trace/tree")
 def inventory_lot_trace_tree(
     lot_no: str = Query(..., min_length=1, max_length=100),
+    part_no: str = Query('', max_length=100),
+    source: str = Query('MES', pattern='^(MES|EXTERNAL)$'),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     root = lot_no.strip()
+    if source == 'EXTERNAL':
+        from services.external_lot_trace import external_trace
+        return external_trace(db,root,part_no)
     all_edges = _edges(db)
 
     # 생산/외주 외의 포장·출고·분할외주 관계용 역방향 인덱스입니다.
@@ -325,7 +330,7 @@ def inventory_lot_trace_tree(
 
     def node(value: str) -> dict:
         if value not in node_cache:
-            node_cache[value] = _node(db, value, process_map)
+            node_cache[value] = _node(db, value, process_map, part_no if value == root else "")
             node_cache[value].setdefault("external_lot_no", "")
         return node_cache[value]
 

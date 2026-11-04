@@ -99,28 +99,29 @@ async function searchLots(){
         const panel = document.getElementById('searchResultPanel');
         panel.style.display = 'block';
         document.getElementById('searchCount').textContent = `${data.total || 0}건`;
-        document.getElementById('searchBody').innerHTML = data.items?.length ? data.items.map(row => `
+        document.getElementById('searchBody').innerHTML = data.items?.length ? data.items.map((row,index) => `
             <tr>
                 <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${row.search_type === 'OUTBOUND' ? '출고 LOT' : '공정 LOT'}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;font-weight:bold;">${esc(row.lot_no)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;">${esc(row.date)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;">${fmt(row.qty)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.part_no)}</td>
-                <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.reference)}</td>
-                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;"><button type="button" onclick='traceLot(${JSON.stringify(row.lot_no)})' style="padding:5px 10px;border:1px solid #2563eb;background:#fff;color:#2563eb;border-radius:4px;cursor:pointer;font-weight:bold;">추적</button></td>
+                <td style="border:1px solid #cbd5e1;padding:6px;">${esc(row.source==='EXTERNAL'?'[외부 연동] '+row.reference:row.reference)}</td>
+                <td style="border:1px solid #cbd5e1;padding:6px;text-align:center;"><button type="button" data-trace-index="${index}" style="padding:5px 10px;border:1px solid #2563eb;background:#fff;color:#2563eb;border-radius:4px;cursor:pointer;font-weight:bold;">추적</button></td>
             </tr>`).join('') : '<tr><td colspan="7" style="padding:20px;text-align:center;">검색 결과가 없습니다.</td></tr>';
+        document.querySelectorAll('[data-trace-index]').forEach(button=>button.onclick=()=>{const row=data.items[Number(button.dataset.traceIndex)];traceLot(row.lot_no,row.part_no,row.source||'MES');});
         status.textContent = data.items?.length ? '검색 결과에서 LOT를 선택해 주세요.' : '검색 결과가 없습니다.';
-        if(data.items?.length === 1) traceLot(data.items[0].lot_no);
+        if(data.items?.length === 1) traceLot(data.items[0].lot_no,data.items[0].part_no,data.items[0].source||'MES');
     }catch(e){
         status.textContent = e.message;
     }
 }
 
-async function traceLot(lotNo){
+async function traceLot(lotNo, partNo='', source='MES'){
     const status = document.getElementById('status');
     status.textContent = `${lotNo} 전체 계보 조회 중...`;
     try{
-        const res = await fetch('/api/inventory/lot-trace/tree?lot_no=' + encodeURIComponent(lotNo));
+        const res = await fetch('/api/inventory/lot-trace/tree?lot_no=' + encodeURIComponent(lotNo)+'&part_no='+encodeURIComponent(partNo)+'&source='+encodeURIComponent(source));
         const data = await res.json();
         if(!res.ok) throw new Error(data.detail || 'LOT 추적 조회에 실패했습니다.');
         document.getElementById('tracePanel').style.display = 'block';
@@ -139,7 +140,7 @@ async function traceLot(lotNo){
                 <td style="border:1px solid #cbd5e1;padding:6px;text-align:right;white-space:nowrap;">${fmt(row.consumed_qty)}</td>
                 <td style="border:1px solid #cbd5e1;padding:6px;white-space:nowrap;">${esc(row.tree)}</td>
             </tr>`).join('') : '<tr><td colspan="11" style="padding:20px;text-align:center;">연결된 LOT가 없습니다.</td></tr>';
-        status.textContent = `연결 LOT ${data.lot_count || 0}건 / 추적 행 ${data.row_count || 0}건`;
+        status.textContent = `연결 LOT ${data.lot_count || 0}건 / 추적 행 ${data.row_count || 0}건${data.notes?.length?' · '+data.notes.join(' / '):''}`;
         document.getElementById('tracePanel').scrollIntoView({behavior:'smooth', block:'start'});
     }catch(e){
         status.textContent = e.message;

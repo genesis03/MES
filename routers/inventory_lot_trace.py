@@ -254,6 +254,7 @@ def inventory_lot_trace_search(
     search_type: str = Query(..., pattern="^(PROCESS|OUTBOUND)$"),
     q: str = Query(..., min_length=1, max_length=100),
     limit: int = Query(100, ge=1, le=300),
+    part_no: str = Query("", max_length=100),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
@@ -262,15 +263,16 @@ def inventory_lot_trace_search(
         raise HTTPException(422, "LOT 검색어를 입력하세요.")
 
     results: list[dict] = []
-    seen: set[tuple[str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
 
     def append_result(kind: str, lot_no: str, part_no: str, qty: float, date: str, reference: str = ""):
         lot_no = str(lot_no or "").strip()
-        if not lot_no or (kind, lot_no) in seen:
+        if not lot_no or (kind, lot_no, part_no) in seen:
             return
-        seen.add((kind, lot_no))
+        seen.add((kind, lot_no, part_no))
         results.append({
             "search_type": kind,
+            "source": "MES",
             "lot_no": lot_no,
             "part_no": part_no or "",
             "qty": float(qty or 0),
@@ -367,6 +369,11 @@ def inventory_lot_trace_search(
                     shipment.shipment_no or "",
                 )
 
+    if part_no.strip():
+        results = [row for row in results if part_no.strip().casefold() in row['part_no'].casefold()]
+    if search_type == 'OUTBOUND':
+        from services.external_lot_trace import external_outbound_lots
+        results.extend({k:v for k,v in row.items() if k!='evidence'} for row in external_outbound_lots(db,keyword,part_no.strip()))
     results.sort(key=lambda row: (row["date"], row["lot_no"]), reverse=True)
     return {"search_type": search_type, "keyword": keyword, "total": len(results), "items": results[:limit]}
 
