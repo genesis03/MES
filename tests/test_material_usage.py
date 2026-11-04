@@ -14,7 +14,7 @@ def manual(env):
     return env
 
 def payload(**changes):
-    return dict(request_key='manual-1',work_date='2026-11-04',worker='작업자',part_no='YR310313',production_qty='2000',materials=[dict(part_no='91012',unit='EA',expected_qty='2000',issued_qty='2000',used_qty='2000',scrap_qty='0',remaining_qty='0')])|changes
+    return dict(request_key='manual-1',work_date='2026-11-04',worker='작업자',part_no='YR310313',production_qty='2000',materials=[dict(part_no='91012',unit='EA',issued_qty='2000',used_qty='2000',scrap_qty='0',remaining_qty='0')])|changes
 
 def save(env,**changes):
     r=env.client.post(API,json=payload(**changes))
@@ -32,26 +32,24 @@ def test_manual_no_stock_and_idempotency(manual):
     assert manual.client.post(API,json=payload(production_qty='3')).status_code==409
 
 def test_blank_zero_and_missing_material(manual):
-    r=save(manual,materials=[dict(part_no='M',expected_qty='1',used_qty='0')])
-    assert '사용 0 · 누락 확인' in r['flags']
+    r=save(manual,materials=[dict(part_no='M',used_qty='0')])
+    assert '생산 대비 자재 사용 부족' in r['flags']
     assert '수량 미입력' in r['flags']
     assert r['materials'][0]['remaining_qty'] is None
     assert r['materials'][0]['balance_difference'] is None
     assert save(manual,request_key='empty',materials=[])['flags']==['자재 기록 없음']
 
 def test_multiple_lots_grouped_case_insensitively(manual):
-    rows=[dict(part_no='Mat',unit='EA',expected_qty='2000',issued_qty='500',used_qty='500',scrap_qty='0',remaining_qty='0'),dict(part_no='mat',unit='ea',issued_qty='1500',used_qty='1500',scrap_qty='0',remaining_qty='0')]
+    rows=[dict(part_no='Mat',unit='EA',issued_qty='500',used_qty='500',scrap_qty='0',remaining_qty='0'),dict(part_no='mat',unit='ea',issued_qty='1500',used_qty='1500',scrap_qty='0',remaining_qty='0')]
     r=save(manual,materials=rows)
     assert r['flags']==['정상(기록 기준)']
     assert len(r['summary'])==1
     assert r['summary'][0]['used_qty']=='2000'
-    rows[1]['expected_qty']='2000'
-    assert manual.client.post(API,json=payload(request_key='bad',materials=rows)).status_code==422
 
 def test_workbook_unexplained_difference(manual):
     rows=[dict(part_no='91012',issued_qty=str(i),used_qty=str(u),scrap_qty='0',remaining_qty='0') for i,u in [(500,500),(1000,1000),(1000,980)]]
     r=save(manual,materials=rows)
-    assert set(r['flags'])=={'수불 불일치','과다 투입','과다 사용'}
+    assert set(r['flags'])=={'수불 불일치','생산 대비 자재 사용 초과'}
     assert r['materials'][-1]['balance_difference']=='20'
 
 @pytest.mark.parametrize('qty',['-1','NaN','0.0000001'])
@@ -80,7 +78,7 @@ def test_filters_export_and_permissions(manual):
     assert manual.client.get(API+query).json()['total']==1
     assert manual.client.get(API+'?start=2026-11-01&end=2026-11-30&flag=자재 기록 없음&size=1').json()['items'][0]['part_no']=='OTHER'
     book=load_workbook(BytesIO(manual.client.get(API+'/export'+query).content))
-    assert book.active['B2'].value=="'=cmd"
+    assert book['자재 사용 상세']['B2'].value=="'=cmd"
     manual.state.user.username='reader';manual.state.user.role='USER';manual.state.user.permissions=json.dumps({'menu_access':{MENU:'READ'}})
     assert manual.client.get(API+query).status_code==200
     assert manual.client.post(API,json=payload(request_key='denied')).status_code==403
@@ -89,28 +87,62 @@ def test_filters_export_and_permissions(manual):
 
 
 def test_three_issues_against_total_production(manual):
-    rows=[dict(part_no='CAP',issued_qty=str(q)) for q in (500,500,1000)]
+    rows=[dict(part_no='CAP',issued_qty=str(q),used_qty=str(q),scrap_qty='0',remaining_qty='0') for q in (500,500,1000)]
     r=save(manual,materials=rows)
     assert r['flags']==['정상(기록 기준)']
     group=r['summary'][0]
-    assert group['expected_qty']=='2000'
+    assert group['production_qty']=='2000'
     assert group['issued_qty']=='2000'
-    assert group['issued_rate']=='100'
-    assert group['used_qty'] is None
-    assert group['issued_difference']=='0'
-    rows[-1]['issued_qty']='900'
+    assert group['usage_rate']=='100'
+    assert group['difference']=='0'
+    rows[-1]['used_qty']='900'
     r=save(manual,request_key='short',materials=rows)
-    assert '투입 부족' in r['flags']
-    assert r['summary'][0]['issued_difference']=='-100'
+    assert '생산 대비 자재 사용 부족' in r['flags']
+    assert r['summary'][0]['difference']=='-100'
+    assert '100 EA 부족' in r['summary'][0]['usage_description']
 
-def test_unit_usage_and_distinct_materials(manual):
-    rows=[dict(part_no='CAP',unit_usage='2',issued_qty='1000'),dict(part_no='CAP',issued_qty='3000'),dict(part_no='BODY',issued_qty='2000')]
+
+def test_legacy_requirements_ignored_and_distinct_materials(manual):
+    rows=[dict(part_no='CAP',unit_usage='2',expected_qty='4000',issued_qty='2000',used_qty='2000',scrap_qty='0',remaining_qty='0'),dict(part_no='BODY',issued_qty='2000',used_qty='2000',scrap_qty='0',remaining_qty='0')]
     r=save(manual,materials=rows)
     assert r['flags']==['정상(기록 기준)']
-    assert [g['expected_qty'] for g in r['summary']]==['4000','2000']
-    rows[1]['unit_usage']='2'
-    assert manual.client.post(API,json=payload(request_key='invalid',materials=rows)).status_code==422
+    assert [g['production_qty'] for g in r['summary']]==['2000','2000']
+    assert [g['difference'] for g in r['summary']]==['0','0']
+
 
 def test_zero_production_rate_is_unknown(manual):
-    r=save(manual,production_qty='0',materials=[dict(part_no='CAP',issued_qty='0')])
-    assert r['summary'][0]['issued_rate'] is None
+    r=save(manual,production_qty='0',materials=[dict(part_no='CAP',issued_qty='0',used_qty='0')])
+    assert r['summary'][0]['usage_rate'] is None
+
+
+def test_screenshot_exact_discrepancies(manual):
+    r=save(manual,production_qty='1000',materials=[dict(part_no='910112',lot_no='1001',issued_qty='500',used_qty='500',scrap_qty='0',remaining_qty='0'),dict(part_no='910112',lot_no='1001',issued_qty='500',used_qty='489',scrap_qty='10',remaining_qty='0')])
+    assert r['materials'][1]['balance_difference']=='1'
+    assert r['materials'][1]['balance_description']=='1 EA 사용처 미기록'
+    assert r['summary'][0]['used_qty']=='989'
+    assert r['summary'][0]['usage_description']=='생산 대비 자재 사용 11 EA 부족'
+    detail=r['summary'][0]['balance_details'][0]
+    assert detail['row']==2 and detail['lot_no']=='1001'
+    r=save(manual,request_key='negative',production_qty='500',materials=[dict(part_no='CAP',issued_qty='500',used_qty='501',scrap_qty='0',remaining_qty='0')])
+    assert r['materials'][0]['balance_description']=='1 EA 투입 초과 기록'
+
+
+def test_daily_excel_aggregates_production_once_and_keeps_days_separate(manual):
+    from services.material_usage_service import daily_review
+    r=save(manual,materials=[dict(part_no='CAP',issued_qty=str(q),used_qty=str(q),scrap_qty='0',remaining_qty='0') for q in (500,500,1000)])
+    r2=save(manual,request_key='second',production_qty='1000',materials=[dict(part_no='CAP',issued_qty='1000',used_qty='989',scrap_qty='10',remaining_qty='0')])
+    r3=save(manual,request_key='nextday',work_date='2026-11-05',materials=[dict(part_no='CAP',issued_qty='2000',used_qty='2100',scrap_qty='0',remaining_qty='0')])
+    groups=daily_review([r,r2,r3,r|{'cancelled':True}])
+    assert len(groups)==2
+    assert groups[0]['production_qty']==3000
+    assert groups[0]['used_qty']==2989
+    assert groups[0]['difference']==-11
+    assert '조립 누락 확인 필요' in groups[0]['verdict']
+    assert '자재 LOSS 증가 확인 필요' in groups[1]['verdict']
+    book=load_workbook(BytesIO(manual.client.get(API+'/export?start=2026-11-01&end=2026-11-30').content))
+    sheet=book['일일 조립 누락 검토']
+    assert sheet['D4'].value==3000 and sheet['F4'].value==2989
+    assert '1 EA 사용처 미기록' in sheet['J4'].value
+    all_values=' '.join(str(c.value) for row in sheet for c in row if c.value is not None)
+    assert '2026-11-04 조립공정' in all_values and '2026-11-05 조립공정' in all_values
+    assert '개당 소요량' not in all_values and '수기 필요량' not in all_values

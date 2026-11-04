@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter,Depends,HTTPException,Query,Request
 from fastapi.responses import StreamingResponse
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel,ConfigDict,Field,StringConstraints,model_validator
+from pydantic import BaseModel,ConfigDict,Field,StringConstraints
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -31,6 +31,7 @@ class Material(Input):
     part_no:Text
     lot_no:str=Field(default='',max_length=100)
     unit:Text='EA'
+    # Legacy fields accepted for old clients; excluded from all current calculations.
     unit_usage:Qty|None=None
     expected_qty:Qty|None=None
     issued_qty:Qty|None=None
@@ -48,18 +49,6 @@ class RecordInput(Input):
     production_qty:Qty
     note:str=Field(default='',max_length=1000)
     materials:list[Material]=Field(default_factory=list,max_length=500)
-    @model_validator(mode='after')
-    def unique_requirement(self):
-        seen=set();us_seen=set()
-        for row in self.materials:
-            key=(row.part_no.casefold(),row.unit.casefold())
-            if row.unit_usage is not None:
-                if key in us_seen:raise ValueError('같은 자재의 개당 소요량은 한 행에만 입력하세요.')
-                us_seen.add(key)
-            if row.expected_qty is not None:
-                if key in seen:raise ValueError('같은 자재의 총 필요수량은 한 행에만 입력하세요.')
-                seen.add(key)
-        return self
 
 
 class CreateInput(RecordInput):
@@ -123,28 +112,10 @@ def listing(start:date,end:date,part_no:str=Query('',max_length=100),worker:str=
 @router.get(API+'/export')
 def export(start:date,end:date,part_no:str=Query('',max_length=100),worker:str=Query('',max_length=100),flag:str=Query('',max_length=50),include_cancelled:bool=False,db:Session=Depends(get_db),user=Depends(get_current_user)):
     access(user)
-    from openpyxl import Workbook
-    book=Workbook();sheet=book.active;sheet.title='자재 사용 현황'
-    sheet.append(['일자','작업자','생산품번','생산 LOT','조립수량','자재품번','자재 LOT','단위','필요수량','투입','사용','폐기','잔여','수불차이','확인사항','비고','상태'])
-    def safe(value):return "'"+value if isinstance(value,str) and value.startswith(('=','+','-','@')) else value
-    def qty(value):return Decimal(value) if value is not None else None
-    for record in query_records(db,start,end,part_no,worker,include_cancelled):
-        row=serialize(record)
-        if flag and flag not in row['flags']:continue
-        for m in row['materials'] or [None]:
-            values=[row['work_date'],row['worker'],row['part_no'],row['production_lot'],qty(row['production_qty'])]
-            values+=([m['part_no'],m['lot_no'],m['unit']]+[qty(m[k]) for k in ['expected_qty','issued_qty','used_qty','scrap_qty','remaining_qty','balance_difference']]) if m else ['']*9
-            sheet.append([safe(v) for v in values+[' / '.join(row['flags']),row['note']+(' / '+m['note'] if m and m['note'] else ''),'취소' if row['cancelled'] else '유효']])
-    sheet.freeze_panes='F2';sheet.auto_filter.ref=sheet.dimensions
-    for column in sheet.columns:sheet.column_dimensions[column[0].column_letter].width=18
-    info=book.create_sheet('검증 기준');info.append(['전체 수기 기록이며 재고·생산실적·BOM·LOT를 생성하거나 변경하지 않습니다.']);info.append(['입력한 자재행만 비교합니다. 기록 자체가 누락된 자재나 실제 조립 여부를 자동 확정하지 않습니다.']);info.append(['필요수량은 총 생산수량(양품+불량+셋업) × 개당 소요량(기본 1)입니다. 자재별 여러 투입을 합산하여 비교합니다. 기존 수기 필요수량은 우선 적용합니다.'])
-    summary=book.create_sheet('생산 대비 투입 검증')
-    summary.append(['일자','생산품번','총 생산수량(양품+불량+셋업)','자재품번','단위','개당 소요량','필요수량','투입 합계','투입 차이','투입률(%)'])
-    for record in query_records(db,start,end,part_no,worker,include_cancelled):
-        row=serialize(record)
-        if flag and flag not in row['flags']:continue
-        for group in row['summary']:
-            summary.append([safe(row['work_date']),safe(row['part_no']),qty(row['production_qty']),safe(group['part_no']),safe(group['unit'])]+[qty(group[k]) for k in ['unit_usage','expected_qty','issued_qty','issued_difference','issued_rate']])
+    from services.material_usage_export import build_workbook
+    rows=[serialize(record) for record in query_records(db,start,end,part_no,worker,include_cancelled)]
+    if flag:rows=[row for row in rows if flag in row['flags']]
+    book=build_workbook(rows,user.username)
     stream=BytesIO();book.save(stream);stream.seek(0)
     return StreamingResponse(stream,media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',headers={'Content-Disposition':'attachment; filename="material-usage.xlsx"'})
 
