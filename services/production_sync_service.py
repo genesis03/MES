@@ -191,19 +191,8 @@ def execute(start, end, token, run_id, kind='production'):
         password = ''
         client.on_query_progress=lambda:renew_query_lease(State,token)
         days = {start + timedelta(days=offset) for offset in range((end - start).days + 1)}
-        if kind in ('packing', 'subcontract', 'shipment'):
-            with SessionLocal() as db:
-                run = db.get(Run, run_id)
-                if run and run.trigger == 'AUTO':
-                    # Packing queries filter CREATE_DATE, not shipment date.
-                    # Revisit all known dates, including previously shipped lots:
-                    # a later shipment cancellation can restore old stock too.
-                    # Subcontract inspection cancellations also change old dates.
-                    date_column = (Record.packing_date if kind == 'packing' else
-                                   Record.shipment_date if kind == 'shipment' else Record.confirm_date)
-                    for (packing_date,) in db.query(date_column).filter(
-                            date_column < start.isoformat()).distinct():
-                        days.add(datetime.strptime(packing_date, '%Y-%m-%d').date())
+        # All targets use the run's recorded range. Older changes are refreshed
+        # explicitly through a manual run, never hidden in automatic counts.
         for day in sorted(days):
             querying_day = day
             if kind in ('production', 'shipment'):

@@ -6,7 +6,7 @@
 {% endblock %}
 {% block sync_content %}
 <h2>외부 연동 포장현황</h2>
-<p class="es-muted">생산실적 연동 계정을 함께 사용합니다. 최초에는 올해 1월 1일부터 오늘까지, 이후에는 최근 기간과 기존 포장 LOT를 다시 조회해 출고·출고 취소를 반영합니다. 재고수량은 포장수량 − 외부 출고수량입니다. 외부 생산실적은 재고에 반영하지 않습니다.</p>
+<p class="es-muted">생산실적 연동 계정을 함께 사용합니다. 최초에는 올해 1월 1일부터 오늘까지, 이후에는 설정한 최근 기간만 자동 조회합니다. 과거 출고·출고 취소는 해당 포장일을 지정해 수동으로 다시 가져오세요. 재고수량은 포장수량 − 외부 출고수량입니다. 외부 생산실적은 재고에 반영하지 않습니다.</p>
 <p><a href="/admin/external-sync?tab=production">연동 계정 설정 · 품번 연결</a> · <a href="/production/packing/status">포장현황 보기</a></p>
 <div class="es-card"><form id="pkSearch" class="es-line">
 <label>시작일<br><input id="pkStart" type="date" required></label>

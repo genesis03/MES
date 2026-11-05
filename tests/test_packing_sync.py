@@ -287,7 +287,7 @@ def test_external_lots_reserve_native_production_packing_and_purchase_numbers(se
         assert _next_internal_lot(db,DAY.isoformat(),set())=='LR260325002'
 
 
-def test_old_packing_dates_are_revisited_even_after_full_shipment(setup,monkeypatch):
+def test_old_packing_dates_require_explicit_manual_refresh(setup,monkeypatch):
     inventory_routes(setup)
     old=DAY-timedelta(days=100)
     with setup.sessions() as db:add_finished(db);db.commit()
@@ -302,7 +302,10 @@ def test_old_packing_dates_are_revisited_even_after_full_shipment(setup,monkeypa
             return ([row(day=old,JOB_QTY='80')],[]) if day==old else ([],[])
     monkeypatch.setattr(source,'PackingClient',Client)
     token,run_id=sync.claim(DAY,DAY,'AUTO','packing');sync.execute(DAY,DAY,token,run_id,'packing')
-    assert visited==[old,DAY]
+    assert visited==[DAY]
+    assert setup.client.get('/api/inventory/status').json()['stock_qty']==0
+    token,run_id=sync.claim(old,old,'MANUAL','packing');sync.execute(old,old,token,run_id,'packing')
+    assert visited==[DAY,old]
     assert setup.client.get('/api/inventory/status').json()['stock_qty']==160
 
 
