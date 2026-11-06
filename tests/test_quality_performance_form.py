@@ -145,7 +145,6 @@ def test_real_app_registers_september_screen_form_and_download(tmp_path):
 from core import security
 security.DEV_BYPASS_AUTH=True
 import app
-app.verify_quality_report_registration()
 from fastapi.testclient import TestClient
 client=TestClient(app.app)
 screen=client.get('/quality/performance')

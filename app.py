@@ -1,11 +1,8 @@
 from urllib.parse import urlparse
-import logging
-import os
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.routing import NoMatchFound
 
 from core.config import BASE_DIR
 from core.database import SessionLocal, engine
@@ -32,7 +29,7 @@ from services.audit_log import (
 
 from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, subcontract_inbound_lot_policy, subcontract_inbound_edit, purchase_unreceived, quality_pages, quality, quality_standard, quality_production_defects, quality_defect_status, production_pages, production, production_complete, production_run, production_run_delete, production_run_lot_fix, production_extra, inventory_lot_location, inventory, inventory_lot_trace, inventory_lot_trace_tree, inventory_lot_usage_trace, internal_labels, packing, sales, sales_order_policy, sales_shipping_direct, sales_shipping_direct_page, sales_shipping_fifo_auto, sales_shipping_partial_confirm, sales_shipping_entry, sales_order_delete, shipping_inquiry
 from routers import production_sync, packing_sync, shipment_sync
-from routers import quality_reports, production_pipeline, quality_performance
+from routers import quality_reports, production_pipeline
 from routers import subcontract_fault_sync
 from routers import external_sync
 from services.production_sync_service import start_scheduler, stop_scheduler
@@ -56,24 +53,6 @@ ensure_existing_plan_revisions(engine)
 install_audit_logging()
 
 app = FastAPI(title="출하 바코드 관리 시스템")
-
-# 품질실적의 화면·조회·저장·출력을 앱에 직접 등록합니다.
-# 안내 화면용 quality_pages의 내부 라우터 등록에 의존하지 않습니다.
-app.include_router(quality_performance.router)
-
-
-@app.on_event("startup")
-def verify_quality_report_registration():
-    route='/api/quality/performance/form'
-    try:
-        registered=str(app.url_path_for('quality_performance_form'))
-    except NoMatchFound as exc:
-        raise RuntimeError('품질실적 조회 API 등록 실패: '+route) from exc
-    if registered!=route:
-        raise RuntimeError('품질실적 조회 API 등록 실패: '+route)
-    logging.getLogger('uvicorn.error').info(
-        'MES runtime: PID=%s APP=%s quality API=%s',os.getpid(),os.path.abspath(__file__),route)
-
 
 @app.on_event("startup")
 def production_sync_startup():
@@ -292,6 +271,8 @@ app.include_router(subcontract_inbound_edit.router)
 app.include_router(quality_reports.router)
 app.include_router(production_pipeline.router)
 app.include_router(quality_pages.router)
+from routers import quality_performance
+app.include_router(quality_performance.router)
 app.include_router(quality.router)
 app.include_router(quality_standard.router)
 app.include_router(quality_production_defects.router)

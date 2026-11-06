@@ -86,7 +86,7 @@ def report(month:str,source:Literal['EXTERNAL','MES']='EXTERNAL',db:Session=Depe
     access(user);return build_report(db,month_value(month),source)
 
 
-@router.get(API+'/form',name='quality_performance_form')
+@router.get(API+'/form')
 def form(month:str,source:Literal['EXTERNAL','MES']='EXTERNAL',db:Session=Depends(get_db),user=Depends(get_current_user)):
     access(user)
     data=build_report(db,month_value(month),source)
