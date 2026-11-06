@@ -86,9 +86,8 @@ def test_chart_literals_are_bound_to_report_cells(quality):
         assert result['charts']['xl/charts/'+name]['series'][0]['categories']==['찍힘','긁힘','치수','파손,휨','변색,외관','기타']
 
 
-def test_existing_quality_router_owns_form_api_and_enforces_access(quality):
-    from routers import quality_pages
-    app=FastAPI();app.include_router(quality_pages.router)
+def test_report_router_registers_form_api_and_enforces_access(quality):
+    app=FastAPI();app.include_router(api.router)
     app.dependency_overrides.update(quality.app.dependency_overrides)
     client=TestClient(app)
     page=client.get('/quality/performance')
@@ -104,3 +103,44 @@ def test_existing_quality_router_owns_form_api_and_enforces_access(quality):
 @pytest.mark.parametrize(('value','fmt','expected'),[(.003,'0.00%','0.30%'),(63579984,'#,##0,','63,580'),(0,'0.00%','0.00%'),(None,'#,##0',''),(1234,'#,##0','1,234'),(1.2,'0.00%','120.00%')])
 def test_original_number_formats(value,fmt,expected):
     assert format_cell(value,fmt)==expected
+
+
+def test_real_app_registers_september_screen_form_and_download(tmp_path):
+    """Exercise app.py itself in an isolated copy, without touching the local DB."""
+    from pathlib import Path
+    import os
+    import shutil
+    import subprocess
+    import sys
+    root=Path(__file__).resolve().parents[1]
+    copy=tmp_path/'application'
+    copy.mkdir()
+    for directory in ('core','models','routers','services','schemas','assets','static','templates'):
+        shutil.copytree(root/directory,copy/directory,ignore=shutil.ignore_patterns('__pycache__'))
+    for source in root.glob('*.py'):
+        shutil.copy2(source,copy/source.name)
+    script='''
+from core import security
+security.DEV_BYPASS_AUTH=True
+import app
+from fastapi.testclient import TestClient
+client=TestClient(app.app)
+screen=client.get('/quality/performance')
+assert screen.status_code==200,screen.text
+assert 'id="qualityFormLoad"' in screen.text
+assert 'quality_performance_form.js' in screen.text
+response=client.get('/api/quality/performance/form?month=2026-09&source=EXTERNAL')
+assert response.status_code==200,response.text
+assert response.json()['month']=='2026-09'
+assert len(response.json()['cells'])==17
+assert len(response.json()['charts'])==28
+download=client.get('/api/quality/performance/excel?month=2026-09&source=EXTERNAL')
+assert download.status_code==200,download.text[:200]
+assert download.content.startswith(b'PK')
+assert 'get' in app.app.openapi()['paths']['/api/quality/performance/form']
+print('September screen/API/download: OK')
+'''
+    env=dict(os.environ,DATABASE_URL='sqlite:///'+str(tmp_path/'isolated.db'))
+    result=subprocess.run([sys.executable,'-c',script],cwd=copy,env=env,capture_output=True,text=True,timeout=120)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert 'September screen/API/download: OK' in result.stdout

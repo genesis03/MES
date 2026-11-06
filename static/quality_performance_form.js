@@ -55,10 +55,10 @@
     }
     function query(){return new URLSearchParams({month:$('qualityFormMonth').value,source:$('qualityFormSource').value});}
     async function load(){
-        const current=++generation,name=active?.name||'요약',params=query();payload=null;show(name);$('qualityFormExcel').disabled=true;$('qualityFormLoad').disabled=true;$('qualityFormIssues').hidden=true;$('qualityFormStatus').textContent='실적을 집계하고 있습니다.';
-        try{const response=await fetch(`${base}/form?${params}`,{cache:'no-store',headers:{'X-MES-Menu-Path':'/quality/performance'}});if(response.status===404)throw new Error('품질실적 API가 등록되지 않았습니다. 업데이트한 서버의 실행 상태를 확인해야 합니다.');const result=await MesResponse.read(response);if(current!==generation)return;payload=result;show(active?.name||name);$('qualityFormStatus').textContent=`${result.month} · ${result.source==='EXTERNAL'?'외부 연동':'MES 입력'} · 조회 월까지의 월별 실적 · 수기 미입력 항목은 빈칸`;$('qualityFormExcel').disabled=false;
+        const current=++generation,name=active?.name||'요약',params=query();payload=null;show(name);$('qualityFormExcel').disabled=true;$('qualityFormLoad').disabled=true;$('qualityFormIssues').hidden=true;$('qualityFormStatus').classList.remove('quality-form-error');$('qualityFormStatus').textContent='실적을 집계하고 있습니다.';
+        try{const response=await fetch(`${base}/form?${params}`,{cache:'no-store',headers:{'X-MES-Menu-Path':'/quality/performance'}});if(response.status===404)throw new Error('실적 조회 연결 실패: 요청 경로를 찾을 수 없습니다. (HTTP 404)');const result=await MesResponse.read(response);if(current!==generation)return;payload=result;show(active?.name||name);$('qualityFormStatus').textContent=`${result.month} · ${result.source==='EXTERNAL'?'외부 연동':'MES 입력'} · 조회 월까지의 월별 실적 · 수기 미입력 항목은 빈칸`;$('qualityFormExcel').disabled=false;
             $('qualityFormReference').textContent=result.reference_note||'';const list=$('qualityFormIssues').querySelector('ul');list.replaceChildren();for(const issue of result.issues){const li=document.createElement('li');li.textContent=issue;list.append(li);}$('qualityFormIssues').hidden=!result.issues.length&&!result.reference_note;
-        }catch(error){if(current===generation)$('qualityFormStatus').textContent=error.message;}finally{if(current===generation)$('qualityFormLoad').disabled=false;}
+        }catch(error){if(current===generation){$('qualityFormStatus').classList.add('quality-form-error');$('qualityFormStatus').textContent=error.message;}}finally{if(current===generation)$('qualityFormLoad').disabled=false;}
     }
     $('qualityFormFit').onclick=()=>{fit=true;resize();};$('qualityFormActual').onclick=()=>{fit=false;resize();};
     $('qualityFormTabs').onclick=event=>{const button=event.target.closest('button[data-sheet]');if(button)show(button.dataset.sheet);};

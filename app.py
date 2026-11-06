@@ -29,7 +29,7 @@ from services.audit_log import (
 
 from routers import pages, manual, shipping, basic_info, basic_info_workers, basic_info_equipment, bom, partner, admin, admin_process_code, auth, purchase, purchase_pages, purchase_inquiry, purchase_delete_guard, purchase_edit, subcontract, subcontract_pages, subcontract_inquiry, subcontract_outbound, subcontract_inbound, subcontract_inbound_lot_policy, subcontract_inbound_edit, purchase_unreceived, quality_pages, quality, quality_standard, quality_production_defects, quality_defect_status, production_pages, production, production_complete, production_run, production_run_delete, production_run_lot_fix, production_extra, inventory_lot_location, inventory, inventory_lot_trace, inventory_lot_trace_tree, inventory_lot_usage_trace, internal_labels, packing, sales, sales_order_policy, sales_shipping_direct, sales_shipping_direct_page, sales_shipping_fifo_auto, sales_shipping_partial_confirm, sales_shipping_entry, sales_order_delete, shipping_inquiry
 from routers import production_sync, packing_sync, shipment_sync
-from routers import quality_reports, production_pipeline
+from routers import quality_reports, production_pipeline, quality_performance
 from routers import subcontract_fault_sync
 from routers import external_sync
 from services.production_sync_service import start_scheduler, stop_scheduler
@@ -53,6 +53,10 @@ ensure_existing_plan_revisions(engine)
 install_audit_logging()
 
 app = FastAPI(title="출하 바코드 관리 시스템")
+
+# 품질실적의 화면·조회·저장·출력을 앱에 직접 등록합니다.
+# 안내 화면용 quality_pages의 내부 라우터 등록에 의존하지 않습니다.
+app.include_router(quality_performance.router)
 
 
 @app.on_event("startup")
