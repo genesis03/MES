@@ -46,7 +46,7 @@ def test_exclusion_ignores_spaces_not_unrelated_suppliers(partner):
     assert len(rows)==1 and rows[0]['REQ_COMP_NM']=='테스트금속'
 
 
-@pytest.mark.parametrize('changes',[{'CONFIRM_QTY':'NaN'},{'CONFIRM_QTY':'1e100'},{'CONFIRM_QTY':'-1'},{'IN_DATE':'2026-02-30'},{'IS_CONFIRM':'N'},{'IN_STATE':'OTHER'},{'HIS_NUM':''},{'REQ_COMP_NM':'거래처,쉼표'},{'IN_DATE':(DAY-timedelta(days=3)).isoformat()}])
+@pytest.mark.parametrize('changes',[{'CONFIRM_QTY':'NaN'},{'CONFIRM_QTY':'1e100'},{'CONFIRM_QTY':'-1'},{'IN_DATE':'2026-02-30'},{'IS_CONFIRM':'N'},{'IN_STATE':'OTHER'},{'HIS_NUM':''},{'REQ_COMP_NM':'거래처,쉼표'}])
 def test_invalid_data_rejected(changes):
     with pytest.raises(SyncError):client.parse_response(response([row(**changes)]),DAY,DAY)
 
@@ -121,7 +121,7 @@ def test_records_search_unit_unknown_and_admin_permissions(setup):
 def test_execute_and_schedule_are_range_limited_and_in_common_controls(setup,monkeypatch):
     visited=[]
     monkeypatch.setattr(client.InboundClient,'__init__',lambda self,*a:None)
-    monkeypatch.setattr(client.InboundClient,'fetch_day',lambda self,day:(visited.append(day) or [row(day)],[]))
+    monkeypatch.setattr(client.InboundClient,'fetch_range',lambda self,start,end:(visited.append(start) or [row(start)],[]))
     old=DAY-timedelta(days=90)
     token,_=sync.claim(old,old,'MANUAL','inbound');sync.save_day([row(old,HIS_NUM='OLD')],token,'inbound',queried_day=old)
     with setup.sessions() as db:
@@ -149,9 +149,79 @@ def test_parser_failure_does_not_hide_previously_saved_day(setup,monkeypatch):
     with setup.sessions() as db:
         state=db.get(InboundSyncState,1);state.lease_token=None;state.lease_until=None;db.commit()
     monkeypatch.setattr(client.InboundClient,'__init__',lambda self,*a:None)
-    def fail(self,day):raise SyncError('invalid response')
-    monkeypatch.setattr(client.InboundClient,'fetch_day',fail)
+    def fail(self,start,end):raise SyncError('invalid response')
+    monkeypatch.setattr(client.InboundClient,'fetch_range',fail)
     token,run_id=sync.claim(DAY,DAY,'MANUAL','inbound');sync.execute(DAY,DAY,token,run_id,'inbound')
     with setup.sessions() as db:
         assert db.get(InboundSyncRun,run_id).status=='FAILED'
         assert db.query(ExternalInboundRecord).one().present is True
+
+
+def range_client(monkeypatch,replies):
+    instance=client.InboundClient.__new__(client.InboundClient);instance.context={};instance.opener=object()
+    calls=[]
+    def query(opener,payload):
+        calls.append(payload)
+        return replies(payload,len(calls))
+    monkeypatch.setattr(client,'query_with_retry',query)
+    return instance,calls
+
+
+def test_reported_oct31_date_mismatch_is_filtered_not_fatal(monkeypatch):
+    instance,calls=range_client(monkeypatch,lambda p,i:capture())
+    rows,notes=instance.fetch_range(date(2026,10,31),date(2026,11,6))
+    assert rows==[]  # Uploaded receipts are Oct 7..29, not Oct 31..Nov 6.
+    assert len(calls)==2 and not instance.complete_range
+    assert any('입고일이 조회 조건과 달라' in n for n in notes)
+
+
+def test_year_range_counts_each_receipt_once_even_if_server_repeats_all(monkeypatch):
+    instance,calls=range_client(monkeypatch,lambda p,i:capture())
+    rows,notes=instance.fetch_range(date(2026,1,1),date(2026,11,6))
+    assert len(calls)==11 and len(rows)==13
+    assert sum(Decimal(r['CONFIRM_QTY']) for r in rows if r['MATERIAL_TYPE_NM']=='동소재')==7368
+    assert not instance.complete_range
+    assert all(date(2026,1,1).isoformat()<=r['IN_DATE']<=date(2026,11,6).isoformat() for r in rows)
+
+
+def test_neighboring_window_receipt_is_not_lost_and_true_duplicate_lines_sum_once(monkeypatch):
+    october=date(2026,10,7)
+    data=response([row(october,CONFIRM_QTY='10'),row(october,CONFIRM_QTY='20')])
+    instance,_=range_client(monkeypatch,lambda p,i:data)
+    rows,_=instance.fetch_range(date(2026,10,1),date(2026,11,6))
+    assert len(rows)==1 and Decimal(rows[0]['CONFIRM_QTY'])==30
+    # First response omitted it; later response carries October IN_DATE.
+    empty={'SO.NET.END':['SO.NET.END'],'log.invoke.object':['MES.In.InConfirmList_test'],'MONITOR.QUERY.START':['s'],'MONITOR.QUERY.END':['e']}
+    instance,_=range_client(monkeypatch,lambda p,i:empty if i==1 else data)
+    rows,_=instance.fetch_range(date(2026,10,1),date(2026,11,6))
+    assert len(rows)==1 and Decimal(rows[0]['CONFIRM_QTY'])==30
+
+
+def test_ambiguous_date_response_does_not_mark_existing_receipts_missing(setup,monkeypatch):
+    start,end=date(2026,10,31),date(2026,11,6)
+    token,_=sync.claim(start,start,'MANUAL','inbound')
+    sync.save_day([row(start)],token,'inbound',queried_day=start)
+    with setup.sessions() as db:
+        state=db.get(InboundSyncState,1);state.lease_token=None;state.lease_until=None;db.commit()
+    monkeypatch.setattr(client.InboundClient,'__init__',lambda self,*a:setattr(self,'context',{}) or setattr(self,'opener',object()))
+    monkeypatch.setattr(client,'query_with_retry',lambda *a:capture())
+    token,run_id=sync.claim(start,end,'MANUAL','inbound');sync.execute(start,end,token,run_id,'inbound')
+    with setup.sessions() as db:
+        record=db.query(ExternalInboundRecord).one()
+        assert record.present and record.confirmed_qty=='100'
+        run=db.get(InboundSyncRun,run_id);counts=json.loads(run.counts_json)
+        assert run.status=='SUCCESS' and counts['received']==0 and counts['completed_days']==7
+        assert counts['warnings']
+
+
+def test_later_month_failure_does_not_partially_store_range(setup,monkeypatch):
+    start,end=date(2026,10,1),date(2026,11,6)
+    monkeypatch.setattr(client.InboundClient,'__init__',lambda self,*a:setattr(self,'context',{}) or setattr(self,'opener',object()))
+    def query(opener,payload):
+        if payload[client.COND+'IN_DATE1']=='2026-09-30':return capture()
+        raise SyncError('second request failed')
+    monkeypatch.setattr(client,'query_with_retry',query)
+    token,run_id=sync.claim(start,end,'MANUAL','inbound');sync.execute(start,end,token,run_id,'inbound')
+    with setup.sessions() as db:
+        assert db.get(InboundSyncRun,run_id).status=='FAILED'
+        assert db.query(ExternalInboundRecord).count()==0

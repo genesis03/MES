@@ -197,7 +197,7 @@ def execute(start, end, token, run_id, kind='production'):
         client = Client(username, password)
         password = ''
         client.on_query_progress=lambda:renew_query_lease(State,token)
-        days = {start + timedelta(days=offset) for offset in range((end - start).days + 1)}
+        days = {start} if kind == 'inbound' else {start + timedelta(days=offset) for offset in range((end - start).days + 1)}
         # All targets use the run's recorded range. Older changes are refreshed
         # explicitly through a manual run, never hidden in automatic counts.
         for day in sorted(days):
@@ -207,11 +207,16 @@ def execute(start, end, token, run_id, kind='production'):
             if kind=='production':
                 client.review_items=[]
             try:
-                rows, warnings = client.fetch_day(day)
+                if kind == 'inbound':
+                    from services.inbound_sync_store import save_range
+                    rows, warnings = client.fetch_range(start,end)
+                    result = save_range(rows,token,start,end,complete_range=getattr(client,'complete_range',False))
+                else:
+                    rows, warnings = client.fetch_day(day)
                 if kind == 'shipment':
                     result = save_day(rows, token, kind, queried_day=day,
                                       complete_day=not client.query_errors)
-                else:
+                elif kind != 'inbound':
                     result = save_day(rows, token) if kind == 'production' else save_day(rows, token, kind, queried_day=day)
             except SyncError as exc:
                 if kind not in ('production', 'shipment'):raise
@@ -233,7 +238,7 @@ def execute(start, end, token, run_id, kind='production'):
                 if kind == 'shipment':
                     counts.setdefault('errors', []).append(failed)
                 failure_data=failure_data or failed.get('failure_data')
-            if not query_errors:counts['completed_days'] += 1
+            if not query_errors:counts['completed_days'] += (end-start).days+1 if kind == 'inbound' else 1
             counts['warnings'] = sorted(set(counts['warnings'] + warnings))
         if partial_errors:
             counts['failed_queries']=len(partial_errors)
