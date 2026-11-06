@@ -1,0 +1,8 @@
+{% extends 'external_sync_base.html' %}
+{% block sync_content %}
+<section class="es-card"><h2>입고현황</h2>
+<p class="es-muted">확정 입고 목록을 연동합니다. ‘테스트 거래처’는 제외하며, 확정수량(CONFIRM_QTY)을 보관합니다. 입고일 기준으로 조회하고 확정일도 함께 표시합니다. 품명·단위는 내부 품목마스터 기준이며 미연결 단위는 —로 표시합니다. 기존 구매입고·재고는 변경하지 않습니다.</p>
+<form id="inSearch" class="es-line"><label>시작일<input id="inStart" type="date" required></label><label>종료일<input id="inEnd" type="date" required></label><label>품번·거래처·입고번호<input id="inKeyword" maxlength="200"></label><label>구분<select id="inType"><option value="">전체</option><option>원자재</option><option>반제품</option></select></label><button class="es-btn" type="submit">조회</button><label><input id="inMissing" type="checkbox"> 원본 누락 포함</label></form>
+<p id="inMessage" role="status"></p><div class="es-scroll"><table class="es-table"><thead><tr><th>입고일</th><th>확정일</th><th>입고번호</th><th>거래처</th><th>품번</th><th>품명</th><th>구분</th><th>자재유형</th><th>확정수량</th><th>단위</th><th>상태</th></tr></thead><tbody id="inRows"></tbody></table></div><p><button id="inPrev" class="es-btn">이전</button> <span id="inPage"></span> <button id="inNext" class="es-btn">다음</button></p>
+</section><script src="/static/inbound_external.js?v=20261106-1" defer></script>
+{% endblock %}

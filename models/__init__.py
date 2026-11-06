@@ -40,6 +40,7 @@ from models.auth_session import AuthSession
 from models.process_flow import ProcessFlowRevision, ProcessFlowStepKey, ProcessFlowStep
 from models.control_plan import ControlPlanRevision, ControlPlanInspectionLink
 from models.fmea import FmeaDocument, FmeaRevision, FmeaRow
+from models.inbound_sync import InboundSyncState,InboundSyncRun,ExternalInboundRecord
 from models.packing_sync import PackingSyncState, PackingSyncRun, ExternalPackingRecord, PackingSourcePresence
 from models.production_sync import ProductionSyncState, ExternalProductionRecord, ProductionSyncRun, ProductionSyncProcessMap, ProductionSyncItemMap, ProductionSyncCredential, ProductionSyncProtocol, ProductionSyncFailureData
 from models.inspection_standard import InspectionStandard, InspectionStandardPrecheck, InspectionStandardItem

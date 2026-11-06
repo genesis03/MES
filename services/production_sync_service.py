@@ -37,6 +37,10 @@ def credentials_ready(db=None):
 
 
 def backend(kind):
+    if kind == 'inbound':
+        from models.inbound_sync import InboundSyncState, InboundSyncRun, ExternalInboundRecord
+        from services.inbound_sync_client import InboundClient
+        return InboundSyncState, InboundSyncRun, ExternalInboundRecord, InboundClient
     if kind == 'subcontract':
         from models.subcontract_fault_sync import SubcontractFaultSyncState, SubcontractFaultSyncRun, ExternalSubcontractFault
         from services.subcontract_fault_client import SubcontractFaultClient
@@ -105,6 +109,9 @@ def key_for(row, kind='production'):
 
 
 def save_day(rows, token, kind='production', queried_day=None, complete_day=True):
+    if kind == 'inbound':
+        from services.inbound_sync_store import save_day as save_inbounds
+        return save_inbounds(rows, token, queried_day)
     if kind == 'shipment':
         from services.shipment_sync_store import save_day as save_shipments
         return save_shipments(rows, token, queried_day, complete_day=complete_day)
@@ -292,7 +299,7 @@ def loop():
     while not _stop.wait(30):
         if not credentials_ready():
             continue
-        for kind in ('production', 'packing', 'subcontract', 'shipment'):
+        for kind in ('production', 'packing', 'subcontract', 'shipment', 'inbound'):
             try:
                 schedule_cycle(kind)
             except Exception:

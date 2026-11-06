@@ -656,7 +656,7 @@ def test_http_login_cookie_and_list_protocol(monkeypatch,bootstrap_key,kind):
         if kind=='production':
             assert len(rows)==17 and sum(bool(r.get('DAILY_SOURCE')) for r in rows)==16
             assert seen==['InitLoad','Login']+['']*16+['List']+['']*2
-        else:assert rows==[pack_row()] and seen==['InitLoad','Login','List']
+        else:assert rows==[{k:v for k,v in pack_row().items() if k!='PRODUCT_NM'}] and seen==['InitLoad','Login','List']
     finally:
         server.shutdown(); server.server_close(); thread.join(timeout=2)
 

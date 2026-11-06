@@ -190,7 +190,7 @@ def test_scheduler_and_common_controls_include_shipments(setup,monkeypatch):
     register(setup)
     monkeypatch.setattr(sync,'today',lambda:DAY)
     settings=setup.client.get('/api/admin/external-sync/settings').json()
-    assert settings['states'][-1]['kind']=='shipment'
+    assert any(s['kind']=='shipment' for s in settings['states'])
     result=setup.client.put('/api/admin/external-sync/settings',json={
         'enabled':True,'interval_minutes':240,'lookback_days':3,'targets':['shipment']})
     assert result.status_code==200,result.text
