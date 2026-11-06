@@ -28,6 +28,10 @@ def test_automatic_data_populates_original_cells_and_all_charts(quality):
     assert cells['1-1']['L24']['text'] == '900'
     assert cells['2-1']['L16']['text'] == '100'
     assert cells['2-1']['L21']['text'] == '200'
+    assert cells['2-1']['L26']['text'] == '1,200'
+    assert cells['2-1']['L27']['text'] == '24'
+    assert cells['2-1']['L31']['text'] == '300'
+    assert cells['2-1']['L32']['text'] == '6'
     assert cells['4-1']['L15']['text'] == '300'
     assert cells['4-1']['L21']['text'] == '400'
     assert cells['4-1']['L24']['text'] == '500'
@@ -55,6 +59,25 @@ def test_manual_unknowns_and_future_months_stay_blank(quality):
     assert result['cells']['요약']['F13']['text'] == ''
     assert result['cells']['2-1']['M16']['text'] == ''
     assert result['cells']['4-1']['M15']['text'] == ''
+
+
+def test_unclassified_assembly_is_visible_without_changing_process_totals(quality):
+    from models.production_sync import ExternalProductionRecord
+    from services import production_sync_service as sync
+    seed(quality)
+    with quality.sessions() as db:
+        now=sync.now()
+        db.add(ExternalProductionRecord(source_key='UNCLASSIFIED',lot_no='UNCLASSIFIED',job_no='UNCLASSIFIED',
+            part_no='UNKNOWN-C',process_name='조립',work_date='2026-10-05',job_qty='99',lot_qty='100',fault_qty='1',
+            raw_json='{"F10":"0","DEFECTS":[{"code":"F1","name":"찍힘","qty":1}]}',
+            content_hash='UNCLASSIFIED',first_seen_at=now,last_seen_at=now,changed_at=now))
+        db.commit()
+    result=quality.client.get(api.API+'/form?month=2026-10').json()
+    assert result['cells']['2-1']['L26']['text']=='1,300'
+    assert result['cells']['2-1']['L27']['text']=='25'
+    assert result['cells']['2-1']['L31']['text']=='300'
+    assert result['cells']['2-1']['L32']['text']=='6'
+    assert any('최종검사 품목군 미연결: UNKNOWN-C' in issue for issue in result['issues'])
 
 
 def test_form_and_excel_use_identical_values_and_zero_is_not_missing(quality):

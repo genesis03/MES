@@ -115,7 +115,8 @@ def test_template_format_drawings_charts_and_formulas_are_preserved(quality):
         for row in b:
             for c in row:assert a[c.coordinate].style_id==c.style_id,(a.title,c.coordinate)
     assert sheets['1-1']['L16'].value==100 and sheets['1-1']['L20'].value==500 and sheets['1-1']['L24'].value==900
-    assert sheets['2-1']['L26'].value==0 and sheets['2-1']['L27'].value==0
+    assert sheets['2-1']['L26'].value==1200 and sheets['2-1']['L27'].value==24
+    assert sheets['2-1']['L31'].value==300 and sheets['2-1']['L32'].value==6
     assert sheets['4-1']['L29'].value==24 and sheets['4-2']['K19'].value==24
     assert sheets['요약']['F11'].value==pytest.approx(24/1200)
     assert sheets['5']['M22'].value is None
@@ -207,6 +208,7 @@ def test_native_source_collects_native_receipts_and_assembly_without_external_co
     assert report['months'][9]['raw']['CAP']==123
     assert report['overview'][9]['process_qty']==23 and report['overview'][9]['process_bad']==1
     assert report['overview'][9]['final_qty']==55 and report['overview'][9]['final_bad']==2
+    assert report['months'][9]['assembly']=={'qty':55,'bad':2}
     with quality.sessions() as db:assert (db.query(PurchaseInboundMaster).count(),db.query(ProductionPerformance).count(),db.query(ExternalProductionRecord).count())==before
 
 

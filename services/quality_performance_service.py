@@ -86,6 +86,7 @@ def add_types(target,details,bad,allowed,issues,label):
 
 def new_month():
     return {'raw':{k:0. for k in ('COPPER','CAP','SEAL')},'process':{k:{'qty':0.,'bad':0.} for k in ('LATHE','TAP')},
+        'assembly':{'qty':0.,'bad':0.},
         'process_types':defaultdict(float),'final':{k:{'qty':0.,'bad':0.} for k in FINAL_GROUPS},
         'final_types':defaultdict(float),'subcontract':{k:{'qty':0.,'bad':0.} for k in ('메인텍','혜성금속')},
         'subcontract_types':defaultdict(float),'manual':blank_manual()}
@@ -157,6 +158,9 @@ def build_report(db,month,source='EXTERNAL'):
             m['process'][kind]['qty']+=row['qty'];m['process'][kind]['bad']+=row['bad']
             add_types(m['process_types'],row['details'],row['bad'],{'찍힘','긁힘','치수','칩','소재','오조립','조도'},issues,'공정')
         elif kind=='ASSEMBLY':
+            # Reference row in the process sheet must show actual assembly work,
+            # including work that still needs a final-inspection product group.
+            m['assembly']['qty']+=row['qty'];m['assembly']['bad']+=row['bad']
             group=final_group(row['item'],row['part'],connections)
             if not group:note('최종검사 품목군 미연결: '+row['part']);continue
             m['final'][group]['qty']+=row['qty'];m['final'][group]['bad']+=row['bad']

@@ -258,7 +258,12 @@ def build_excel(report,writing_date,author):
             put('1-1',f'{c}{qtyrow}',m['raw'][group] if active else None);put('1-1',f'{c}{badrow}',0 if active else None)
         for kind,qr,br in [('LATHE',16,17),('TAP',21,22)]:
             put('2-1',f'{c}{qr}',m['process'][kind]['qty'] if active else None);put('2-1',f'{c}{br}',m['process'][kind]['bad'] if active else None)
-        put('2-1',f'{c}26',0 if active else None);put('2-1',f'{c}27',0 if active else None)
+        put('2-1',f'{c}26',m['assembly']['qty'] if active else None)
+        put('2-1',f'{c}27',m['assembly']['bad'] if active else None)
+        # Assembly is visible for reference, but only lathe/tapping contribute
+        # to process totals. Assembly defects remain in final inspection.
+        formula('2-1',f'{c}31',f'{c}16+{c}21' if active else '""')
+        formula('2-1',f'{c}32',f'{c}17+{c}22' if active else '""')
         for i,name in enumerate(('찍힘','긁힘','치수','칩','소재','오조립','조도','기타'),20):put('2-2',f'{b}{i}',m['process_types'].get(name,0) if active else None)
         for name,qr,br in [('메인텍',15,16),('혜성금속',18,19)]:
             put('3-1',f'{d}{qr}',m['subcontract'][name]['qty'] if active else None);put('3-1',f'{d}{br}',m['subcontract'][name]['bad'] if active else None)
