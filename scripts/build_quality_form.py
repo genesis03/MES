@@ -80,15 +80,6 @@ for sheet in book:
                    'borderBottom':border(cell.border.bottom),'borderLeft':border(cell.border.left)}
             if value or cell.has_style:cells.append({'address':cell.coordinate,'text':str(value or ''),'style':style})
     charts=[]
-    for chart in sheet._charts:
-        anchor=chart.anchor
-        left,top=marker(anchor._from,x,y)
-        if hasattr(anchor,'to'):right,bottom=marker(anchor.to,x,y);width,height=right-left,bottom-top
-        else:width,height=anchor.ext.cx/9525,anchor.ext.cy/9525
-        title=''
-        if chart.title and chart.title.tx and chart.title.tx.rich:
-            title=''.join(run.t for p in chart.title.tx.rich.p for run in p.r)
-        charts.append({'left':left,'top':top,'width':width,'height':height,'title':title,'type':type(chart).__name__})
     drawings=[]
     with ZipFile(SOURCE) as z:
         # The original cover and contents headings are drawing text, not cell values.
@@ -103,8 +94,28 @@ for sheet in book:
                 path=target.lstrip('/') if target.startswith('/') else posixpath.normpath('xl/worksheets/'+target)
                 drawing=etree.fromstring(z.read(path))
                 ns={'x':'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing','a':'http://schemas.openxmlformats.org/drawingml/2006/main'}
+                draw_rels=posixpath.join(posixpath.dirname(path),'_rels',posixpath.basename(path)+'.rels')
+                if draw_rels in z.namelist():
+                    relationships=etree.fromstring(z.read(draw_rels))
+                    targets={e.get('Id'):e.get('Target') for e in relationships}
+                    def point(n):
+                        c=int(n.find('x:col',ns).text);r=int(n.find('x:row',ns).text)
+                        return x[min(c,len(x)-1)]+int(n.find('x:colOff',ns).text)/9525,y[min(r,len(y)-1)]+int(n.find('x:rowOff',ns).text)/9525
+                    chart_ns={'c':'http://schemas.openxmlformats.org/drawingml/2006/chart','r':'http://schemas.openxmlformats.org/officeDocument/2006/relationships','a':ns['a']}
+                    for anchor in drawing:
+                        references=anchor.xpath('.//c:chart/@r:id',namespaces=chart_ns)
+                        if not references:continue
+                        left,top=point(anchor.find('x:from',ns));right,bottom=point(anchor.find('x:to',ns))
+                        for rid in references:
+                            target=targets[rid]
+                            part=target.lstrip('/') if target.startswith('/') else posixpath.normpath(posixpath.dirname(path)+'/'+target)
+                            root=etree.fromstring(z.read(part))
+                            title=''.join(root.xpath('.//c:title//a:t/text()',namespaces=chart_ns))
+                            types=root.xpath('.//c:plotArea/*',namespaces=chart_ns)
+                            kind=next((etree.QName(n).localname for n in types if etree.QName(n).localname.endswith('Chart')),'barChart')
+                            charts.append({'left':left,'top':top,'width':right-left,'height':bottom-top,'title':title,'type':kind,'part':part})
                 for anchor in drawing:
-                    text=anchor.xpath('./x:sp/x:txBody//a:t/text()',namespaces=ns)
+                    text=anchor.xpath('.//x:sp/x:txBody//a:t/text()',namespaces=ns)
                     start=anchor.find('x:from',ns);end=anchor.find('x:to',ns)
                     if not text or start is None or end is None:continue
                     def point(n):
@@ -112,7 +123,7 @@ for sheet in book:
                         return x[min(c,len(x)-1)]+int(n.find('x:colOff',ns).text)/9525,y[min(r,len(y)-1)]+int(n.find('x:rowOff',ns).text)/9525
                     left,top=point(start);right,bottom=point(end)
                     text=[('____' if t=='2026' else '__' if t=='8' else t) for t in text]
-                    sizes=anchor.xpath('./x:sp/x:txBody//a:rPr/@sz',namespaces=ns)
+                    sizes=anchor.xpath('.//x:sp/x:txBody//a:rPr/@sz',namespaces=ns)
                     drawings.append({'text':''.join(text),'left':left,'top':top,'width':right-left,'height':bottom-top,'fontSize':int(sizes[0])/100*4/3 if sizes else 32})
     sheets.append({'name':sheet.title,'width':x[-1],'height':y[-1],'cells':cells,'charts':charts,'drawings':drawings})
 (ROOT/'static/quality_performance_form.json').write_text(json.dumps({'sheets':sheets},ensure_ascii=False,separators=(',',':')),encoding='utf-8')

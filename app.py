@@ -272,8 +272,6 @@ app.include_router(subcontract_inbound_edit.router)
 app.include_router(quality_reports.router)
 app.include_router(production_pipeline.router)
 app.include_router(quality_pages.router)
-from routers import quality_performance
-app.include_router(quality_performance.router)
 app.include_router(quality.router)
 app.include_router(quality_standard.router)
 app.include_router(quality_production_defects.router)

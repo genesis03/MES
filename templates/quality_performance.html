@@ -1,13 +1,21 @@
 {% extends 'base.html' %}
 {% block title %}품질실적{% endblock %}
 {% block extra_head %}
-<link rel="stylesheet" href="/static/quality_performance_form.css?v=20261106-1">
+<link rel="stylesheet" href="/static/quality_performance_form.css?v=20261106-2">
 {% endblock %}
 {% block content %}
 <h1>품질실적</h1>
-<div class="quality-form-toolbar"><span>원본 양식 검토</span><span>데이터 미연결 · 실적과 계산 결과는 빈칸입니다.</span><button id="qualityFormFit" type="button">화면에 맞춤</button><button id="qualityFormActual" type="button">원본 크기</button></div>
+<div class="quality-form-toolbar">
+    <label>보고 대상 월 <input id="qualityFormMonth" type="month" value="{{report_month|default('')}}" max="{{report_month|default('')}}" required></label>
+    <label>자료 구분 <select id="qualityFormSource"><option value="EXTERNAL">외부 연동</option><option value="MES">MES 입력</option></select></label>
+    <button id="qualityFormLoad" type="button">실적 불러오기</button>
+    <button id="qualityFormExcel" type="button" disabled>엑셀 다운로드</button>
+    <button id="qualityFormFit" type="button">화면에 맞춤</button><button id="qualityFormActual" type="button">원본 크기</button>
+</div>
+<p class="quality-form-note">입고·공정·외주·조립 실적을 집계합니다. 미입력 납품수량·고객불량·매출·클레임은 빈칸입니다.</p>
 <nav id="qualityFormTabs" aria-label="원본 엑셀 시트"></nav>
 <p id="qualityFormStatus" role="status">원본 양식을 불러오는 중입니다.</p>
 <div id="qualityFormViewport"><div id="qualityFormSizer"><section id="qualityFormSheet" aria-label="보고서 양식"></section></div></div>
-<script src="/static/quality_performance_form.js?v=20261106-1" defer></script>
+<details id="qualityFormIssues" hidden><summary>집계 확인사항</summary><p id="qualityFormReference"></p><ul></ul></details>
+<script src="/static/quality_performance_form.js?v=20261106-2" defer></script>
 {% endblock %}

@@ -84,3 +84,8 @@ def planned_inspection_page(request: Request, current_user=Depends(get_current_u
         context={"request": request, "user": current_user,
                  "page": PLANNED_INSPECTION_PAGES[request.url.path]},
     )
+
+
+# Keep the report screen and its APIs together under the existing quality router.
+from routers.quality_performance import router as quality_performance_router
+router.include_router(quality_performance_router)

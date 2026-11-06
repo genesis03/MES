@@ -1,0 +1,106 @@
+"""The original form, its charts and Excel download share the same report data."""
+from datetime import date
+from types import SimpleNamespace
+from io import BytesIO
+import json
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from openpyxl import load_workbook
+import pytest
+
+from test_production_sync import setup
+from test_quality_performance import quality, seed
+from core.security import get_current_user
+from routers import quality_performance as api
+from services.quality_performance_service import blank_manual
+from services.quality_performance_form import format_cell, form_definition
+
+
+def test_automatic_data_populates_original_cells_and_all_charts(quality):
+    seed(quality)
+    response = quality.client.get(api.API + '/form?month=2026-10')
+    assert response.status_code == 200, response.text
+    result = response.json()
+    cells = result['cells']
+    assert cells['1-1']['L16']['text'] == '100'
+    assert cells['1-1']['L20']['text'] == '500'
+    assert cells['1-1']['L24']['text'] == '900'
+    assert cells['2-1']['L16']['text'] == '100'
+    assert cells['2-1']['L21']['text'] == '200'
+    assert cells['4-1']['L15']['text'] == '300'
+    assert cells['4-1']['L21']['text'] == '400'
+    assert cells['4-1']['L24']['text'] == '500'
+    assert cells['요약']['F9']['text'] == '2.00%'
+    assert cells['요약']['F11']['text'] == '2.00%'
+    assert cells['3-1']['M18']['text'] == '1,000'
+    assert cells['3-1']['M19']['text'] == '5'
+    assert len(result['charts']) == 28
+    for name in ('chart1.xml','chart2.xml'):
+        for series in result['charts']['xl/charts/'+name]['series']:
+            assert len(series['categories']) == len(series['values'])
+            assert all(series['categories'])
+    assert len(next(s for s in form_definition()['sheets'] if s['name']=='요약')['charts']) == 2
+    assert result['drawings']['표지'][0] == '2026년 10월 품질 실적 보고'
+
+
+def test_manual_unknowns_and_future_months_stay_blank(quality):
+    seed(quality)
+    result = quality.client.get(api.API + '/form?month=2026-10').json()
+    assert result['cells']['5']['M19']['text'] == ''
+    assert result['cells']['5']['M20']['text'] == ''
+    assert result['cells']['6']['L15']['text'] == ''
+    assert result['cells']['6']['L16']['text'] == ''
+    assert result['cells']['요약']['F12']['text'] == ''
+    assert result['cells']['요약']['F13']['text'] == ''
+    assert result['cells']['2-1']['M16']['text'] == ''
+    assert result['cells']['4-1']['M15']['text'] == ''
+
+
+def test_form_and_excel_use_identical_values_and_zero_is_not_missing(quality):
+    seed(quality)
+    manual = blank_manual()
+    manual.update(delivery_qty=10000, customer_bad=0, customer_cases=0, revenue=1000000)
+    for amounts in manual['claims'].values():
+        amounts.update(occurred=0, agreed=0, deducted=0)
+    assert quality.client.put(api.API,json={'month':'2026-10','version':0,'manual':manual}).status_code==200
+    result = quality.client.get(api.API + '/form?month=2026-10').json()
+    assert result['cells']['5']['M20']['text'] == '0'
+    assert result['cells']['6']['L15']['text'] == '1,000'
+    assert result['cells']['요약']['F12']['text'] == '0PPM'
+    excel = quality.client.get(api.API + '/excel?month=2026-10')
+    book = load_workbook(BytesIO(excel.content),data_only=True,read_only=True)
+    for sheet,address in [('요약','F9'),('요약','F11'),('1-1','L20'),('6','L15'),('5','M20')]:
+        cell=book[sheet][address]
+        assert result['cells'][sheet][address]['text']==format_cell(cell.value,cell.number_format)
+    book.close()
+
+
+def test_chart_literals_are_bound_to_report_cells(quality):
+    seed(quality)
+    result=quality.client.get(api.API+'/form?month=2026-10').json()
+    goal=[s for s in result['charts']['xl/charts/chart11.xml']['series'] if '목표' in s['name']]
+    assert len(goal)==1
+    assert goal[0]['values']==[.003]*12
+    for name in ('chart7.xml','chart8.xml'):
+        assert result['charts']['xl/charts/'+name]['series'][0]['categories']==['찍힘','긁힘','치수','파손,휨','변색,외관','기타']
+
+
+def test_existing_quality_router_owns_form_api_and_enforces_access(quality):
+    from routers import quality_pages
+    app=FastAPI();app.include_router(quality_pages.router)
+    app.dependency_overrides.update(quality.app.dependency_overrides)
+    client=TestClient(app)
+    page=client.get('/quality/performance')
+    assert page.status_code==200
+    assert 'id="qualityFormMonth"' in page.text
+    assert client.get(api.API+'/form?month=2026-10').status_code==200
+    assert client.get(api.API+'/form?month=2026-11').status_code==422
+    assert client.get(api.API+'/form?month=2026-10&source=INVALID').status_code==422
+    app.dependency_overrides[get_current_user]=lambda:SimpleNamespace(username='reader',role='USER',permissions='{}')
+    assert client.get(api.API+'/form?month=2026-10').status_code==403
+
+
+@pytest.mark.parametrize(('value','fmt','expected'),[(.003,'0.00%','0.30%'),(63579984,'#,##0,','63,580'),(0,'0.00%','0.00%'),(None,'#,##0',''),(1234,'#,##0','1,234'),(1.2,'0.00%','120.00%')])
+def test_original_number_formats(value,fmt,expected):
+    assert format_cell(value,fmt)==expected

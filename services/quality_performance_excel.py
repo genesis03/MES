@@ -182,6 +182,35 @@ class Workbook:
         for name in self.zip.namelist():
             if not (name.startswith('xl/charts/chart') and name.endswith('.xml')):continue
             root=ET.fromstring(self.zip.read(name));edited=False
+            # The summary's original literal category caches were swapped/stale:
+            # the percent chart has four metrics, the PPM chart only customers.
+            summary_categories={
+                'xl/charts/chart1.xml':"'요약'!$B$8:$B$11",
+                'xl/charts/chart2.xml':"'요약'!$B$12",
+            }
+            if name in summary_categories:
+                for category in root.xpath('.//c:ser/c:cat',namespaces=NS):
+                    for child in list(category):category.remove(child)
+                    ET.SubElement(ET.SubElement(category,f'{{{C}}}strRef'),f'{{{C}}}f').text=summary_categories[name]
+                    edited=True
+            # These original charts used fixed literal values, so their series did
+            # not follow worksheet updates. Bind them to the same report cells.
+            literal_sources={
+                'xl/charts/chart7.xml':("'1-2'!$N$20:$N$25", "'1-2'!$A$20:$A$25"),
+                'xl/charts/chart8.xml':("'1-2'!$R$20:$R$25", "'1-2'!$A$20:$A$25"),
+                'xl/charts/chart11.xml':("'2-1'!$C$30:$N$30", None),
+            }
+            if name in literal_sources:
+                values,categories=literal_sources[name]
+                for series in root.xpath('.//c:ser[c:val/c:numLit]',namespaces=NS):
+                    value=series.find('c:val',NS)
+                    for child in list(value):value.remove(child)
+                    ET.SubElement(ET.SubElement(value,f'{{{C}}}numRef'),f'{{{C}}}f').text=values
+                    if categories:
+                        category=series.find('c:cat',NS)
+                        for child in list(category):category.remove(child)
+                        ET.SubElement(ET.SubElement(category,f'{{{C}}}strRef'),f'{{{C}}}f').text=categories
+                    edited=True
             for ref in root.xpath('.//c:numRef|.//c:strRef',namespaces=NS):
                 text=ref.findtext('c:f',namespaces=NS)
                 if not text:continue

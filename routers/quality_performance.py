@@ -15,6 +15,7 @@ from core.security import get_current_user,check_admin_permission,parse_user_per
 from models.quality_performance import QualityPerformanceMonth,QualityPerformanceAudit
 from services.quality_performance_service import build_report,blank_manual,GOALS,CLAIM_GROUPS
 from services.quality_performance_excel import build_excel
+from services.quality_performance_form import build_form
 from services.production_sync_service import today
 
 router=APIRouter(tags=['Quality Performance'])
@@ -76,12 +77,20 @@ def page(request:Request,user=Depends(get_current_user)):
     access(user)
     try:access(user,True);write=True
     except HTTPException:write=False
-    return templates.TemplateResponse(request=request,name='quality_performance.html',context={'request':request,'user':user,'can_write':write})
+    month=(today().replace(day=1)-timedelta(days=1)).strftime('%Y-%m')
+    return templates.TemplateResponse(request=request,name='quality_performance.html',context={'request':request,'user':user,'can_write':write,'report_month':month})
 
 
 @router.get(API)
 def report(month:str,source:Literal['EXTERNAL','MES']='EXTERNAL',db:Session=Depends(get_db),user=Depends(get_current_user)):
     access(user);return build_report(db,month_value(month),source)
+
+
+@router.get(API+'/form')
+def form(month:str,source:Literal['EXTERNAL','MES']='EXTERNAL',db:Session=Depends(get_db),user=Depends(get_current_user)):
+    access(user)
+    data=build_report(db,month_value(month),source)
+    return build_form(data,today(),data['manual']['author'] or user.username)
 
 
 @router.put(API)
