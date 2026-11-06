@@ -396,3 +396,20 @@ def subcontract_inbound_page(request: Request, current_user=Depends(get_current_
             "route_path": "/subcontract/inbound",
         },
     )
+
+
+@router.get('/api/purchase/inquiry/external-inbounds')
+def purchase_external_inbound_inquiry_api(
+    start_date: Optional[str] = Query(None, max_length=10),
+    end_date: Optional[str] = Query(None, max_length=10),
+    inbound_no: Optional[str] = Query(None, max_length=30),
+    po_no: Optional[str] = Query(None, max_length=30),
+    partner_name: Optional[str] = Query(None, max_length=100),
+    part_no: Optional[str] = Query(None, max_length=50),
+    lot: Optional[str] = Query(None, max_length=100),
+    status: Optional[str] = Query(None, max_length=20),
+    offset: int = Query(0, ge=0), limit: int = Query(500, ge=1, le=2000),
+    db: Session = Depends(get_db), current_user=Depends(get_current_user),
+):
+    from services.inbound_inquiry import external_inbound_inquiry
+    return external_inbound_inquiry(db,start_date,end_date,inbound_no,po_no,partner_name,part_no,lot,status,offset,limit)
