@@ -39,7 +39,7 @@ def test_automatic_data_populates_original_cells_and_all_charts(quality):
     assert cells['요약']['F11']['text'] == '2.00%'
     assert cells['3-1']['M18']['text'] == '1,000'
     assert cells['3-1']['M19']['text'] == '5'
-    assert len(result['charts']) == 28
+    assert len(result['charts']) == 27
     for name in ('chart1.xml','chart2.xml'):
         for series in result['charts']['xl/charts/'+name]['series']:
             assert len(series['categories']) == len(series['values'])
@@ -53,8 +53,7 @@ def test_manual_unknowns_and_future_months_stay_blank(quality):
     result = quality.client.get(api.API + '/form?month=2026-10').json()
     assert result['cells']['5']['M19']['text'] == ''
     assert result['cells']['5']['M20']['text'] == ''
-    assert result['cells']['6']['L15']['text'] == ''
-    assert result['cells']['6']['L16']['text'] == ''
+    assert '6' not in result['cells']
     assert result['cells']['요약']['F12']['text'] == ''
     assert result['cells']['요약']['F13']['text'] == ''
     assert result['cells']['2-1']['M16']['text'] == ''
@@ -89,11 +88,11 @@ def test_form_and_excel_use_identical_values_and_zero_is_not_missing(quality):
     assert quality.client.put(api.API,json={'month':'2026-10','version':0,'manual':manual}).status_code==200
     result = quality.client.get(api.API + '/form?month=2026-10').json()
     assert result['cells']['5']['M20']['text'] == '0'
-    assert result['cells']['6']['L15']['text'] == '1,000'
+    assert '6' not in result['cells']
     assert result['cells']['요약']['F12']['text'] == '0PPM'
     excel = quality.client.get(api.API + '/excel?month=2026-10')
     book = load_workbook(BytesIO(excel.content),data_only=True,read_only=True)
-    for sheet,address in [('요약','F9'),('요약','F11'),('1-1','L20'),('6','L15'),('5','M20')]:
+    for sheet,address in [('요약','F9'),('요약','F11'),('1-1','L20'),('요약','F13'),('5','M20')]:
         cell=book[sheet][address]
         assert result['cells'][sheet][address]['text']==format_cell(cell.value,cell.number_format)
     book.close()
@@ -146,6 +145,7 @@ def test_real_app_registers_september_screen_form_and_download(tmp_path):
 from core import security
 security.DEV_BYPASS_AUTH=True
 import app
+app.verify_quality_report_registration()
 from fastapi.testclient import TestClient
 client=TestClient(app.app)
 screen=client.get('/quality/performance')
@@ -155,8 +155,8 @@ assert 'quality_performance_form.js' in screen.text
 response=client.get('/api/quality/performance/form?month=2026-09&source=EXTERNAL')
 assert response.status_code==200,response.text
 assert response.json()['month']=='2026-09'
-assert len(response.json()['cells'])==17
-assert len(response.json()['charts'])==28
+assert len(response.json()['cells'])==16
+assert len(response.json()['charts'])==27
 download=client.get('/api/quality/performance/excel?month=2026-09&source=EXTERNAL')
 assert download.status_code==200,download.text[:200]
 assert download.content.startswith(b'PK')

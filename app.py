@@ -1,8 +1,11 @@
 from urllib.parse import urlparse
+import logging
+import os
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.routing import NoMatchFound
 
 from core.config import BASE_DIR
 from core.database import SessionLocal, engine
@@ -57,6 +60,19 @@ app = FastAPI(title="출하 바코드 관리 시스템")
 # 품질실적의 화면·조회·저장·출력을 앱에 직접 등록합니다.
 # 안내 화면용 quality_pages의 내부 라우터 등록에 의존하지 않습니다.
 app.include_router(quality_performance.router)
+
+
+@app.on_event("startup")
+def verify_quality_report_registration():
+    route='/api/quality/performance/form'
+    try:
+        registered=str(app.url_path_for('quality_performance_form'))
+    except NoMatchFound as exc:
+        raise RuntimeError('품질실적 조회 API 등록 실패: '+route) from exc
+    if registered!=route:
+        raise RuntimeError('품질실적 조회 API 등록 실패: '+route)
+    logging.getLogger('uvicorn.error').info(
+        'MES runtime: PID=%s APP=%s quality API=%s',os.getpid(),os.path.abspath(__file__),route)
 
 
 @app.on_event("startup")

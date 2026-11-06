@@ -340,4 +340,6 @@ def build_excel(report,writing_date,author):
         for coord,cell in list(cells.items()):
             f=cell.find('s:f',NS)
             if f is not None and '/' in (f.text or '') and 'IFERROR(' not in f.text and 'IF(' not in f.text:formula(name,coord,f'IFERROR({f.text},"")')
-    return book.finish()
+    from services.quality_workbook_sheets import remove_sheet
+    put('목차','F29',None)
+    return remove_sheet(book.finish(),'6')

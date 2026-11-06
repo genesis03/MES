@@ -9,6 +9,14 @@ echo  (외부 PC 접속 허용: 0.0.0.0:8000)
 echo ===================================================
 echo.
 
+:: 이미 떠 있는 서버와 충돌한 상태를 새 서버 실행 성공으로 오인하지 않도록 중단합니다.
+powershell.exe -NoProfile -Command "$mesPortPids = @(Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique); if ($mesPortPids.Count -gt 0) { Write-Host ('[ERROR] Port 8000 is already in use. PID: ' + ($mesPortPids -join ', ')); exit 1 }; exit 0"
+if errorlevel 1 (
+    echo [오류] 8000번 포트를 사용하는 기존 서버를 종료한 뒤 다시 실행해 주세요.
+    pause
+    exit /b 1
+)
+
 :: 이 배치 파일이 있는 프로젝트에서 실행합니다.
 cd /d "%~dp0"
 if errorlevel 1 exit /b 1
@@ -35,7 +43,9 @@ echo ---------------------------------------------------
 echo.
 
 :: Uvicorn 웹 서버 가동 (외부 접속 허용 0.0.0.0)
-"%MES_SERVER_PYTHON%" -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+:: 공유 폴더에서도 Python 변경을 감지하도록 파일 변경을 폴링합니다.
+set "WATCHFILES_FORCE_POLLING=true"
+"%MES_SERVER_PYTHON%" -m uvicorn app:app --app-dir "%CD%" --host 0.0.0.0 --port 8000 --reload --reload-dir "%CD%"
 
 if %errorlevel% neq 0 (
     echo.

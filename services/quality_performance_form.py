@@ -117,7 +117,7 @@ def build_form(report, writing_date, author):
     sheets = load_workbook(BytesIO(workbook), data_only=True, read_only=True)
     definitions = form_definition()['sheets']
     result = {'month':report['month'],'source':report['source'],'cells':{},'charts':{},'drawings':{},
-              'issues':report['issues'], 'manual_pending':['납품수량','고객불량','매출액','클레임'],
+              'issues':report['issues'], 'manual_pending':['납품수량','고객불량'],
               'reference_note':'2024·2025년 비교 실적은 제공된 원본 엑셀의 참고값입니다.' if report['month'].startswith('2026-') else ''}
     try:
         for definition in definitions:

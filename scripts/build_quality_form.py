@@ -40,6 +40,7 @@ def marker(m,x,y):return (x[min(m.col,len(x)-1)]+m.colOff/9525,y[min(m.row,len(y
 
 sheets=[]
 for sheet in book:
+    if sheet.title=='6':continue
     area=list(sheet.print_area.ranges)[0] if hasattr(sheet.print_area,'ranges') else str(sheet.print_area).split('!')[-1].replace("'",'')
     c1,r1,c2,r2=range_boundaries(str(area))
     x=[0];y=[0]
@@ -68,7 +69,7 @@ for sheet in book:
             if sheet.title=='5' and cell.coordinate in ('A26','J26'):value=''
             if sheet.title=='표지' and cell.coordinate=='AT28':value='작성일자 :'
             if sheet.title=='표지' and cell.coordinate=='AT30':value='작 성 자 :'
-            if sheet.title=='6' and cell.coordinate=='N1':value=''
+            if sheet.title=='목차' and cell.coordinate=='F29':value=''
             font=cell.font;align=cell.alignment
             style={'left':x[col-1],'top':y[row-1],'width':x[endcol]-x[col-1],'height':y[endrow]-y[row-1],
                    'fontFamily':font.name or '맑은 고딕','fontSize':(font.sz or 11)*4/3,'fontWeight':'700' if font.b else '400',

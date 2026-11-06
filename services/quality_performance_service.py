@@ -190,7 +190,6 @@ def build_report(db,month,source='EXTERNAL'):
         months[int(saved.month[5:7])-1]['manual']=blank_manual()|json.loads(saved.data_json)
     for index,m in enumerate(months[:selected],1):
         if m['manual']['delivery_qty'] is None or m['manual']['customer_bad'] is None or m['manual']['customer_cases'] is None:note(f'{index}월 고객불량 수기 자료 미입력')
-        if m['manual']['revenue'] is None or any(v is None for g in m['manual']['claims'].values() for v in g.values()):note(f'{index}월 시트6 수기 자료 미입력')
     issues.add('원자재 불량수량은 사용자 지정에 따라 0으로 집계합니다.')
     issues.add('생산수량은 양품·불량·셋업 합계이며, 조립실적은 공정불량에서 제외하고 최종검사에만 반영합니다.')
     for vendor in vendors:

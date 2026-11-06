@@ -95,8 +95,12 @@ def test_template_format_drawings_charts_and_formulas_are_preserved(quality):
     response=quality.client.get(api.API+'/excel?month=2026-10')
     assert response.status_code==200,response.text
     original=zipfile.ZipFile(TEMPLATE);out=zipfile.ZipFile(BytesIO(response.content))
-    assert set(original.namelist())==set(out.namelist())
+    removed={'xl/charts/chart28.xml','xl/drawings/_rels/drawing17.xml.rels','xl/drawings/drawing17.xml',
+             'xl/printerSettings/printerSettings17.bin','xl/worksheets/_rels/sheet17.xml.rels','xl/worksheets/sheet17.xml'}
+    assert set(original.namelist())-set(out.namelist())==removed
+    assert not set(out.namelist())-set(original.namelist())
     for path in original.namelist():
+        if path in removed or path=='xl/_rels/workbook.xml.rels':continue
         if path=='xl/drawings/drawing1.xml':
             a=ET.fromstring(original.read(path));b=ET.fromstring(out.read(path));ns={'a':'http://schemas.openxmlformats.org/drawingml/2006/main'}
             assert b.xpath('.//a:t/text()',namespaces=ns)==['2026','년 ','10','월 품질',' ','실적 보고']
@@ -108,8 +112,8 @@ def test_template_format_drawings_charts_and_formulas_are_preserved(quality):
             assert original.read(path)==out.read(path),path
     sheets=load_workbook(BytesIO(response.content),data_only=True)
     reference=load_workbook(TEMPLATE,data_only=True)
-    assert sheets.sheetnames==reference.sheetnames and len(sheets.sheetnames)==17
-    for a,b in zip(sheets,reference):
+    assert sheets.sheetnames==[name for name in reference.sheetnames if name!='6'] and len(sheets.sheetnames)==16
+    for a,b in zip(sheets,[s for s in reference if s.title!='6']):
         assert set(str(r) for r in a.merged_cells.ranges)==set(str(r) for r in b.merged_cells.ranges)
         assert a.print_area==b.print_area and a.page_setup==b.page_setup
         for row in b:
@@ -121,12 +125,14 @@ def test_template_format_drawings_charts_and_formulas_are_preserved(quality):
     assert sheets['요약']['F11'].value==pytest.approx(24/1200)
     assert sheets['5']['M22'].value is None
     formulas=load_workbook(BytesIO(response.content),data_only=False)
-    assert "'6'!L32" in formulas['요약']['F13'].value
+    assert formulas['요약']['F13'].value is None
+    assert '6' not in formulas.sheetnames
+    assert not any(c.data_type=='f' and "'6'!" in c.value for sheet in formulas for row in sheet for c in row)
     assert '22' in formulas['5']['P10'].value
     assert formulas['3-2']['R23'].value=='=K23'
     assert not any(c.data_type=='e' for s in sheets for row in s for c in row)
     chartpaths=[p for p in out.namelist() if p.startswith('xl/charts/chart') and p.endswith('.xml')]
-    assert len(chartpaths)==28
+    assert len(chartpaths)==27
 
 
 @pytest.mark.parametrize('month',['bad','2026-13','2026-11','2027-01'])
@@ -159,8 +165,8 @@ def test_manual_month_isolation_and_excel_cached_ppm_claim_rate(quality):
     w=load_workbook(BytesIO(response.content),data_only=True)
     assert w['5']['M22'].value==2000 and w['5']['P10'].value==2000
     assert w['요약']['F12'].value==2000
-    assert w['6']['L32'].value==.01 and w['요약']['F13'].value==.01
-    assert w['6']['O15'].value is None  # Jan-Aug missing, never partial revenue as full-year result.
+    assert '6' not in w.sheetnames and w['요약']['F13'].value==.01
+    assert w['요약']['G13'].value is None  # Jan-Aug missing, never partial annual result.
     assert w['5']['P19'].value is None
     z=zipfile.ZipFile(BytesIO(response.content));root=ET.fromstring(z.read('xl/worksheets/sheet1.xml'))
     author=root.find('.//s:c[@r="AT30"]',NS)
@@ -229,9 +235,31 @@ def test_downloaded_excel_manual_cells_keep_live_annual_formulas(quality):
     assert response.status_code==200,response.text
     book=Workbook(BytesIO(response.content))
     for coord,value in [('D19',1000),('D20',1),('D21',1)]:book.put('5',coord,value)
-    book.put('6','C15',100000)
-    for row in (16,17,18,20,21,22,24,25,26):book.put('6',f'C{row}',1000 if row==16 else 0)
     result=load_workbook(book.finish(),data_only=True)
     assert result['5']['P19'].value==1000 and result['5']['P22'].value==1000
-    assert result['6']['O15'].value==100000 and result['6']['O29'].value==1000 and result['6']['O32'].value==.01
-    assert result['6']['C15'].number_format=='#,##0,'
+    assert '6' not in result.sheetnames
+    assert '품질 클레임 비용' not in [str(c.value) for row in result['목차'] for c in row]
+
+
+def test_removed_sheet_has_no_dangling_package_or_calculation_references(quality):
+    import posixpath
+    response=quality.client.get(api.API+'/excel?month=2026-10')
+    package=zipfile.ZipFile(BytesIO(response.content))
+    names=set(package.namelist())
+    for path in names:
+        if not path.endswith('.rels'):continue
+        owner='' if path=='_rels/.rels' else '/'.join(path.rsplit('/_rels/',1))[:-5]
+        for relation in ET.fromstring(package.read(path)):
+            if relation.get('TargetMode')=='External':continue
+            target=relation.get('Target')
+            resolved=target.lstrip('/') if target.startswith('/') else posixpath.normpath(posixpath.join(posixpath.dirname(owner),target))
+            assert resolved in names,(path,resolved)
+    book=ET.fromstring(package.read('xl/workbook.xml'))
+    rels={r.get('Id'):r.get('Target') for r in ET.fromstring(package.read('xl/_rels/workbook.xml.rels'))}
+    sheet_parts={s.get('sheetId'):'xl/'+rels[s.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')] for s in book.find('s:sheets',NS)}
+    formula_cells={sid:{c.get('r') for c in ET.fromstring(package.read(part)).xpath('.//s:c[s:f]',namespaces=NS)} for sid,part in sheet_parts.items()}
+    for entry in ET.fromstring(package.read('xl/calcChain.xml')):
+        assert entry.get('r') in formula_cells[entry.get('i')]
+    properties=ET.fromstring(package.read('docProps/app.xml'))
+    ns={'ep':'http://schemas.openxmlformats.org/officeDocument/2006/extended-properties','vt':'http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes'}
+    assert properties.xpath('ep:HeadingPairs/vt:vector/vt:variant/vt:i4/text()',namespaces=ns)==['16','16']
