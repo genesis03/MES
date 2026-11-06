@@ -1,3 +1,9 @@
+{# 이전 품질실적 안내 라우터가 이 템플릿을 호출해도 실제 화면을 표시합니다. #}
+{% if request.url.path.rstrip('/') == '/quality/performance' %}
+    {% with can_write=can_write|default(false) %}
+        {% include "quality_performance.html" %}
+    {% endwith %}
+{% else %}
 {% extends "base.html" %}
 {% block title %}{{ page.title }}{% endblock %}
 {% block extra_head %}
@@ -26,3 +32,4 @@
     <p class="document-planned-note">현재는 메뉴와 안내 화면만 제공하며 작성·등록·저장 기능은 아직 연결되지 않았습니다. 기존 문서와 검사 데이터는 변경하지 않습니다.</p>
 </section>
 {% endblock %}
+{% endif %}
