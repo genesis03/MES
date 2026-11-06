@@ -54,11 +54,6 @@ def subcontract_defect_status_page(request: Request, current_user=Depends(get_cu
 
 # 아직 구현되지 않은 검사 화면의 안내입니다. 출하 성적서는 quality_reports에서 처리합니다.
 PLANNED_INSPECTION_PAGES = {
-    "/quality/performance": {
-        "title": "품질실적", "section": "품질관리",
-        "description": "월별 품질실적 보고서 작성 화면을 준비 중입니다.",
-        "detail": "원본 보고서 양식에 입고·공정·외주·조립 실적을 연결하고, 고객불량과 매출·클레임은 수기로 작성합니다.",
-    },
     "/quality/patrol-inspections": {
         "title": "공정순회 검사",
         "section": "품질관리 · 검사 및 성적서",
@@ -74,7 +69,6 @@ PLANNED_INSPECTION_PAGES = {
 }
 
 
-@router.get("/quality/performance", response_class=HTMLResponse)
 @router.get("/quality/patrol-inspections", response_class=HTMLResponse)
 @router.get("/quality/inbound-reports", response_class=HTMLResponse)
 def planned_inspection_page(request: Request, current_user=Depends(get_current_user)):

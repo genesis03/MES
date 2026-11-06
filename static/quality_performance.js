@@ -1,0 +1,24 @@
+(()=>{
+ const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),fmt=v=>v==null?'—':Number(v).toLocaleString('ko-KR',{maximumFractionDigits:6}),percent=v=>v==null?'—':fmt(v*100)+'%';
+ const base='/api/quality/performance',write=window.qualityPerformanceCanWrite;let data=null,dirty=false,busy=false,request=0;
+ const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-1);const month=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;$('qpfMonth').value=month;$('qpfMonth').max=month;
+ async function api(path,options={}){const response=await fetch(base+path,{...options,headers:{'Content-Type':'application/json','X-MES-Menu-Path':'/quality/performance'}});return MesResponse.read(response);}
+ const query=()=>new URLSearchParams({month:$('qpfMonth').value,source:$('qpfSource').value});
+ function changed(){dirty=true;$('qpfMessage').textContent='수기 입력 수정 중 · 저장 전';}
+ function leave(){return !dirty||confirm('저장하지 않은 수기 입력을 버리고 다시 불러올까요?');}
+ async function load(){if(!leave()){if(data){$('qpfMonth').value=data.month;$('qpfSource').value=data.source;}return;}const current=++request;$('qpfMessage').textContent='실적 집계 중';$('qpfExcel').disabled=true;
+ try{const result=await api('?'+query());if(current!==request)return;data=result;dirty=false;
+ $('qpfRows').innerHTML=data.overview.map(r=>'<tr>'+[r.month,fmt(r.raw_qty.COPPER),fmt(r.raw_qty.CAP),fmt(r.raw_qty.SEAL),fmt(r.process_qty),fmt(r.process_bad),percent(r.process_rate),fmt(r.subcontract_qty),fmt(r.subcontract_bad),percent(r.subcontract_rate),fmt(r.final_qty),fmt(r.final_bad),percent(r.final_rate),fmt(r.customer_ppm),percent(r.claim_rate)].map(v=>`<td>${esc(v)}</td>`).join('')+'</tr>').join('');
+ document.querySelectorAll('[data-manual]').forEach(el=>el.value=data.manual[el.dataset.manual]??'');$('qpfAuthor').value=data.manual.author||'';
+ document.querySelectorAll('[data-claim]').forEach(el=>el.value=data.manual.claims[el.dataset.claim][el.dataset.field]??'');document.querySelectorAll('[data-note]').forEach(el=>el.value=data.manual.notes[el.dataset.note][el.dataset.field]??'');
+ $('qpfIssues').innerHTML=data.issues.map(v=>`<li>${esc(v)}</li>`).join('');$('qpfHistory').replaceChildren();$('qpfMessage').textContent=`${data.month} 실적을 불러왔습니다.`;$('qpfExcel').disabled=false;
+ }catch(e){$('qpfMessage').textContent=e.message;}}
+ $('qpfLoad').onclick=()=>{if(!busy)load();};
+ if(write)$('qpfManualForm').addEventListener('input',changed);
+ $('qpfManualForm').onsubmit=async event=>{event.preventDefault();if(!write||!data||busy)return;if(data.month!==$('qpfMonth').value){$('qpfMessage').textContent='변경한 보고 월의 실적을 먼저 불러오세요.';return;}
+ const manual={claims:{},notes:{},author:$('qpfAuthor').value};document.querySelectorAll('[data-manual]').forEach(el=>manual[el.dataset.manual]=el.value===''?null:Number(el.value));document.querySelectorAll('[data-claim]').forEach(el=>{manual.claims[el.dataset.claim]??={};manual.claims[el.dataset.claim][el.dataset.field]=el.value===''?null:Number(el.value);});document.querySelectorAll('[data-note]').forEach(el=>{manual.notes[el.dataset.note]??={};manual.notes[el.dataset.note][el.dataset.field]=el.value;});busy=true;$('qpfSave').disabled=true;
+ try{await api('',{method:'PUT',body:JSON.stringify({month:data.month,version:data.version,manual})});dirty=false;await load();$('qpfMessage').textContent='수기 실적을 저장했습니다.';}catch(e){$('qpfMessage').textContent=e.message+' 입력 내용은 유지됩니다.';}finally{busy=false;$('qpfSave').disabled=false;}};
+ $('qpfExcel').onclick=()=>{if(!data)return;if(dirty){$('qpfMessage').textContent='수기 입력을 먼저 저장하세요.';return;}if(data.month!==$('qpfMonth').value||data.source!==$('qpfSource').value){$('qpfMessage').textContent='변경한 조건의 실적을 먼저 불러오세요.';return;}location.href=base+'/excel?'+query();};
+ $('qpfHistoryButton').onclick=async()=>{if(!data)return;try{const rows=await api('/history?month='+encodeURIComponent(data.month));const labels={delivery_qty:'납품수량',customer_bad:'고객 불량수량',customer_cases:'고객 불량발생',revenue:'매출액',author:'작성자'};$('qpfHistory').innerHTML='<h3>수기 수정 이력</h3>'+rows.map(r=>`<details><summary>${esc(r.at)} · ${esc(r.actor)}</summary>${['before','after'].map(key=>'<p>'+ (key==='before'?'변경 전':'변경 후')+'</p><table class="qpf-table">'+Object.entries(labels).map(([k,label])=>`<tr><th>${label}</th><td>${esc(r[key][k]??'—')}</td></tr>`).join('')+Object.entries(r[key].claims||{}).map(([group,amounts])=>`<tr><th>${esc(group)} 발생 / 합의 / 공제</th><td>${['occurred','agreed','deducted'].map(k=>fmt(amounts[k])).join(' / ')}</td></tr>`).join('')+'</table>').join('')}</details>`).join('');}catch(e){$('qpfMessage').textContent=e.message;}};
+ window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});load();
+})();
