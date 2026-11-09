@@ -117,9 +117,9 @@ def test_search_selects_matching_row_from_actual_three_order_response(monkeypatc
     client=SimpleNamespace(context={},opener=object(),encrypt_key='4321',order_search_range=(date(2026,11,2),date(2026,11,9)))
     assert detail.lookup_header(client,document_rows(number))==key
     assert calls[0]['jump.form.code']=='SEARCH'
-    assert calls[0][detail.CONDITION+'REQ_NUM']==number
-    assert calls[0][detail.CONDITION+'REQ_DATE1']=='2026-11-01'
-    assert calls[0][detail.CONDITION+'REQ_DATE2']=='2026-11-10'
+    assert calls[0][detail.CONDITION+'REQ_NUM']==''
+    assert calls[0][detail.CONDITION+'REQ_DATE1']=='2026-11-02'
+    assert calls[0][detail.CONDITION+'REQ_DATE2']=='2026-11-09'
     assert client.order_lookup_headers[key]['REQ_DATE']==('2026-11-05' if number.endswith('72') else '2026-11-07')
 
 
@@ -164,6 +164,9 @@ def test_actual_list_search_detail_chain_for_each_order(monkeypatch,number,lot_c
         if obj=='MES.Request.EtcReqDetailList.EtcReqDetailListObj':return response(requested)
         if obj=='Common.Pop.Request.EtcReqPopObj':
             assert payload['jump.form.code']=='SEARCH'
+            assert payload[detail.CONDITION+'REQ_NUM']==''
+            assert payload[detail.CONDITION+'REQ_DATE1']=='2026-11-02'
+            assert payload[detail.CONDITION+'REQ_DATE2']=='2026-11-09'
             return search_capture()
         if obj=='MES.Request.Etc.EtcReqObj':
             return json.loads((Path(__file__).parent/'fixtures/subcontract_order_detail_r202611072.json').read_text()) if number.endswith('72') else capture()

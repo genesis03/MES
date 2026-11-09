@@ -126,7 +126,7 @@ CONDITION='MES.Request.Set.ReqCondSet.'
 
 def lookup_header(client,source_rows):
     """Resolve a header from the observed SEARCH table, not the form's CHECK hook."""
-    from datetime import date,timedelta
+    from datetime import date
     import re
     from services.production_sync_client import client_common,query_with_retry
     if not source_rows:raise SyncError('대조할 외주 출고 내역이 없습니다.')
@@ -138,7 +138,7 @@ def lookup_header(client,source_rows):
     payload.update({'run.object.name':'Common.Pop.Request.EtcReqPopObj','jump.form.code':'SEARCH'})
     fields=('CONFIRM_DATE','ETC_REQ_TYPE','FIELD_REQ_NUM','FIELD_RULE_NO','IS_CHANGE','IS_ETCINFORM','IS_UNMATCH_INQTY','IS_UNOUT','ORDER_NO','ORDER_NUM','PO_NUM','REQ_COMP_NM','REQ_COMP_NO','REQ_DATE1','REQ_DATE2','REQ_ITEM_NUM','REQ_NO','REQ_NUM','REQ_TYPE','STAT_CODE','YEAR')
     payload.update({CONDITION+field:'' for field in fields})
-    payload.update({CONDITION+'ETC_REQ_TYPE':"'PROC_HEAT_OUT', 'PROC_MACH_OUT', 'PROC_SILVER_OUT', 'PROC_PURCHA'",CONDITION+'FIELD_REQ_NUM':'MES.Request.Etc.EtcReqForm.ReqInfoModel.REQ_NUM',CONDITION+'FIELD_RULE_NO':'MES.Request.Etc.EtcReqForm.ReqInfoModel.RULE_NO',CONDITION+'REQ_NUM':first['REQ_NUM'],CONDITION+'REQ_DATE1':(start-timedelta(days=1)).isoformat(),CONDITION+'REQ_DATE2':(end+timedelta(days=1)).isoformat()})
+    payload.update({CONDITION+'ETC_REQ_TYPE':"'PROC_HEAT_OUT', 'PROC_MACH_OUT', 'PROC_SILVER_OUT', 'PROC_PURCHA'",CONDITION+'FIELD_REQ_NUM':'MES.Request.Etc.EtcReqForm.ReqInfoModel.REQ_NUM',CONDITION+'FIELD_RULE_NO':'MES.Request.Etc.EtcReqForm.ReqInfoModel.RULE_NO',CONDITION+'REQ_NUM':'',CONDITION+'REQ_DATE1':start.isoformat(),CONDITION+'REQ_DATE2':end.isoformat()})
     code_keys='PROC_MIL PROC_HEAT PROC_GRIND PROC_MACH PROC_COMB PROC_TAB PROC_WIRE PROC_CHO PROC_SILVER PROC_PURCHA PROC_EDIS PROC_AUX PROC_DOT'.split()
     names='밀링 열처리 1차연삭 머시닝가공 복합선반 탭핑가공 와이어컷팅 초경 은도금 반제품구매 방전 부속가공 DOT'.split()
     prefix='Common.System.Code.CodeShortSet.'
