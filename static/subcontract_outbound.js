@@ -26,15 +26,20 @@
     $('ob-number').value = ''; $('ob-date').value = today(); $('ob-status').value = '발주를 불러오세요';
     $('ob-order-no').value=''; $('ob-partner').value=''; $('ob-process').value=''; $('ob-location').value=''; $('ob-manager').value=''; $('ob-order-date').value='';
     $('ob-items').innerHTML='<tr><td colspan="10">외주가공 발주를 불러오세요.</td></tr>';
+    $('ob-lot-rows').innerHTML='<tr><td colspan="6">출고건 또는 발주를 불러오세요.</td></tr>';
     $('ob-confirm').disabled=true; $('ob-cancel').disabled=true; $('ob-slip').disabled=true; $('ob-label').disabled=true;
     $('ob-date').disabled=false; msg('');
   }
 
   function renderItems(items) {
+    let lotIndex = 0;
+    $('ob-lot-rows').innerHTML = (items || []).flatMap(item => (item.lots || []).map(lot =>
+      `<tr><td>${++lotIndex}</td><td>${esc(item.order_part_no)}</td><td>${esc(item.previous_part_no)}</td><td>${esc(lot.lot_no)}</td><td>${fmt(lot.outbound_qty ?? lot.allocated_qty ?? lot.lot_qty ?? 0)}</td><td>${esc(item.unit)}</td></tr>`
+    )).join('') || '<tr><td colspan="6">LOT 내역이 없습니다.</td></tr>';
     if (!items?.length) { $('ob-items').innerHTML='<tr><td colspan="10">품목이 없습니다.</td></tr>'; return; }
     $('ob-items').innerHTML = items.map((x,i) => {
       const lotTotal = (x.lots||[]).reduce((s,l)=>s+Number(l.outbound_qty ?? l.allocated_qty ?? l.lot_qty ?? 0),0);
-      return `<tr><td>${i+1}</td><td>${esc(x.order_part_no)}</td><td class="left">${esc(x.order_part_name)}</td><td>${esc(x.previous_part_no)}</td><td class="left">${esc(x.spec)}</td><td>${esc(x.unit)}</td><td>${fmt(x.outbound_qty)}</td><td>${Number(x.lot_count||0)}</td><td>${fmt(lotTotal)}</td><td class="left">${esc(x.note)}${x.lots?.length?`<div>LOT: ${x.lots.map(l=>esc(l.lot_no)).join(', ')}</div>`:''}</td></tr>`;
+      return `<tr><td>${i+1}</td><td>${esc(x.order_part_no)}</td><td class="left">${esc(x.order_part_name)}</td><td>${esc(x.previous_part_no)}</td><td class="left">${esc(x.spec)}</td><td>${esc(x.unit)}</td><td>${fmt(x.outbound_qty)}</td><td>${Number(x.lot_count||0)}</td><td>${fmt(lotTotal)}</td><td class="left">${esc(x.note)}</td></tr>`;
     }).join('');
   }
 

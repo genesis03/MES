@@ -32,6 +32,10 @@
   <div class="ob-box" style="overflow:auto">
     <table class="ob-table"><thead><tr><th>No.</th><th>발주 품번</th><th>발주 품명</th><th>이전 품번</th><th>규격</th><th>단위</th><th>출고수량</th><th>LOT 건수</th><th>LOT 합계수량</th><th>비고</th></tr></thead><tbody id="ob-items"><tr><td colspan="10">외주가공 발주를 불러오세요.</td></tr></tbody></table>
   </div>
+  <div class="ob-box" style="overflow:auto">
+    <h2 style="font-size:16px;margin:14px">LOT별 수량</h2>
+    <table class="ob-table"><thead><tr><th>No.</th><th>발주 품번</th><th>이전 품번</th><th>LOT 번호</th><th>수량</th><th>단위</th></tr></thead><tbody id="ob-lot-rows"><tr><td colspan="6">출고건 또는 발주를 불러오세요.</td></tr></tbody></table>
+  </div>
 </div>
 
 <div id="ob-modal" class="ob-modal-bg mes-popup-backdrop" hidden>
@@ -63,4 +67,4 @@
   </div>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/subcontract_outbound.js?v=dispatch-20261109-1"></script><script src="/static/internal_label_buttons.js?v=dispatch-20261109-1"></script>{% endblock %}
+{% block extra_script %}<script src="/static/subcontract_outbound.js?v=lot-quantities-20261109-1"></script><script src="/static/internal_label_buttons.js?v=dispatch-20261109-1"></script>{% endblock %}
