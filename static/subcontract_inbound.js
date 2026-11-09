@@ -7,7 +7,6 @@
     popupEntries: new Map(),
     popupItemId: null,
     viewInbound: null,
-    nextBoxId: 0,
   };
 
   const esc = (v) => String(v ?? "").replace(/[&<>'"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
@@ -64,13 +63,23 @@
   }
 
   function itemStats(item, entryMap = state.entries) {
-    let allocated = 0, received = 0, available = 0, current = 0, enteredBoxes = 0;
-    const sourceIds = new Set(item.lots.map(lot => lot.outbound_lot_id));
-    item.lots.forEach(lot => { allocated += num(lot.allocated_qty); received += num(lot.received_qty); available += num(lot.remaining_qty); });
-    entryMap.forEach(entry => {
-      if (sourceIds.has(entry.outbound_lot_id) && num(entry.inbound_qty) > 0) { current += num(entry.inbound_qty); enteredBoxes++; }
+    let allocated = 0, received = 0, available = 0, current = 0, enteredLots = 0;
+    item.lots.forEach((lot) => {
+      allocated += num(lot.allocated_qty);
+      received += num(lot.received_qty);
+      available += num(lot.remaining_qty);
+      const entry = entryMap.get(lot.outbound_lot_id);
+      if (entry && num(entry.inbound_qty) > 0) {
+        current += num(entry.inbound_qty);
+        enteredLots += 1;
+      }
     });
-    return { allocated, received, available, current, afterRemaining: Math.max(0, available - current), enteredBoxes };
+    if (state.viewInbound && entryMap === state.entries) {
+      const history = (state.viewInbound.items || []).filter(row => Number(row.outbound_item_id) === Number(item.outbound_item_id)).flatMap(row => row.lots || []);
+      current = history.reduce((sum,lot)=>sum+num(lot.inbound_qty),0);
+      enteredLots = new Set(history.map(lot=>lot.outbound_lot_id)).size;
+    }
+    return { allocated, received, available, current, afterRemaining: Math.max(0, available - current), enteredLots };
   }
 
   function recomputeTotals() {
@@ -115,7 +124,7 @@
         <td>${fmt(s.received)}</td>
         <td>${fmt(s.available)}</td>
         <td class="si-item-current">${s.current ? fmt(s.current) : "-"}</td>
-        <td>${s.enteredBoxes}</td>
+        <td>${s.enteredLots}/${item.lots.length}</td>
         <td class="${cls}">${status}</td>
         <td><button type="button" class="si-btn si-lot-btn" data-item-id="${item.outbound_item_id}"${buttonDisabled ? " disabled" : ""}>${viewOnly ? "LOT 조회" : "LOT 입고"}</button></td>
       </tr>`;
@@ -137,7 +146,6 @@
     state.popupItemId = null;
     const completed = source.inbound_status === "COMPLETED";
     state.viewInbound = selectedInbound || (completed ? source.inbound || null : null);
-    if (state.viewInbound) state.entries = receiptBoxes(state.viewInbound);
     const shownInbound = state.viewInbound;
     $("si-number").value = shownInbound ? shownInbound.inbound_no : "";
     $("si-number").placeholder = shownInbound ? "" : "입고 시 자동 발번";
@@ -158,23 +166,8 @@
 
   function generatedLotText(lot, inboundQty) {
     if (inboundQty <= 0) return "-";
+    if (state.source?.source !== 'EXTERNAL' && num(lot.received_qty) === 0 && inboundQty === num(lot.allocated_qty)) return "원 LOT 유지";
     return String(state.source?.processing_type_name || '').replace(/\s/g,'').includes('은도금') ? "LZ 자동발번" : "LC 자동발번";
-  }
-
-  function sourceBoxes(lotId, entries = state.popupEntries) {
-    return Array.from(entries, ([key, entry]) => ({ key, entry })).filter(box => box.entry.outbound_lot_id === lotId);
-  }
-
-  function boxQuantity(lotId, exceptKey = null) {
-    return sourceBoxes(lotId).reduce((sum, box) => sum + (box.key === exceptKey ? 0 : num(box.entry.inbound_qty)), 0);
-  }
-
-  function receiptBoxes(inbound) {
-    const result = new Map();
-    (inbound.items || []).forEach(item => (item.lots || []).forEach(lot => {
-      result.set(`receipt-${lot.id}`, {outbound_lot_id: Number(lot.outbound_lot_id), inbound_qty: num(lot.inbound_qty), supplier_lot_no: lot.supplier_lot_no || null, sample_qty: num(lot.sample_qty), child_lot_no: lot.child_lot_no || ''});
-    }));
-    return result;
   }
 
   function cloneEntries(sourceMap) {
@@ -203,69 +196,103 @@
   function renderSourceLots() {
     const item = itemById(state.popupItemId);
     if (!item) {
-      $("si-popup-source-lots").innerHTML = `<tr><td colspan="3" class="si-empty">품번을 선택하세요.</td></tr>`;
-      $("si-popup-source-count").textContent = "0"; $("si-popup-source-total").textContent = "0"; return;
+      $("si-popup-source-lots").innerHTML = `<tr><td colspan="2" class="si-empty">품번을 선택하세요.</td></tr>`;
+      $("si-popup-source-count").textContent = "0";
+      $("si-popup-source-total").textContent = "0";
+      return;
     }
     let availableTotal = 0;
-    $("si-popup-source-lots").innerHTML = item.lots.map(lot => {
-      const available = state.viewInbound ? num(lot.remaining_qty) : Math.max(0,num(lot.remaining_qty)-boxQuantity(lot.outbound_lot_id));
-      availableTotal += available;
-      return `<tr class="si-pick-row${available <= 0 ? ' disabled' : ''}" data-lot-id="${lot.outbound_lot_id}"><td class="left">${esc(lot.source_lot_no)}</td><td>${fmt(available)}</td><td>${state.viewInbound ? '' : `<button type="button" class="si-btn si-add-box" data-lot-id="${lot.outbound_lot_id}"${available <= 0 ? ' disabled' : ''}>박스 추가</button>`}</td></tr>`;
-    }).join('') || `<tr><td colspan="3" class="si-empty">출고 LOT가 없습니다.</td></tr>`;
-    $("si-popup-source-count").textContent = item.lots.length; $("si-popup-source-total").textContent = fmt(availableTotal);
-    if (state.viewInbound) return;
-    document.querySelectorAll('#si-popup-source-lots .si-add-box').forEach(button => button.addEventListener('click', () => addLotToReceive(Number(button.dataset.lotId))));
-    document.querySelectorAll('#si-popup-source-lots .si-pick-row:not(.disabled)').forEach(tr => tr.addEventListener('dblclick',event => { if (!event.target.closest('button')) addLotToReceive(Number(tr.dataset.lotId)); }));
+    const rows = item.lots.map((lot) => {
+      const remaining = num(lot.remaining_qty);
+      availableTotal += remaining;
+      const already = state.popupEntries.has(lot.outbound_lot_id);
+      const cls = remaining <= 0 ? " disabled" : "";
+      return `<tr class="si-pick-row${cls}" data-lot-id="${lot.outbound_lot_id}">
+        <td class="left">${esc(lot.source_lot_no)}${already ? " ✓" : ""}</td><td>${fmt(remaining)}</td>
+      </tr>`;
+    });
+    $("si-popup-source-lots").innerHTML = rows.join("") || `<tr><td colspan="2" class="si-empty">출고 LOT가 없습니다.</td></tr>`;
+    $("si-popup-source-count").textContent = item.lots.length;
+    $("si-popup-source-total").textContent = fmt(availableTotal);
+    document.querySelectorAll("#si-popup-source-lots .si-pick-row:not(.disabled)").forEach((tr) => tr.addEventListener("dblclick", () => addLotToReceive(Number(tr.dataset.lotId))));
   }
 
   function currentPopupEntries() {
     const item = itemById(state.popupItemId);
     if (!item) return [];
-    return Array.from(state.popupEntries, ([key, entry]) => ({key, entry, owner:lotOwner(entry.outbound_lot_id)}))
-      .filter(box => box.owner?.item.outbound_item_id === item.outbound_item_id)
-      .map(box => ({key:box.key, entry:box.entry, lot:box.owner.lot}));
+    if (state.viewInbound) {
+      return (state.viewInbound.items || []).filter(row=>Number(row.outbound_item_id)===Number(item.outbound_item_id)).flatMap(row=>row.lots || []).map(history=>({
+        lot:item.lots.find(lot=>Number(lot.outbound_lot_id)===Number(history.outbound_lot_id)),
+        entry:{inbound_qty:num(history.inbound_qty),supplier_lot_no:history.supplier_lot_no || '',sample_qty:num(history.sample_qty),child_lot_no:history.child_lot_no || ''}
+      })).filter(row=>row.lot);
+    }
+    return item.lots.map((lot) => ({ lot, entry: state.popupEntries.get(lot.outbound_lot_id) })).filter((x) => x.entry);
   }
 
   function renderReceiveLots() {
-    const rows = currentPopupEntries(), readOnly = !!state.viewInbound;
-    $("si-popup-receive-lots").innerHTML = rows.map(({key, lot, entry}, index) => `<tr data-box-key="${esc(key)}">
-      <td>${index+1}</td><td class="left">${esc(lot.source_lot_no)}</td>
-      <td><input class="si-right-input si-r-supplier" maxlength="100" value="${esc(entry.supplier_lot_no || '')}"${readOnly ? ' readonly' : ''}></td>
-      <td>${fmt(lot.allocated_qty)}</td><td>${fmt(lot.received_qty)}</td><td>${fmt(lot.remaining_qty)}</td>
-      <td><input class="si-right-input si-r-inbound" type="number" min="0.001" max="${Math.max(0,num(lot.remaining_qty)-boxQuantity(lot.outbound_lot_id,key))}" step="0.001" value="${entry.inbound_qty}"${readOnly ? ' readonly' : ''}></td>
-      <td><input class="si-right-input si-r-sample" type="number" min="0" step="0.001" value="${entry.sample_qty || 0}"${readOnly ? ' readonly' : ''}></td>
-      <td class="si-r-new-lot">${esc(readOnly ? entry.child_lot_no || '-' : generatedLotText(lot,num(entry.inbound_qty)))}</td>
-      <td>${readOnly ? '' : `<button type="button" class="si-btn si-remove-box" data-box-key="${esc(key)}">삭제</button>`}</td></tr>`).join('') || `<tr><td colspan="10" class="si-empty">출고 LOT의 '박스 추가'를 눌러 박스별 수량을 입력하세요.</td></tr>`;
+    const rows = currentPopupEntries();
+    const readOnly = !!state.viewInbound;
+    let total = 0;
+    if (!rows.length) {
+      $("si-popup-receive-lots").innerHTML = `<tr><td colspan="9" class="si-empty">LOT를 스캔하거나 가운데 목록을 더블클릭하세요.</td></tr>`;
+    } else {
+      $("si-popup-receive-lots").innerHTML = rows.map(({ lot, entry }) => {
+        total += num(entry.inbound_qty);
+        return `<tr data-lot-id="${lot.outbound_lot_id}">
+          <td class="left">${esc(lot.source_lot_no)}</td>
+          <td><input class="si-right-input si-r-supplier" maxlength="100" value="${esc(entry.supplier_lot_no || "")}"${readOnly ? " readonly" : ""}></td>
+          <td>${fmt(lot.allocated_qty)}</td>
+          <td>${fmt(lot.received_qty)}</td>
+          <td>${fmt(lot.remaining_qty)}</td>
+          <td><input class="si-right-input si-r-inbound" type="number" min="0.001" max="${lot.remaining_qty}" step="0.001" value="${entry.inbound_qty}"${readOnly ? " readonly" : ""}></td>
+          <td><input class="si-right-input si-r-sample" type="number" min="0" step="0.001" value="${entry.sample_qty || 0}"${readOnly ? " readonly" : ""}></td>
+          <td>${esc(readOnly ? (entry.child_lot_no || "-") : generatedLotText(lot, num(entry.inbound_qty)))}</td>
+          <td>${readOnly ? "" : `<button type="button" class="si-btn si-remove-lot" data-lot-id="${lot.outbound_lot_id}">삭제</button>`}</td>
+        </tr>`;
+      }).join("");
+    }
     $("si-popup-receive-count").textContent = rows.length;
-    $("si-popup-receive-total").textContent = fmt(rows.reduce((sum,box)=>sum+num(box.entry.inbound_qty),0));
+    $("si-popup-receive-total").textContent = fmt(total);
+
     if (readOnly) return;
-    document.querySelectorAll('#si-popup-receive-lots tr[data-box-key]').forEach(tr => {
-      const key=tr.dataset.boxKey, entry=state.popupEntries.get(key), lot=lotOwner(entry.outbound_lot_id).lot;
-      tr.querySelector('.si-r-inbound').addEventListener('input',event => {
-        const max=Math.max(0,num(lot.remaining_qty)-boxQuantity(lot.outbound_lot_id,key));
-        const value=Number(event.target.value);entry.inbound_qty=Number.isFinite(value)?Math.max(0,Math.min(value,max)):0;
-        event.target.value=entry.inbound_qty;
-        const sample=tr.querySelector('.si-r-sample');if(num(sample.value)>entry.inbound_qty)sample.value=entry.inbound_qty;
-        entry.sample_qty=num(sample.value);tr.querySelector('.si-r-new-lot').textContent=generatedLotText(lot,entry.inbound_qty);
+    document.querySelectorAll("#si-popup-receive-lots tr[data-lot-id]").forEach((tr) => {
+      const lotId = Number(tr.dataset.lotId);
+      const lot = lotOwner(lotId)?.lot;
+      tr.querySelector(".si-r-inbound").addEventListener("input", (e) => {
+        let q = num(e.target.value);
+        if (q > num(lot.remaining_qty)) q = num(lot.remaining_qty);
+        if (q < 0) q = 0;
+        e.target.value = q;
+        const entry = state.popupEntries.get(lotId);
+        entry.inbound_qty = q;
+        const sample = tr.querySelector(".si-r-sample");
+        if (num(sample.value) > q) sample.value = q;
+        entry.sample_qty = num(sample.value);
+        tr.children[7].textContent = generatedLotText(lot, q);
         refreshPopupReceiveTotal();
       });
-      tr.querySelector('.si-r-supplier').addEventListener('input',event=>{entry.supplier_lot_no=event.target.value.trim()||null;});
-      tr.querySelector('.si-r-sample').addEventListener('input',event=>{
-        const value=Number(event.target.value);entry.sample_qty=Number.isFinite(value)?Math.max(0,Math.min(value,num(entry.inbound_qty))):0;event.target.value=entry.sample_qty;
+      tr.querySelector(".si-r-supplier").addEventListener("input", (e) => { state.popupEntries.get(lotId).supplier_lot_no = e.target.value.trim() || null; });
+      tr.querySelector(".si-r-sample").addEventListener("input", (e) => {
+        const entry = state.popupEntries.get(lotId);
+        let q = num(e.target.value);
+        if (q < 0) q = 0;
+        if (q > num(entry.inbound_qty)) q = num(entry.inbound_qty);
+        e.target.value = q;
+        entry.sample_qty = q;
       });
     });
-    document.querySelectorAll('.si-remove-box').forEach(button=>button.addEventListener('click',()=>{
-      state.popupEntries.delete(button.dataset.boxKey);renderSourceLots();renderReceiveLots();$('si-lot-scan').focus();
+    document.querySelectorAll(".si-remove-lot").forEach((btn) => btn.addEventListener("click", () => {
+      state.popupEntries.delete(Number(btn.dataset.lotId));
+      renderSourceLots();
+      renderReceiveLots();
+      $("si-lot-scan").focus();
     }));
   }
 
   function refreshPopupReceiveTotal() {
-    $("si-popup-receive-total").textContent = fmt(currentPopupEntries().reduce((sum,box)=>sum+num(box.entry.inbound_qty),0));
-    document.querySelectorAll('#si-popup-receive-lots tr[data-box-key]').forEach(tr=>{
-      const key=tr.dataset.boxKey, entry=state.popupEntries.get(key), lot=lotOwner(entry.outbound_lot_id).lot;
-      tr.querySelector('.si-r-inbound').max=Math.max(0,num(lot.remaining_qty)-boxQuantity(entry.outbound_lot_id,key));
-    });
-    renderSourceLots();
+    let total = 0;
+    currentPopupEntries().forEach(({ entry }) => total += num(entry.inbound_qty));
+    $("si-popup-receive-total").textContent = fmt(total);
   }
 
   function selectPopupItem(itemId) {
@@ -279,13 +306,31 @@
   }
 
   function addLotToReceive(lotId) {
+    if (state.viewInbound) return;
     const owner = lotOwner(lotId);
-    if (!owner || state.viewInbound) return;
-    if (owner.item.outbound_item_id !== state.popupItemId) {scanError('선택한 품번의 LOT가 아닙니다. 해당 품번을 먼저 선택하세요.');return;}
-    const available=Math.max(0,num(owner.lot.remaining_qty)-boxQuantity(lotId));
-    if (available<=0) {scanError('추가할 잔량이 없습니다. 입력한 박스 수량을 먼저 확인하세요.');return;}
-    state.popupEntries.set(`box-${++state.nextBoxId}`, {outbound_lot_id:lotId,inbound_qty:available,supplier_lot_no:null,sample_qty:0});
-    scanError('');renderSourceLots();renderReceiveLots();$('si-lot-scan').value='';$('si-lot-scan').focus();
+    if (!owner) return;
+    if (owner.item.outbound_item_id !== state.popupItemId) {
+      scanError("선택한 품번의 LOT가 아닙니다. 해당 품번을 먼저 선택하세요.");
+      return;
+    }
+    const lot = owner.lot;
+    if (num(lot.remaining_qty) <= 0) {
+      scanError("이미 전량 입고된 LOT입니다.");
+      return;
+    }
+    if (!state.popupEntries.has(lotId)) {
+      state.popupEntries.set(lotId, {
+        outbound_lot_id: lotId,
+        inbound_qty: num(lot.remaining_qty),
+        supplier_lot_no: null,
+        sample_qty: 0,
+      });
+    }
+    scanError("");
+    renderSourceLots();
+    renderReceiveLots();
+    $("si-lot-scan").value = "";
+    $("si-lot-scan").focus();
   }
 
   function scanLot() {
@@ -299,7 +344,7 @@
     const lot = item?.lots.find((x) => String(x.source_lot_no).trim().toUpperCase() === code.toUpperCase());
     if (!lot) {
       const anywhere = state.source?.items.some((it) => it.lots.some((x) => String(x.source_lot_no).trim().toUpperCase() === code.toUpperCase()));
-      scanError(anywhere ? "선택한 품번의 LOT가 아닙니다. 해당 품번을 먼저 선택하세요." : "출고 LOT 목록에서 해당 LOT를 찾을 수 없습니다.");
+      scanError(anywhere ? "선택한 품번의 LOT가 아닙니다. 해당 품번을 먼저 선택하세요." : "발주에 배정된 LOT 목록에서 해당 LOT를 찾을 수 없습니다.");
       $("si-lot-scan").select();
       return;
     }
@@ -309,7 +354,21 @@
   function openLotPopup(initialItemId, inbound = null) {
     if (!state.source) return;
     state.popupEntries = new Map();
-    state.popupEntries = inbound ? receiptBoxes(inbound) : cloneEntries(state.entries);
+    if (inbound) {
+      (inbound.items || []).forEach((item) => {
+        (item.lots || []).forEach((lot) => {
+          state.popupEntries.set(Number(lot.outbound_lot_id), {
+            outbound_lot_id: Number(lot.outbound_lot_id),
+            inbound_qty: num(lot.inbound_qty),
+            supplier_lot_no: lot.supplier_lot_no || null,
+            sample_qty: num(lot.sample_qty),
+            child_lot_no: lot.child_lot_no || "",
+          });
+        });
+      });
+    } else {
+      state.popupEntries = cloneEntries(state.entries);
+    }
     state.popupItemId = initialItemId || state.source.items.find((x) => itemStats(x).available > 0)?.outbound_item_id || state.source.items[0]?.outbound_item_id || null;
     $("si-scan-wrap").hidden = !!inbound;
     $("si-lot-save").hidden = !!inbound;
@@ -323,19 +382,28 @@
   }
 
   function applyLotPopup() {
-    const totals=new Map();
-    for (const entry of state.popupEntries.values()) {
-      const owner=lotOwner(entry.outbound_lot_id);
-      if (!owner) {lotMessage('선택한 출고의 LOT가 아닙니다.',true);return;}
-      const qty=num(entry.inbound_qty), sample=num(entry.sample_qty);
-      if (!Number.isFinite(qty) || qty<=0) {lotMessage(`${owner.lot.source_lot_no} 박스 수량은 0보다 커야 합니다.`,true);return;}
-      totals.set(entry.outbound_lot_id,(totals.get(entry.outbound_lot_id)||0)+qty);
-      if (totals.get(entry.outbound_lot_id)>num(owner.lot.remaining_qty)+1e-9) {lotMessage(`${owner.lot.source_lot_no} 박스 수량 합계가 입고가능수량을 초과합니다.`,true);return;}
-      if (!Number.isFinite(sample)||sample<0||sample>qty) {lotMessage(`${owner.lot.source_lot_no} 샘플수량은 해당 박스 입고수량 이하여야 합니다.`,true);return;}
-      if (!String(entry.supplier_lot_no||'').trim()) {lotMessage(`${owner.lot.source_lot_no} 박스의 외주업체 LOT를 입력해 주세요.`,true);return;}
+    for (const [lotId, entry] of state.popupEntries.entries()) {
+      const owner = lotOwner(lotId);
+      if (!owner) continue;
+      const q = num(entry.inbound_qty);
+      const sample = num(entry.sample_qty);
+      if (q <= 0 || q > num(owner.lot.remaining_qty)) {
+        lotMessage(`${owner.lot.source_lot_no} 입고수량은 0보다 크고 입고가능수량 이하여야 합니다.`, true);
+        return;
+      }
+      if (sample < 0 || sample > q) {
+        lotMessage(`${owner.lot.source_lot_no} 샘플수량은 입고수량을 초과할 수 없습니다.`, true);
+        return;
+      }
+      if (!String(entry.supplier_lot_no || "").trim()) {
+        lotMessage(`${owner.lot.source_lot_no} 공급사 외주 LOT를 입력해 주세요.`, true);
+        return;
+      }
     }
-    state.entries=cloneEntries(state.popupEntries);$('si-lot-modal').hidden=true;renderItems();
-    message("박스별 수량을 반영했습니다. '입고 확정'을 누르면 박스마다 개별 LOT가 생성됩니다.");
+    state.entries = cloneEntries(state.popupEntries);
+    $("si-lot-modal").hidden = true;
+    renderItems();
+    message("LOT별 금회 입고 내용을 반영했습니다. 상단 '입고 확정'을 누르면 저장됩니다.");
   }
 
   async function loadInboundById(inboundId) {
@@ -426,7 +494,7 @@
     try {
       const inbound = await api("/api/subcontract/inbound", {
         method: "POST",
-        body: JSON.stringify({ box_receipt:true, outbound_id: state.source.outbound_id, inbound_date: $("si-date").value, storage_location: location, lot_results: lotResults }),
+        body: JSON.stringify({ outbound_id: state.source.outbound_id, inbound_date: $("si-date").value, storage_location: location, lot_results: lotResults }),
       });
       const refreshed = await api(`/api/subcontract/inbound/outbound/${state.source.outbound_id}`);
       renderSource(refreshed, inbound);
