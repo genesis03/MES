@@ -1,3 +1,5 @@
+from collections import defaultdict
+from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -24,8 +26,8 @@ templates = Jinja2Templates(directory="templates")
 
 class EditLotInput(BaseModel):
     id: int = Field(gt=0)
-    inbound_qty: float = Field(gt=0)
-    sample_qty: float = Field(default=0, ge=0)
+    inbound_qty: float = Field(gt=0, allow_inf_nan=False)
+    sample_qty: float = Field(default=0, ge=0, allow_inf_nan=False)
     supplier_lot_no: Optional[str] = Field(default=None, max_length=100)
 
 
@@ -197,7 +199,7 @@ def update_inbound(
     existing_lots = [lot for item in master.items for lot in item.lots]
     existing_by_id = {lot.id: lot for lot in existing_lots}
     incoming_ids = {row.id for row in payload.lots}
-    if incoming_ids != set(existing_by_id):
+    if len(incoming_ids)!=len(payload.lots) or incoming_ids != set(existing_by_id):
         raise HTTPException(422, "기존 입고 LOT 구성은 수정할 수 없습니다. 수량/외주 LOT/샘플만 수정하세요.")
 
     child_lots = [lot.child_lot_no for lot in existing_lots if lot.child_lot_no]
@@ -212,9 +214,16 @@ def update_inbound(
     from services.subcontract_external_receipt import lock_source
     lock_source(db,outbound)
     from services.subcontract_fifo import validate_inbound_selection, validate_receipt_reduction
+    requested=defaultdict(Decimal)
+    for row in payload.lots:requested[existing_by_id[row.id].outbound_lot_id]+=Decimal(str(row.inbound_qty))
+    for source_id,qty in requested.items():
+        source=db.get(SubcontractOutboundLot,source_id)
+        if source is None:raise HTTPException(409,"원출고 LOT를 찾을 수 없습니다.")
+        remaining=Decimal(str(source.outbound_qty))-Decimal(str(_other_received_qty(db,master.id,source_id)))
+        if qty>remaining:raise HTTPException(422,f"{source.lot_no}의 박스별 입고수량 합계는 수정 가능수량 {remaining:g}을 초과할 수 없습니다.")
     validate_receipt_reduction(db, master, {row.id: row.inbound_qty for row in payload.lots})
     if any(abs(row.inbound_qty - float(existing_by_id[row.id].good_qty or 0)) > 1e-9 for row in payload.lots):
-        validate_inbound_selection(db, outbound, {existing_by_id[row.id].outbound_lot_id: row.inbound_qty for row in payload.lots}, exclude_inbound_id=master.id)
+        validate_inbound_selection(db, outbound, dict(requested), exclude_inbound_id=master.id)
 
     for row in payload.lots:
         lot = existing_by_id[row.id]

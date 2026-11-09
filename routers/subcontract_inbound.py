@@ -29,12 +29,13 @@ router = APIRouter(prefix="/api/subcontract/inbound", tags=["Subcontract Inbound
 
 class InboundLotResultInput(BaseModel):
     outbound_lot_id: int = Field(gt=0)
-    inbound_qty: float = Field(gt=0)
-    sample_qty: float = Field(default=0, ge=0)
+    inbound_qty: float = Field(gt=0, allow_inf_nan=False)
+    sample_qty: float = Field(default=0, ge=0, allow_inf_nan=False)
     supplier_lot_no: Optional[str] = Field(default=None, max_length=100)
 
 
 class InboundCreateInput(BaseModel):
+    box_receipt: bool = False
     outbound_id: int = Field(gt=0)
     inbound_date: str = Field(min_length=10, max_length=10)
     storage_location: str = Field(min_length=1, max_length=20)
@@ -347,6 +348,9 @@ def create_inbound(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    if payload.box_receipt or len({row.outbound_lot_id for row in payload.lot_results})!=len(payload.lot_results):
+        from routers.subcontract_inbound_lot_policy import create_inbound_with_lot_policy
+        return create_inbound_with_lot_policy(payload,db,current_user)
     outbound = db.get(SubcontractOutboundMaster, payload.outbound_id)
     if outbound is None:
         raise HTTPException(404, "외주가공 출고 내역을 찾을 수 없습니다.")

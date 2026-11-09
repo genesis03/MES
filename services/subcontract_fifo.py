@@ -1,5 +1,6 @@
 """FIFO checks for subcontract dispatch and receipt; never rewrite historical LOT links."""
 import re
+from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
 
@@ -100,9 +101,14 @@ def validate_receipt_reduction(db, master, new_quantities):
     outbound = db.get(SubcontractOutboundMaster, master.outbound_id)
     if outbound is None:
         raise HTTPException(409, "원출고 정보를 찾을 수 없습니다.")
+    old_totals=defaultdict(Decimal);new_totals=defaultdict(Decimal)
     for item in master.items:
         for lot in item.lots:
-            if Decimal(str(new_quantities.get(lot.id, 0))) >= Decimal(str(lot.good_qty or 0)):
+            old_totals[lot.outbound_lot_id]+=Decimal(str(lot.good_qty or 0))
+            new_totals[lot.outbound_lot_id]+=Decimal(str(new_quantities.get(lot.id,0)))
+    for item in master.items:
+        for lot in item.lots:
+            if new_totals[lot.outbound_lot_id] >= old_totals[lot.outbound_lot_id]:
                 continue
             source = db.get(SubcontractOutboundLot, lot.outbound_lot_id)
             if source is None:

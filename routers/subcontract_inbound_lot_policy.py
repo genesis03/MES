@@ -1,6 +1,8 @@
+from collections import Counter, defaultdict
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from core.database import get_db
@@ -47,16 +49,16 @@ def create_inbound_with_lot_policy(
     if not outbound.items:
         raise HTTPException(422, "입고할 외주가공 출고 품목이 없습니다.")
     _validate_storage(db, payload.storage_location)
+    locked=db.execute(update(SubcontractOutboundMaster).where(SubcontractOutboundMaster.id==outbound.id,SubcontractOutboundMaster.status=='OUTBOUND').values(status='OUTBOUND'))
+    if locked.rowcount!=1:raise HTTPException(409,"원출고 상태가 변경되었습니다. 다시 불러오세요.")
     from services.subcontract_external_receipt import lock_source
     external_source=lock_source(db,outbound)
 
     lot_by_id = {lot.id: (item, lot) for item in outbound.items for lot in item.lots}
-    seen = set()
+    requested=defaultdict(Decimal)
+    box_counts=Counter(row.outbound_lot_id for row in payload.lot_results)
     validated = []
     for row in payload.lot_results:
-        if row.outbound_lot_id in seen:
-            raise HTTPException(422, "동일한 출고 LOT를 한 번의 입고에 중복 입력할 수 없습니다.")
-        seen.add(row.outbound_lot_id)
         source = lot_by_id.get(row.outbound_lot_id)
         if source is None:
             raise HTTPException(422, "선택한 외주 출고에 포함되지 않은 LOT가 있습니다.")
@@ -68,8 +70,9 @@ def create_inbound_with_lot_policy(
         sample_qty = Decimal(str(row.sample_qty))
         if remaining <= 0:
             raise HTTPException(409, f"{source_lot.lot_no}는 이미 전량 입고되었습니다.")
-        if inbound_qty > remaining:
-            raise HTTPException(422, f"{source_lot.lot_no}의 입고수량은 잔여수량 {float(remaining):g}을 초과할 수 없습니다.")
+        requested[source_lot.id]+=inbound_qty
+        if requested[source_lot.id] > remaining:
+            raise HTTPException(422, f"{source_lot.lot_no}의 박스별 입고수량 합계는 잔여수량 {float(remaining):g}을 초과할 수 없습니다.")
         if sample_qty > inbound_qty:
             raise HTTPException(422, f"{source_lot.lot_no}의 샘플수량은 금회 입고수량을 초과할 수 없습니다.")
         if not (row.supplier_lot_no or "").strip():
@@ -77,7 +80,7 @@ def create_inbound_with_lot_policy(
         validated.append((row, source_item, source_lot, allocated, received, inbound_qty))
 
     from services.subcontract_fifo import validate_inbound_selection
-    validate_inbound_selection(db, outbound, {row.outbound_lot_id: row.inbound_qty for row in payload.lot_results})
+    validate_inbound_selection(db, outbound, dict(requested))
 
     inbound_no = _next_inbound_no(db, payload.inbound_date)
     master = SubcontractInboundMaster(
@@ -124,9 +127,10 @@ def create_inbound_with_lot_policy(
             master.items.append(inbound_item)
 
 
-        # 내부 출고의 첫 전량입고는 원 LOT를 유지합니다.
-        # 외부 출고는 LS 원본을 보존하고 입고할 때 내부 공정 LOT를 새로 만듭니다.
-        is_split = external_source is not None or received > 0 or inbound_qty < allocated
+        # 박스 입고는 박스마다 공정 LOT를 생성합니다.
+        # 기존 단일 LOT API의 최초 전량입고 동작은 유지합니다.
+        box_mode=payload.box_receipt or box_counts[source_lot.id] > 1
+        is_split = box_mode or external_source is not None or received > 0 or inbound_qty < allocated
         if is_split:
             child_lot_no = next_lot_no(db, split_prefix, payload.inbound_date, 1, reserved_lots)
             reserved_lots.add(child_lot_no)
@@ -143,7 +147,7 @@ def create_inbound_with_lot_policy(
                 lot_qty=float(inbound_qty),
                 storage_location=payload.storage_location,
                 status="ACTIVE",
-                note=f"외주가공 {'외부출고 입고' if external_source else '부분입고'} {inbound_no} / 원LOT {source_lot.lot_no}",
+                note=f"외주가공 {'박스입고' if box_mode else '외부출고 입고' if external_source else '부분입고'} {inbound_no} / 원LOT {source_lot.lot_no}",
             ))
         else:
             child_lot_no = source_lot.lot_no
