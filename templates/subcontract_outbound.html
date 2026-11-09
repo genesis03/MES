@@ -15,6 +15,7 @@
     <button id="ob-cancel" class="ob-btn ob-danger" type="button" disabled>취소</button>
     <button id="ob-slip" class="ob-btn ob-print" type="button" disabled>출고전표 출력</button>
     <button id="ob-label" class="ob-btn ob-print" type="button" disabled>내부 LOT 라벨 출력</button>
+    {% if is_admin_user %}<a class="ob-btn" href="/admin/external-sync?tab=subcontract_dispatch">외부 출고 가져오기</a>{% endif %}
     <span id="ob-message" class="ob-msg"></span>
   </div>
   <div class="ob-box ob-head">
@@ -46,7 +47,7 @@
 
 <div id="ob-history-modal" class="ob-modal-bg mes-popup-backdrop" hidden>
   <div class="ob-modal mes-popup">
-    <div class="ob-modal-head mes-popup-head"><strong>외주가공 출고건 불러오기</strong><span style="margin-left:auto;font-size:12px;color:#64748b">출고완료 건만 표시됩니다.</span></div>
+    <div class="ob-modal-head mes-popup-head"><strong>외주가공 출고건 불러오기</strong><span style="margin-left:auto;font-size:12px;color:#64748b">내부 출고완료 및 외부 출고 이력을 표시합니다.</span></div>
     <div class="ob-modal-body mes-popup-body">
       <div class="ob-history-filters mes-popup-filters">
         <div class="ob-history-filter"><label for="ob-h-outbound-no">출고번호</label><input id="ob-h-outbound-no" autocomplete="off"></div>
@@ -62,4 +63,4 @@
   </div>
 </div>
 {% endblock %}
-{% block extra_script %}<script src="/static/subcontract_outbound.js?v=consistency-1"></script><script src="/static/internal_label_buttons.js?v=20260917-2"></script>{% endblock %}
+{% block extra_script %}<script src="/static/subcontract_outbound.js?v=dispatch-20261109-1"></script><script src="/static/internal_label_buttons.js?v=dispatch-20261109-1"></script>{% endblock %}

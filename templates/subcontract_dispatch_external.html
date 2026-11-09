@@ -1,0 +1,8 @@
+{% extends 'external_sync_base.html' %}
+{% block sync_content %}
+<section class="es-card"><h2>외주출고</h2>
+<p class="es-muted">은도금·탭핑의 실제 출고 이력을 가져옵니다. 반제품 구매·가발주·테스트 거래처는 제외합니다. 외부 입고·완료 상태는 참고 표시하며 우리 MES 입고나 재고 차감은 자동 생성하지 않습니다. 가져온 자료는 외주 가공 출고의 ‘출고건 불러오기’에서도 확인할 수 있습니다. 원본에서 사라진 내역은 취소로 자동 판정하지 않습니다.</p>
+<form id="dsSearch" class="es-line"><label>시작일<input id="dsStart" type="date" required></label><label>종료일<input id="dsEnd" type="date" required></label><label>전표·거래처·품번·LOT<input id="dsKeyword" maxlength="200"></label><button class="es-btn" type="submit">조회</button></form>
+<p id="dsMessage" role="status"></p><div class="es-scroll"><table class="es-table"><thead><tr><th>출고일</th><th>전표번호</th><th>거래처</th><th>가공유형</th><th>요청 품번</th><th>이전 품번</th><th>LOT</th><th>출고수량</th><th>외부 상태</th></tr></thead><tbody id="dsRows"></tbody></table></div><p><button id="dsPrev" class="es-btn">이전</button> <span id="dsPage"></span> <button id="dsNext" class="es-btn">다음</button></p>
+</section><script src="/static/subcontract_dispatch_external.js?v=20261109-1" defer></script>
+{% endblock %}

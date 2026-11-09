@@ -40,10 +40,10 @@ def page(request: Request, user=Depends(get_current_user)):
 
 
 @router.get('/admin/external-sync', response_class=HTMLResponse)
-def integrated_page(request: Request, tab: Literal['production','subcontract','packing','shipment','inbound','history'] = 'production', user=Depends(get_current_user)):
+def integrated_page(request: Request, tab: Literal['production','subcontract','packing','shipment','inbound','subcontract_dispatch','history'] = 'production', user=Depends(get_current_user)):
     access(user)
     names = {'production':'production_external.html', 'subcontract':'subcontract_fault_external.html',
-             'packing':'packing_external.html', 'shipment':'shipment_external.html', 'inbound':'inbound_external.html', 'history':'external_sync_history.html'}
+             'packing':'packing_external.html', 'shipment':'shipment_external.html', 'inbound':'inbound_external.html', 'subcontract_dispatch':'subcontract_dispatch_external.html', 'history':'external_sync_history.html'}
     return templates.TemplateResponse(request=request, name=names[tab],
         context={'user':user, 'can_manage':True, 'active_sync':tab})
 
@@ -87,7 +87,7 @@ class ProtocolKeyInput(BaseModel):
 
 def lock_shared_settings(db, message):
     from services.production_sync_service import backend
-    kinds = ('production', 'packing', 'subcontract', 'shipment', 'inbound')
+    kinds = ('production', 'packing', 'subcontract', 'shipment', 'inbound', 'subcontract_dispatch')
     for kind in kinds:
         state(db, kind)
     instant = now()

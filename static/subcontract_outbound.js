@@ -34,7 +34,7 @@
     if (!items?.length) { $('ob-items').innerHTML='<tr><td colspan="10">품목이 없습니다.</td></tr>'; return; }
     $('ob-items').innerHTML = items.map((x,i) => {
       const lotTotal = (x.lots||[]).reduce((s,l)=>s+Number(l.outbound_qty ?? l.allocated_qty ?? l.lot_qty ?? 0),0);
-      return `<tr><td>${i+1}</td><td>${esc(x.order_part_no)}</td><td class="left">${esc(x.order_part_name)}</td><td>${esc(x.previous_part_no)}</td><td class="left">${esc(x.spec)}</td><td>${esc(x.unit)}</td><td>${fmt(x.outbound_qty)}</td><td>${Number(x.lot_count||0)}</td><td>${fmt(lotTotal)}</td><td class="left">${esc(x.note)}</td></tr>`;
+      return `<tr><td>${i+1}</td><td>${esc(x.order_part_no)}</td><td class="left">${esc(x.order_part_name)}</td><td>${esc(x.previous_part_no)}</td><td class="left">${esc(x.spec)}</td><td>${esc(x.unit)}</td><td>${fmt(x.outbound_qty)}</td><td>${Number(x.lot_count||0)}</td><td>${fmt(lotTotal)}</td><td class="left">${esc(x.note)}${x.lots?.length?`<div>LOT: ${x.lots.map(l=>esc(l.lot_no)).join(', ')}</div>`:''}</td></tr>`;
     }).join('');
   }
 
@@ -102,7 +102,7 @@
     try {
       const data = await request(`/api/subcontract/outbound/${outboundId}`);
       applyHistoricalOutbound(data);
-      msg(`${data.outbound_no} 출고건을 불러왔습니다. 라벨을 재출력할 수 있습니다.`);
+      msg(data.source==='EXTERNAL' ? `${data.outbound_no} 외부 출고 이력입니다. 재고·입고를 자동 생성하지 않습니다.` : `${data.outbound_no} 출고건을 불러왔습니다. 라벨을 재출력할 수 있습니다.`);
     } catch (e) { msg(e.message); }
   }
 

@@ -259,6 +259,10 @@ def outbound_history_list(
             "status": row.status,
             "status_name": "출고완료",
         })
+    from services.subcontract_dispatch_history import history
+    items.extend(history(db,outbound_no,order_no,partner_name,start_date,end_date,limit))
+    items.sort(key=lambda r:(r['outbound_date'],r['outbound_id']),reverse=True)
+    items=items[:limit]
     return {"total": len(items), "items": items}
 
 
@@ -286,6 +290,9 @@ def get_outbound(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
+    if outbound_id < 0:
+        from services.subcontract_dispatch_history import detail
+        return detail(db,-outbound_id)
     master = db.get(SubcontractOutboundMaster, outbound_id)
     if master is None:
         raise HTTPException(404, "외주가공 출고 내역을 찾을 수 없습니다.")

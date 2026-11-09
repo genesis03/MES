@@ -245,6 +245,8 @@ app.include_router(shipment_sync.router)
 app.include_router(subcontract_fault_sync.router)
 from routers import inbound_sync
 app.include_router(inbound_sync.router)
+from routers import subcontract_dispatch_sync
+app.include_router(subcontract_dispatch_sync.router)
 app.include_router(external_sync.router)
 app.include_router(process_flow.router)
 app.include_router(basic_info_workers.router)
