@@ -103,12 +103,14 @@ def quoted(value):
     return '"'+str(value).replace('\\','\\\\').replace('"','\\"').replace('%','%%')+'"'
 Path('/etc/systemd/system/mes-https-renew.service').write_text(
     '[Unit]\nDescription=MES IP certificate renewal\nAfter=docker.service network-online.target\nWants=network-online.target\n\n'
-    '[Service]\nType=oneshot\nWorkingDirectory='+quoted(root)+'\nExecStart=/bin/bash '+quoted(root/'scripts/oracle_https.sh')+' renew\n')
+    '[Service]\nType=oneshot\nWorkingDirectory='+str(root).replace('%','%%')+'\nExecStart=/bin/bash '+quoted(root/'scripts/oracle_https.sh')+' renew\n')
 Path('/etc/systemd/system/mes-https-renew.timer').write_text(
     '[Unit]\nDescription=Renew MES HTTPS certificates twice daily\n\n[Timer]\n'
     'OnCalendar=*-*-* 00,12:00:00\nRandomizedDelaySec=300\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n')
 PY
+    systemd-analyze verify /etc/systemd/system/mes-https-renew.service /etc/systemd/system/mes-https-renew.timer
     systemctl daemon-reload
+    systemctl reset-failed mes-https-renew.service mes-https-renew.timer || true
     systemctl enable --now mes-https-renew.timer
     systemctl list-timers mes-https-renew.timer --no-pager
     ;;
