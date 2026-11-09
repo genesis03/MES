@@ -22,7 +22,8 @@ def records(start_date:date,end_date:date,keyword:str=Query('',max_length=200),p
     access(user)
     if start_date>end_date:raise HTTPException(422,'시작일과 종료일을 확인하세요.')
     query=db.query(Record).filter(Record.outbound_date.between(start_date.isoformat(),end_date.isoformat()))
-    if keyword.strip():query=query.filter(or_(*[c.contains(keyword.strip(),autoescape=True) for c in (Record.outbound_no,Record.part_no,Record.previous_part_no,Record.partner_name,Record.lot_no)]))
+    if keyword.strip():query=query.filter(or_(*[c.contains(keyword.strip(),autoescape=True) for c in (Record.outbound_no,Record.part_no,Record.previous_part_no,Record.partner_name,Record.lot_no,Record.raw_json)]))
     total=query.count()
     rows=query.order_by(Record.outbound_date.desc(),Record.id.desc()).offset((page-1)*50).limit(50)
-    return dict(total=total,page=page,rows=[{k:getattr(r,k) for k in ('id','outbound_no','outbound_date','partner_name','process_name','part_no','previous_part_no','lot_no','outbound_qty','source_status_name')} for r in rows])
+    from services.subcontract_order_lots import allocations
+    return dict(total=total,page=page,rows=[dict(lot_count=len(allocations(r)),**{k:getattr(r,k) for k in ('id','outbound_no','outbound_date','partner_name','process_name','part_no','previous_part_no','lot_no','outbound_qty','source_status_name')}) for r in rows])

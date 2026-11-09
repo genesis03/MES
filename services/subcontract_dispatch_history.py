@@ -3,6 +3,7 @@ from decimal import Decimal
 from fastapi import HTTPException
 from models.subcontract_dispatch_sync import ExternalSubcontractDispatch as Record
 from models.models import ItemMasterModel
+from services.subcontract_order_lots import allocations
 
 
 def history(db,outbound_no=None,order_no=None,partner_name=None,start_date=None,end_date=None,limit=300):
@@ -33,5 +34,5 @@ def detail(db,record_id):
     items=[]
     for (part,previous),lots in groups.items():
         matches=masters.get(part.casefold(),[]);master=matches[0] if len(matches)==1 else None
-        items.append(dict(order_part_no=part,order_part_name=master.part_name if master else '',previous_part_no=previous,spec=master.spec if master else '',unit=master.unit if master else '',outbound_qty=str(sum(Decimal(r.outbound_qty) for r in lots)),lot_count=len(lots),lots=[dict(lot_no=r.lot_no,outbound_qty=r.outbound_qty) for r in lots],note=' / '.join(f'{r.lot_no}: {r.source_status_name}' for r in lots)))
+        items.append(dict(order_part_no=part,order_part_name=master.part_name if master else '',previous_part_no=previous,spec=master.spec if master else '',unit=master.unit if master else '',outbound_qty=str(sum(Decimal(r.outbound_qty) for r in lots)),lot_count=sum(len(allocations(r)) for r in lots),lots=[dict(lot_no=box['LOT_NUM'],outbound_qty=box['JOB_QTY']) for r in lots for box in allocations(r)],note=' / '.join(f'{r.lot_no}: {r.source_status_name}' for r in lots)))
     return dict(id=-first.id,source='EXTERNAL',status='EXTERNAL',status_name='외부 · '+' / '.join(sorted({r.source_status_name for r in rows})),outbound_no=first.outbound_no,outbound_date=first.outbound_date,order_no=first.outbound_no,order_date=first.outbound_date,partner_name=first.partner_name,processing_type_name=first.process_name,external_storage_location_name=first.storage_name,manager_name='',items=items)

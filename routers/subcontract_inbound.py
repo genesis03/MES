@@ -228,13 +228,16 @@ def inbound_outbound_list(
         )
     rows = query.order_by(SubcontractOutboundMaster.outbound_date.desc(), SubcontractOutboundMaster.id.desc()).limit(limit).all()
     from models.subcontract_dispatch_sync import ExternalSubcontractReceiptSource as Link
-    external_ids={row[0] for row in db.query(Link.outbound_id).filter(Link.outbound_id.isnot(None))}
+    from models.subcontract_dispatch_sync import ExternalSubcontractDispatch as Record
+    links=db.query(Link).filter(Link.outbound_id.isnot(None)).all()
+    external_ids={link.outbound_id for link in links}
+    record_ids={link.outbound_id:db.query(Record.id).filter_by(group_key=link.group_key).order_by(Record.id).first() for link in links}
     result = []
     for outbound in rows:
         source = _serialize_outbound_source(db, outbound)
         status_name = {"WAITING": "입고대기", "PARTIAL": "부분입고", "COMPLETED": "입고완료"}[source["inbound_status"]]
         result.append({
-            "outbound_id": outbound.id,
+            "outbound_id": -record_ids[outbound.id][0] if outbound.id in external_ids and record_ids[outbound.id] else outbound.id,
             "outbound_no": outbound.outbound_no,
             "outbound_date": outbound.outbound_date,
             "order_no": outbound.order_no,

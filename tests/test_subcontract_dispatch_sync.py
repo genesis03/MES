@@ -21,7 +21,9 @@ from services.production_sync_client import SyncError
 
 def row(day=DAY,**changes):
     result={k:'' for k in client.FIELDS}
-    return result|dict(RULE_NO='line1',REQ_NUM='R001',REQ_DATE_STR=day.isoformat(),REQ_COMP_NO='vendor1',REQ_COMP_NM='혜성금속',ETC_REQ_TYPE='PROC_SILVER',ETC_REQ_TYPE_NM='은도금',REQ_ITEM_NUM='310060',ITEM_NUM='310060-B',LOT_NUM='LS001',ETC_REQ_QTY='100',STAT_CODE='REQ_OUT',STAT_CODE_NM='출고')|changes
+    result=result|dict(RULE_NO='line1',REQ_NUM='R001',REQ_DATE_STR=day.isoformat(),REQ_COMP_NO='vendor1',REQ_COMP_NM='혜성금속',ETC_REQ_TYPE='PROC_SILVER',ETC_REQ_TYPE_NM='은도금',REQ_ITEM_NUM='310060',ITEM_NUM='310060-B',LOT_NUM='LS001',ETC_REQ_QTY='100',STAT_CODE='REQ_OUT',STAT_CODE_NM='출고')|changes
+    result['_ORDER_LOTS']=[dict(RULE_NO='allocation-'+result['RULE_NO'],LOT_NUM=result['LOT_NUM'],ITEM_NUM=result['ITEM_NUM'],ITEM_NO='item-'+result['ITEM_NUM'],JOB_QTY=result['ETC_REQ_QTY'],LOT_QTY=result['ETC_REQ_QTY'],REST_QTY='0')]
+    return result
 
 
 def response(rows):
@@ -62,6 +64,7 @@ def test_range_request_is_read_only_uses_current_auth_and_exact_windows(monkeypa
         calls.append(payload)
         return response([row(date.fromisoformat(payload[client.COND+'REQ_DATE1']),RULE_NO=str(len(calls)))])
     monkeypatch.setattr(client,'query_with_retry',query)
+    monkeypatch.setattr(instance,'fetch_order_lots',lambda rows:[row(**source) for source in rows])
     rows,_=instance.fetch_range(date(2026,10,1),date(2026,11,9))
     assert len(rows)==2 and len(calls)==2
     assert [p[client.COND+'REQ_DATE2'] for p in calls]==['2026-10-31','2026-11-09']
@@ -74,7 +77,7 @@ def test_idempotent_import_history_detail_and_no_inventory_side_effects(setup):
     rows=[row(),row(RULE_NO='line2',LOT_NUM='LS002',ETC_REQ_QTY='200')]
     assert save_range(rows,token,DAY,DAY)['inserted']==2
     assert save_range(rows,token,DAY,DAY)['unchanged']==2
-    rows[0]['ETC_REQ_QTY']='90'
+    rows[0]['ETC_REQ_QTY']='90';rows[0]['_ORDER_LOTS'][0]['JOB_QTY']='90'
     assert save_range(rows,token,DAY,DAY)['updated']==1
     assert save_range([],token,DAY,DAY)['received']==0
     with setup.sessions() as db:

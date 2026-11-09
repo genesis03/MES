@@ -14,6 +14,8 @@ def group_key(row):
 def save_range(rows,token,start,end):
     from services import production_sync_service as sync
     rows=unique_rows(rows)
+    from services.subcontract_order_lots import validate_allocations
+    for source in rows:validate_allocations(source)
     if start>end or any(not start.isoformat()<=r['REQ_DATE_STR']<=end.isoformat() for r in rows):raise SyncError('외주 출고 저장일과 조회 기간이 다릅니다.')
     counts=dict(received=len(rows),inserted=0,updated=0,unchanged=0)
     with sync.SessionLocal() as db:

@@ -82,6 +82,19 @@ class SubcontractDispatchClient(ProductionClient):
             payload.update({COND+'REQ_DATE1':cursor.isoformat(),COND+'REQ_DATE2':window_end.isoformat()})
             found,warnings=parse_response(query_with_retry(self.opener,payload),cursor,window_end)
             rows.extend(found);notes.extend(warnings);cursor=following
-        return unique_rows(rows),sorted(set(notes))
+        rows=unique_rows(rows)
+        groups={}
+        for row in rows:groups.setdefault((row['REQ_NUM'],row['REQ_COMP_NO'],row['ETC_REQ_TYPE']),[]).append(row)
+        detailed=[]
+        for group in groups.values():detailed.extend(self.fetch_order_lots(group))
+        if detailed:notes.append(f'개별 발주 LOT {sum(len(row["_ORDER_LOTS"]) for row in detailed)}개 확인')
+        return detailed,sorted(set(notes))
+
+    def fetch_order_lots(self,rows):
+        from services.subcontract_order_lots import lookup_header,fetch_detail
+        try:
+            master_key=lookup_header(self,rows)
+            return fetch_detail(self,rows,master_key)
+        except SyncError as exc:raise SyncError(f'{rows[0]["REQ_NUM"]} 개별 발주 LOT 조회: {exc}') from exc
 
     def fetch_day(self,day):return self.fetch_range(day,day)

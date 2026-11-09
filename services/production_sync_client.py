@@ -126,7 +126,7 @@ def initialize_protocol_key(opener):
 
 
 def query_with_retry(opener, payload):
-    """Retry only read-only List transport failures, never login or bad data."""
+    """Retry read-only query transport failures, never login or bad data."""
     for attempt in range(3):
         try:
             return post(opener, payload)
