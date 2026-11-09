@@ -166,10 +166,6 @@ def check_admin_permission(user: Any) -> bool:
     if not user:
         return False
 
-    username = str(getattr(user, "username", "")).strip().lower()
-    if username == "admin":
-        return True
-
     role = str(getattr(user, "role", "")).strip().lower()
     if role in ("admin", "administrator", "superadmin", "system", "1", "true"):
         return True

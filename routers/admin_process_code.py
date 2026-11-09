@@ -21,14 +21,14 @@ def _is_super_admin(user) -> bool:
         return False
     username = str(getattr(user, "username", "")).strip().lower()
     role = str(getattr(user, "role", "")).strip().upper()
-    return username == "admin" or role == "SUPERADMIN"
+    return (username == "admin" and role == "ADMIN") or role == "SUPERADMIN"
 
 
 def _is_admin(user) -> bool:
     if not user:
         return False
     role = str(getattr(user, "role", "")).strip().upper()
-    return role in {"ADMIN", "SUPERADMIN"} or str(getattr(user, "username", "")).strip().lower() == "admin"
+    return role in {"ADMIN", "SUPERADMIN"}
 
 
 @router.get("/admin/processes-locations", response_class=HTMLResponse)

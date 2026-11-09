@@ -87,7 +87,7 @@ def production_orders_inquiry_page(request: Request, current_user=Depends(get_cu
         context={
             "request": request,
             "user": current_user,
-            "is_super_admin": username == "admin" or role == "SUPERADMIN",
+            "is_super_admin": (username == "admin" and role == "ADMIN") or role == "SUPERADMIN",
         },
     )
 

@@ -513,7 +513,7 @@
     async function initBaseData() {
         try {
             const [resItems, resLoc] = await Promise.all([
-                fetch('/api/basic-info/items'),
+                fetch('/api/basic-info/item-options'),
                 fetch('/api/locations/lookup')
             ]);
 

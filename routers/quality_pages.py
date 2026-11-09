@@ -30,7 +30,7 @@ def production_defects_page(request: Request, current_user=Depends(get_current_u
         context={
             "request": request,
             "user": current_user,
-            "is_admin": username == "admin" or role in {"ADMIN", "SUPERADMIN"},
+            "is_admin": role in {"ADMIN", "SUPERADMIN"},
         },
     )
 

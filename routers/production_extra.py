@@ -31,7 +31,7 @@ def _is_super_admin(user) -> bool:
     else:
         username = str(getattr(user, "username", "")).strip().lower()
         role = str(getattr(user, "role", "")).strip().upper()
-    return username == "admin" or role == "SUPERADMIN"
+    return (username == "admin" and role == "ADMIN") or role == "SUPERADMIN"
 
 
 def _performance_output_lots(db: Session, performance_id: int):

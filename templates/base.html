@@ -1,4 +1,4 @@
-{% set is_admin_user = user and (user.username|lower == 'admin' or user.role|upper in ['ADMIN', 'ADMINISTRATOR', 'SUPERADMIN', 'SYSTEM', '1', 'TRUE']) %}
+{% set is_admin_user = user and (user.role|upper in ['ADMIN', 'ADMINISTRATOR', 'SUPERADMIN', 'SYSTEM', '1', 'TRUE']) %}
 <!DOCTYPE html>
 <html lang="ko">
 <head>

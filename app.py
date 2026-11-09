@@ -11,9 +11,7 @@ import models.partner  # 신규 거래처 테이블 자동 생성 트리거
 from models.models import UserModel
 from core.security import (
     DEV_BYPASS_AUTH,
-    check_admin_permission,
     init_default_accounts,
-    parse_user_permissions,
     verify_session_token,
 )
 from services.purchase_lot_format import install_purchase_lot_format
@@ -65,15 +63,6 @@ def production_sync_shutdown():
 
 
 
-def _menu_level(value) -> str:
-    if value is True:
-        return "READ"
-    if value is False or value is None:
-        return "NONE"
-    level = str(value).strip().upper()
-    return level if level in {"NONE", "READ", "WRITE"} else "NONE"
-
-
 @app.middleware("http")
 async def audit_request_context(request: Request, call_next):
     """업무 데이터 변경 시 사용자/메뉴/요청 정보를 감사로그에 연결합니다."""
@@ -122,75 +111,26 @@ async def audit_request_context(request: Request, call_next):
 
 @app.middleware("http")
 async def enforce_menu_write_permission(request: Request, call_next):
-    """일반 계정의 메뉴 접근 및 READ/WRITE 권한을 서버에서도 검사합니다."""
+    """Apply account permissions to the actual server endpoint, never a client header."""
     if DEV_BYPASS_AUTH:
         return await call_next(request)
-
-    req_path = request.url.path.rstrip("/") or "/"
-    if req_path.startswith("/static/") or req_path in {"/login", "/logout", "/api/login", "/api/logout", "/api/session/activity"}:
+    path = request.url.path.rstrip("/") or "/"
+    if path.startswith("/static/") or path in {"/login", "/api/login", "/logout", "/api/logout"}:
         return await call_next(request)
-
-    token = request.cookies.get("session_token")
+    from fastapi import HTTPException
+    from core.endpoint_access import enforce_endpoint_access
     username = getattr(request.state, "authenticated_username", None)
-    if not username and token:
-        username = verify_session_token(token)
     if not username:
-        return await call_next(request)
-
-    db = SessionLocal()
-    try:
+        token = request.cookies.get("session_token")
+        username = verify_session_token(token) if token else None
+    if not username:
+        return JSONResponse(status_code=401, content={"detail": "로그인이 필요합니다."})
+    with SessionLocal() as db:
         user = db.query(UserModel).filter(UserModel.username == username).first()
-        if not user or check_admin_permission(user):
-            return await call_next(request)
-
-        perms = parse_user_permissions(user)
-        menu_access = perms.get("menu_access")
-        if not isinstance(menu_access, dict) or not menu_access:
-            return await call_next(request)
-
-        normalized = {
-            (str(path).rstrip("/") or "/"): _menu_level(level)
-            for path, level in menu_access.items()
-            if str(path or "").strip()
-        }
-
-        def match_menu(path_value: str):
-            path_value = (path_value or "").rstrip("/") or "/"
-            return next(
-                (
-                    path for path in sorted(normalized, key=len, reverse=True)
-                    if path_value == path or (path != "/" and path_value.startswith(path + "/"))
-                ),
-                None,
-            )
-
-        method = request.method.upper()
-
-        # 화면 URL 직접 접근: NONE이면 차단
-        if method in {"GET", "HEAD"} and not req_path.startswith("/api/"):
-            matched = match_menu(req_path)
-            if matched and normalized[matched] == "NONE":
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "해당 메뉴에 대한 접근 권한이 없습니다."},
-                )
-
-        # 쓰기 요청: 호출한 화면이 WRITE가 아니면 차단
-        if method in {"POST", "PUT", "PATCH", "DELETE"}:
-            source_path = (request.headers.get("X-MES-Menu-Path") or "").strip()
-            if not source_path:
-                referer = request.headers.get("referer") or ""
-                if referer:
-                    source_path = urlparse(referer).path
-            matched = match_menu(source_path)
-            if matched and normalized[matched] != "WRITE":
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "읽기 전용 권한입니다. 저장/수정/삭제/확정 작업을 할 수 없습니다."},
-                )
-    finally:
-        db.close()
-
+        try:
+            await enforce_endpoint_access(request, user, db)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
     return await call_next(request)
 
 
@@ -209,7 +149,7 @@ async def enforce_login_session(request: Request, call_next):
         response = await call_next(request)
         response.headers.setdefault("Cache-Control", "private, no-store")
         return response
-    if path.startswith("/api/"):
+    if path.startswith("/api/") or "/api/" in path or path.endswith("/api"):
         response = JSONResponse(status_code=401,
             content={"detail": "로그인 세션이 만료되었습니다. 다시 로그인해 주세요."},
             headers={"Cache-Control": "no-store"})

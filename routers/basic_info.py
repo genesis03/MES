@@ -157,6 +157,16 @@ async def get_items(
     return {"status": "success", "data": data}
 
 
+@router.get("/api/basic-info/item-options")
+def item_options(db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Minimal item fields for BOM selection; never expose full item-master metadata."""
+    rows = db.query(ItemMasterModel).order_by(ItemMasterModel.part_no.asc()).all()
+    return {"status": "success", "data": [
+        {key: getattr(row, key) for key in ("id", "part_no", "part_name", "unit", "account_type", "material_type")}
+        for row in rows
+    ]}
+
+
 # 3. 품목 등록 API
 @router.post("/api/basic-info/items/create")
 async def create_item(request: Request, db: Session = Depends(get_db)):
