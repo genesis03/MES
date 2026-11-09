@@ -161,8 +161,8 @@
 
   function generatedLotText(lot, inboundQty) {
     if (inboundQty <= 0) return "-";
-    if (num(lot.received_qty) === 0 && inboundQty === num(lot.allocated_qty)) return "원 LOT 유지";
-    return "LZ 자동발번";
+    if (state.source?.source !== 'EXTERNAL' && num(lot.received_qty) === 0 && inboundQty === num(lot.allocated_qty)) return "원 LOT 유지";
+    return String(state.source?.processing_type_name || '').replace(/\s/g,'').includes('은도금') ? "LZ 자동발번" : "LC 자동발번";
   }
 
   function cloneEntries(sourceMap) {
@@ -428,6 +428,9 @@
 
   async function loadOutboundList() {
     const keyword = $("si-search").value.trim();
+    state.selectedOutboundId=null;
+    $("si-load-apply").disabled=true;
+    $("si-load-message").textContent='';
     $("si-outbounds").innerHTML = `<tr><td colspan="10">조회 중...</td></tr>`;
     try {
       const data = await api(`/api/subcontract/inbound/outbounds?keyword=${encodeURIComponent(keyword)}`);
@@ -452,12 +455,18 @@
   async function applySelectedOutbound() {
     if (!state.selectedOutboundId) return;
     try {
-      const source = await api(`/api/subcontract/inbound/outbound/${state.selectedOutboundId}`);
+      $("si-load-apply").disabled = true;
+      const source = state.selectedOutboundId < 0
+        ? await api(`/api/subcontract/inbound/external/${-state.selectedOutboundId}/prepare`, {method:'POST'})
+        : await api(`/api/subcontract/inbound/outbound/${state.selectedOutboundId}`);
       renderSource(source, null);
       $("si-load-modal").hidden = true;
       message(source.inbound_status === "PARTIAL" ? "부분입고 건을 불러왔습니다. 품번별 LOT 입고에서 잔량을 추가 입력할 수 있습니다." : "외주가공 출고건을 불러왔습니다.");
     } catch (e) {
       message(e.message, true);
+      $("si-load-message").textContent=e.message;
+    } finally {
+      $("si-load-apply").disabled=false;
     }
   }
 

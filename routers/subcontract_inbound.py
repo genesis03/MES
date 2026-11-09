@@ -152,6 +152,8 @@ def _serialize(master: SubcontractInboundMaster | None):
 
 
 def _serialize_outbound_source(db: Session, outbound: SubcontractOutboundMaster):
+    from models.subcontract_dispatch_sync import ExternalSubcontractReceiptSource as Link
+    external=db.query(Link).filter_by(outbound_id=outbound.id).first() is not None
     items = []
     total_allocated = Decimal("0")
     total_received = Decimal("0")
@@ -197,6 +199,7 @@ def _serialize_outbound_source(db: Session, outbound: SubcontractOutboundMaster)
         "manager_name": outbound.manager_name or "",
         "status": outbound.status,
         "note": outbound.note or "",
+        "source": 'EXTERNAL' if external else 'NATIVE',
         "total_allocated_qty": float(total_allocated),
         "total_received_qty": float(total_received),
         "total_remaining_qty": float(total_allocated - total_received),
@@ -223,6 +226,8 @@ def inbound_outbound_list(
             | (SubcontractOutboundMaster.partner_name.contains(q, autoescape=True))
         )
     rows = query.order_by(SubcontractOutboundMaster.outbound_date.desc(), SubcontractOutboundMaster.id.desc()).limit(limit).all()
+    from models.subcontract_dispatch_sync import ExternalSubcontractReceiptSource as Link
+    external_ids={row[0] for row in db.query(Link.outbound_id).filter(Link.outbound_id.isnot(None))}
     result = []
     for outbound in rows:
         source = _serialize_outbound_source(db, outbound)
@@ -239,9 +244,21 @@ def inbound_outbound_list(
             "received_qty": source["total_received_qty"],
             "remaining_qty": source["total_remaining_qty"],
             "inbound_status": source["inbound_status"],
-            "inbound_status_name": status_name,
+            "inbound_status_name": ('외부 · ' if outbound.id in external_ids else '')+status_name,
+            "source": 'EXTERNAL' if outbound.id in external_ids else 'NATIVE',
         })
+    from services.subcontract_external_receipt import unlinked_sources
+    result.extend(unlinked_sources(db,keyword))
+    result.sort(key=lambda row:(row['outbound_date'],row['outbound_id']),reverse=True)
+    result=result[:limit]
     return {"total": len(result), "items": result}
+
+
+@router.post("/external/{record_id}/prepare")
+def prepare_external_source(record_id:int,db:Session=Depends(get_db),current_user=Depends(get_current_user)):
+    from services.subcontract_external_receipt import prepare
+    outbound=prepare(db,record_id,getattr(current_user,'username',None))
+    return _serialize_outbound_source(db,outbound)
 
 
 @router.get("/lookup")
@@ -289,6 +306,10 @@ def get_inbound_source(
         raise HTTPException(404, "외주가공 출고 내역을 찾을 수 없습니다.")
     if outbound.status != "OUTBOUND":
         raise HTTPException(409, "출고완료 상태의 외주가공 건만 입고할 수 있습니다.")
+    from models.subcontract_dispatch_sync import ExternalSubcontractReceiptSource
+    from services.subcontract_external_receipt import validate_link
+    link=db.query(ExternalSubcontractReceiptSource).filter_by(outbound_id=outbound.id).one_or_none()
+    if link:validate_link(db,link)
     return _serialize_outbound_source(db, outbound)
 
 
@@ -482,6 +503,9 @@ def cancel_inbound(
     if master.status == "CANCELLED":
         return _serialize(master)
 
+    from services.subcontract_external_receipt import lock_source
+    outbound=db.get(SubcontractOutboundMaster,master.outbound_id)
+    if outbound:lock_source(db,outbound,validate=False)
     from services.subcontract_fifo import validate_receipt_reduction
     validate_receipt_reduction(db, master, {})
 

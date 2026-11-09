@@ -47,6 +47,8 @@ def create_inbound_with_lot_policy(
     if not outbound.items:
         raise HTTPException(422, "입고할 외주가공 출고 품목이 없습니다.")
     _validate_storage(db, payload.storage_location)
+    from services.subcontract_external_receipt import lock_source
+    external_source=lock_source(db,outbound)
 
     lot_by_id = {lot.id: (item, lot) for item in outbound.items for lot in item.lots}
     seen = set()
@@ -122,9 +124,9 @@ def create_inbound_with_lot_policy(
             master.items.append(inbound_item)
 
 
-        # 첫 입고가 전량이면 기존 LOT를 유지합니다.
-        # 부분입고/분할입고일 때만 공정별 신규 LOT를 발번합니다.
-        is_split = received > 0 or inbound_qty < allocated
+        # 내부 출고의 첫 전량입고는 원 LOT를 유지합니다.
+        # 외부 출고는 LS 원본을 보존하고 입고할 때 내부 공정 LOT를 새로 만듭니다.
+        is_split = external_source is not None or received > 0 or inbound_qty < allocated
         if is_split:
             child_lot_no = next_lot_no(db, split_prefix, payload.inbound_date, 1, reserved_lots)
             reserved_lots.add(child_lot_no)
@@ -141,7 +143,7 @@ def create_inbound_with_lot_policy(
                 lot_qty=float(inbound_qty),
                 storage_location=payload.storage_location,
                 status="ACTIVE",
-                note=f"외주가공 부분입고 {inbound_no} / 원LOT {source_lot.lot_no}",
+                note=f"외주가공 {'외부출고 입고' if external_source else '부분입고'} {inbound_no} / 원LOT {source_lot.lot_no}",
             ))
         else:
             child_lot_no = source_lot.lot_no

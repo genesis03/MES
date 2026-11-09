@@ -1,5 +1,5 @@
 """External subcontract dispatches, independent of native stock transactions."""
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from core.database import Base
 
 
@@ -54,3 +54,12 @@ class ExternalSubcontractDispatch(Base):
     first_seen_at=Column(DateTime,nullable=False)
     last_seen_at=Column(DateTime,nullable=False)
     changed_at=Column(DateTime,nullable=False)
+
+
+class ExternalSubcontractReceiptSource(Base):
+    """Immutable native reference created when a user selects an external dispatch."""
+    __tablename__='external_subcontract_receipt_sources'
+    group_key=Column(String(64),primary_key=True)
+    outbound_id=Column(Integer,ForeignKey('subcontract_outbound_masters.id'),unique=True)
+    snapshot_json=Column(Text,nullable=False)
+    created_at=Column(DateTime,nullable=False)

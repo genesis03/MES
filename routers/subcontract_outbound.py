@@ -189,7 +189,9 @@ def outbound_order_list(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    query = db.query(SubcontractOrderMaster).filter(SubcontractOrderMaster.status == "ORDERED")
+    from models.subcontract_dispatch_sync import ExternalSubcontractReceiptSource as Link
+    imported_orders=db.query(SubcontractOutboundMaster.order_id).join(Link,Link.outbound_id==SubcontractOutboundMaster.id)
+    query = db.query(SubcontractOrderMaster).filter(SubcontractOrderMaster.status == "ORDERED", ~SubcontractOrderMaster.id.in_(imported_orders))
     if keyword:
         q = keyword.strip()
         query = query.filter(
@@ -232,7 +234,8 @@ def outbound_history_list(
     if start_date and end_date and start_date > end_date:
         raise HTTPException(422, "시작일은 종료일 이후일 수 없습니다.")
 
-    query = db.query(SubcontractOutboundMaster).filter(SubcontractOutboundMaster.status == "OUTBOUND")
+    from models.subcontract_dispatch_sync import ExternalSubcontractReceiptSource as Link
+    query = db.query(SubcontractOutboundMaster).filter(SubcontractOutboundMaster.status == "OUTBOUND", ~SubcontractOutboundMaster.id.in_(db.query(Link.outbound_id).filter(Link.outbound_id.isnot(None))))
     if outbound_no:
         query = query.filter(SubcontractOutboundMaster.outbound_no.contains(outbound_no.strip(), autoescape=True))
     if order_no:
@@ -277,6 +280,9 @@ def get_outbound_source_order(
         raise HTTPException(404, "외주가공 발주를 찾을 수 없습니다.")
     if order.status != "ORDERED":
         raise HTTPException(409, "발주완료 상태의 외주가공 발주만 출고할 수 있습니다.")
+    from models.subcontract_dispatch_sync import ExternalSubcontractReceiptSource as Link
+    if db.query(Link).join(SubcontractOutboundMaster,SubcontractOutboundMaster.id==Link.outbound_id).filter(SubcontractOutboundMaster.order_id==order.id).first():
+        raise HTTPException(409,"외부 출고에 연결된 발주입니다. 입고처리의 출고건 불러오기에서 선택하세요.")
     data = _serialize_source_order(order, _active_outbound(db, order.id))
     data["external_storage_location_name"] = _storage_location_name(db, order.external_storage_location)
     if data.get("outbound"):
@@ -296,6 +302,12 @@ def get_outbound(
     master = db.get(SubcontractOutboundMaster, outbound_id)
     if master is None:
         raise HTTPException(404, "외주가공 출고 내역을 찾을 수 없습니다.")
+    from models.subcontract_dispatch_sync import ExternalSubcontractReceiptSource as Link,ExternalSubcontractDispatch as Record
+    link=db.query(Link).filter_by(outbound_id=master.id).one_or_none()
+    if link:
+        from services.subcontract_dispatch_history import detail
+        first=db.query(Record).filter_by(group_key=link.group_key).first()
+        return detail(db,first.id)
     data = _serialize_outbound(master)
     order = db.get(SubcontractOrderMaster, master.order_id)
     data["order_date"] = order.order_date if order else ""
@@ -403,6 +415,9 @@ def cancel_outbound(
     if master is None:
         raise HTTPException(404, "외주가공 출고 내역을 찾을 수 없습니다.")
 
+    from models.subcontract_dispatch_sync import ExternalSubcontractReceiptSource as Link
+    if db.query(Link).filter_by(outbound_id=master.id).first():
+        raise HTTPException(409,"외부에서 가져온 출고는 내부에서 취소할 수 없습니다. 원본 출고를 확인하세요.")
     if master.status != "CANCELLED":
         lot_nos = sorted({lot.lot_no for item in master.items for lot in item.lots if lot.lot_no})
         if lot_nos:

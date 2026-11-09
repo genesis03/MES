@@ -62,6 +62,8 @@ def validate_outbound_selection(available, selected):
 
 def validate_inbound_selection(db, outbound, selected, exclude_inbound_id=None):
     """Selected quantities must form a FIFO prefix across same partner/part/process dispatches."""
+    from services.subcontract_external_receipt import validate_external_fifo
+    validate_external_fifo(db,outbound,selected)
     received = (db.query(SubcontractInboundLot.outbound_lot_id,
                          func.sum(SubcontractInboundLot.good_qty))
                 .join(SubcontractInboundItem, SubcontractInboundItem.id == SubcontractInboundLot.inbound_item_id)
