@@ -54,3 +54,34 @@ git checkout HEAD -- static/css/label_common.css
 HTML 태그 안에 style="margin-top: 10px;"와 같이 인라인 스타일이 직접 작성되어 있으면
 외부 CSS 파일 수정 수치가 덮어씌워지므로 태그 내 style=""을 우선 제거해야 합니다.
 
+#오프라인 실행
+python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+
+(파워쉘에서 실행)
+ssh -i "C:\문서\공유폴더\BarcodeApp\ssh-key-2026-09-02.key" ubuntu@129.225.159.7
+
+ssh -i "C:\문서\공유폴더\BarcodeApp\ssh-key-2026-09-02.key" ubuntu@129.225.172.135
+
+
+
+
+cd /home/ubuntu/MES
+
+git pull origin main
+
+sudo docker compose -f docker-compose.oracle.yml up -d --build
+
+.venv/scripts 는 윈도우용, /bin 은 리눅스 용
+
+source .venv/bin/activate
+git pull origin main
+
+docker compose -f docker-compose.oracle.yml stop mes
+sudo cp -a data "data_backup_$(date +%Y%m%d_%H%M%S)"
+
+cd /home/ubuntu/MES
+git pull --ff-only origin main &&
+sudo docker compose -f docker-compose.oracle.yml up -d --build
+
+git pull origin main &&
+docker compose -f docker-compose.oracle-https.yml up -d --build mes proxy
