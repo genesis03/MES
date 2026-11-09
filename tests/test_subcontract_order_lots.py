@@ -235,3 +235,31 @@ def test_check_cannot_connect_a_different_document(monkeypatch):
     monkeypatch.setattr(source,'query_with_retry',lambda *_:check_capture('R202611073'))
     with pytest.raises(SyncError,match='요청한 발주번호가 없습니다'):
         detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),document_rows('R202611072'))
+
+
+def test_check_request_serializes_code_table_as_thirteen_wire_rows(monkeypatch):
+    from services import production_sync_client as source
+    from urllib.parse import unquote
+    def query(opener,payload):
+        wire=source.encode_payload(payload).decode('utf-8')
+        fields=dict(part.split('=',1) for part in wire.split('&'))
+        prefix='Common.System.Code.CodeShortSet.'
+        for name in ('CODE_KEY','CODE_NM','CODE_VALUE','GROUP_KEY','PAR_KEY','SEQ_NO'):
+            assert len(fields[prefix+name].split(','))==13
+        assert fields[prefix+'CODE_KEY'].startswith('PROC_MIL,PROC_HEAT,')
+        assert unquote(fields[prefix+'CODE_NM'].split(',')[1])=='열처리'
+        # A scalar containing commas must still be exactly ONE cell on the wire.
+        condition=fields[detail.CONDITION+'ETC_REQ_TYPE']
+        assert ',' not in condition and '%2C' in condition
+        assert fields[detail.CONDITION+'REQ_NUM']=='R202611072'
+        return check_capture('R202611072')
+    monkeypatch.setattr(source,'query_with_retry',query)
+    detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),document_rows('R202611072'))
+
+
+def test_protocol_column_preserves_commas_inside_cells_and_ordinary_posts():
+    from services.production_sync_client import encode_payload,ProtocolColumn
+    from urllib.parse import urlencode
+    ordinary={'a':'one,two','b':'a b&c=한글','empty':''}
+    assert encode_payload(ordinary)==urlencode(ordinary).encode('utf-8')
+    assert encode_payload({'column':ProtocolColumn(['a,b','c d',''])})==b'column=a%2Cb,c%20d,'

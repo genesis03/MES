@@ -128,7 +128,7 @@ def lookup_header(client,source_rows):
     """Resolve the master key using the captured numbered CHECK request."""
     from datetime import date
     import re
-    from services.production_sync_client import client_common,query_with_retry
+    from services.production_sync_client import client_common,query_with_retry,ProtocolColumn
     if not source_rows:raise SyncError('대조할 외주 출고 내역이 없습니다.')
     first=source_rows[0]
     callback=getattr(client,'on_query_progress',None)
@@ -142,7 +142,7 @@ def lookup_header(client,source_rows):
     code_keys='PROC_MIL PROC_HEAT PROC_GRIND PROC_MACH PROC_COMB PROC_TAB PROC_WIRE PROC_CHO PROC_SILVER PROC_PURCHA PROC_EDIS PROC_AUX PROC_DOT'.split()
     names='밀링 열처리 1차연삭 머시닝가공 복합선반 탭핑가공 와이어컷팅 초경 은도금 반제품구매 방전 부속가공 DOT'.split()
     prefix='Common.System.Code.CodeShortSet.'
-    payload.update({prefix+'CODE_KEY':','.join(code_keys),prefix+'CODE_NM':','.join(names),prefix+'CODE_VALUE':','.join(['ETCREQ']*13),prefix+'GROUP_KEY':','.join(['PROC_TYPE']*13),prefix+'PAR_KEY':','*12,prefix+'SEQ_NO':'1,2,3,8,12,13,16,17,18,19,20,26,27'})
+    payload.update({prefix+'CODE_KEY':ProtocolColumn(code_keys),prefix+'CODE_NM':ProtocolColumn(names),prefix+'CODE_VALUE':ProtocolColumn(['ETCREQ']*13),prefix+'GROUP_KEY':ProtocolColumn(['PROC_TYPE']*13),prefix+'PAR_KEY':ProtocolColumn(['']*13),prefix+'SEQ_NO':ProtocolColumn('1,2,3,8,12,13,16,17,18,19,20,26,27'.split(','))})
     values=query_with_retry(client.opener,payload)
     def scalar(key):
         cells=values.get(key,[''])

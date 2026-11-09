@@ -9,7 +9,7 @@ from http.client import IncompleteRead, RemoteDisconnected
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from urllib.error import HTTPError, URLError
-from urllib.parse import parse_qs, urlencode
+from urllib.parse import parse_qs, urlencode, quote
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
 BASE = 'http://14.63.172.132:8081'
@@ -88,10 +88,25 @@ def client_common(client):
     return common(getattr(client,'encrypt_key',None))
 
 
+class ProtocolColumn(tuple):
+    """SoEngine table column: encode each cell before joining with raw commas."""
+
+
+def encode_payload(values):
+    parts = []
+    for key, value in values.items():
+        if isinstance(value, ProtocolColumn):
+            cells = ','.join(quote(str(cell), safe="'()*!~") for cell in value)
+            parts.append(quote(key, safe="'()*!~") + '=' + cells)
+        else:
+            parts.append(urlencode({key: value}))
+    return '&'.join(parts).encode('utf-8')
+
+
 def post(opener, values):
     ordered = {key: value for key, value in values.items() if key != 'SO.NET.END'}
     ordered['SO.NET.END'] = 'SO.NET.END'
-    req = Request(ENDPOINT, data=urlencode(ordered).encode('utf-8'), headers={
+    req = Request(ENDPOINT, data=encode_payload(ordered), headers={
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
         'Origin': BASE, 'Referer': BASE + '/', 'User-Agent': 'MES-Production-Sync/1.0'})
     with opener.open(req, timeout=45) as response:
