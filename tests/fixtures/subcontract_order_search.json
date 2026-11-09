@@ -1,0 +1,38 @@
+{
+  "MES.Request.Set.ReqInfoSet.REQ_NUM": [
+    "R202611071,R202611073,R202611072"
+  ],
+  "MES.Request.Set.ReqInfoSet.RULE_NO": [
+    "2026110714543078700011359563437,2026110715091438900011973976379,2026110714570260400012102562628"
+  ],
+  "MES.Request.Set.ReqInfoSet.REQ_COMP_NO": [
+    "2023092708564337100010210440973,2022033113063142100010796710466,2022033113063142100010796710466"
+  ],
+  "MES.Request.Set.ReqInfoSet.ETC_REQ_TYPE": [
+    "PROC_PURCHA,PROC_SILVER,PROC_SILVER"
+  ],
+  "MES.Request.Set.ReqInfoSet.REQ_DATE": [
+    "2026-11-07 오전 12:00:00,2026-11-07 오전 12:00:00,2026-11-05 오전 12:00:00"
+  ],
+  "MES.Request.Set.ReqInfoSet.STAT_CODE": [
+    "REQ_FIN,REQ_OUT,REQ_OUT"
+  ],
+  "MES.Request.Set.ReqInfoSet.ROW_COUNT": [
+    ""
+  ],
+  "SO.NET.END": [
+    "SO.NET.END"
+  ],
+  "log.invoke.object": [
+    "Common.Pop.Request.E_20261109140235333_791668"
+  ],
+  "MONITOR.QUERY.START": [
+    "2026-11-09 14:02:35.333"
+  ],
+  "MONITOR.QUERY.END": [
+    "2026-11-09 14:02:35.348"
+  ],
+  "jump.form.code": [
+    ""
+  ]
+}

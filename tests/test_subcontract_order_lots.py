@@ -85,137 +85,117 @@ def test_detail_request_uses_master_key_not_outbound_detail_line_key(monkeypatch
     assert len(calls)==1
 
 
-def header_capture():return json.loads((Path(__file__).parent/'fixtures/subcontract_order_header_check.json').read_text())
+def test_problem_order_r202611072_has_verified_header_and_original_lot():
+    values=json.loads((Path(__file__).parent/'fixtures/subcontract_order_detail_r202611072.json').read_text())
+    listing=json.loads((Path(__file__).parent/'fixtures/subcontract_dispatch_list.json').read_text())
+    source,_=parse_response(listing,date(2026,10,1),date(2026,11,9))
+    source=[record for record in source if record['REQ_NUM']=='R202611072']
+    result=detail.parse_detail(values,source)
+    assert len(result)==1
+    assert result[0]['_ORDER_RULE_NO']=='2026110714570260400012102562628'
+    assert result[0]['ITEM_NUM']=='YR310284-D'
+    assert result[0]['_ORDER_LOTS'][0]['LOT_NUM']=='LZ20261107011'
+    assert result[0]['_ORDER_LOTS'][0]['JOB_QTY']=='663'
+    assert result[0]['_ORDER_LOTS'][0]['LOT_QTY']=='663'
+
+
+
+def search_capture():return json.loads((Path(__file__).parent/'fixtures/subcontract_order_search.json').read_text())
+
+
+def document_rows(number):
+    listing=json.loads((Path(__file__).parent/'fixtures/subcontract_dispatch_list.json').read_text())
+    source,_=parse_response(listing,date(2026,10,1),date(2026,11,9))
+    return [record for record in source if record['REQ_NUM']==number]
+
+
+@pytest.mark.parametrize('number,key',[('R202611072','2026110714570260400012102562628'),('R202611073','2026110715091438900011973976379')])
+def test_search_selects_matching_row_from_actual_three_order_response(monkeypatch,number,key):
+    from services import production_sync_client as source
+    calls=[]
+    monkeypatch.setattr(source,'query_with_retry',lambda opener,payload:(calls.append(dict(payload)) or search_capture()))
+    client=SimpleNamespace(context={},opener=object(),encrypt_key='4321',order_search_range=(date(2026,11,2),date(2026,11,9)))
+    assert detail.lookup_header(client,document_rows(number))==key
+    assert calls[0]['jump.form.code']=='SEARCH'
+    assert calls[0][detail.CONDITION+'REQ_NUM']==number
+    assert calls[0][detail.CONDITION+'REQ_DATE1']=='2026-11-01'
+    assert calls[0][detail.CONDITION+'REQ_DATE2']=='2026-11-10'
+    assert client.order_lookup_headers[key]['REQ_DATE']==('2026-11-05' if number.endswith('72') else '2026-11-07')
 
 
 @pytest.mark.parametrize('field,value',[
- ('ROW_COUNT','0'),('ROW_COUNT','2'),('REQ_NUM','OTHER'),('REQ_COMP_NO','OTHER'),('ETC_REQ_TYPE','OTHER'),('STAT_CODE','REQ_REG'),('RULE_NO','')])
-def test_header_lookup_rejects_missing_ambiguous_or_wrong_order(monkeypatch,field,value):
+ ('RULE_NO','wrong-count'),('REQ_COMP_NO','wrong-count'),('ETC_REQ_TYPE','wrong-count'),('ROW_COUNT','1')])
+def test_malformed_search_table_is_not_silently_indexed(monkeypatch,field,value):
     from services import production_sync_client as source
-    values=header_capture();values[detail.HEADER+field]=[value]
+    values=search_capture();values[detail.HEADER+field]=[value]
     monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
-    with pytest.raises(SyncError):detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),rows())
+    with pytest.raises(SyncError):detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),document_rows('R202611072'))
 
 
-def test_complete_observed_list_check_detail_chain_returns_66_lots(monkeypatch):
+@pytest.mark.parametrize('field,replacement',[('REQ_COMP_NO','OTHER'),('ETC_REQ_TYPE','PROC_TAB'),('STAT_CODE','REQ_FIN'),('RULE_NO','')])
+def test_matching_order_number_still_requires_correct_identity(monkeypatch,field,replacement):
+    from services import production_sync_client as source
+    values=search_capture();cells=values[detail.HEADER+field][0].split(',');cells[2]=replacement;values[detail.HEADER+field]=[','.join(cells)]
+    monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
+    with pytest.raises(SyncError):detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),document_rows('R202611072'))
+
+
+def test_other_orders_in_search_result_cannot_supply_the_header(monkeypatch):
+    from services import production_sync_client as source
+    values=search_capture();values[detail.HEADER+'REQ_NUM']=['R202611071,R202611073,R-OTHER']
+    monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
+    with pytest.raises(SyncError,match='요청한 발주번호가 없습니다'):detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),document_rows('R202611072'))
+
+
+def test_duplicate_matching_header_is_rejected(monkeypatch):
+    from services import production_sync_client as source
+    values=search_capture();values[detail.HEADER+'REQ_NUM']=['R202611071,R202611072,R202611072']
+    monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
+    with pytest.raises(SyncError,match='2건'):detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),document_rows('R202611072'))
+
+
+@pytest.mark.parametrize('number,lot_count,total',[('R202611072',1,663),('R202611073',66,10340)])
+def test_actual_list_search_detail_chain_for_each_order(monkeypatch,number,lot_count,total):
     from services import subcontract_dispatch_client as dispatch,production_sync_client as source
     from test_subcontract_dispatch_sync import response
-    instance=dispatch.SubcontractDispatchClient.__new__(dispatch.SubcontractDispatchClient)
-    instance.context={};instance.opener=object();instance.encrypt_key='4321';calls=[]
+    calls=[];requested=document_rows(number)
     def query(opener,payload):
-        calls.append(payload)
-        obj=payload['run.object.name']
-        if obj=='MES.Request.EtcReqDetailList.EtcReqDetailListObj':return response(rows())
-        if obj=='Common.Pop.Request.EtcReqPopObj':return header_capture()
-        if obj=='MES.Request.Etc.EtcReqObj':return capture()
+        calls.append(dict(payload));obj=payload['run.object.name']
+        if obj=='MES.Request.EtcReqDetailList.EtcReqDetailListObj':return response(requested)
+        if obj=='Common.Pop.Request.EtcReqPopObj':
+            assert payload['jump.form.code']=='SEARCH'
+            return search_capture()
+        if obj=='MES.Request.Etc.EtcReqObj':
+            return json.loads((Path(__file__).parent/'fixtures/subcontract_order_detail_r202611072.json').read_text()) if number.endswith('72') else capture()
         raise AssertionError(obj)
     monkeypatch.setattr(dispatch,'query_with_retry',query);monkeypatch.setattr(source,'query_with_retry',query)
-    result,notes=instance.fetch_range(date(2026,11,7),date(2026,11,7))
-    assert len(result)==4 and sum(len(row['_ORDER_LOTS']) for row in result)==66
-    assert [p['jump.form.code'] for p in calls]==['List','CHECK','List']
+    client=dispatch.SubcontractDispatchClient.__new__(dispatch.SubcontractDispatchClient);client.context={};client.opener=object();client.encrypt_key='4321'
+    result,notes=client.fetch_range(date(2026,11,2),date(2026,11,9))
+    children=[child for row in result for child in row['_ORDER_LOTS']]
+    assert len(children)==lot_count and sum(Decimal(child['JOB_QTY']) for child in children)==total
+    assert [p['jump.form.code'] for p in calls]==['List','SEARCH','List']
     assert all(p['ENCRYPT.KEY']=='4321' for p in calls)
-    assert calls[1][detail.CONDITION+'REQ_NUM']=='R202611073'
-    assert calls[1][detail.CONDITION+'FIELD_RULE_NO']=='MES.Request.Etc.EtcReqForm.ReqInfoModel.RULE_NO'
-    assert calls[2][detail.HEADER+'RULE_NO']==header_capture()[detail.HEADER+'RULE_NO'][0]
-    assert calls[2][detail.HEADER+'RULE_NO'] not in {row['RULE_NO'] for row in rows()}
-    assert '개별 발주 LOT 66개 확인' in notes
+    assert calls[2][detail.HEADER+'REQ_NUM']==number
+    assert calls[2][detail.HEADER+'RULE_NO']==result[0]['_ORDER_RULE_NO']
+    assert calls[2][detail.HEADER+'RULE_NO'] not in {row['RULE_NO'] for row in requested}
+    assert f'개별 발주 LOT {lot_count}개 확인' in notes
 
 
-def test_order_lookup_is_not_restricted_to_dispatch_date(monkeypatch):
+def test_search_also_accepts_single_filtered_header(monkeypatch):
     from services import production_sync_client as source
-    values=header_capture();values[detail.HEADER+'REQ_DATE']=['2026-01-01 오전 12:00:00'];calls=[]
-    monkeypatch.setattr(source,'query_with_retry',lambda opener,payload:(calls.append(dict(payload)) or values))
-    client=SimpleNamespace(context={},opener=object(),encrypt_key='4321')
-    key=detail.lookup_header(client,rows())
-    assert key==values[detail.HEADER+'RULE_NO'][0]
-    assert calls[0][detail.CONDITION+'REQ_DATE1']==calls[0][detail.CONDITION+'REQ_DATE2']==''
-    assert client.order_lookup_headers[key]['REQ_DATE']=='2026-01-01'
-    assert calls[0][detail.CONDITION+'REQ_NUM']=='R202611073'
-
-
-def test_matching_scalar_header_can_be_verified_without_row_count(monkeypatch):
-    from services import production_sync_client as source
-    values=header_capture();values.pop(detail.HEADER+'ROW_COUNT')
+    values=search_capture()
+    for field in ('REQ_NUM','RULE_NO','REQ_COMP_NO','ETC_REQ_TYPE','STAT_CODE','REQ_DATE'):
+        values[detail.HEADER+field]=[values[detail.HEADER+field][0].split(',')[2]]
+    values[detail.HEADER+'ROW_COUNT']=['1']
     monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
-    key=detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),rows())
-    assert key==values[detail.HEADER+'RULE_NO'][0]
+    assert detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),document_rows('R202611072'))=='2026110714570260400012102562628'
 
 
-def test_missing_count_does_not_allow_missing_identity(monkeypatch):
+def test_empty_search_does_not_reuse_a_previous_header(monkeypatch):
     from services import production_sync_client as source
-    values=header_capture();values.pop(detail.HEADER+'ROW_COUNT');values[detail.HEADER+'RULE_NO']=['']
+    values=search_capture()
+    for key in list(values):
+        if key.startswith(detail.HEADER):values.pop(key)
     monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
-    with pytest.raises(SyncError):detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),rows())
-
-
-def test_empty_type_filtered_result_retries_same_number_without_type_filter(monkeypatch):
-    from services import production_sync_client as source
-    calls=[];empty=header_capture();empty[detail.HEADER+'ROW_COUNT']=['0']
-    def query(opener,payload):
-        calls.append(dict(payload));return empty if payload[detail.CONDITION+'ETC_REQ_TYPE'] else header_capture()
-    monkeypatch.setattr(source,'query_with_retry',query)
-    key=detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),rows())
-    assert key==header_capture()[detail.HEADER+'RULE_NO'][0] and len(calls)==2
-    assert calls[1][detail.CONDITION+'ETC_REQ_TYPE']==''
-    assert all(p[detail.CONDITION+'REQ_NUM']=='R202611073' for p in calls)
-
-
-@pytest.mark.parametrize('count,expected',[('0','0건'),('2','2건'),('invalid','유효하지')])
-def test_header_count_error_explains_returned_result(monkeypatch,count,expected):
-    from services import production_sync_client as source
-    values=header_capture();values[detail.HEADER+'ROW_COUNT']=[count]
-    monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
-    with pytest.raises(SyncError,match=expected):detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),rows())
-
-
-def test_detail_request_uses_actual_order_date_from_lookup(monkeypatch):
-    from services import production_sync_client as source
-    values=header_capture();values[detail.HEADER+'REQ_DATE']=['2026-01-01 오전 12:00:00'];calls=[]
-    def query(opener,payload):
-        calls.append(dict(payload));return values if payload['jump.form.code']=='CHECK' else capture()
-    monkeypatch.setattr(source,'query_with_retry',query)
-    client=SimpleNamespace(context={},opener=object(),encrypt_key='4321')
-    key=detail.lookup_header(client,rows());detail.fetch_detail(client,rows(),key)
-    assert calls[1][detail.HEADER+'REQ_DATE']=='2026-01-01'
-
-
-@pytest.mark.parametrize('returned,label',[('R202611073','R202611073'),('','빈값'),(None,'필드 누락')])
-def test_mismatch_reports_actual_returned_number_and_count(monkeypatch,returned,label):
-    from services import production_sync_client as source
-    values=header_capture()
-    if returned is None:values.pop(detail.HEADER+'REQ_NUM')
-    else:values[detail.HEADER+'REQ_NUM']=[returned]
-    requested=rows()
-    for row in requested:row['REQ_NUM']='R202611072'
-    monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
-    with pytest.raises(SyncError) as failure:detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),requested)
-    assert '요청 R202611072' in str(failure.value)
-    assert f'응답 {label}' in str(failure.value) and '조회건수 1' in str(failure.value)
-    assert failure.value.diagnostic['returned_req_num']==label
-    assert failure.value.diagnostic['header_key_present'] is True
-
-
-def test_mismatch_does_not_record_raw_response_or_login_context(monkeypatch):
-    from services import production_sync_client as source
-    values=header_capture();values[detail.HEADER+'REQ_NUM']=['unexpected credential-text with spaces']
-    values['Common.Set.LoginUserSet.USER_PASS']=['test-secret-not-to-log']
-    monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
-    with pytest.raises(SyncError) as failure:detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),rows())
-    encoded=json.dumps(failure.value.diagnostic,ensure_ascii=False)
-    assert '형식 확인 필요' in str(failure.value)
-    assert 'test-secret-not-to-log' not in str(failure.value)+encoded
-    assert 'credential-text' not in str(failure.value)+encoded
-
-
-def test_wrong_lookup_number_never_reaches_detail_fetch(monkeypatch):
-    from services import subcontract_dispatch_client as dispatch,production_sync_client as source
-    values=header_capture();values[detail.HEADER+'REQ_NUM']=['R202611073'];calls=[]
-    requested=rows()
-    for row in requested:row['REQ_NUM']='R202611072'
-    def query(opener,payload):calls.append(payload['run.object.name']);return values
-    monkeypatch.setattr(source,'query_with_retry',query)
-    instance=dispatch.SubcontractDispatchClient.__new__(dispatch.SubcontractDispatchClient)
-    instance.context={};instance.opener=object();instance.encrypt_key='4321'
-    with pytest.raises(SyncError) as failure:instance.fetch_order_lots(requested)
-    assert calls==['Common.Pop.Request.EtcReqPopObj']
-    assert failure.value.diagnostic['expected_req_num']=='R202611072'
+    client=SimpleNamespace(context={},opener=object(),encrypt_key='4321',order_lookup_headers={'old':{'REQ_DATE':'2026-11-07'}})
+    with pytest.raises(SyncError,match='발주번호가 없습니다'):detail.lookup_header(client,document_rows('R202611072'))

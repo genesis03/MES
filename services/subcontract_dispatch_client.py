@@ -70,6 +70,7 @@ def parse_response(values,start,end):
 
 class SubcontractDispatchClient(ProductionClient):
     def fetch_range(self,start,end):
+        self.order_search_range=(start,end)
         rows=[];notes=[];cursor=start
         while cursor<=end:
             following=date(cursor.year+1,1,1) if cursor.month==12 else date(cursor.year,cursor.month+1,1)

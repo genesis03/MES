@@ -1,0 +1,80 @@
+{
+  "MES.Request.Set.ReqInfoSet.ETC_REQ_TYPE": [
+    "PROC_SILVER"
+  ],
+  "MES.Request.Set.ReqInfoSet.REQ_COMP_NO": [
+    "2022033113063142100010796710466"
+  ],
+  "MES.Request.Set.ReqInfoSet.REQ_NUM": [
+    "R202611072"
+  ],
+  "MES.Request.Set.ReqInfoSet.RULE_NO": [
+    "2026110714570260400012102562628"
+  ],
+  "MES.Request.Set.ReqInfoSet.STAT_CODE": [
+    "REQ_OUT"
+  ],
+  "MES.Request.Set.EtcReqDetailSet.ETC_REQ_QTY": [
+    "663"
+  ],
+  "MES.Request.Set.EtcReqDetailSet.ITEM_NO": [
+    "2025120810253511100011062121555"
+  ],
+  "MES.Request.Set.EtcReqDetailSet.ITEM_NUM": [
+    "YR310284-D"
+  ],
+  "MES.Request.Set.EtcReqDetailSet.RULE_NO": [
+    "2026110714571343200010787040178"
+  ],
+  "MES.Request.Set.EtcReqDetailSet.LOT_NUM": [
+    "LS20261107001"
+  ],
+  "MES.Request.Set.EtcReqDetailSet.LOT_NO": [
+    "2026110714571343200011023754080"
+  ],
+  "MES.Request.Set.EtcReqDetailSet.ETC_REQ_TYPE": [
+    "PROC_SILVER"
+  ],
+  "MES.Request.Set.EtcReqDetailSet.REQ_ITEM_NUM": [
+    "YR310284"
+  ],
+  "Common.Set.LotSet.ITEM_NO": [
+    "2025120810253511100011062121555"
+  ],
+  "Common.Set.LotSet.ITEM_NUM": [
+    "YR310284-D"
+  ],
+  "Common.Set.LotSet.JOB_QTY": [
+    "663.0000"
+  ],
+  "Common.Set.LotSet.LOT_NUM": [
+    "LZ20261107011"
+  ],
+  "Common.Set.LotSet.LOT_QTY": [
+    "663.0000"
+  ],
+  "Common.Set.LotSet.REST_QTY": [
+    "0.0000"
+  ],
+  "Common.Set.LotSet.ROW_COUNT": [
+    ""
+  ],
+  "Common.Set.LotSet.RULE_NO": [
+    "2026110714563224400011212799288"
+  ],
+  "jump.form.code": [
+    ""
+  ],
+  "MONITOR.QUERY.START": [
+    "2026-11-09 13:56:33.030"
+  ],
+  "MONITOR.QUERY.END": [
+    "2026-11-09 13:56:33.062"
+  ],
+  "log.invoke.object": [
+    "MES.Request.Etc.EtcR_20261109135632937_1823768"
+  ],
+  "SO.NET.END": [
+    "SO.NET.END"
+  ]
+}
