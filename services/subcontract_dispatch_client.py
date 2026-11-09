@@ -95,6 +95,6 @@ class SubcontractDispatchClient(ProductionClient):
         try:
             master_key=lookup_header(self,rows)
             return fetch_detail(self,rows,master_key)
-        except SyncError as exc:raise SyncError(f'{rows[0]["REQ_NUM"]} 개별 발주 LOT 조회: {exc}') from exc
+        except SyncError as exc:raise SyncError(f'{rows[0]["REQ_NUM"]} 개별 발주 LOT 조회: {exc}',diagnostic=exc.diagnostic) from exc
 
     def fetch_day(self,day):return self.fetch_range(day,day)

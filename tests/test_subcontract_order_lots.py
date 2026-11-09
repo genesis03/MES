@@ -177,3 +177,45 @@ def test_detail_request_uses_actual_order_date_from_lookup(monkeypatch):
     client=SimpleNamespace(context={},opener=object(),encrypt_key='4321')
     key=detail.lookup_header(client,rows());detail.fetch_detail(client,rows(),key)
     assert calls[1][detail.HEADER+'REQ_DATE']=='2026-01-01'
+
+
+@pytest.mark.parametrize('returned,label',[('R202611073','R202611073'),('','빈값'),(None,'필드 누락')])
+def test_mismatch_reports_actual_returned_number_and_count(monkeypatch,returned,label):
+    from services import production_sync_client as source
+    values=header_capture()
+    if returned is None:values.pop(detail.HEADER+'REQ_NUM')
+    else:values[detail.HEADER+'REQ_NUM']=[returned]
+    requested=rows()
+    for row in requested:row['REQ_NUM']='R202611072'
+    monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
+    with pytest.raises(SyncError) as failure:detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),requested)
+    assert '요청 R202611072' in str(failure.value)
+    assert f'응답 {label}' in str(failure.value) and '조회건수 1' in str(failure.value)
+    assert failure.value.diagnostic['returned_req_num']==label
+    assert failure.value.diagnostic['header_key_present'] is True
+
+
+def test_mismatch_does_not_record_raw_response_or_login_context(monkeypatch):
+    from services import production_sync_client as source
+    values=header_capture();values[detail.HEADER+'REQ_NUM']=['unexpected credential-text with spaces']
+    values['Common.Set.LoginUserSet.USER_PASS']=['test-secret-not-to-log']
+    monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
+    with pytest.raises(SyncError) as failure:detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),rows())
+    encoded=json.dumps(failure.value.diagnostic,ensure_ascii=False)
+    assert '형식 확인 필요' in str(failure.value)
+    assert 'test-secret-not-to-log' not in str(failure.value)+encoded
+    assert 'credential-text' not in str(failure.value)+encoded
+
+
+def test_wrong_lookup_number_never_reaches_detail_fetch(monkeypatch):
+    from services import subcontract_dispatch_client as dispatch,production_sync_client as source
+    values=header_capture();values[detail.HEADER+'REQ_NUM']=['R202611073'];calls=[]
+    requested=rows()
+    for row in requested:row['REQ_NUM']='R202611072'
+    def query(opener,payload):calls.append(payload['run.object.name']);return values
+    monkeypatch.setattr(source,'query_with_retry',query)
+    instance=dispatch.SubcontractDispatchClient.__new__(dispatch.SubcontractDispatchClient)
+    instance.context={};instance.opener=object();instance.encrypt_key='4321'
+    with pytest.raises(SyncError) as failure:instance.fetch_order_lots(requested)
+    assert calls==['Common.Pop.Request.EtcReqPopObj']
+    assert failure.value.diagnostic['expected_req_num']=='R202611072'

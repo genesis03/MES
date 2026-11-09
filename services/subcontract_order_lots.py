@@ -167,7 +167,19 @@ def lookup_header(client,source_rows):
     # Some older records omit ROW_COUNT. Scalar identity plus full detail-line
     # validation is sufficient; do not reject an otherwise verified order.
     for field in ('REQ_NUM','REQ_COMP_NO','ETC_REQ_TYPE','STAT_CODE'):
-        if scalar(HEADER+field)!=first[field]:raise SyncError(f'{first["REQ_NUM"]}: 발주번호 확인 응답의 {field}가 출고 내역과 다릅니다.')
+        if scalar(HEADER+field)!=first[field]:
+            if field=='REQ_NUM':
+                # Diagnostic metadata only: never log the raw response or login context.
+                raw=scalar(HEADER+'REQ_NUM')
+                if HEADER+'REQ_NUM' not in values:returned='필드 누락'
+                elif not raw:returned='빈값'
+                elif re.fullmatch(r'[A-Za-z0-9_.-]{1,100}',raw):returned=raw
+                else:returned='형식 확인 필요'
+                row_count=count if count.isdecimal() and len(count)<=8 else '미제공'
+                has_key=bool(re.fullmatch(r'[0-9]{1,100}',scalar(HEADER+'RULE_NO')))
+                diagnostic=dict(error_kind='order_number_mismatch',expected_req_num=first['REQ_NUM'],returned_req_num=returned,row_count=row_count,header_key_present=has_key)
+                raise SyncError(f'발주번호 불일치: 요청 {first["REQ_NUM"]} / 응답 {returned} / 조회건수 {row_count} / 발주키 {"있음" if has_key else "없음"}. 다른 발주를 연결하지 않고 중단했습니다.',diagnostic=diagnostic)
+            raise SyncError(f'{first["REQ_NUM"]}: 발주번호 확인 응답의 {field}가 출고 내역과 다릅니다.')
     key=scalar(HEADER+'RULE_NO')
     if not re.fullmatch(r'[0-9]{1,100}',key):raise SyncError('발주 헤더 식별키가 유효하지 않습니다(조회 건수 누락 여부와 원본 응답을 확인하세요).')
     cache=getattr(client,'order_lookup_headers',{})
