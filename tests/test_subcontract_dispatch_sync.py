@@ -125,3 +125,17 @@ def test_execute_range_and_automatic_recent_only(setup,monkeypatch):
         settings=db.get(State,1);settings.enabled=True;settings.initial_completed_at=sync.now();settings.lookback_days=2;settings.next_run_at=None;db.commit()
     sync.schedule_cycle('subcontract_dispatch')
     assert calls==[(DAY,DAY),(DAY-timedelta(days=1),DAY)]
+
+
+def test_failed_order_lookup_does_not_mislabel_range_start_as_query_date(setup,monkeypatch):
+    monkeypatch.setattr(client.SubcontractDispatchClient,'__init__',lambda self,*a:None)
+    def failed(self,start,end):raise SyncError('R202601062 개별 발주 LOT 조회: 발주번호 확인 조회가 0건입니다.')
+    monkeypatch.setattr(client.SubcontractDispatchClient,'fetch_range',failed)
+    token,run_id=sync.claim(DAY,DAY,'MANUAL','subcontract_dispatch')
+    sync.execute(DAY,DAY,token,run_id,'subcontract_dispatch')
+    with setup.sessions() as db:
+        run=db.get(Run,run_id)
+        assert run.status=='FAILED'
+        assert run.error.startswith('R202601062 개별 발주 LOT 조회:')
+        assert not run.error.startswith(DAY.isoformat())
+        assert db.query(Record).count()==0

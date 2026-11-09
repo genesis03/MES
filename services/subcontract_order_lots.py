@@ -114,7 +114,8 @@ def fetch_detail(client,source_rows,order_rule_no):
     if callback:callback()
     payload=client_common(client)|client.context
     payload.update({'run.object.name':'MES.Request.Etc.EtcReqObj','jump.form.code':'List'})
-    payload.update({HEADER+'RULE_NO':str(order_rule_no),HEADER+'REQ_NUM':first['REQ_NUM'],HEADER+'REQ_COMP_NO':first['REQ_COMP_NO'],HEADER+'REQ_DATE':first['REQ_DATE_STR'],HEADER+'ETC_REQ_TYPE':first['ETC_REQ_TYPE'],HEADER+'REQ_TYPE':first['ETC_REQ_TYPE'],HEADER+'STAT_CODE':first['STAT_CODE']})
+    header=getattr(client,'order_lookup_headers',{}).get(str(order_rule_no),{})
+    payload.update({HEADER+'RULE_NO':str(order_rule_no),HEADER+'REQ_NUM':first['REQ_NUM'],HEADER+'REQ_COMP_NO':first['REQ_COMP_NO'],HEADER+'REQ_DATE':header.get('REQ_DATE',first['REQ_DATE_STR']),HEADER+'ETC_REQ_TYPE':first['ETC_REQ_TYPE'],HEADER+'REQ_TYPE':first['ETC_REQ_TYPE'],HEADER+'STAT_CODE':first['STAT_CODE']})
     values=query_with_retry(client.opener,payload)
     if values.get(HEADER+'RULE_NO')!=[str(order_rule_no)]:raise SyncError('발주 상세 응답의 헤더 식별키가 요청과 다릅니다.')
     return parse_detail(values,source_rows)
@@ -125,33 +126,51 @@ CONDITION='MES.Request.Set.ReqCondSet.'
 
 def lookup_header(client,source_rows):
     """Observed read-only CHECK maps the document number to its master RULE_NO."""
-    from datetime import date,timedelta
     import re
     from services.production_sync_client import client_common,query_with_retry
-    first=source_rows[0];day=date.fromisoformat(first['REQ_DATE_STR'])
+    first=source_rows[0]
     callback=getattr(client,'on_query_progress',None)
     if callback:callback()
     payload=client_common(client)|client.context
     payload.update({'run.object.name':'Common.Pop.Request.EtcReqPopObj','jump.form.code':'CHECK'})
     fields=('CONFIRM_DATE','ETC_REQ_TYPE','FIELD_REQ_NUM','FIELD_RULE_NO','IS_CHANGE','IS_ETCINFORM','IS_UNMATCH_INQTY','IS_UNOUT','ORDER_NO','ORDER_NUM','PO_NUM','REQ_COMP_NM','REQ_COMP_NO','REQ_DATE1','REQ_DATE2','REQ_ITEM_NUM','REQ_NO','REQ_NUM','REQ_TYPE','STAT_CODE','YEAR')
     payload.update({CONDITION+field:'' for field in fields})
-    payload.update({CONDITION+'ETC_REQ_TYPE':"'PROC_HEAT_OUT', 'PROC_MACH_OUT', 'PROC_SILVER_OUT', 'PROC_PURCHA'",CONDITION+'FIELD_REQ_NUM':'MES.Request.Etc.EtcReqForm.ReqInfoModel.REQ_NUM',CONDITION+'FIELD_RULE_NO':'MES.Request.Etc.EtcReqForm.ReqInfoModel.RULE_NO',CONDITION+'REQ_NUM':first['REQ_NUM'],CONDITION+'REQ_DATE1':(day-timedelta(days=1)).isoformat(),CONDITION+'REQ_DATE2':(day+timedelta(days=1)).isoformat()})
+    payload.update({CONDITION+'ETC_REQ_TYPE':"'PROC_HEAT_OUT', 'PROC_MACH_OUT', 'PROC_SILVER_OUT', 'PROC_PURCHA'",CONDITION+'FIELD_REQ_NUM':'MES.Request.Etc.EtcReqForm.ReqInfoModel.REQ_NUM',CONDITION+'FIELD_RULE_NO':'MES.Request.Etc.EtcReqForm.ReqInfoModel.RULE_NO',CONDITION+'REQ_NUM':first['REQ_NUM']})
     code_keys='PROC_MIL PROC_HEAT PROC_GRIND PROC_MACH PROC_COMB PROC_TAB PROC_WIRE PROC_CHO PROC_SILVER PROC_PURCHA PROC_EDIS PROC_AUX PROC_DOT'.split()
     names='밀링 열처리 1차연삭 머시닝가공 복합선반 탭핑가공 와이어컷팅 초경 은도금 반제품구매 방전 부속가공 DOT'.split()
     prefix='Common.System.Code.CodeShortSet.'
     payload.update({prefix+'CODE_KEY':','.join(code_keys),prefix+'CODE_NM':','.join(names),prefix+'CODE_VALUE':','.join(['ETCREQ']*13),prefix+'GROUP_KEY':','.join(['PROC_TYPE']*13),prefix+'PAR_KEY':','*12,prefix+'SEQ_NO':'1,2,3,8,12,13,16,17,18,19,20,26,27'})
-    values=query_with_retry(client.opener,payload)
-    def scalar(key):
-        data=values.get(key,[''])
-        if len(data)!=1:raise SyncError('발주번호 확인 응답에 중복 필드가 있습니다.')
-        return data[0].strip()
-    if values.get('SO.NET.END')!=['SO.NET.END'] or any(key.startswith('THROW.') for key in values):raise SyncError('정상적인 발주번호 확인 응답이 아닙니다.')
-    if not scalar('log.invoke.object').startswith('Common.Pop.Request.E') or not all(scalar(k) for k in ('MONITOR.QUERY.START','MONITOR.QUERY.END')):raise SyncError('발주번호 확인 완료를 확인할 수 없습니다.')
-    if scalar('jump.form.code') not in ('','CHECK') or any(scalar(k) for k in ('jump.url','jump.object.name','jump.form.message')):raise SyncError('발주번호 확인 대신 화면 전환 응답을 받았습니다.')
-    if scalar(HEADER+'ROW_COUNT')!='1':raise SyncError('발주번호와 일치하는 발주가 정확히 한 건인지 확인할 수 없습니다.')
+    # Date controls belong to the popup's screen state. An order can predate
+    # its dispatch, so the exact document lookup must not inherit those dates.
+    def check(values):
+        def scalar(key):
+            data=values.get(key,[''])
+            if len(data)!=1:raise SyncError('발주번호 확인 응답에 중복 필드가 있습니다.')
+            return data[0].strip()
+        if values.get('SO.NET.END')!=['SO.NET.END'] or any(key.startswith('THROW.') for key in values):raise SyncError('정상적인 발주번호 확인 응답이 아닙니다.')
+        if not scalar('log.invoke.object').startswith('Common.Pop.Request.E') or not all(scalar(k) for k in ('MONITOR.QUERY.START','MONITOR.QUERY.END')):raise SyncError('발주번호 확인 완료를 확인할 수 없습니다.')
+        if scalar('jump.form.code') not in ('','CHECK') or any(scalar(k) for k in ('jump.url','jump.object.name','jump.form.message')):raise SyncError('발주번호 확인 대신 화면 전환 응답을 받았습니다.')
+        return scalar
+    values=query_with_retry(client.opener,payload);scalar=check(values)
+    count=scalar(HEADER+'ROW_COUNT')
+    if count=='0' or (not count and not scalar(HEADER+'RULE_NO')):
+        # Old processing categories can also be hidden by the popup's type filter.
+        # Retry the same exact document number, never a whole-history import.
+        if callback:callback()
+        payload[CONDITION+'ETC_REQ_TYPE']=''
+        values=query_with_retry(client.opener,payload);scalar=check(values)
+        count=scalar(HEADER+'ROW_COUNT')
+    if count=='0':raise SyncError('발주번호 확인 조회가 0건입니다. 날짜·가공유형 제한을 해제한 조회에서도 해당 발주를 반환하지 않았습니다.')
+    if count not in ('','1'):
+        if count.isdecimal() and len(count)<=8:raise SyncError(f'발주번호 확인 조회가 {count}건입니다. 발주를 하나로 연결할 수 없습니다.')
+        raise SyncError('발주번호 확인 응답의 조회 건수 값이 유효하지 않습니다.')
+    # Some older records omit ROW_COUNT. Scalar identity plus full detail-line
+    # validation is sufficient; do not reject an otherwise verified order.
     for field in ('REQ_NUM','REQ_COMP_NO','ETC_REQ_TYPE','STAT_CODE'):
         if scalar(HEADER+field)!=first[field]:raise SyncError(f'{first["REQ_NUM"]}: 발주번호 확인 응답의 {field}가 출고 내역과 다릅니다.')
-    if scalar(HEADER+'REQ_DATE')[:10]!=first['REQ_DATE_STR']:raise SyncError('발주 확인 응답의 일자가 출고 내역과 다릅니다.')
     key=scalar(HEADER+'RULE_NO')
-    if not re.fullmatch(r'[0-9]{1,100}',key):raise SyncError('발주 헤더 식별키가 유효하지 않습니다.')
+    if not re.fullmatch(r'[0-9]{1,100}',key):raise SyncError('발주 헤더 식별키가 유효하지 않습니다(조회 건수 누락 여부와 원본 응답을 확인하세요).')
+    cache=getattr(client,'order_lookup_headers',{})
+    cache[key]={'REQ_DATE':scalar(HEADER+'REQ_DATE')[:10]}
+    client.order_lookup_headers=cache
     return key

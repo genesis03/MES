@@ -89,7 +89,7 @@ def header_capture():return json.loads((Path(__file__).parent/'fixtures/subcontr
 
 
 @pytest.mark.parametrize('field,value',[
- ('ROW_COUNT','0'),('ROW_COUNT','2'),('REQ_NUM','OTHER'),('REQ_COMP_NO','OTHER'),('ETC_REQ_TYPE','OTHER'),('STAT_CODE','REQ_REG'),('RULE_NO',''),('REQ_DATE','2026-11-06')])
+ ('ROW_COUNT','0'),('ROW_COUNT','2'),('REQ_NUM','OTHER'),('REQ_COMP_NO','OTHER'),('ETC_REQ_TYPE','OTHER'),('STAT_CODE','REQ_REG'),('RULE_NO','')])
 def test_header_lookup_rejects_missing_ambiguous_or_wrong_order(monkeypatch,field,value):
     from services import production_sync_client as source
     values=header_capture();values[detail.HEADER+field]=[value]
@@ -119,3 +119,61 @@ def test_complete_observed_list_check_detail_chain_returns_66_lots(monkeypatch):
     assert calls[2][detail.HEADER+'RULE_NO']==header_capture()[detail.HEADER+'RULE_NO'][0]
     assert calls[2][detail.HEADER+'RULE_NO'] not in {row['RULE_NO'] for row in rows()}
     assert '개별 발주 LOT 66개 확인' in notes
+
+
+def test_order_lookup_is_not_restricted_to_dispatch_date(monkeypatch):
+    from services import production_sync_client as source
+    values=header_capture();values[detail.HEADER+'REQ_DATE']=['2026-01-01 오전 12:00:00'];calls=[]
+    monkeypatch.setattr(source,'query_with_retry',lambda opener,payload:(calls.append(dict(payload)) or values))
+    client=SimpleNamespace(context={},opener=object(),encrypt_key='4321')
+    key=detail.lookup_header(client,rows())
+    assert key==values[detail.HEADER+'RULE_NO'][0]
+    assert calls[0][detail.CONDITION+'REQ_DATE1']==calls[0][detail.CONDITION+'REQ_DATE2']==''
+    assert client.order_lookup_headers[key]['REQ_DATE']=='2026-01-01'
+    assert calls[0][detail.CONDITION+'REQ_NUM']=='R202611073'
+
+
+def test_matching_scalar_header_can_be_verified_without_row_count(monkeypatch):
+    from services import production_sync_client as source
+    values=header_capture();values.pop(detail.HEADER+'ROW_COUNT')
+    monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
+    key=detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),rows())
+    assert key==values[detail.HEADER+'RULE_NO'][0]
+
+
+def test_missing_count_does_not_allow_missing_identity(monkeypatch):
+    from services import production_sync_client as source
+    values=header_capture();values.pop(detail.HEADER+'ROW_COUNT');values[detail.HEADER+'RULE_NO']=['']
+    monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
+    with pytest.raises(SyncError):detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),rows())
+
+
+def test_empty_type_filtered_result_retries_same_number_without_type_filter(monkeypatch):
+    from services import production_sync_client as source
+    calls=[];empty=header_capture();empty[detail.HEADER+'ROW_COUNT']=['0']
+    def query(opener,payload):
+        calls.append(dict(payload));return empty if payload[detail.CONDITION+'ETC_REQ_TYPE'] else header_capture()
+    monkeypatch.setattr(source,'query_with_retry',query)
+    key=detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),rows())
+    assert key==header_capture()[detail.HEADER+'RULE_NO'][0] and len(calls)==2
+    assert calls[1][detail.CONDITION+'ETC_REQ_TYPE']==''
+    assert all(p[detail.CONDITION+'REQ_NUM']=='R202611073' for p in calls)
+
+
+@pytest.mark.parametrize('count,expected',[('0','0건'),('2','2건'),('invalid','유효하지')])
+def test_header_count_error_explains_returned_result(monkeypatch,count,expected):
+    from services import production_sync_client as source
+    values=header_capture();values[detail.HEADER+'ROW_COUNT']=[count]
+    monkeypatch.setattr(source,'query_with_retry',lambda *_:values)
+    with pytest.raises(SyncError,match=expected):detail.lookup_header(SimpleNamespace(context={},opener=object(),encrypt_key='4321'),rows())
+
+
+def test_detail_request_uses_actual_order_date_from_lookup(monkeypatch):
+    from services import production_sync_client as source
+    values=header_capture();values[detail.HEADER+'REQ_DATE']=['2026-01-01 오전 12:00:00'];calls=[]
+    def query(opener,payload):
+        calls.append(dict(payload));return values if payload['jump.form.code']=='CHECK' else capture()
+    monkeypatch.setattr(source,'query_with_retry',query)
+    client=SimpleNamespace(context={},opener=object(),encrypt_key='4321')
+    key=detail.lookup_header(client,rows());detail.fetch_detail(client,rows(),key)
+    assert calls[1][detail.HEADER+'REQ_DATE']=='2026-01-01'

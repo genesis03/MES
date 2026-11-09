@@ -256,7 +256,7 @@ def execute(start, end, token, run_id, kind='production'):
             raise SyncError('전체 기간에서 수신한 실적이 0건입니다. 조회 조건과 계정 권한을 확인해야 하므로 가져오기 완료로 확정하지 않습니다.')
     except (SyncError, CredentialError) as exc:
         if kind=='production':failure_data=getattr(exc,'failure_data',None)
-        error = f'{querying_day.isoformat()} 조회: {exc}' if querying_day else str(exc)
+        error = f'{querying_day.isoformat()} 조회: {exc}' if querying_day and kind != 'subcontract_dispatch' else str(exc)
     except Exception:
         # Do not log raw responses or authentication payloads.
         error = '동기화 저장 처리에 실패했습니다. DB 연결과 서버 설정을 확인해 주세요.'
