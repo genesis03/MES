@@ -166,3 +166,25 @@ print('September screen/API/download: OK')
     result=subprocess.run([sys.executable,'-c',script],cwd=copy,env=env,capture_output=True,text=True,timeout=120)
     assert result.returncode==0,result.stdout+result.stderr
     assert 'September screen/API/download: OK' in result.stdout
+
+
+def test_aggregation_issues_stay_out_of_manual_cause_cells(quality):
+    from services.quality_performance_service import build_report
+    from services.quality_performance_form import build_form
+    from services.quality_performance_excel import build_excel
+    seed(quality)
+    with quality.sessions() as db:
+        report=build_report(db,'2026-10')
+    for key in ('inbound','process','subcontract','final','customer'):
+        report['manual']['notes'][key]={'cause':'수기 작성 원인','action':'수기 작성 대책'}
+    warnings=['원자재 품번 미연결: TEST','공정 자료가 없습니다.',
+              '외주 업체 미연결: TEST','최종검사 품목군 미연결: TEST']
+    report['issues'].extend(warnings)
+    form=build_form(report,date(2026,11,6),'작성자')
+    book=load_workbook(build_excel(report,date(2026,11,6),'작성자'),data_only=True)
+    for sheet,row in [('1',25),('2',25),('3',25),('4',25),('5',26)]:
+        assert form['cells'][sheet][f'A{row}']['text']=='수기 작성 원인'
+        assert book[sheet][f'A{row}'].value=='수기 작성 원인'
+        assert book[sheet][f'J{row}'].value=='수기 작성 대책'
+    assert all(warning in form['issues'] for warning in warnings)
+    book.close()

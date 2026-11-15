@@ -330,10 +330,7 @@ def build_excel(report,writing_date,author):
     notes=report['manual']['notes']
     for section,key in [('1','inbound'),('2','process'),('3','subcontract'),('4','final'),('5','customer')]:
         header=24 if section in ('1','2','3','4') else 25
-        prefixes={'inbound':('원자재','원본 업체'),'process':('공정','보고 기간의'),'subcontract':('외주',),'final':('조립','최종검사'),'customer':()}
-        related=[issue for issue in report.get('issues',[]) if any(issue.startswith(prefix) for prefix in prefixes[key]) and any(word in issue for word in ('미연결','미분류','없습니다','맞지','없는'))]
-        cause=notes[key]['cause']+ ('\n확인: '+' / '.join(related) if related else '')
-        if len(cause)>32000:cause=cause[:31900]+'\n추가 확인사항은 품질실적 화면에서 확인하세요.'
+        cause=notes[key]['cause']
         put(section,'A'+str(header+1),cause);put(section,'J'+str(header+1),notes[key]['action'])
     # Original unguarded chart ratios can otherwise produce #DIV/0! on zero months.
     for name,cells in book.cells.items():
