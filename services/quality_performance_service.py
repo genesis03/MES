@@ -2,6 +2,9 @@
 import json
 import re
 from collections import defaultdict
+from decimal import Decimal,InvalidOperation
+from models.sales import ShipmentMaster,ShipmentItem
+from models.shipment_sync import ExternalShipment
 from models.models import ItemMasterModel,ItemBomModel,ProcessModel,PurchaseInboundMaster,PurchaseInboundItem
 from models.quality_performance import QualityPerformanceMonth
 from models.inbound_sync import ExternalInboundRecord
@@ -10,17 +13,19 @@ from models.production import ProductionPerformance,ProductionWorkOrder
 from models.production_run import ProductionRun,ProductionRunDefect
 from services.production_sync_mapping import ItemConnections,stage_suffix
 from services.production_sync_view import external_record_view
-from services.subcontract_fault_view import external_rows
+from services.subcontract_fault_view import external_rows,field_settings
+from services.subcontract_fault_client import FAULT_FIELDS
 from services.subcontract_defect_status import subcontract_defect_status
 from models.quality_migration import DEFECT_TYPE_SEED
 from services.defect_report_format import report_types
 
 GOALS={'inbound':.003,'process':.003,'subcontract':.007,'final':.008,'customer':10.,'claim':.01}
-CAP_PARTS={'280098','YR280554','YR280555','YR280556','YR280589'}
+CAP_PARTS={'280089','280144','280098','YR280554','YR280555','YR280556','YR280589'}
 SEAL_PARTS={'480187','480207'}
 FINAL_GROUPS=('BASE','310140','SV1','AX1-EV')
 CLAIM_GROUPS=('BASE','SV1','AX1-EV')
 TYPE_NAMES=dict(DEFECT_TYPE_SEED)|{'13':'기타'}
+SUBCONTRACT_TYPES=('얼룩','박리')
 
 
 def blank_manual():
@@ -89,7 +94,52 @@ def new_month():
         'assembly':{'qty':0.,'bad':0.},
         'process_types':defaultdict(float),'final':{k:{'qty':0.,'bad':0.} for k in FINAL_GROUPS},
         'final_types':defaultdict(float),'subcontract':{k:{'qty':0.,'bad':0.} for k in ('메인텍','혜성금속')},
-        'subcontract_types':defaultdict(float),'manual':blank_manual()}
+        'subcontract_types':defaultdict(float),'delivery_qty':0.,'manual':blank_manual()}
+
+
+
+def add_deliveries(db,months,start,end,source,issues):
+    """Count confirmed shipment item quantities once, never box/original LOT stock."""
+    def quantity(value):
+        result=Decimal(str(value))
+        if not result.is_finite() or result<0:raise ValueError('invalid shipment quantity')
+        return result
+    found=False
+    if source=='EXTERNAL':
+        rows=db.query(ExternalShipment).filter(ExternalShipment.present.is_(True),ExternalShipment.status=='OUT_FIN',ExternalShipment.shipment_date.between(start,end))
+        for record in rows:
+            try:
+                items=json.loads(record.raw_json)['items']
+                if not isinstance(items,list) or not items:raise ValueError('missing shipment items')
+                keys=[row['RULE_NO'] for row in items]
+                if not all(keys) or len(set(keys))!=len(keys):raise ValueError('invalid shipment items')
+                total=sum((quantity(row['TR_QTY']) for row in items),Decimal(0))
+            except (KeyError,TypeError,ValueError,InvalidOperation):
+                issues.add('납품수량 미확인 전표 제외: '+record.shipment_no)
+                continue
+            months[int(record.shipment_date[5:7])-1]['delivery_qty']+=float(total)
+            found=True
+    else:
+        rows=(db.query(ShipmentMaster.shipment_date,ShipmentItem.shipped_qty)
+            .join(ShipmentItem,ShipmentItem.shipment_id==ShipmentMaster.id)
+            .filter(ShipmentMaster.status=='CONFIRMED',ShipmentMaster.shipment_date.between(start,end)))
+        for day,qty in rows:
+            months[int(day[5:7])-1]['delivery_qty']+=float(quantity(qty));found=True
+    if not found:issues.add('보고 기간의 확정 납품자료가 없습니다. 납품수량은 0으로 표시합니다.')
+
+
+def selected_subcontract_types(row,columns,settings):
+    result={name:0. for name in SUBCONTRACT_TYPES}
+    if row.get('record_source')=='EXTERNAL_SUBCONTRACT' and not row.get('types_complete',True):
+        # Other unmapped categories must not discard known stain/peeling quantities.
+        for field in FAULT_FIELDS:
+            name=columns.get(settings['defects'].get(field))
+            if name in result:result[name]+=float(row['raw'].get(field) or 0)
+    else:
+        for code,qty in row['by_type'].items():
+            name=columns.get(code)
+            if name in result and qty is not None:result[name]+=float(qty)
+    return result
 
 
 def build_report(db,month,source='EXTERNAL'):
@@ -173,6 +223,10 @@ def build_report(db,month,source='EXTERNAL'):
     if source=='EXTERNAL':outs=external_rows(db,start,end)
     else:outs=[r for r in subcontract_defect_status(db,start,end,limit=10**9)['items'] if r.get('record_source')=='MES']
     cols={c['code']:c['name'] for c in report_types(db)}
+    subcontract_settings=field_settings(db)
+    if outs:
+        for name in SUBCONTRACT_TYPES:
+            if name not in cols.values():note('외주 불량유형 연결 확인 필요: '+name)
     for row in outs:
         if row.get('unallocated') and row.get('inbound_qty') is None and not row.get('defect_qty'):continue
         partner=row['partner_name'] or ''
@@ -183,14 +237,17 @@ def build_report(db,month,source='EXTERNAL'):
         if len(groups)!=1:note('외주 업체 분류 미연결: '+(partner or row['part_no']));continue
         if row['inbound_qty'] is None:note('외주 입고수량 미연결: '+row['part_no']);continue
         m=m_for(row['date']);bucket=m['subcontract'][groups[0]]
-        bucket['qty']+=float(row['inbound_qty']);bucket['bad']+=float(row['defect_qty'])
-        details=[{'name':cols.get(code,'기타'),'qty':qty} for code,qty in row['by_type'].items() if qty is not None]
-        add_types(m['subcontract_types'],details,float(row['defect_qty']),{'찍힘','긁힘','박리','얼룩','치수'},issues,'외주')
+        if row.get('types_complete') is False:note('외주 원본 불량유형 합계 확인 필요: '+row['part_no'])
+        selected_types=selected_subcontract_types(row,cols,subcontract_settings)
+        bucket['qty']+=float(row['inbound_qty']);bucket['bad']+=sum(selected_types.values())
+        for name,qty in selected_types.items():m['subcontract_types'][name]+=qty
+    add_deliveries(db,months,start,end,source,issues)
     for saved in db.query(QualityPerformanceMonth).filter(QualityPerformanceMonth.month.between(f'{year}-01',month)):
         months[int(saved.month[5:7])-1]['manual']=blank_manual()|json.loads(saved.data_json)
     for index,m in enumerate(months[:selected],1):
-        if m['manual']['delivery_qty'] is None or m['manual']['customer_bad'] is None or m['manual']['customer_cases'] is None:note(f'{index}월 고객불량 수기 자료 미입력')
+        if m['manual']['customer_bad'] is None or m['manual']['customer_cases'] is None:note(f'{index}월 고객불량 수기 자료 미입력')
     issues.add('원자재 불량수량은 사용자 지정에 따라 0으로 집계합니다.')
+    issues.add('외주 생산수량은 입고수량이며 불량수량은 얼룩·박리만 합산합니다.')
     issues.add('생산수량은 양품·불량·셋업 합계이며, 조립실적은 공정불량에서 제외하고 최종검사에만 반영합니다.')
     for vendor in vendors:
         if not any(name in vendor.replace(' ','') for name in ('한국고무','성민전자','성재금속','황해정밀')):note('원본 업체 차트에 없는 입고 거래처: '+vendor)
@@ -205,6 +262,6 @@ def build_report(db,month,source='EXTERNAL'):
         claims=[g['occurred'] for g in m['manual']['claims'].values()];claim=sum(claims) if all(v is not None for v in claims) else None
         overview.append({'month':f'{year}-{index:02d}','raw_qty':m['raw'],'process_qty':pqty,'process_bad':pbad,'process_rate':rate(pbad,pqty),
             'subcontract_qty':sqty,'subcontract_bad':sbad,'subcontract_rate':rate(sbad,sqty),
-            'final_qty':fqty,'final_bad':fbad,'final_rate':rate(fbad,fqty),'customer_ppm':rate(m['manual']['customer_bad'],m['manual']['delivery_qty'],1000000),
+            'final_qty':fqty,'final_bad':fbad,'final_rate':rate(fbad,fqty),'customer_ppm':rate(m['manual']['customer_bad'],m['delivery_qty'],1000000),
             'claim_rate':rate(claim,m['manual']['revenue'])})
     return {'month':month,'source':source,'version':row.version if row else 0,'goals':GOALS,'months':months,'overview':overview,'issues':sorted(issues),'manual':months[selected-1]['manual'],'raw_vendors':dict(vendors)}

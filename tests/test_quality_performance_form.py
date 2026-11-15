@@ -51,7 +51,7 @@ def test_automatic_data_populates_original_cells_and_all_charts(quality):
 def test_manual_unknowns_and_future_months_stay_blank(quality):
     seed(quality)
     result = quality.client.get(api.API + '/form?month=2026-10').json()
-    assert result['cells']['5']['M19']['text'] == ''
+    assert result['cells']['5']['M19']['text'] == '10,000'
     assert result['cells']['5']['M20']['text'] == ''
     assert '6' not in result['cells']
     assert result['cells']['요약']['F12']['text'] == ''

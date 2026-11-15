@@ -1,7 +1,8 @@
 (() => {
     'use strict';
     const $=id=>document.getElementById(id);
-    let sheets=[],active=null,fit=true,payload=null,generation=0;
+    let sheets=[],active=null,fit=true,payload=null,generation=0,dirty=false,busy=false;
+    const canWrite=$('qualityCustomerForm').dataset.canWrite==='true';
     const base='/api/quality/performance';
     const colors=['#bfbfbf','#ffc000','#ff0000','#5b9bd5','#70ad47','#8064a2','#ed7d31'];
     const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -54,18 +55,70 @@
         resize();
     }
     function query(){return new URLSearchParams({month:$('qualityFormMonth').value,source:$('qualityFormSource').value});}
-    async function load(){
-        const current=++generation,name=active?.name||'요약',params=query();payload=null;show(name);$('qualityFormExcel').disabled=true;$('qualityFormLoad').disabled=true;$('qualityFormIssues').hidden=true;$('qualityFormStatus').classList.remove('quality-form-error');$('qualityFormStatus').textContent='실적을 집계하고 있습니다.';
-        try{const response=await fetch(`${base}/form?${params}`,{cache:'no-store',headers:{'X-MES-Menu-Path':'/quality/performance'}});if(response.status===404)throw new Error('실적 조회 연결 실패: 요청 경로를 찾을 수 없습니다. (HTTP 404)');const result=await MesResponse.read(response);if(current!==generation)return;payload=result;show(active?.name||name);$('qualityFormStatus').textContent=`${result.month} · ${result.source==='EXTERNAL'?'외부 연동':'MES 입력'} · 조회 월까지의 월별 실적 · 수기 미입력 항목은 빈칸`;$('qualityFormExcel').disabled=false;
-            $('qualityFormReference').textContent=result.reference_note||'';const list=$('qualityFormIssues').querySelector('ul');list.replaceChildren();for(const issue of result.issues){const li=document.createElement('li');li.textContent=issue;list.append(li);}$('qualityFormIssues').hidden=!result.issues.length&&!result.reference_note;
-        }catch(error){if(current===generation){$('qualityFormStatus').classList.add('quality-form-error');$('qualityFormStatus').textContent=error.message;}}finally{if(current===generation)$('qualityFormLoad').disabled=false;}
+    function setBusy(value){
+        busy=value;
+        for(const id of ['qualityFormLoad','qualityFormMonth','qualityFormSource'])$(id).disabled=value;
+        for(const id of ['qualityCustomerBad','qualityCustomerCases'])$(id).disabled=value||!canWrite||!payload;
+        if($('qualityCustomerSave'))$('qualityCustomerSave').disabled=value||!payload||!dirty;
+        $('qualityFormExcel').disabled=value||!payload||dirty;
     }
+    function fillCustomer(){
+        $('qualityCustomerMonth').textContent=payload?.month||'';
+        $('qualityDeliveryQty').textContent=payload?label(payload.delivery_qty):'—';
+        $('qualityCustomerBad').value=payload?.manual?.customer_bad??'';
+        $('qualityCustomerCases').value=payload?.manual?.customer_cases??'';
+    }
+    async function load(){
+        if(dirty&&!confirm('저장하지 않은 고객불량 입력을 버리고 실적을 다시 불러올까요?')){
+            if(payload){$('qualityFormMonth').value=payload.month;$('qualityFormSource').value=payload.source;}
+            return false;
+        }
+        dirty=false;
+        const current=++generation,params=query();setBusy(true);
+        $('qualityFormStatus').classList.remove('quality-form-error');$('qualityFormStatus').textContent='실적을 집계하고 있습니다.';
+        try{
+            const response=await fetch(`${base}/form?${params}`,{cache:'no-store',headers:{'X-MES-Menu-Path':'/quality/performance'}});
+            if(response.status===404)throw new Error('실적 조회 연결 실패: 요청 경로를 찾을 수 없습니다. (HTTP 404)');
+            const result=await MesResponse.read(response);if(current!==generation)return false;
+            payload=result;fillCustomer();show(active?.name||'요약');
+            $('qualityFormStatus').textContent=`${result.month} · ${result.source==='EXTERNAL'?'외부 연동':'MES 입력'} · 납품수량 자동 집계 · 고객불량 수량·건수 월별 수기 입력`;
+            $('qualityFormReference').textContent=result.reference_note||'';
+            const list=$('qualityFormIssues').querySelector('ul');list.replaceChildren();
+            for(const issue of result.issues){const li=document.createElement('li');li.textContent=issue;list.append(li);}
+            $('qualityFormIssues').hidden=!result.issues.length&&!result.reference_note;
+            return true;
+        }catch(error){
+            if(current===generation){
+                if(payload){$('qualityFormMonth').value=payload.month;$('qualityFormSource').value=payload.source;}
+                fillCustomer();$('qualityFormStatus').classList.add('quality-form-error');$('qualityFormStatus').textContent=error.message;
+            }
+            return false;
+        }finally{if(current===generation)setBusy(false);}
+    }
+    $('qualityCustomerForm').addEventListener('input',()=>{
+        if(!canWrite||!payload||busy)return;
+        dirty=true;setBusy(false);$('qualityFormStatus').textContent='고객불량 입력 수정 중 — 저장하면 보고서와 엑셀에 반영됩니다.';
+    });
+    $('qualityCustomerForm').addEventListener('submit',async event=>{
+        event.preventDefault();if(!canWrite||!payload||busy||!dirty||!event.currentTarget.reportValidity())return;
+        const number=id=>$(id).value===''?null:Number($(id).value);
+        const manual={...payload.manual,customer_bad:number('qualityCustomerBad'),customer_cases:number('qualityCustomerCases')};
+        setBusy(true);$('qualityFormStatus').classList.remove('quality-form-error');$('qualityFormStatus').textContent='고객불량 수량·건수를 저장하고 있습니다.';
+        try{
+            const response=await fetch(base,{method:'PUT',headers:{'Content-Type':'application/json','X-MES-Menu-Path':'/quality/performance'},body:JSON.stringify({month:payload.month,version:payload.version,manual})});
+            const saved=await MesResponse.read(response);payload.manual=manual;payload.version=saved.version;dirty=false;
+            if(await load())$('qualityFormStatus').textContent=`${payload.month} 고객불량 수량·건수를 저장했습니다.`;
+            else $('qualityFormStatus').textContent='저장은 완료됐지만 보고서를 다시 불러오지 못했습니다. '+$('qualityFormStatus').textContent;
+        }catch(error){$('qualityFormStatus').classList.add('quality-form-error');$('qualityFormStatus').textContent=error.message+' 입력 내용은 유지됩니다.';}
+        finally{setBusy(false);}
+    });
+    window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
     $('qualityFormFit').onclick=()=>{fit=true;resize();};$('qualityFormActual').onclick=()=>{fit=false;resize();};
     $('qualityFormTabs').onclick=event=>{const button=event.target.closest('button[data-sheet]');if(button)show(button.dataset.sheet);};
-    $('qualityFormLoad').onclick=load;
-    $('qualityFormMonth').onchange=()=>{if($('qualityFormMonth').value)load();};$('qualityFormSource').onchange=load;
-    $('qualityFormExcel').onclick=()=>{if(payload)location.href=`${base}/excel?${new URLSearchParams({month:payload.month,source:payload.source})}`;};
+    $('qualityFormLoad').onclick=()=>load();
+    $('qualityFormMonth').onchange=()=>{if($('qualityFormMonth').value)load();};$('qualityFormSource').onchange=()=>load();
+    $('qualityFormExcel').onclick=()=>{if(payload&&!dirty&&!busy)location.href=`${base}/excel?${new URLSearchParams({month:payload.month,source:payload.source})}`;};
     new ResizeObserver(resize).observe($('qualityFormViewport'));
     if(!$('qualityFormMonth').value){const date=new Date();date.setDate(1);date.setMonth(date.getMonth()-1);const month=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;$('qualityFormMonth').value=month;$('qualityFormMonth').max=month;}
-    fetch('/static/quality_performance_form.json?v=20261106-4',{cache:'no-store'}).then(response=>{if(!response.ok)throw new Error('양식 파일을 불러오지 못했습니다.');return response.json();}).then(data=>{sheets=data.sheets;for(const sheet of sheets){const button=document.createElement('button');button.type='button';button.dataset.sheet=sheet.name;button.textContent=sheet.name;$('qualityFormTabs').append(button);}show('요약');return load();}).catch(error=>{$('qualityFormStatus').textContent=error.message;});
+    fetch('/static/quality_performance_form.json?v=20261115-1',{cache:'no-store'}).then(response=>{if(!response.ok)throw new Error('양식 파일을 불러오지 못했습니다.');return response.json();}).then(data=>{sheets=data.sheets;for(const sheet of sheets){const button=document.createElement('button');button.type='button';button.dataset.sheet=sheet.name;button.textContent=sheet.name;$('qualityFormTabs').append(button);}show('요약');return load();}).catch(error=>{$('qualityFormStatus').textContent=error.message;});
 })();

@@ -271,7 +271,7 @@ def build_excel(report,writing_date,author):
         for group,qr,br in [('BASE',15,16),('310140',18,19),('SV1',21,22),('AX1-EV',24,25)]:
             put('4-1',f'{c}{qr}',m['final'][group]['qty'] if active else None);put('4-1',f'{c}{br}',m['final'][group]['bad'] if active else None)
         for i,name in enumerate(('찍힘','긁힘','치수','칩','소재','조도','기타'),20):put('4-2',f'{b}{i}',m['final_types'].get(name,0) if active else None)
-        for field,row in [('delivery_qty',19),('customer_bad',20),('customer_cases',21)]:put('5',f'{d}{row}',m['manual'][field] if active else None)
+        for field,row in [('delivery_qty',19),('customer_bad',20),('customer_cases',21)]:put('5',f'{d}{row}',(m['delivery_qty'] if field=='delivery_qty' else m['manual'][field]) if active else None)
         formula('5',f'{d}22',f'IF(OR({d}19="",{d}20=""),"",IFERROR({d}20/{d}19*1000000,""))')
         formula('5',f'{d}23',f'IF({d}22="","",2-({d}22/{d}18))')
         put('6',f'{c}15',m['manual']['revenue'] if active else None)

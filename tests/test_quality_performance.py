@@ -30,7 +30,17 @@ def item(db,part,name,**changes):
     row=ItemMasterModel(part_no=part,part_name=name,account_type='PROD',material_type='SEMI',created_at='2026-01-01',**changes);db.add(row);db.flush();return row
 
 
-def seed(env):
+
+def external_delivery(env,month='2026-10',quantity=10000,key='DELIVERY',status='OUT_FIN',present=True,items=None):
+    from models.shipment_sync import ExternalShipment
+    with env.sessions() as db:
+        now=sync.now()
+        if items is None:items=[{'RULE_NO':key+'-I','TR_QTY':str(quantity),'lots':[{'LOT_QTY':'999999','JOB_QTY':str(quantity)}]}]
+        row=ExternalShipment(source_key=key,shipment_no=key,shipment_date=month+'-08',customer_name='고객사',status=status,present=present,raw_json=json.dumps({'items':items}),content_hash=key,first_seen_at=now,last_seen_at=now,changed_at=now)
+        db.add(row);db.commit()
+
+
+def seed(env,delivery_qty=10000):
     with env.sessions() as db:
         parent=item(db,'310061','ROUND TERMINAL');body=item(db,'310062-C','ROUND TERMINAL ASSEMBLY')
         db.add(ItemBomModel(parent_item_id=parent.id,child_item_id=body.id,parent_part_no=parent.part_no,child_part_no=body.part_no,quantity=1,created_at='2026-01-01'))
@@ -42,9 +52,12 @@ def seed(env):
         for i,(part,process,good,bad,setupqty) in enumerate([('LATHE-A','복합선반',95,2,3),('TAP-B','탭핑',190,4,6),('310062-C','조립',285,6,9),('310194-C','조립',380,8,12),('310201-C','조립',475,10,15)]):
             raw={'F10':str(setupqty),'DEFECTS':[{'code':'F1','name':'찍힘','qty':bad}]}
             db.add(ExternalProductionRecord(source_key='P'+str(i),lot_no='QPF-'+str(i),job_no='JOB'+str(i),part_no=part,process_name=process,work_date='2026-10-05',job_qty=str(good),lot_qty=str(good+bad+setupqty),fault_qty=str(bad),raw_json=json.dumps(raw),content_hash=str(i),first_seen_at=now,last_seen_at=now,changed_at=now))
-        raw={'ORI_LOT_QTY':'1000','REST_QTY':'5','FAULT_QTY':'5','F1':'2','F9':'3','APPLY_COMP_NM':'혜성금속','ORDER_COMP_NM':''}
-        db.add(ExternalSubcontractFault(source_key='S',confirm_date='2026-10-07',inbound_no='SUB',part_no='PART-Ag',lot_no='SLOT',process_name='은도금',defect_qty='5',raw_json=json.dumps(raw),content_hash='S',first_seen_at=now,last_seen_at=now,changed_at=now))
+        from models.models import CommonCodeModel
+        db.add(CommonCodeModel(group_code='DEFECT_TYPE',group_name='불량유형',code='11',code_name='박리',sort_order=11,created_at='2026-01-01'))
+        raw={'ORI_LOT_QTY':'1000','REST_QTY':'9','FAULT_QTY':'9','F1':'4','F7':'2','F8':'3','APPLY_COMP_NM':'혜성금속','ORDER_COMP_NM':''}
+        db.add(ExternalSubcontractFault(source_key='S',confirm_date='2026-10-07',inbound_no='SUB',part_no='PART-Ag',lot_no='SLOT',process_name='은도금',defect_qty='9',raw_json=json.dumps(raw),content_hash='S',first_seen_at=now,last_seen_at=now,changed_at=now))
         db.commit()
+    external_delivery(env,quantity=delivery_qty)
 
 
 def test_groups_goals_and_assembly_are_counted_once(quality):
@@ -67,6 +80,7 @@ def test_groups_goals_and_assembly_are_counted_once(quality):
 
 
 def test_manual_zero_blank_conflict_audit_and_permissions(quality):
+    seed(quality)
     manual=blank_manual();manual.update(delivery_qty=10000,customer_bad=1,customer_cases=1,revenue=100000,author='작성자')
     for group in manual['claims'].values():group.update(occurred=0,agreed=0,deducted=0)
     manual['claims']['SV1']['occurred']=1000
@@ -155,7 +169,8 @@ def test_shared_assembly_types_do_not_repeat_for_each_lot(quality):
 
 
 def test_manual_month_isolation_and_excel_cached_ppm_claim_rate(quality):
-    seed(quality)
+    seed(quality,delivery_qty=1000)
+    external_delivery(quality,month='2026-09',quantity=1000,key='SEPT-DELIVERY')
     for month,bad in [('2026-09',0),('2026-10',2)]:
         manual=blank_manual();manual.update(delivery_qty=1000,customer_bad=bad,customer_cases=1,revenue=10000,author='=원문 작성자')
         for group in manual['claims'].values():group.update(occurred=0,agreed=0,deducted=0)
@@ -167,7 +182,7 @@ def test_manual_month_isolation_and_excel_cached_ppm_claim_rate(quality):
     assert w['요약']['F12'].value==2000
     assert '6' not in w.sheetnames and w['요약']['F13'].value==.01
     assert w['요약']['G13'].value is None  # Jan-Aug missing, never partial annual result.
-    assert w['5']['P19'].value is None
+    assert w['5']['P19'].value==2000
     z=zipfile.ZipFile(BytesIO(response.content));root=ET.fromstring(z.read('xl/worksheets/sheet1.xml'))
     author=root.find('.//s:c[@r="AT30"]',NS)
     assert author.get('t')=='inlineStr' and author.find('s:f',NS) is None
