@@ -52,3 +52,6 @@ Desktop.ini
 .idea/
 *.url
 *.lnk
+
+# PC-only note; not synchronized through Git
+/새 텍스트 문서.txt

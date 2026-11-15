@@ -1,27 +1,33 @@
-# PC용 텍스트 문서를 보존하면서 업데이트
+# PC 전용 텍스트 문서는 Git 업데이트에서 제외
 
-`새 텍스트 문서.txt`는 GitHub에도 남겨 수동으로 갱신할 수 있다. 추적 중인 파일은 `.gitignore`에 적는 것만으로 pull에서 제외되지 않는다.
-
-PC 문서를 별도로 유지하려면 MES 폴더에서 다음 명령으로 업데이트한다.
+`새 텍스트 문서.txt`는 최신 main의 추적 대상에서 제거하고 `.gitignore`에 등록했다. PC 파일은 로컬에서 자유롭게 수정할 수 있으며, 앞으로는 기존 명령으로 MES를 업데이트한다.
 
 ```bash
-bash scripts/update_mes_preserve_note.sh
+git pull origin main
 ```
 
-이 명령은 PC 문서를 임시 비공개 폴더에 백업하고, 그 파일만 Git 기준 내용으로 잠시 복원해 fast-forward 업데이트한 뒤 PC 내용을 돌려놓는다. 업데이트가 실패해도 문서를 복원하고 백업은 남긴다. DB나 다른 파일을 stash하거나 교체하지 않는다. 다른 파일의 로컬 변경이 원격 변경과 겹치면 정상적으로 중단한다. 문서를 이미 스테이징했다면 먼저 중단해 커밋 대기 내용을 보호한다.
+별도 업데이트 스크립트와 skip-worktree 설정은 더 이상 사용하지 않는다. 이 파일은 일반 `git add`로도 다시 올라가지 않는다. `git add -f`로 강제 등록하면 다시 추적되므로 사용하지 않는다. GitHub 최신 main에서는 파일이 빠지지만 과거 커밋의 이력까지 삭제하는 변경은 아니다.
 
-복원 후에는 해당 PC의 index에 skip-worktree를 설정한다. 이것만으로 이후의 모든 원격 변경 충돌이 해결되는 것은 아니므로, 이 PC에서는 위 보존용 명령을 계속 사용한다. GitHub의 텍스트 문서를 삭제하거나 다른 사람의 파일을 변경하지 않는다. 기존의 임시 worktree를 통한 파일 단독 업로드 방법은 계속 사용할 수 있다.
+## 이미 이 파일을 추적하고 있는 PC — 최초 한 번
 
-## 아직 보존용 스크립트를 받지 못한 PC
+원격의 추적 해제 변경은 해당 PC에서 파일 삭제로 적용될 수 있다. 따라서 최초 업데이트 한 번만 파일을 백업한 채 적용하고 원래 내용을 복원한다. 이후에는 위의 일반 pull만 사용한다.
 
-현재 문서 때문에 pull이 막혔다면, 작업 폴더를 변경하지 않는 fetch로 스크립트만 임시 파일에 받아 실행한다.
+MES 폴더에서 실행한다.
 
 ```bash
-git fetch origin main &&
-mes_update_script="$(mktemp)" &&
-git show origin/main:scripts/update_mes_preserve_note.sh > "$mes_update_script" &&
-bash "$mes_update_script" &&
-rm -- "$mes_update_script"
+(
+    set -e
+    mes_note_backup="$(mktemp)"
+    cp -p -- "새 텍스트 문서.txt" "$mes_note_backup"
+    printf '문서 백업: %s\n' "$mes_note_backup"
+    trap 'cp -p -- "$mes_note_backup" "새 텍스트 문서.txt"' EXIT
+    git update-index --no-skip-worktree -- "새 텍스트 문서.txt"
+    git update-index --no-assume-unchanged -- "새 텍스트 문서.txt"
+    git restore --worktree -- "새 텍스트 문서.txt"
+    git pull origin main
+)
 ```
 
-`fast-forward` 불가 오류는 로컬 커밋과 원격 커밋이 갈라졌다는 뜻이며 강제 덮어쓰지 않는다. 오류를 확인하고 로컬 작업을 보존한 채 별도로 정리해야 한다.
+성공·실패 모두 백업한 문서 내용은 돌려놓는다. 다른 파일의 로컬 변경이 겹치면 일반 Git 규칙대로 업데이트가 중단되며, 다른 파일이나 DB를 임시 보관·덮어쓰지 않는다. 백업 파일은 출력한 임시 경로에 남긴다.
+
+이번 변경 이후 텍스트 파일을 지우지 말고 로컬 전용으로 사용하면 된다. 새 PC에서 clone하면 이 파일은 내려오지 않는다.
