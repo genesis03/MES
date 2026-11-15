@@ -239,7 +239,7 @@ def build_report(db,month,source='EXTERNAL'):
             note('외주 업체 연결 확인 필요: '+(' / '.join(dict.fromkeys(str(name) for name in names if name)) or row['part_no']))
             continue
         m=m_for(row['date']);bucket=m['subcontract'][group]
-        if (group,row.get('inbound_no')) not in covered_receipts:
+        if not any((group,row.get('inbound_no'),str(part or '').strip().casefold()) in covered_receipts for part in (row.get('source_part_no'),row.get('part_no'))):
             if row['inbound_qty'] is not None:
                 bucket['qty']+=float(row['inbound_qty'])
                 note('외주 입고원장 미연결: '+str(row.get('inbound_no') or row['part_no'])+' — 불량현황의 입고수량 사용')

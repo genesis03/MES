@@ -16,6 +16,12 @@ def vendor_name(value):
     return re.sub(r'[^a-z0-9가-힣]','',text)
 
 
+def part_vendor(part):
+    part=unicodedata.normalize('NFKC',str(part or '')).strip().casefold()
+    if not part.endswith('-ag'):return None
+    return '메인텍' if part in ('310060-ag','310140-ag') else '혜성금속'
+
+
 class VendorLinks:
     def __init__(self,db,rows,start,end,source):
         self.by_id={partner.id:partner.partner_name for partner in db.query(Partner)}
@@ -37,6 +43,8 @@ class VendorLinks:
         return next(iter(matches)) if len(matches)==1 else None
 
     def resolve(self,row,partner_field=''):
+        group=part_vendor(row.get('source_part_no')) or part_vendor(row.get('part_no'))
+        if group:return group
         # Native receipts have a stable partner ID even if the stored display name changed.
         name=self.by_id.get(row.get('partner_id'))
         group=self.one_group([name],strict=True) if name else None
@@ -60,9 +68,9 @@ class VendorLinks:
         covered=set()
         if source=='EXTERNAL':
             for receipt in self.receipts:
-                group=self.one_group([receipt.partner_name],strict=True)
+                group=part_vendor(receipt.part_no) or self.one_group([receipt.partner_name],strict=True)
                 if not group:continue
-                covered.add((group,receipt.inbound_no))
+                covered.add((group,receipt.inbound_no,receipt.part_no.strip().casefold()))
                 if start<=receipt.inbound_date<=end:
                     months[int(receipt.inbound_date[5:7])-1]['subcontract'][group]['qty']+=float(receipt.confirmed_qty)
         else:
@@ -70,9 +78,9 @@ class VendorLinks:
                 .join(SubcontractInboundItem,SubcontractInboundItem.inbound_id==SubcontractInboundMaster.id)
                 .filter(SubcontractInboundMaster.status=='RECEIVED',SubcontractInboundMaster.inbound_date.between(start,end)))
             for master,line in receipts:
-                group=self.resolve({'partner_id':master.partner_id,'partner_name':master.partner_name})
+                group=self.resolve({'partner_id':master.partner_id,'partner_name':master.partner_name,'part_no':line.part_no})
                 if not group:continue
-                covered.add((group,master.inbound_no))
+                covered.add((group,master.inbound_no,line.part_no.strip().casefold()))
                 # Legacy good_qty stores total received quantity, not received minus defects.
                 months[int(master.inbound_date[5:7])-1]['subcontract'][group]['qty']+=float(line.good_qty or 0)
         return covered
