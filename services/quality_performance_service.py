@@ -247,7 +247,7 @@ def build_report(db,month,source='EXTERNAL'):
                 note('외주 입고수량 미연결: '+row['part_no'])
         if row.get('types_complete') is False:note('외주 원본 불량유형 합계 확인 필요: '+row['part_no'])
         selected_types=selected_subcontract_types(row,cols,subcontract_settings)
-        bucket['bad']+=float(row['defect_qty'])
+        bucket['bad']+=sum(selected_types.values())
         for name,qty in selected_types.items():m['subcontract_types'][name]+=qty
     add_deliveries(db,months,start,end,source,issues)
     for saved in db.query(QualityPerformanceMonth).filter(QualityPerformanceMonth.month.between(f'{year}-01',month)):
@@ -255,7 +255,7 @@ def build_report(db,month,source='EXTERNAL'):
     for index,m in enumerate(months[:selected],1):
         if m['manual']['customer_bad'] is None or m['manual']['customer_cases'] is None:note(f'{index}월 고객불량 수기 자료 미입력')
     issues.add('원자재 불량수량은 사용자 지정에 따라 0으로 집계합니다.')
-    issues.add('3-1 외주 생산수량은 업체별 입고수량, 불량수량은 업체별 전체 외주불량입니다. 3-2 유형별 표에는 얼룩·박리만 표시합니다.')
+    issues.add('3-1 외주 생산수량은 업체별 입고수량, 불량수량은 업체별 얼룩·박리 합계입니다. 3-2 유형별 합계와 3-1 불량 합계를 일치시키고 3시트에 종합합니다.')
     issues.add('생산수량은 양품·불량·셋업 합계이며, 조립실적은 공정불량에서 제외하고 최종검사에만 반영합니다.')
     for vendor in vendors:
         if not any(name in vendor.replace(' ','') for name in ('한국고무','성민전자','성재금속','황해정밀')):note('원본 업체 차트에 없는 입고 거래처: '+vendor)
