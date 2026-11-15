@@ -74,7 +74,7 @@ def test_groups_goals_and_assembly_are_counted_once(quality):
     assert m['final']['AX1-EV']=={'qty':500,'bad':10}
     assert sum(m['process_types'].values())==6
     assert sum(m['final_types'].values())==24
-    assert m['subcontract']['혜성금속']=={'qty':1000,'bad':5}
+    assert m['subcontract']['혜성금속']=={'qty':1000,'bad':9}
     assert sum(m['subcontract_types'].values())==5
     with quality.sessions() as db:assert db.query(PurchaseInboundMaster).count()==0
 

@@ -12,7 +12,7 @@
     <button id="qualityFormExcel" type="button" disabled>엑셀 다운로드</button>
     <button id="qualityFormFit" type="button">화면에 맞춤</button><button id="qualityFormActual" type="button">원본 크기</button>
 </div>
-<p class="quality-form-note">입고·공정·외주·조립 실적을 집계합니다. 공정별 표의 조립 행은 참고용이며 공정 TOTAL에서 제외하고 최종검사에 집계합니다. 외주불량은 얼룩·박리만 반영하며 납품수량은 확정 출고에서 자동 집계합니다.</p>
+<p class="quality-form-note">입고·공정·외주·조립 실적을 집계합니다. 공정별 표의 조립 행은 참고용이며 공정 TOTAL에서 제외하고 최종검사에 집계합니다. 외주불량은 업체별 전체 수량으로 집계하고 유형별 표에는 얼룩·박리만 표시하며 납품수량은 확정 출고에서 자동 집계합니다.</p>
 <form id="qualityCustomerForm" class="quality-customer-form" data-can-write="{{ 'true' if can_write else 'false' }}">
     <strong><span id="qualityCustomerMonth"></span> 고객불량</strong>
     <label>납품수량(EA) <output id="qualityDeliveryQty">—</output></label>

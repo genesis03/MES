@@ -38,7 +38,7 @@ def test_automatic_data_populates_original_cells_and_all_charts(quality):
     assert cells['요약']['F9']['text'] == '2.00%'
     assert cells['요약']['F11']['text'] == '2.00%'
     assert cells['3-1']['M18']['text'] == '1,000'
-    assert cells['3-1']['M19']['text'] == '5'
+    assert cells['3-1']['M19']['text'] == '9'
     assert len(result['charts']) == 27
     for name in ('chart1.xml','chart2.xml'):
         for series in result['charts']['xl/charts/'+name]['series']:

@@ -62,7 +62,8 @@ def subcontract_defect_status(db, start_date=None, end_date=None, part_no='', pa
         common = {'date': master.inbound_date, 'inbound_no': master.inbound_no,
                   'inbound_item_id': item.id, 'part_no': product.part_no if product else item.part_no,
                   'part_name': product.part_name if product else item.part_name,
-                  'process_name': master.processing_type_name, 'partner_name': master.partner_name}
+                  'process_name': master.processing_type_name, 'partner_name': master.partner_name,
+                  'partner_id': master.partner_id}
         lot_quantities = defaultdict(float)
         lot_samples = defaultdict(float)
         for lot in lots[item.id]:

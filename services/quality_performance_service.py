@@ -16,6 +16,7 @@ from services.production_sync_view import external_record_view
 from services.subcontract_fault_view import external_rows,field_settings
 from services.subcontract_fault_client import FAULT_FIELDS
 from services.subcontract_defect_status import subcontract_defect_status
+from services.quality_performance_vendors import VendorLinks
 from models.quality_migration import DEFECT_TYPE_SEED
 from services.defect_report_format import report_types
 
@@ -224,22 +225,29 @@ def build_report(db,month,source='EXTERNAL'):
     else:outs=[r for r in subcontract_defect_status(db,start,end,limit=10**9)['items'] if r.get('record_source')=='MES']
     cols={c['code']:c['name'] for c in report_types(db)}
     subcontract_settings=field_settings(db)
+    vendor_links=VendorLinks(db,outs,start,end,source)
+    covered_receipts=vendor_links.add_receipt_quantities(db,months,start,end,source)
     if outs:
         for name in SUBCONTRACT_TYPES:
             if name not in cols.values():note('외주 불량유형 연결 확인 필요: '+name)
     for row in outs:
         if row.get('unallocated') and row.get('inbound_qty') is None and not row.get('defect_qty'):continue
-        partner=row['partner_name'] or ''
-        if source=='EXTERNAL' and not partner:
-            choices={v for v in [row['raw'].get('APPLY_COMP_NM',''),row['raw'].get('ORDER_COMP_NM','')] if any(n in v.replace(' ','') for n in ('메인텍','혜성금속'))}
-            if len(choices)==1:partner=choices.pop()
-        groups=[name for name in ('메인텍','혜성금속') if name in partner.replace(' ','')]
-        if len(groups)!=1:note('외주 업체 분류 미연결: '+(partner or row['part_no']));continue
-        if row['inbound_qty'] is None:note('외주 입고수량 미연결: '+row['part_no']);continue
-        m=m_for(row['date']);bucket=m['subcontract'][groups[0]]
+        group=vendor_links.resolve(row,subcontract_settings.get('partner_field','') if source=='EXTERNAL' else '')
+        if not group:
+            names=[row.get('partner_name')]+[row.get('raw',{}).get(key) for key in ('APPLY_COMP_NM','ORDER_COMP_NM')]
+            names+=sorted(vendor_links.by_document.get(row.get('inbound_no'),set()))
+            note('외주 업체 연결 확인 필요: '+(' / '.join(dict.fromkeys(str(name) for name in names if name)) or row['part_no']))
+            continue
+        m=m_for(row['date']);bucket=m['subcontract'][group]
+        if (group,row.get('inbound_no')) not in covered_receipts:
+            if row['inbound_qty'] is not None:
+                bucket['qty']+=float(row['inbound_qty'])
+                note('외주 입고원장 미연결: '+str(row.get('inbound_no') or row['part_no'])+' — 불량현황의 입고수량 사용')
+            elif not row.get('unallocated'):
+                note('외주 입고수량 미연결: '+row['part_no'])
         if row.get('types_complete') is False:note('외주 원본 불량유형 합계 확인 필요: '+row['part_no'])
         selected_types=selected_subcontract_types(row,cols,subcontract_settings)
-        bucket['qty']+=float(row['inbound_qty']);bucket['bad']+=sum(selected_types.values())
+        bucket['bad']+=float(row['defect_qty'])
         for name,qty in selected_types.items():m['subcontract_types'][name]+=qty
     add_deliveries(db,months,start,end,source,issues)
     for saved in db.query(QualityPerformanceMonth).filter(QualityPerformanceMonth.month.between(f'{year}-01',month)):
@@ -247,7 +255,7 @@ def build_report(db,month,source='EXTERNAL'):
     for index,m in enumerate(months[:selected],1):
         if m['manual']['customer_bad'] is None or m['manual']['customer_cases'] is None:note(f'{index}월 고객불량 수기 자료 미입력')
     issues.add('원자재 불량수량은 사용자 지정에 따라 0으로 집계합니다.')
-    issues.add('외주 생산수량은 입고수량이며 불량수량은 얼룩·박리만 합산합니다.')
+    issues.add('3-1 외주 생산수량은 업체별 입고수량, 불량수량은 업체별 전체 외주불량입니다. 3-2 유형별 표에는 얼룩·박리만 표시합니다.')
     issues.add('생산수량은 양품·불량·셋업 합계이며, 조립실적은 공정불량에서 제외하고 최종검사에만 반영합니다.')
     for vendor in vendors:
         if not any(name in vendor.replace(' ','') for name in ('한국고무','성민전자','성재금속','황해정밀')):note('원본 업체 차트에 없는 입고 거래처: '+vendor)

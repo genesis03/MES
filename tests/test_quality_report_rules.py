@@ -71,10 +71,10 @@ def test_legacy_manual_delivery_cannot_override_auto_delivery(quality):
     assert september['manual']['customer_bad'] is None and september['manual']['customer_cases'] is None
 
 
-def test_only_stain_and_peeling_are_reported_without_changing_source(quality):
+def test_vendor_totals_keep_all_defects_and_type_sheet_only_stain_peeling(quality):
     seed(quality)
     report=quality.client.get(api.API+'?month=2026-10').json()
-    assert report['months'][9]['subcontract']['혜성금속']=={'qty':1000,'bad':5}
+    assert report['months'][9]['subcontract']['혜성금속']=={'qty':1000,'bad':9}
     assert report['months'][9]['subcontract_types']=={'얼룩':2,'박리':3}
     book=load_workbook(BytesIO(quality.client.get(api.API+'/excel?month=2026-10').content),data_only=True)
     assert [book['3-2'][f'K{row}'].value for row in range(20,26)]==[0,0,3,2,0,0]
@@ -89,7 +89,7 @@ def test_unmapped_other_type_does_not_hide_known_stain_or_peeling(quality):
         row=db.query(ExternalSubcontractFault).one();raw=json.loads(row.raw_json);raw['F10']='7';row.raw_json=json.dumps(raw);db.commit()
     report=quality.client.get(api.API+'?month=2026-10').json()
     assert report['months'][9]['subcontract_types']=={'얼룩':2,'박리':3}
-    assert report['months'][9]['subcontract']['혜성금속']['bad']==5
+    assert report['months'][9]['subcontract']['혜성금속']['bad']==9
 
 
 def test_native_subcontract_uses_receipts_and_selected_types(quality,monkeypatch):
@@ -98,7 +98,7 @@ def test_native_subcontract_uses_receipts_and_selected_types(quality,monkeypatch
     rows=[dict(record_source='MES',date='2026-10-10',partner_name='메인텍',part_no='P',inbound_qty=800,defect_qty=25,by_type={'1':15,'9':4,'11':6})]
     monkeypatch.setattr(service,'subcontract_defect_status',lambda *args,**kwargs:{'items':rows})
     result=quality.client.get(api.API+'?month=2026-10&source=MES').json()
-    assert result['months'][9]['subcontract']['메인텍']=={'qty':800,'bad':10}
+    assert result['months'][9]['subcontract']['메인텍']=={'qty':800,'bad':25}
     assert result['months'][9]['subcontract']['혜성금속']=={'qty':0,'bad':0}
     assert result['months'][9]['subcontract_types']=={'얼룩':4,'박리':6}
 
@@ -130,3 +130,65 @@ def test_2024_2025_comparison_quantities_remain_template_values(quality):
     assert output['5']['B21'].value==reference['5']['B21'].value
     assert output['5']['C21'].value==reference['5']['C21'].value
     reference.close();output.close()
+
+
+def test_external_vendor_link_uses_receipt_identity_when_fault_names_missing(quality):
+    from models.inbound_sync import ExternalInboundRecord
+    from services import production_sync_service as sync
+    seed(quality)
+    with quality.sessions() as db:
+        fault=db.query(ExternalSubcontractFault).one()
+        raw=json.loads(fault.raw_json);raw['APPLY_COMP_NM']='';raw['ORDER_COMP_NM']='';fault.raw_json=json.dumps(raw)
+        now=sync.now()
+        for key,number,partner,qty,present in [
+            ('VENDOR-LINK','SUB','(주) 혜성 금속',1200,True),
+            ('GOOD-RECEIPT','GOOD-SUB','주식회사 메인텍',700,True),
+            ('REMOVED','REMOVED-SUB','혜성금속',9000,False),
+            ('DIFFERENT','OTHER-SUB','신혜성금속',8000,True)]:
+            db.add(ExternalInboundRecord(source_key=key,inbound_no=number,history_no=key,part_no='PART-Ag',inbound_date='2026-10-07',confirm_date='2026-10-07',partner_name=partner,confirmed_qty=str(qty),product_type='반제품',material_type='SEMI',present=present,raw_json='{}',content_hash=key,first_seen_at=now,last_seen_at=now,changed_at=now))
+        db.commit()
+    report=quality.client.get(api.API+'?month=2026-10').json()
+    assert report['months'][9]['subcontract']['혜성금속']=={'qty':1200,'bad':9}
+    assert report['months'][9]['subcontract']['메인텍']=={'qty':700,'bad':0}
+    assert report['months'][9]['subcontract_types']=={'얼룩':2,'박리':3}
+    assert not any('외주 업체 연결 확인 필요' in text for text in report['issues'])
+
+
+@pytest.mark.parametrize('allocated',[True,False])
+def test_native_vendor_id_counts_all_receipts_and_unallocated_defects(quality,allocated):
+    from test_subcontract_defect_status import seed as seed_subcontract
+    from models.partner import Partner
+    from models.subcontract_inbound import SubcontractInboundMaster,SubcontractInboundItem
+    seed_subcontract(quality,allocated=allocated)
+    with quality.sessions() as db:
+        db.add(Partner(id=1,partner_code='VENDOR-ID',partner_name='(주) 혜성금속',partner_type='VENDOR'))
+        product=db.query(SubcontractInboundItem).filter_by(id=1).one()
+        master=SubcontractInboundMaster(inbound_no='SI-NO-FAULT',inbound_date='2026-09-23',outbound_id=1,outbound_no='SO-1',order_id=1,order_no='ORDER-1',partner_id=1,partner_name='이전 업체 표시명',processing_type_code='PLATE',processing_type_name='은도금',storage_location='TEST',status='RECEIVED')
+        db.add(master);db.flush()
+        db.add(SubcontractInboundItem(inbound_id=master.id,outbound_item_id=1,order_item_id=1,previous_item_id=product.item_id,item_id=product.item_id,previous_part_no='310062-B',part_no=product.part_no,part_name='품목',unit='EA',outbound_qty=40,good_qty=40,defect_qty=0))
+        db.commit()
+    result=quality.client.get(api.API+'?month=2026-09&source=MES').json()
+    assert result['months'][8]['subcontract']['혜성금속']=={'qty':140,'bad':5}
+
+
+def test_ambiguous_vendor_names_are_flagged_instead_of_guessed(quality):
+    seed(quality)
+    with quality.sessions() as db:
+        fault=db.query(ExternalSubcontractFault).one();raw=json.loads(fault.raw_json);raw.update(APPLY_COMP_NM='혜성금속',ORDER_COMP_NM='메인텍');fault.raw_json=json.dumps(raw);db.commit()
+    result=quality.client.get(api.API+'?month=2026-10').json()
+    assert result['months'][9]['subcontract']['혜성금속']['bad']==0
+    assert result['months'][9]['subcontract']['메인텍']['bad']==0
+    assert any('외주 업체 연결 확인 필요' in text for text in result['issues'])
+
+
+def test_receipt_supplier_is_not_replaced_by_fault_customer_name(quality):
+    from models.inbound_sync import ExternalInboundRecord
+    from services import production_sync_service as sync
+    seed(quality)
+    with quality.sessions() as db:
+        now=sync.now()
+        db.add(ExternalInboundRecord(source_key='OTHER-SUPPLIER',inbound_no='SUB',history_no='H-OTHER',part_no='PART-Ag',inbound_date='2026-10-07',confirm_date='2026-10-07',partner_name='다른 실제 입고업체',confirmed_qty='1000',product_type='반제품',material_type='SEMI',raw_json='{}',content_hash='OTHER',first_seen_at=now,last_seen_at=now,changed_at=now))
+        db.commit()
+    result=quality.client.get(api.API+'?month=2026-10').json()
+    assert result['months'][9]['subcontract']['혜성금속']=={'qty':0,'bad':0}
+    assert any('외주 업체 연결 확인 필요' in text for text in result['issues'])
