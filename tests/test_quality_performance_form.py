@@ -29,13 +29,13 @@ def test_automatic_data_populates_original_cells_and_all_charts(quality):
     assert cells['2-1']['L16']['text'] == '100'
     assert cells['2-1']['L21']['text'] == '200'
     assert cells['2-1']['L26']['text'] == '1,200'
-    assert cells['2-1']['L27']['text'] == '24'
-    assert cells['2-1']['L31']['text'] == '300'
+    assert cells['2-1']['L27']['text'] == ''
+    assert cells['2-1']['L31']['text'] == '1,500'
     assert cells['2-1']['L32']['text'] == '6'
     assert cells['4-1']['L15']['text'] == '300'
     assert cells['4-1']['L21']['text'] == '400'
     assert cells['4-1']['L24']['text'] == '500'
-    assert cells['요약']['F9']['text'] == '2.00%'
+    assert cells['요약']['F9']['text'] == '0.40%'
     assert cells['요약']['F11']['text'] == '2.00%'
     assert cells['3-1']['M18']['text'] == '1,000'
     assert cells['3-1']['M19']['text'] == '5'
@@ -60,7 +60,7 @@ def test_manual_unknowns_and_future_months_stay_blank(quality):
     assert result['cells']['4-1']['M15']['text'] == ''
 
 
-def test_unclassified_assembly_is_visible_without_changing_process_totals(quality):
+def test_unclassified_assembly_production_is_in_total_but_defects_stay_in_final(quality):
     from models.production_sync import ExternalProductionRecord
     from services import production_sync_service as sync
     seed(quality)
@@ -73,8 +73,8 @@ def test_unclassified_assembly_is_visible_without_changing_process_totals(qualit
         db.commit()
     result=quality.client.get(api.API+'/form?month=2026-10').json()
     assert result['cells']['2-1']['L26']['text']=='1,300'
-    assert result['cells']['2-1']['L27']['text']=='25'
-    assert result['cells']['2-1']['L31']['text']=='300'
+    assert result['cells']['2-1']['L27']['text']==''
+    assert result['cells']['2-1']['L31']['text']=='1,600'
     assert result['cells']['2-1']['L32']['text']=='6'
     assert any('최종검사 품목군 미연결: UNKNOWN-C' in issue for issue in result['issues'])
 

@@ -264,7 +264,7 @@ def build_report(db,month,source='EXTERNAL'):
     def rate(bad,qty,scale=1):return bad/qty*scale if bad is not None and qty is not None and qty else None
     overview=[]
     for index,m in enumerate(months[:selected],1):
-        pqty=sum(r['qty'] for r in m['process'].values());pbad=sum(r['bad'] for r in m['process'].values())
+        pqty=sum(r['qty'] for r in m['process'].values())+m['assembly']['qty'];pbad=sum(r['bad'] for r in m['process'].values())
         fqty=sum(r['qty'] for r in m['final'].values());fbad=sum(r['bad'] for r in m['final'].values())
         sqty=sum(r['qty'] for r in m['subcontract'].values());sbad=sum(r['bad'] for r in m['subcontract'].values())
         claims=[g['occurred'] for g in m['manual']['claims'].values()];claim=sum(claims) if all(v is not None for v in claims) else None
