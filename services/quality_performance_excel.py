@@ -259,7 +259,7 @@ def build_excel(report,writing_date,author):
         for kind,qr,br in [('LATHE',16,17),('TAP',21,22)]:
             put('2-1',f'{c}{qr}',m['process'][kind]['qty'] if active else None);put('2-1',f'{c}{br}',m['process'][kind]['bad'] if active else None)
         put('2-1',f'{c}26',m['assembly']['qty'] if active else None)
-        put('2-1',f'{c}27',None)
+        for row in (27,28,29):put('2-1',f'{c}{row}',None)
         # Production totals include all three processes; assembly defects belong to final inspection.
         formula('2-1',f'{c}31',f'{c}16+{c}21+{c}26' if active else '""')
         formula('2-1',f'{c}32',f'{c}17+{c}22' if active else '""')
@@ -267,9 +267,17 @@ def build_excel(report,writing_date,author):
         for name,qr,br in [('메인텍',15,16),('혜성금속',18,19)]:
             put('3-1',f'{d}{qr}',m['subcontract'][name]['qty'] if active else None);put('3-1',f'{d}{br}',m['subcontract'][name]['bad'] if active else None)
         for i,name in enumerate(('찍힘','긁힘','박리','얼룩','치수','기타'),20):put('3-2',f'{b}{i}',m['subcontract_types'].get(name,0) if active else None)
+        for row in range(20,26):put('1-2',f'{b}{row}',0 if active else None)
         for group,qr,br in [('BASE',15,16),('310140',18,19),('SV1',21,22),('AX1-EV',24,25)]:
             put('4-1',f'{c}{qr}',m['final'][group]['qty'] if active else None);put('4-1',f'{c}{br}',m['final'][group]['bad'] if active else None)
         for i,name in enumerate(('찍힘','긁힘','치수','칩','소재','조도','기타'),20):put('4-2',f'{b}{i}',m['final_types'].get(name,0) if active else None)
+        # Summary quantities always reference the matching detailed TOTAL,
+        # including months that were hard-coded to zero in the original template.
+        for summary,detail,col,qtyrow,badrow in (
+            ('1','1-1',c,28,29),('2','2-1',c,31,32),
+            ('3','3-1',d,22,23),('4','4-1',c,28,29)):
+            formula(summary,f'{d}19',f"'{detail}'!{col}{qtyrow}")
+            formula(summary,f'{d}20',f"'{detail}'!{col}{badrow}")
         for field,row in [('delivery_qty',19),('customer_bad',20),('customer_cases',21)]:put('5',f'{d}{row}',(m['delivery_qty'] if field=='delivery_qty' else m['manual'][field]) if active else None)
         formula('5',f'{d}22',f'IF(OR({d}19="",{d}20=""),"",IFERROR({d}20/{d}19*1000000,""))')
         formula('5',f'{d}23',f'IF({d}22="","",2-({d}22/{d}18))')
@@ -281,7 +289,7 @@ def build_excel(report,writing_date,author):
             formula('6',f'{c}{row}',f'IF(OR({missing}),"",'+ '+'.join(f'{c}{r}' for r in parts)+')')
         formula('6',f'{c}32',f'IF(OR({c}15="",{c}16="",{c}20="",{c}24=""),"",IFERROR({c}29/{c}15,""))')
         for row in (16,17,18,20,21,22,24,25,26):formula('6',f'O{row}',f'SUM(C{row}:N{row})')
-    put('2-1','O27',None)  # Keep the annual assembly defect total blank too.
+    for row in (27,28,29):put('2-1',f'O{row}',None)
     # Remove stale private working values outside the printed report areas.
     for name in ('요약','1','1-1','1-2','2','2-1','2-2','3','3-1','3-2','4','4-1','4-2','5','6'):
         sheet=book.cells[name]
