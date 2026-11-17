@@ -92,7 +92,7 @@ def add_types(target,details,bad,allowed,issues,label):
 
 def new_month():
     return {'raw':{k:0. for k in ('COPPER','CAP','SEAL')},'process':{k:{'qty':0.,'bad':0.} for k in ('LATHE','TAP')},
-        'assembly':{'qty':0.,'bad':0.},
+        'assembly':{'qty':0.,'bad':0.},'assembly_process_bad':0.,
         'process_types':defaultdict(float),'final':{k:{'qty':0.,'bad':0.} for k in FINAL_GROUPS},
         'final_types':defaultdict(float),'subcontract':{k:{'qty':0.,'bad':0.} for k in ('메인텍','혜성금속')},
         'subcontract_types':defaultdict(float),'delivery_qty':0.,'manual':blank_manual()}
@@ -202,7 +202,7 @@ def build_report(db,month,source='EXTERNAL'):
             order=db.get(ProductionWorkOrder,record.work_order_id);item=db.get(ItemMasterModel,order.item_id) if order else None
             productions.append({'date':record.performance_date,'part':item.part_no if item else order.part_no if order else '', 'item':item,'stage':stage(names.get(record.process_code,record.process_code)),
                 'qty':float(record.good_qty+record.defect_qty+record.setup_qty),'bad':float(record.defect_qty),'details':[],'shared':[]})
-    shared=defaultdict(list)
+    shared=defaultdict(list);assembly_batches=defaultdict(list)
     for row in productions:
         m=m_for(row['date']);kind=row['stage']
         if kind in ('LATHE','TAP'):
@@ -212,6 +212,8 @@ def build_report(db,month,source='EXTERNAL'):
             # Reference row in the process sheet must show actual assembly work,
             # including work that still needs a final-inspection product group.
             m['assembly']['qty']+=row['qty'];m['assembly']['bad']+=row['bad']
+            key=row['shared_key'] if row['shared'] else ('single',id(row))
+            assembly_batches[key].append(row)
             group=final_group(row['item'],row['part'],connections)
             if not group:note('최종검사 품목군 미연결: '+row['part']);continue
             m['final'][group]['qty']+=row['qty'];m['final'][group]['bad']+=row['bad']
@@ -220,6 +222,16 @@ def build_report(db,month,source='EXTERNAL'):
         elif row['qty']:note('보고서 대상 외 공정 제외: '+row['part'])
     for rows in shared.values():
         add_types(m_for(rows[0]['date'])['final_types'],rows[0]['shared'],sum(r['bad'] for r in rows),{'찍힘','긁힘','치수','칩','소재','조도'},issues,'조립 공유 LOT')
+    # Add assembly misassembly to process reporting independently of final
+    # reporting. Existing final quantities and breakdowns remain unchanged.
+    for rows in assembly_batches.values():
+        types=defaultdict(float)
+        add_types(types,rows[0]['shared'] or rows[0]['details'],sum(r['bad'] for r in rows),
+                  {'오조립'},issues,'조립 오조립')
+        qty=types.get('오조립',0.)
+        m=m_for(rows[0]['date'])
+        m['assembly_process_bad']+=qty
+        if qty:m['process_types']['오조립']+=qty
     if not productions:note('보고 기간의 '+('외부' if source=='EXTERNAL' else 'MES')+' 생산실적이 없습니다.')
     if source=='EXTERNAL':outs=external_rows(db,start,end)
     else:outs=[r for r in subcontract_defect_status(db,start,end,limit=10**9)['items'] if r.get('record_source')=='MES']
@@ -256,7 +268,7 @@ def build_report(db,month,source='EXTERNAL'):
         if m['manual']['customer_bad'] is None or m['manual']['customer_cases'] is None:note(f'{index}월 고객불량 수기 자료 미입력')
     issues.add('원자재 불량수량은 사용자 지정에 따라 0으로 집계합니다.')
     issues.add('3-1 외주 생산수량은 업체별 입고수량, 불량수량은 업체별 얼룩·박리 합계입니다. 3-2 유형별 합계와 3-1 불량 합계를 일치시키고 3시트에 종합합니다.')
-    issues.add('생산수량은 양품·불량·셋업 합계이며, 조립 생산수량은 공정 TOTAL에 포함하고, 조립 불량수량은 최종검사에만 반영합니다.')
+    issues.add('생산수량은 양품·불량·셋업 합계이며, 조립 생산수량은 공정 TOTAL에 포함하고, 조립 불량의 최종검사 집계는 유지하며, 오조립 수량은 공정불량에도 추가 반영합니다.')
     for vendor in vendors:
         if not any(name in vendor.replace(' ','') for name in ('한국고무','성민전자','성재금속','황해정밀')):note('원본 업체 차트에 없는 입고 거래처: '+vendor)
     if year!=2026:issues.add('이전 연도 비교 실적은 해당 연도 원장이 확인되지 않아 공란입니다.')
@@ -264,7 +276,7 @@ def build_report(db,month,source='EXTERNAL'):
     def rate(bad,qty,scale=1):return bad/qty*scale if bad is not None and qty is not None and qty else None
     overview=[]
     for index,m in enumerate(months[:selected],1):
-        pqty=sum(r['qty'] for r in m['process'].values())+m['assembly']['qty'];pbad=sum(r['bad'] for r in m['process'].values())
+        pqty=sum(r['qty'] for r in m['process'].values())+m['assembly']['qty'];pbad=sum(r['bad'] for r in m['process'].values())+m['assembly_process_bad']
         fqty=sum(r['qty'] for r in m['final'].values());fbad=sum(r['bad'] for r in m['final'].values())
         sqty=sum(r['qty'] for r in m['subcontract'].values());sbad=sum(r['bad'] for r in m['subcontract'].values())
         claims=[g['occurred'] for g in m['manual']['claims'].values()];claim=sum(claims) if all(v is not None for v in claims) else None

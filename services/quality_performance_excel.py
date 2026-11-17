@@ -262,7 +262,7 @@ def build_excel(report,writing_date,author):
         for row in (27,28,29):put('2-1',f'{c}{row}',None)
         # Production totals include all three processes; assembly defects belong to final inspection.
         formula('2-1',f'{c}31',f'{c}16+{c}21+{c}26' if active else '""')
-        formula('2-1',f'{c}32',f'{c}17+{c}22' if active else '""')
+        formula('2-1',f'{c}32',f"'2-2'!{b}19" if active else '""')
         for i,name in enumerate(('찍힘','긁힘','치수','칩','소재','오조립','조도','기타'),20):put('2-2',f'{b}{i}',m['process_types'].get(name,0) if active else None)
         for name,qr,br in [('메인텍',15,16),('혜성금속',18,19)]:
             put('3-1',f'{d}{qr}',m['subcontract'][name]['qty'] if active else None);put('3-1',f'{d}{br}',m['subcontract'][name]['bad'] if active else None)
