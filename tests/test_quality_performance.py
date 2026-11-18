@@ -133,9 +133,9 @@ def test_template_format_drawings_charts_and_formulas_are_preserved(quality):
         for row in b:
             for c in row:assert a[c.coordinate].style_id==c.style_id,(a.title,c.coordinate)
     assert sheets['1-1']['L16'].value==100 and sheets['1-1']['L20'].value==500 and sheets['1-1']['L24'].value==900
-    assert sheets['2-1']['L26'].value==1200 and sheets['2-1']['L27'].value is None
+    assert sheets['2-1']['L26'].value==1200 and sheets['2-1']['L27'].value==0
     assert sheets['2-1']['L31'].value==1500 and sheets['2-1']['L32'].value==6
-    assert sheets['2-1']['O27'].value is None
+    assert sheets['2-1']['O27'].value==0
     assert sheets['2-1']['O31'].value==1500
     assert sheets['4-1']['L29'].value==24 and sheets['4-2']['K19'].value==24
     assert sheets['요약']['F11'].value==pytest.approx(24/1200)

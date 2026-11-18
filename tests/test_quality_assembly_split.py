@@ -42,7 +42,9 @@ def test_assembly_misassembly_is_added_to_process_without_changing_final_totals(
     assert book['4-1']['L29'].value==book['4-2']['K19'].value==24
     assert book['2']['M20'].value==6+moved
     assert book['4']['M20'].value==24
-    assert book['2-1']['L27'].value is None
+    assert book['2-1']['L27'].value==moved
+    assert book['2-1']['O27'].value==moved
+    assert book['2-1']['L32'].value==sum(book['2-1'][f'L{row}'].value for row in (17,22,27))
     book.close()
 
 

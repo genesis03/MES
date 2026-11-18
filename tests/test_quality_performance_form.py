@@ -29,7 +29,7 @@ def test_automatic_data_populates_original_cells_and_all_charts(quality):
     assert cells['2-1']['L16']['text'] == '100'
     assert cells['2-1']['L21']['text'] == '200'
     assert cells['2-1']['L26']['text'] == '1,200'
-    assert cells['2-1']['L27']['text'] == ''
+    assert cells['2-1']['L27']['text'] == '0'
     assert cells['2-1']['L31']['text'] == '1,500'
     assert cells['2-1']['L32']['text'] == '6'
     assert cells['4-1']['L15']['text'] == '300'
@@ -73,7 +73,7 @@ def test_unclassified_assembly_production_is_in_total_but_defects_stay_in_final(
         db.commit()
     result=quality.client.get(api.API+'/form?month=2026-10').json()
     assert result['cells']['2-1']['L26']['text']=='1,300'
-    assert result['cells']['2-1']['L27']['text']==''
+    assert result['cells']['2-1']['L27']['text']=='0'
     assert result['cells']['2-1']['L31']['text']=='1,600'
     assert result['cells']['2-1']['L32']['text']=='6'
     assert any('최종검사 품목군 미연결: UNKNOWN-C' in issue for issue in result['issues'])

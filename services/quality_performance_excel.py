@@ -259,7 +259,9 @@ def build_excel(report,writing_date,author):
         for kind,qr,br in [('LATHE',16,17),('TAP',21,22)]:
             put('2-1',f'{c}{qr}',m['process'][kind]['qty'] if active else None);put('2-1',f'{c}{br}',m['process'][kind]['bad'] if active else None)
         put('2-1',f'{c}26',m['assembly']['qty'] if active else None)
-        for row in (27,28,29):put('2-1',f'{c}{row}',None)
+        put('2-1',f'{c}27',m.get('assembly_process_bad',0) if active else None)
+        formula('2-1',f'{c}28',f'IFERROR({c}27/{c}26,"")' if active else '""')
+        formula('2-1',f'{c}29',f'IF({c}28="","",2-{c}28/{c}25)' if active else '""')
         # Production totals include all three processes; assembly defects belong to final inspection.
         formula('2-1',f'{c}31',f'{c}16+{c}21+{c}26' if active else '""')
         formula('2-1',f'{c}32',f"'2-2'!{b}19" if active else '""')
@@ -289,7 +291,9 @@ def build_excel(report,writing_date,author):
             formula('6',f'{c}{row}',f'IF(OR({missing}),"",'+ '+'.join(f'{c}{r}' for r in parts)+')')
         formula('6',f'{c}32',f'IF(OR({c}15="",{c}16="",{c}20="",{c}24=""),"",IFERROR({c}29/{c}15,""))')
         for row in (16,17,18,20,21,22,24,25,26):formula('6',f'O{row}',f'SUM(C{row}:N{row})')
-    for row in (27,28,29):put('2-1',f'O{row}',None)
+    formula('2-1','O27','SUM(C27:N27)')
+    formula('2-1','O28','IFERROR(O27/O26,"")')
+    formula('2-1','O29','IF(O28="","",2-O28/O25)')
     # Remove stale private working values outside the printed report areas.
     for name in ('요약','1','1-1','1-2','2','2-1','2-2','3','3-1','3-2','4','4-1','4-2','5','6'):
         sheet=book.cells[name]
