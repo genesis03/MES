@@ -9,13 +9,14 @@ from routers import quality_performance as api
 
 
 @pytest.mark.parametrize('shared,moved',[(False,2),(False,6),(False,0),(True,4)])
-def test_assembly_misassembly_is_added_to_process_without_changing_final_totals(quality,shared,moved):
+@pytest.mark.parametrize('code',['F7','F6'])
+def test_assembly_misassembly_is_added_to_process_without_changing_final_totals(quality,shared,moved,code):
     seed(quality)
     with quality.sessions() as db:
         records=db.query(ExternalProductionRecord).filter_by(process_name='조립').order_by(ExternalProductionRecord.id).all()
         if shared:
             records=records[:2]
-            details=[{'code':'F7','name':'오조립','qty':4},{'code':'F1','name':'찍힘','qty':10}]
+            details=[{'code':code,'name':'오조립','qty':4},{'code':'F1','name':'찍힘','qty':10}]
             lots=[r.lot_no for r in records]
             for r in records:
                 raw=json.loads(r.raw_json);raw.update(DEFECTS=[],ASSEMBLY_GROUP_LOTS=lots,ASSEMBLY_GROUP_DEFECTS=details);r.raw_json=json.dumps(raw)
@@ -23,7 +24,7 @@ def test_assembly_misassembly_is_added_to_process_without_changing_final_totals(
             records[0].part_no=records[1].part_no
         else:
             r=records[0];raw=json.loads(r.raw_json)
-            raw['DEFECTS']=[{'code':'F7','name':'오조립','qty':moved},{'code':'F1','name':'찍힘','qty':6-moved}];r.raw_json=json.dumps(raw)
+            raw['DEFECTS']=[{'code':code,'name':'오조립','qty':moved},{'code':'F1','name':'찍힘','qty':6-moved}];r.raw_json=json.dumps(raw)
         db.commit()
     data=quality.client.get(api.API+'?month=2026-10').json();m=data['months'][9]
     assert m['assembly_process_bad']==moved
@@ -33,7 +34,7 @@ def test_assembly_misassembly_is_added_to_process_without_changing_final_totals(
     assert sum(m['process_types'].values())==6+moved
     assert sum(m['final_types'].values())==24
     assert '오조립' not in m['final_types']
-    assert m['final_types'].get('기타',0)==moved
+    assert m['final_types'].get('기타' if code=='F7' else '소재',0)==moved
     assert m['final_types']['찍힘']==24-moved
     book=load_workbook(BytesIO(quality.client.get(api.API+'/excel?month=2026-10').content),data_only=True)
     assert book['2-2']['K25'].value==moved

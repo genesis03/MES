@@ -226,7 +226,12 @@ def build_report(db,month,source='EXTERNAL'):
     # reporting. Existing final quantities and breakdowns remain unchanged.
     for rows in assembly_batches.values():
         types=defaultdict(float)
-        add_types(types,rows[0]['shared'] or rows[0]['details'],sum(r['bad'] for r in rows),
+        details=rows[0]['shared'] or rows[0]['details']
+        # External daily codes have their own numbering. Prefer the supplied
+        # type name for this additional count without changing final reporting.
+        details=[dict(d,code='',name=re.sub(r'\s+','',str(d['name'])))
+                 if str(d.get('name') or '').strip() else d for d in details]
+        add_types(types,details,sum(r['bad'] for r in rows),
                   {'오조립'},issues,'조립 오조립')
         qty=types.get('오조립',0.)
         m=m_for(rows[0]['date'])
