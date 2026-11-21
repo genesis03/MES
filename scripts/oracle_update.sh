@@ -18,9 +18,13 @@ if ! flock -n 9; then
 fi
 
 compose=(docker compose -f docker-compose.oracle-https.yml)
-if (( EUID != 0 )); then
-    sudo -v
-    compose=(sudo "${compose[@]}")
+if ! docker info >/dev/null 2>&1; then
+    if ! sudo -n docker info >/dev/null 2>&1; then
+        echo '현재 계정에서 Docker 데몬에 접속할 수 없습니다.' >&2
+        docker info >/dev/null
+        exit 1
+    fi
+    compose=(sudo -n "${compose[@]}")
 fi
 
 git pull --ff-only origin main
