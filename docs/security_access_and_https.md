@@ -55,12 +55,13 @@ sudo journalctl -u mes-https-renew.service -n 30 --no-pager
 
 ### 전환 이후 업데이트
 
-HTTPS 전환 후에는 이전 HTTP compose로 재시작하지 않는다.
+오라클 서버에서 저장소 소유자 계정으로 실행한다. 새 명령을 처음 받는 경우에만 먼저 `git pull --ff-only origin main`을 실행한다.
 
 ```bash
-git pull origin main
-docker compose -f docker-compose.oracle-https.yml up -d --build mes proxy
+bash scripts/oracle_update.sh
 ```
+
+스크립트는 HTTPS 구성을 선택하고, 원격 main을 가져와 MES를 빌드한다. MES의 로그인 응답을 확인한 뒤 프록시를 다시 만들고, 서버 안에서 인증서를 검증하며 HTTPS 로그인 응답 200을 확인한다. 기본 주소와 다른 주소를 쓰는 서버는 스크립트에 호스트명 또는 IPv4를 인자로 전달한다. 실패 시 종료 코드가 0이 아니며 자동 롤백은 수행하지 않는다. 외부 방화벽 경로는 별도의 외부 접속으로 확인한다.
 
 갱신은 인증서가 갱신할 시기에 가까울 때만 실제 발급하며, 완료 후 Nginx 설정 검사와 reload를 수행한다. 프로세스 재시작으로 DB를 초기화하지 않는다. 인증서 만료 여부와 타이머 실패는 운영자가 모니터링해야 한다.
 

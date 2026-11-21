@@ -16,6 +16,12 @@ services:
       DEFAULT_USER_PASSWORD: ${DEFAULT_USER_PASSWORD}
       SESSION_COOKIE_SECURE: "true"
     command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers", "--forwarded-allow-ips=*"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; r = urlopen('http://127.0.0.1:8080/login', timeout=3); raise SystemExit(r.status != 200)"]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+      start_period: 15s
     expose:
       - "8080"
     volumes:
